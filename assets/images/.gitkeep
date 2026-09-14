@@ -1,0 +1,3 @@
+# Brand assets go here: icon.png, splash.png, adaptive icon layers.
+# Until they exist, app.json deliberately omits the icon/splash references —
+# pointing at a missing file fails the Expo build. Restore them when adding art.

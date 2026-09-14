@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Mandi",
+    "slug": "costonomy-mp",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "mandi",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF7ED"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.costonomy.mp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Mandi needs camera access to capture photos of received goods and dispute evidence.",
+        "NSPhotoLibraryUsageDescription": "Mandi needs photo library access to attach evidence to receiving records and disputes.",
+        "NSLocationWhenInUseUsageDescription": "Mandi uses your location to show delivery tracking relative to your outlet."
+      }
+    },
+    "android": {
+      "package": "com.costonomy.mp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "extra": {
+      "router": {}
+    }
+  }
+}

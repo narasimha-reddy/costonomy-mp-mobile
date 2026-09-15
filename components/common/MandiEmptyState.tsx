@@ -20,6 +20,16 @@ interface MandiEmptyStateProps {
   onAction?: () => void;
   secondaryActionLabel?: string;
   onSecondaryAction?: () => void;
+  /**
+   * Inline density, for a section on a screen that has other sections.
+   *
+   * <p>The full-height treatment is right when emptiness *is* the screen — an
+   * empty Orders tab. It is wrong stacked three times down a home screen, where
+   * each hero-sized "nothing here" pushes the next section below the fold and a
+   * restaurant with no data scrolls past three illustrations to reach the
+   * catalog. Compact keeps the same words and drops the staging.
+   */
+  compact?: boolean;
   style?: ViewStyle;
   testID?: string;
 }
@@ -33,9 +43,27 @@ export function MandiEmptyState({
   onAction,
   secondaryActionLabel,
   onSecondaryAction,
+  compact = false,
   style,
   testID,
 }: MandiEmptyStateProps) {
+  if (compact) {
+    return (
+      <View style={[styles.compact, style]} testID={testID}>
+        <Ionicons name={icon} size={IconSize.md} color={Colors.textTertiary} />
+        <View style={styles.compactText}>
+          <MandiText variant="bodyEmphasis">{title}</MandiText>
+          {description != null && (
+            <MandiText variant="caption" muted>{description}</MandiText>
+          )}
+        </View>
+        {actionLabel != null && onAction != null && (
+          <MandiButton label={actionLabel} onPress={onAction} variant="tertiary" size="md" fullWidth={false} />
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, style]} testID={testID}>
       <View style={styles.iconCircle}>
@@ -75,6 +103,15 @@ export function MandiEmptyState({
 }
 
 const styles = StyleSheet.create({
+  compact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.cardPadding,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surfaceSunken,
+  },
+  compactText: { flex: 1, gap: Spacing.xs },
   container: {
     flex: 1,
     alignItems: 'center',

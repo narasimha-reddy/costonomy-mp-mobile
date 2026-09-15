@@ -17,3 +17,5 @@ export { MandiOfflineBanner, MandiStaleIndicator } from './MandiOfflineBanner';
 export { MandiToastProvider, useToast, type ToastTone } from './MandiToast';
 export { AuthGate } from './AuthGate';
 export { DeviceFrame } from './DeviceFrame';
+export { OutletSelector } from './OutletSelector';
+export { MandiScreen } from './MandiScreen';

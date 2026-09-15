@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
+import { useNotifications } from '@/hooks/useNotifications';
 import { fetchActiveOrders, fetchPendingOrders } from '@/services/supplier';
 import { StoreSelector } from '@/components/supplier/StoreSelector';
 import { PendingOrderCard } from '@/components/supplier/PendingOrderCard';
@@ -12,6 +13,7 @@ import {
   MandiEmptyState,
   MandiErrorState,
   MandiHeader,
+  MandiHeaderAction,
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
@@ -36,6 +38,7 @@ export default function SupplierHome() {
   const router = useRouter();
   const { accessToken } = useSession();
   const { storeId, store } = useStore();
+  const { unreadCount } = useNotifications();
 
   const pending = useQuery({
     queryKey: ['store', storeId, 'orders', 'pending'],
@@ -52,7 +55,22 @@ export default function SupplierHome() {
 
   return (
     <MandiScreen
-      header={<MandiHeader title="Mandi Supplier" right={<StoreSelector />} />}
+      header={(
+        <MandiHeader
+          title="Mandi Supplier"
+          right={(
+            <View style={styles.headerActions}>
+              <StoreSelector />
+              <MandiHeaderAction
+                icon="notifications-outline"
+                label="Notifications"
+                badge={unreadCount}
+                onPress={() => router.push('/notifications')}
+              />
+            </View>
+          )}
+        />
+      )}
       onRefresh={() => {
         void pending.refetch();
         void active.refetch();
@@ -129,6 +147,7 @@ export default function SupplierHome() {
 }
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   section: { gap: Spacing.listGap },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
 });

@@ -30,8 +30,20 @@ export function StoreSelector() {
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.scrim} onPress={() => setOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
+        <Pressable
+          style={styles.scrim}
+          onPress={() => setOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Close the store list"
+        >
+          {/* Swallows taps so they do not reach the scrim behind. Marked modal so
+              a screen reader stays inside the sheet while it is open. */}
+          <Pressable
+            style={styles.sheet}
+            onPress={(event) => event.stopPropagation()}
+            accessibilityViewIsModal
+            accessibilityLabel="Choose a store"
+          >
             <MandiText variant="subtitle">Choose a store</MandiText>
             <ScrollView>
               {stores.map((option) => {

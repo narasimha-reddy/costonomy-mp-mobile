@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useCart } from '@/hooks/useCart';
+import { useNotifications } from '@/hooks/useNotifications';
 import { fetchCategories } from '@/services/catalog';
 import { fetchOutletOrders, fetchRequirements } from '@/services/procurement';
 import { CategoryTile } from '@/components/product/CategoryTile';
@@ -46,6 +47,7 @@ export default function RestaurantHome() {
   const { me } = useSession();
   const { outletId, outlet } = useOutlet();
   const { itemCount } = useCart();
+  const { unreadCount } = useNotifications();
 
   return (
     <MandiScreen
@@ -53,15 +55,23 @@ export default function RestaurantHome() {
         <MandiHeader
           title="Mandi"
           right={
-            <MandiHeaderAction
-              icon="cart-outline"
-              label="Cart"
-              badge={itemCount}
-              onPress={() => {
-                track('open_cart', { screen: SCREEN, outletId });
-                router.push('/restaurant/cart');
-              }}
-            />
+            <View style={styles.headerActions}>
+              <MandiHeaderAction
+                icon="notifications-outline"
+                label="Notifications"
+                badge={unreadCount}
+                onPress={() => router.push('/notifications')}
+              />
+              <MandiHeaderAction
+                icon="cart-outline"
+                label="Cart"
+                badge={itemCount}
+                onPress={() => {
+                  track('open_cart', { screen: SCREEN, outletId });
+                  router.push('/restaurant/cart');
+                }}
+              />
+            </View>
           }
         />
       }
@@ -303,6 +313,7 @@ function CategoriesSection({ outletId }: { outletId: number | null }) {
 }
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: 'row', gap: Spacing.xs },
   greeting: { gap: Spacing.xs },
   outletRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   section: { gap: Spacing.listGap },

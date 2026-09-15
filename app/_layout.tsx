@@ -18,6 +18,7 @@ import { Colors } from '@/theme';
 import { DeviceFrame, MandiOfflineBanner, MandiToastProvider } from '@/components/common';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { SessionProvider } from '@/contexts/SessionProvider';
+import { RealtimeProvider } from '@/contexts/RealtimeProvider';
 import { createQueryClient } from '@/lib/query';
 
 // Created once for the life of the process. A client rebuilt on render would
@@ -55,6 +56,9 @@ export default function RootLayout() {
           outside the navigator so the session is resolved before any route
           decides where to send the user. */}
       <SessionProvider>
+        {/* Inside the session because it needs a token, and above the navigator
+            so one connection serves every screen. */}
+        <RealtimeProvider>
         <SafeAreaProvider>
           <MandiToastProvider>
             {/* Web renders inside a phone-width frame; on a device this is a
@@ -74,6 +78,7 @@ export default function RootLayout() {
             </DeviceFrame>
           </MandiToastProvider>
         </SafeAreaProvider>
+        </RealtimeProvider>
       </SessionProvider>
     </QueryClientProvider>
   );

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
+import { useRealtime } from '@/contexts/RealtimeProvider';
 import { fetchDelivery } from '@/services/delivery';
 import { fetchSupplierOrder } from '@/services/procurement';
 import { MandiMap } from '@/components/delivery/MandiMap';
@@ -25,6 +26,8 @@ import { resolveStatus, DeliveryStatus as DeliveryStatusRegistry } from '@/model
 import { Colors, Spacing } from '@/theme';
 
 const ACTIVE_POLL_MS = 10_000;
+/** With the socket up, this is a safety net rather than the transport. */
+const BACKSTOP_POLL_MS = 60_000;
 
 /**
  * REST-ORDER-TRACK-01. Doc 05 §16.
@@ -33,11 +36,12 @@ const ACTIVE_POLL_MS = 10_000;
  * A 404 from the delivery endpoint is that state, not an error: a delivery is
  * created when the supplier marks the order ready.
  *
- * <p><b>Polling is the fallback, and it is what is implemented here.</b> §16 lists
- * WebSocket first, push second, polling third; the realtime channel lands with
- * M6. Polling a live delivery every ten seconds is correct behaviour in the
- * meantime — and remains the floor under the socket afterwards, because §16 also
- * requires authoritative state to be refetched on reconnect and cold start.
+ * <p><b>Both transports, in the order §16 gives them.</b> The realtime provider
+ * invalidates this query when a delivery event arrives, so a connected socket
+ * updates the screen as things happen. The interval below stays as the floor —
+ * slowed right down while the socket is up, because a socket that is connected
+ * but silently dead looks exactly like a quiet delivery, and this is the screen
+ * where that distinction matters most.
  *
  * <p><b>Supplier own delivery is not trackable</b> and the screen says why (doc 06
  * §2) rather than showing a map that will never move.
@@ -47,6 +51,7 @@ export default function TrackingScreen() {
   const orderId = Number(raw);
   const { accessToken } = useSession();
   const { outlet } = useOutlet();
+  const { transport } = useRealtime();
 
   const order = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -63,10 +68,11 @@ export default function TrackingScreen() {
     retry: (count, error) => !isApiError(error) && count < 2,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (status == null) return ACTIVE_POLL_MS;
-      return ['DELIVERED', 'CANCELLED', 'DELIVERY_FAILED'].includes(status)
-        ? false
-        : ACTIVE_POLL_MS;
+      if (status != null
+        && ['DELIVERED', 'CANCELLED', 'DELIVERY_FAILED'].includes(status)) {
+        return false;
+      }
+      return transport === 'socket' ? BACKSTOP_POLL_MS : ACTIVE_POLL_MS;
     },
   });
 

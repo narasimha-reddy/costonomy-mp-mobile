@@ -122,7 +122,18 @@ export default function OtpScreen() {
             disabled={code.length !== 6}
           />
 
-          <Pressable onPress={resend} disabled={secondsLeft > 0} style={styles.resend}>
+          <Pressable
+            onPress={resend}
+            disabled={secondsLeft > 0}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: secondsLeft > 0 }}
+            accessibilityLabel={
+              secondsLeft > 0
+                ? `Resend code, available in ${secondsLeft} seconds`
+                : 'Send a new code'
+            }
+            style={styles.resend}
+          >
             <MandiText
               variant="body"
               color={secondsLeft > 0 ? Colors.textTertiary : Colors.primary}

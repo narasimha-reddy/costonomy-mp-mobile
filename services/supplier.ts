@@ -115,18 +115,27 @@ export function rejectOrder(
   });
 }
 
-export function markPreparing(token: string, orderId: number) {
+/**
+ * Advance an accepted order.
+ *
+ * <p><b>Both require an idempotency key</b>, as a header — the server rejects the
+ * call outright without one, which is the right call for a state transition a
+ * retry could otherwise apply twice.
+ */
+export function markPreparing(token: string, orderId: number, idempotencyKey: string) {
   return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/preparing`, {
     method: 'POST',
     token,
+    idempotencyKey,
   });
 }
 
 /** Ready for pickup. This is what starts the delivery flow (doc 05 §28). */
-export function markReady(token: string, orderId: number) {
+export function markReady(token: string, orderId: number, idempotencyKey: string) {
   return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/ready`, {
     method: 'POST',
     token,
+    idempotencyKey,
   });
 }
 

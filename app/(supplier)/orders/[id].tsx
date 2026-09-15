@@ -137,10 +137,13 @@ export default function SupplierOrderScreen() {
   });
 
   const advance = useMutation({
+    // A fresh key per transition, not the screen's: `preparing` and `ready` are
+    // two different operations, and reusing one key would make the second look
+    // like a replay of the first.
     mutationFn: (to: 'preparing' | 'ready') =>
       to === 'preparing'
-        ? markPreparing(accessToken as string, orderId)
-        : markReady(accessToken as string, orderId),
+        ? markPreparing(accessToken as string, orderId, newIdempotencyKey())
+        : markReady(accessToken as string, orderId, newIdempotencyKey()),
     onSuccess: (_data, to) => {
       track(to === 'ready' ? 'order_ready' : 'order_preparing', { screen: SCREEN, entityId: orderId });
       invalidate();

@@ -1,17 +1,19 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder } from '@/services/procurement';
 import {
+  MandiButton,
   MandiCard,
   MandiCountdown,
   MandiErrorState,
   MandiHeader,
   MandiScreen,
   MandiSkeletonList,
+  MandiStickyBar,
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
@@ -34,6 +36,7 @@ import { Colors, Spacing } from '@/theme';
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = Number(id);
+  const router = useRouter();
   const { accessToken } = useSession();
 
   const query = useQuery({
@@ -52,6 +55,7 @@ export default function OrderDetailScreen() {
       header={<MandiHeader title={order?.orderNumber ?? 'Order'} subtitle={order?.supplierName} back />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
+      footer={renderActions()}
     >
       {query.isPending ? (
         <MandiSkeletonList count={3} />
@@ -130,6 +134,59 @@ export default function OrderDetailScreen() {
       )}
     </MandiScreen>
   );
+
+  /**
+   * What the restaurant can do next, decided by the order's own status.
+   *
+   * <p>Deliberately driven by what the server says the order is, never by what
+   * the app last did — guardrail 4. A screen that offered "Check in delivery"
+   * because the user tapped something a moment ago would offer it on an order the
+   * backend has since expired.
+   */
+  function renderActions() {
+    if (order == null) return undefined;
+
+    const trackable = ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'PREPARING'].includes(order.status);
+    const receivable = order.status === 'DELIVERED';
+    const settled = order.status === 'RECEIVED';
+
+    if (!trackable && !receivable && !settled) return undefined;
+
+    return (
+      <MandiStickyBar>
+        {trackable && (
+          <MandiButton
+            label="Track delivery"
+            size="lg"
+            icon="navigate-outline"
+            onPress={() => router.push(`/(restaurant)/tracking/${order.id}`)}
+          />
+        )}
+        {receivable && (
+          <MandiButton
+            label="Check in delivery"
+            size="lg"
+            onPress={() => router.push(`/(restaurant)/receiving/${order.id}`)}
+          />
+        )}
+        {settled && (
+          <>
+            <MandiButton
+              label="Rate this order"
+              size="lg"
+              onPress={() => router.push(`/(restaurant)/rating/${order.id}`)}
+            />
+            <MandiButton
+              label="Something was wrong"
+              variant="tertiary"
+              size="md"
+              onPress={() => router.push(`/(restaurant)/dispute/${order.id}`)}
+            />
+          </>
+        )}
+      </MandiStickyBar>
+    );
+  }
 }
 
 function Row({

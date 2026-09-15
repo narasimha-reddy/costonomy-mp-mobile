@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { requestOtp } from '@/lib/api/auth';
+import { requestOtp } from '@/services/auth';
 import { ApiError, isApiError } from '@/lib/api/errors';
 import { MandiButton, MandiFormField, MandiText } from '@/components/common';
 import { Colors, Spacing } from '@/theme';

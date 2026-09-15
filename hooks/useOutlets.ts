@@ -1,5 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import { fetchOutlet, fetchRestaurantOutlets, type Outlet } from '@/lib/api/restaurant';
+import { fetchOutlet, fetchRestaurantOutlets, type Outlet } from '@/services/restaurant';
 import { useSession } from '@/contexts/SessionProvider';
 import type { Membership } from '@/lib/session/types';
 

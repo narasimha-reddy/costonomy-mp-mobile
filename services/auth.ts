@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest } from '@/lib/api/client';
 import type { AuthMe, AuthTokens } from '@/lib/session/types';
 
 export interface OtpChallenge {

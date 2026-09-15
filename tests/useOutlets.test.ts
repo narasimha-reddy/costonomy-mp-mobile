@@ -1,4 +1,4 @@
-import { directOutletIds, restaurantScopeIds } from '@/lib/outlets';
+import { directOutletIds, restaurantScopeIds } from '@/hooks/useOutlets';
 import { audienceOf, type Membership } from '@/lib/session/types';
 
 function membership(partial: Partial<Membership>): Membership {

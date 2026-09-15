@@ -1,7 +1,7 @@
 import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
-import { fetchMe, logout as logoutRequest, refreshSession, verifyOtp } from '@/lib/api/auth';
+import { fetchMe, logout as logoutRequest, refreshSession, verifyOtp } from '@/services/auth';
 import { ApiError } from '@/lib/api/errors';
 import { deleteSecret, getSecret, setSecret } from '@/lib/session/storage';
 import { audienceOf, type Audience, type AuthMe, type AuthTokens } from '@/lib/session/types';

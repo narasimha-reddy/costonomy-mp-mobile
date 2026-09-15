@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest } from '@/lib/api/client';
 
 /** Doc 04 §7's outlet shape. */
 export interface Outlet {

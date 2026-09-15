@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSession } from '@/contexts/SessionProvider';
-import { useOutlets } from '@/lib/outlets';
+import { useOutlets } from '@/hooks/useOutlets';
 import {
   MandiButton,
   MandiCard,

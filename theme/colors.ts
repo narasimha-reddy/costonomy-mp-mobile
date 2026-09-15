@@ -41,6 +41,11 @@ export const Colors = {
   /** Recessed below `surface` — inset rows, disabled fields, table headers. */
   surfaceSunken: '#F3F4F6',
   scrim: 'rgba(17, 24, 39, 0.45)',
+  /**
+   * Behind the phone-width frame on web only. Never appears on a device, where
+   * the app fills the screen — see `DeviceFrame`.
+   */
+  backdrop: '#E5E3DF',
 
   // ── Lines ───────────────────────────────────────────────────────────
   border: '#E5E7EB',

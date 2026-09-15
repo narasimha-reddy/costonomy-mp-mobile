@@ -15,7 +15,7 @@ import {
 } from '@expo-google-fonts/source-sans-3';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Colors } from '@/theme';
-import { MandiOfflineBanner, MandiToastProvider } from '@/components/common';
+import { DeviceFrame, MandiOfflineBanner, MandiToastProvider } from '@/components/common';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { SessionProvider } from '@/contexts/SessionProvider';
 import { createQueryClient } from '@/lib/query';
@@ -57,17 +57,21 @@ export default function RootLayout() {
       <SessionProvider>
         <SafeAreaProvider>
           <MandiToastProvider>
-            <View style={styles.root}>
-              <StatusBar style="dark" />
-              {/* Mounted once here so no screen can forget the offline state. */}
-              <OfflineBar />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: Colors.background },
-                }}
-              />
-            </View>
+            {/* Web renders inside a phone-width frame; on a device this is a
+                pass-through. A screen checked at desktop width is not checked. */}
+            <DeviceFrame>
+              <View style={styles.root}>
+                <StatusBar style="dark" />
+                {/* Mounted once here so no screen can forget the offline state. */}
+                <OfflineBar />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: Colors.background },
+                  }}
+                />
+              </View>
+            </DeviceFrame>
           </MandiToastProvider>
         </SafeAreaProvider>
       </SessionProvider>

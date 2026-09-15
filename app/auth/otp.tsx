@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { requestOtp } from '@/lib/api/auth';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { requestOtp } from '@/services/auth';
 import { ApiError, isApiError } from '@/lib/api/errors';
 import { useSession } from '@/contexts/SessionProvider';
 import { MandiButton, MandiFormField, MandiText } from '@/components/common';
@@ -42,7 +42,12 @@ export default function OtpScreen() {
   }, [secondsLeft]);
 
   async function submit() {
-    if (!phone) return;
+    if (!phone) {
+      // Unreachable while the guard below stands; kept so a future refactor that
+      // removes it fails loudly rather than reinstating a dead button.
+      setError('We lost your number. Enter it again.');
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -74,6 +79,12 @@ export default function OtpScreen() {
       setError(caught instanceof ApiError ? caught.message : 'Could not send a new code.');
     }
   }
+
+  // No number, nothing to verify. Reaching this screen without one — a reload
+  // that dropped the query string, a bookmarked URL, a deep link — used to render
+  // a working-looking form whose Verify button silently did nothing, because
+  // `submit` returned early. Send them back to enter it instead.
+  if (!phone) return <Redirect href="/auth/phone" />;
 
   return (
     <KeyboardAvoidingView

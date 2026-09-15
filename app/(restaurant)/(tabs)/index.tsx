@@ -217,10 +217,14 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
     enabled: outletId != null && accessToken != null,
   });
 
-  // "Active" is everything the restaurant is still waiting on. A terminal order
-  // belongs in the Orders tab's history, not on the home screen.
+  // "Active" is everything the restaurant is still waiting on a supplier for. A
+  // terminal order belongs in the Orders tab's history, and a DRAFT one never
+  // reached a supplier at all — its payment did not complete — so presenting it
+  // as in flight would tell the restaurant something untrue about an order
+  // nobody is working on.
   const active = (query.data ?? []).filter(
-    (order) => !['DELIVERED', 'RECEIVED', 'CANCELLED', 'REJECTED', 'EXPIRED'].includes(order.status),
+    (order) => !['DRAFT', 'DELIVERED', 'RECEIVED', 'CANCELLED', 'REJECTED', 'EXPIRED']
+      .includes(order.status),
   );
 
   return (

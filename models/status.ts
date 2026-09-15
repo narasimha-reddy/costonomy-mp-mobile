@@ -21,7 +21,10 @@ export interface StatusDisplay {
 
 /** Supplier order — doc 03 §5. */
 export const SupplierOrderStatus: Record<string, StatusDisplay> = {
-  DRAFT: { label: 'Draft', tone: 'neutral' },
+  // DRAFT means the payment never completed, so the order never reached its
+  // supplier (guardrail 16, D-020). "Draft" describes the row; it tells the
+  // restaurant nothing about why nobody is acting on their order.
+  DRAFT: { label: 'Payment incomplete', tone: 'warning' },
   PENDING_ACCEPTANCE: { label: 'Awaiting supplier', tone: 'pending' },
   CONFIRMED: { label: 'Confirmed', tone: 'success' },
   PARTIALLY_ACCEPTED: { label: 'Partially accepted', tone: 'warning' },

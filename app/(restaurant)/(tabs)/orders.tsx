@@ -24,7 +24,11 @@ import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 type Tab = 'pending' | 'active' | 'completed' | 'cancelled';
 
 const TABS: { key: Tab; label: string; statuses: Status[] }[] = [
-  { key: 'pending', label: 'Pending', statuses: ['PENDING_ACCEPTANCE'] },
+  // DRAFT sits here rather than under Active: its payment never completed, so no
+  // supplier has seen it. It must still be visible somewhere — an order the
+  // restaurant tried to place and that silently vanished is worse than one
+  // labelled honestly.
+  { key: 'pending', label: 'Pending', statuses: ['PENDING_ACCEPTANCE', 'DRAFT'] },
   {
     key: 'active',
     label: 'Active',

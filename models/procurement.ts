@@ -127,19 +127,27 @@ export type SupplierOrderStatus =
   | 'REJECTED' | 'EXPIRED' | 'PREPARING' | 'READY_FOR_PICKUP'
   | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'RECEIVED' | 'CANCELLED';
 
+/**
+ * A line on a supplier order.
+ *
+ * <p>Mirrors `SupplierOrderItemResponse` exactly. Note it carries
+ * `requestedQuantity`, not `quantity`, and no pack fields — a supplier order line
+ * is denominated in the ordering unit, and the pack it came from belongs to the
+ * SKU rather than to the order.
+ */
 export interface SupplierOrderItem {
   id: number;
   canonicalProductId: number;
   productName: string;
   skuName: string;
-  packSize: Money;
-  packUnit: string;
-  quantity: Money;
+  requestedQuantity: Money;
+  /** Null until the supplier answers; zero means they declined this line. */
   acceptedQuantity: Money | null;
   unit: string;
   unitPrice: Money;
   gstRate: Money;
   lineTotal: Money;
+  status: string;
 }
 
 export interface SupplierOrder {

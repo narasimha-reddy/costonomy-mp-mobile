@@ -86,13 +86,13 @@ export default function OrderDetailScreen() {
             {order.items.map((item) => {
               const short =
                 item.acceptedQuantity != null &&
-                Number(item.acceptedQuantity) < Number(item.quantity);
+                Number(item.acceptedQuantity) < Number(item.requestedQuantity);
               return (
                 <View key={item.id} style={styles.item}>
                   <View style={styles.itemText}>
                     <MandiText variant="body">{item.productName}</MandiText>
                     <MandiText variant="caption" color={Colors.textSecondary}>
-                      {formatQuantity(item.quantity)} {item.unit} ·{' '}
+                      {formatQuantity(item.requestedQuantity)} {item.unit} ·{' '}
                       {formatMoney(item.unitPrice)} · GST {formatGstRate(item.gstRate)}
                     </MandiText>
                     {short && (

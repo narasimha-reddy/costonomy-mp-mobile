@@ -1,14 +1,57 @@
+import React from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Redirect } from 'expo-router';
+import { useSession } from '@/contexts/SessionProvider';
+import { MandiText } from '@/components/common';
+import { Colors, Spacing } from '@/theme';
 
 /**
- * Entry point.
+ * REST-AUTH-01 — where the app decides who you are. §23A.5.
  *
- * Will become `REST-AUTH-01` Splash (§23A.5): restore the session, call
- * `/auth/me`, and route to the restaurant or supplier experience based on the
- * **server's** answer about org/store membership and role — never on cached
- * client state. Until authentication lands (build sequence step 4), this routes
- * to the design-system gallery so the repo has something to run.
+ * <p><b>The destination is the server's answer, never a cached one.</b> The
+ * session provider has just called `/auth/me`; this reads the memberships it
+ * returned. Doc 09 §2 is explicit that route visibility is not security, and
+ * doc 46 requires a revoked grant to take effect on the next request — a role
+ * remembered on the device would keep a removed user inside their old
+ * organisation until they reinstalled the app.
+ *
+ * <p>A signed-in user who belongs to no organisation is a real state, not an
+ * error: they have an account and nothing to do with it yet.
  */
 export default function Index() {
-  return <Redirect href="/design-system" />;
+  const { restoring, authenticated, audience } = useSession();
+
+  if (restoring) {
+    return (
+      <View style={styles.splash}>
+        <MandiText variant="display">Mandi</MandiText>
+        <ActivityIndicator color={Colors.primary} />
+      </View>
+    );
+  }
+
+  if (!authenticated) return <Redirect href="/auth/phone" />;
+
+  switch (audience) {
+    case 'SUPPLIER':
+      return <Redirect href="/(supplier)" />;
+    case 'RESTAURANT':
+    case 'BOTH':
+      // Someone who is both goes to the restaurant side first and switches from
+      // Account. v2.2 §5 is one app with role-based views, and buying is the
+      // journey they are far more likely to have opened the app for.
+      return <Redirect href="/(restaurant)" />;
+    default:
+      return <Redirect href="/onboarding" />;
+  }
 }
+
+const styles = StyleSheet.create({
+  splash: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.lg,
+    backgroundColor: Colors.background,
+  },
+});

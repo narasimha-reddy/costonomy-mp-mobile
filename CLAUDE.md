@@ -51,6 +51,7 @@ docs/specs/     the specification set (shared with costonomy-mp-api)
 
 ```bash
 npm start          # expo dev server
+npm run web        # expo on http://localhost:7001 — the default way to check a screen
 npm run typecheck  # tsc --noEmit
 npm run lint       # eslint — includes the colour-literal guard
 npm test           # jest
@@ -58,6 +59,22 @@ npm test           # jest
 
 All three must pass before a PR. `npm start` then opening `/design-system` shows
 a live gallery of every primitive — check it before building a new component.
+
+### Checking a screen against a real backend
+
+Run the API on the `local` profile and `npm run web`. The local profile fixes the
+OTP at `123456` (`costonomy.mp.otp.mock-code`), so any number signs in — but the
+**resend cooldown and attempt limits are real**, which is deliberate: those paths
+are part of the screen. Expect a genuine 429 if you re-request a code for the same
+number inside a minute.
+
+Two things that will waste your time otherwise:
+
+- **`react-native-maps` does not run on web.** Anything that renders a map needs a
+  web fallback, or it cannot be checked this way at all.
+- **expo-router keeps the previous screen mounted.** A `document.querySelector`
+  that grabs the first match will find the *old* screen's element. Filter for
+  visibility before asserting on anything.
 
 ## Rules that are not negotiable
 

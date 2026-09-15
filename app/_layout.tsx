@@ -13,9 +13,17 @@ import {
   SourceSans3_800ExtraBold,
   useFonts,
 } from '@expo-google-fonts/source-sans-3';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { Colors } from '@/theme';
 import { MandiOfflineBanner, MandiToastProvider } from '@/components/common';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { SessionProvider } from '@/contexts/SessionProvider';
+import { createQueryClient } from '@/lib/query';
+
+// Created once for the life of the process. A client rebuilt on render would
+// throw away every cached query on each state change, which looks to a user like
+// the app reloading itself at random.
+const queryClient = createQueryClient();
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Already hidden, or unsupported on this platform — not fatal.
@@ -42,21 +50,28 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <SafeAreaProvider>
-      <MandiToastProvider>
-        <View style={styles.root}>
-          <StatusBar style="dark" />
-          {/* Mounted once here so no screen can forget the offline state. */}
-          <OfflineBar />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: Colors.background },
-            }}
-          />
-        </View>
-      </MandiToastProvider>
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      {/* Inside the query client so a screen can invalidate on sign-out, and
+          outside the navigator so the session is resolved before any route
+          decides where to send the user. */}
+      <SessionProvider>
+        <SafeAreaProvider>
+          <MandiToastProvider>
+            <View style={styles.root}>
+              <StatusBar style="dark" />
+              {/* Mounted once here so no screen can forget the offline state. */}
+              <OfflineBar />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: Colors.background },
+                }}
+              />
+            </View>
+          </MandiToastProvider>
+        </SafeAreaProvider>
+      </SessionProvider>
+    </QueryClientProvider>
   );
 }
 

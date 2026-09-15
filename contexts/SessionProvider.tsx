@@ -3,6 +3,7 @@ import React, {
 } from 'react';
 import { fetchMe, logout as logoutRequest, refreshSession, verifyOtp } from '@/services/auth';
 import { ApiError } from '@/lib/api/errors';
+import { registerTokenRenewal } from '@/lib/api/session-bridge';
 import { deleteSecret, getSecret, setSecret } from '@/lib/session/storage';
 import { audienceOf, type Audience, type AuthMe, type AuthTokens } from '@/lib/session/types';
 
@@ -96,6 +97,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       }
       throw error;
     }
+  }, [renew]);
+
+  // Let the API client renew a token mid-request. Without this the renewal below
+  // is reachable only from `/auth/me`, and every other screen simply fails once
+  // the fifteen-minute access token expires.
+  useEffect(() => {
+    registerTokenRenewal(renew);
+    return () => registerTokenRenewal(null);
   }, [renew]);
 
   // Restore on cold start. §23A.5: the splash resolves to a real destination.

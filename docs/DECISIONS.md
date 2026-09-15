@@ -1521,6 +1521,75 @@ in a shell of someone's dashboard.
 
 ---
 
+## D-058 — An expired access token is renewed by the API client, not by each screen
+**2026-09-15 · Settled**
+
+The session provider had a correct single-flight `renew()` from the first day.
+Nothing but `/auth/me` ever called it. Every screen query passed its token
+straight to `apiRequest`, so when the fifteen-minute access token expired each
+query failed on its own and the app looked broken until it was force-quit —
+found by leaving a browser tab open for twenty minutes, not by any test.
+
+**Decision: `apiRequest` renews once on a 401 and repeats the call.** Safe for any
+method, `POST` included: the server rejected the request at authentication and
+never saw it, so there is nothing to have happened twice. The renewal does not
+consume a retry attempt, because nothing was wrong with the request.
+
+The client cannot call `useSession` and the provider cannot be imported by the
+client without a cycle, so the provider registers its renewal function in
+`lib/api/session-bridge` on mount. With nothing registered — a unit test, a call
+made before the provider mounts — a 401 stays a 401, which is the right answer
+rather than a hang.
+
+**A failed renewal is still a 401.** It propagates, the session clears, and the
+route guards send the user to sign in. Retrying into a wall would be worse than
+the bug this fixes.
+
+---
+
+## D-059 — Mock checkout is completed through a gated endpoint, not skipped
+**2026-09-15 · Settled**
+
+`MockPaymentProvider.completeCheckout` was reachable only from Java. A real
+checkout happens in the provider's hosted UI, which no mock has, so a local or
+staging environment could reach the payment screen and stop dead: the order sat
+in `DRAFT`, no supplier ever saw it, and acceptance, tracking and receiving were
+unreachable by anything except the test suite.
+
+**Decision: `POST /api/v1/internal/payments/{id}/simulate-checkout`**, following
+`DeliverySimulationService`'s pattern — two gates, both in the service next to the
+work they guard. The caller must hold `PAYMENT_CREATE` on the payment's own
+outlet, so it grants nothing they could not already do; and the configured
+provider must actually be a mock, which is what makes it safe to ship. Against a
+real provider it refuses, so it cannot become a way to mark real money authorised.
+
+**It stops at authorisation** and returns the provider payment id. The caller then
+goes through the real `/payments/{id}/confirm`. Short-circuiting straight to a
+confirmed payment would have left the one step that matters — the server asking
+the provider what actually happened — exercised by nothing but the suite.
+
+---
+
+## D-060 — The client renders the server's ranking; it never re-sorts
+**2026-09-15 · Settled**
+
+The comparison screen (REST-SUP-01) receives offers from the recommendation feed
+already ranked, and treats index 0 as the recommendation. It does not sort, filter
+or re-weigh them.
+
+Doc 07 specifies the ranking and tests it; a client-side sort would quietly
+substitute a different one that nothing tests, and "cheapest first" is not the
+same answer as the feed's — which weighs fill rate, reliability and whether a
+supplier can cover the quantity at all. Guardrail 9 also has a sharper edge here:
+the shape carries no commission field, and `explanationLabel` has no commission
+label and must never gain one.
+
+**Quantity is part of the question.** The feed is asked for the quantity on
+screen, because `coversFullQuantity` is meaningless without one, and changing the
+stepper re-asks rather than re-filtering what is already loaded.
+
+---
+
 ## D-017 — The requirement lifecycle includes SOURCING
 **Raised 2026-09-14 · Settled 2026-09-14** (was OPEN-003)
 

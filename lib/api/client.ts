@@ -1,5 +1,6 @@
 import { API_BASE_URL } from './config';
 import { ApiError, NetworkError } from './errors';
+import { renewAccessToken } from './session-bridge';
 
 /**
  * The server's envelope. Doc 04 §1, D-011.
@@ -71,13 +72,33 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const retryable = method === 'GET' || options.idempotencyKey != null;
   const maxAttempts = (options.retries ?? (retryable ? DEFAULT_RETRIES : 0)) + 1;
 
+  // An expired access token is not a failed request, it is a stale credential.
+  // Renewing once and repeating the call is safe for any method: the server
+  // never saw the original, having rejected it at authentication.
+  let token = options.token;
+  let renewed = false;
+
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await performRequest<T>(path, method, options);
+      return await performRequest<T>(path, method, { ...options, token });
     } catch (error) {
       lastError = error;
+
+      if (error instanceof ApiError && error.isUnauthenticated && token != null && !renewed) {
+        renewed = true;
+        const fresh = await renewAccessToken();
+        if (fresh != null) {
+          token = fresh;
+          // Does not count as an attempt: nothing was wrong with the request.
+          attempt -= 1;
+          continue;
+        }
+        // No renewal available or the session is genuinely over. Report the 401
+        // so the app signs out rather than retrying into a wall.
+        break;
+      }
 
       const isLast = attempt === maxAttempts;
       if (isLast) break;

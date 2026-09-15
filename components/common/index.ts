@@ -19,3 +19,5 @@ export { AuthGate } from './AuthGate';
 export { DeviceFrame } from './DeviceFrame';
 export { OutletSelector } from './OutletSelector';
 export { MandiScreen } from './MandiScreen';
+export { MandiHeader, MandiHeaderAction } from './MandiHeader';
+export { MandiStickyBar } from './MandiStickyBar';

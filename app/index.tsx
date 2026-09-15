@@ -34,13 +34,13 @@ export default function Index() {
 
   switch (audience) {
     case 'SUPPLIER':
-      return <Redirect href="/(supplier)" />;
+      return <Redirect href="/supplier" />;
     case 'RESTAURANT':
     case 'BOTH':
       // Someone who is both goes to the restaurant side first and switches from
       // Account. v2.2 §5 is one app with role-based views, and buying is the
       // journey they are far more likely to have opened the app for.
-      return <Redirect href="/(restaurant)" />;
+      return <Redirect href="/restaurant" />;
     default:
       return <Redirect href="/onboarding" />;
   }

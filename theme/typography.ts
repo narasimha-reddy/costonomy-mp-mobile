@@ -79,10 +79,25 @@ export const TextStyles = {
     lineHeight: Math.round(FontSize.lg * LineHeight.normal),
   },
   /** "Recommended for you", "Active orders" — the row above a horizontal list. */
+  /**
+   * The label above a group of cards.
+   *
+   * <p>Deliberately a different register from the content it introduces, not a
+   * larger version of it. At 16px semibold it was a hair bigger than a card's own
+   * title at 15px semibold and the same colour — so "New orders" and "Indiranagar"
+   * read as two things of equal weight, and the page looked like a flat list with
+   * occasional stray words in it.
+   *
+   * <p>Uppercase and letterspaced at 12px says "this is scaffolding" without
+   * competing: a reader's eye skips it on the way to the cards and finds it again
+   * when looking for where one group ends.
+   */
   sectionTitle: {
     fontFamily: FontFamily.semibold,
-    fontSize: FontSize.md,
-    lineHeight: Math.round(FontSize.md * LineHeight.normal),
+    fontSize: FontSize.xs,
+    lineHeight: Math.round(FontSize.xs * LineHeight.normal),
+    letterSpacing: 0.8,
+    textTransform: 'uppercase' as const,
   },
   body: {
     fontFamily: FontFamily.regular,

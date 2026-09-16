@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
 import { DEVICE_WIDTH } from './DeviceFrame';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -18,9 +19,10 @@ import { Colors, Radius, Spacing } from '@/theme';
  * same scrim, the same radius, the same stop-propagation, and would have needed
  * the same fix four times.
  *
- * <p>The scrim is a button. Tapping outside a sheet is how people close one, and
- * a sheet that can only be dismissed by a control inside it traps anyone who
- * opened it by accident.
+ * <p>There are two ways out, because tapping outside a sheet is how most people
+ * close one and a sheet dismissible only from outside is unreachable to anyone
+ * who cannot see where "outside" is. So the scrim closes on a tap, silently, and
+ * the sheet carries a close button that is the announced route.
  */
 export function MandiBottomSheet({
   visible,
@@ -33,7 +35,7 @@ export function MandiBottomSheet({
   onClose: () => void;
   /** Rendered as the sheet's heading, and read as its accessible name. */
   title?: string;
-  /** What the scrim announces, e.g. "Close the filter". */
+  /** What the close button announces, e.g. "Close the filter". */
   closeLabel?: string;
   children: React.ReactNode;
 }) {
@@ -47,23 +49,46 @@ export function MandiBottomSheet({
       // navigation bar rather than stopping short of it.
       statusBarTranslucent
     >
+      {/* The scrim closes on a tap but is not announced as a button.
+          As a button it wrapped every control in the sheet — an option inside a
+          button inside a button, which is invalid on web and gives a screen
+          reader nested controls where there is one surface. Tapping away stays a
+          sighted convenience; the close button below is the announced way out. */}
       <Pressable
         style={styles.scrim}
         onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel={closeLabel ?? 'Close'}
+        accessible={false}
+        importantForAccessibility="no"
       >
         <View style={styles.column} pointerEvents="box-none">
-          <Pressable
+          {/* A View that claims the touch, not a Pressable.
+              The sheet has to swallow taps so they do not reach the scrim and
+              close it — but a Pressable inside a Pressable renders as a button
+              inside a button, which is invalid HTML on web and gives a screen
+              reader two nested controls where there is one surface. Claiming the
+              responder stops the bubble without pretending to be a control. */}
+          <View
             style={styles.sheet}
-            // Without this, a tap on the sheet bubbles to the scrim and closes it.
-            onPress={(event) => event.stopPropagation()}
+            onStartShouldSetResponder={() => true}
             accessibilityViewIsModal
             accessibilityLabel={title}
           >
-            {title ? <MandiText variant="subtitle">{title}</MandiText> : null}
+            <View style={styles.titleRow}>
+              {title ? (
+                <MandiText variant="subtitle" style={styles.flex}>{title}</MandiText>
+              ) : <View style={styles.flex} />}
+              <Pressable
+                onPress={onClose}
+                accessibilityRole="button"
+                accessibilityLabel={closeLabel ?? 'Close'}
+                hitSlop={8}
+                style={styles.close}
+              >
+                <Ionicons name="close" size={20} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
             {children}
-          </Pressable>
+          </View>
         </View>
       </Pressable>
     </Modal>
@@ -83,6 +108,9 @@ const styles = StyleSheet.create({
     // would letterbox the sheet on anything wider than 390pt.
     maxWidth: Platform.OS === 'web' ? DEVICE_WIDTH : undefined,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  flex: { flex: 1 },
+  close: { padding: Spacing.xs, margin: -Spacing.xs },
   sheet: {
     backgroundColor: Colors.surfaceElevated,
     borderTopLeftRadius: Radius.xl,

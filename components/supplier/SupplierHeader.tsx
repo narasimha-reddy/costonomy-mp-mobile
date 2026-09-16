@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@/contexts/StoreProvider';
+import { storeLabel } from '@/utils/storeName';
 import { useNotifications } from '@/hooks/useNotifications';
 import { MandiBottomSheet, MandiHeaderAction, MandiText } from '@/components/common';
 import { Colors, Spacing, TouchTarget } from '@/theme';
@@ -28,7 +29,7 @@ export function SupplierHeader({
   subtitle,
   trailing,
 }: {
-  /** Overrides the store line — used where the screen itself names the store. */
+  /** The section, when the screen is one — "Catalog", "Orders". */
   subtitle?: string;
   trailing?: React.ReactNode;
 }) {
@@ -37,42 +38,40 @@ export function SupplierHeader({
   const { unreadCount } = useNotifications();
   const [open, setOpen] = useState(false);
 
-  const title = supplier?.displayName ?? store?.name ?? 'Your business';
+  // The store leads, the business follows.
+  //
+  // A supplier with three stores works in one of them at a time, and the answer
+  // to "where am I" was the small grey line while the answer to "who am I" — a
+  // thing nobody forgets — was the headline. The storefront icon went with it:
+  // once the store is the title, an icon saying "this is a store" is decoration.
   const multiStore = stores.length > 1;
-
-  // The second line answers "where am I", and on a multi-store account it also
-  // has to answer "which store". A section name behind a storefront icon reads
-  // as the name of a store, so the icon appears only when a store is named.
-  const section = subtitle;
-  const storeName = store?.name;
-  const line = multiStore || section == null
-    ? [section, storeName].filter(Boolean).join(' · ')
-    : section;
-  const namesStore = line.includes(storeName ?? '\u0000');
+  const business = supplier?.displayName ?? null;
+  const title = storeLabel(store?.name, business) ?? business ?? 'Your business';
+  const line = [subtitle, store?.name ? business : null].filter(Boolean).join(' · ');
 
   return (
     <View style={styles.header}>
       <View style={styles.identity}>
-        <MandiText variant="title" numberOfLines={1}>{title}</MandiText>
+        {/* The switcher is on the title now, because the title is the store.
+            One store and there is nothing to switch between, so it is a heading
+            rather than a control that does nothing. */}
+        <Pressable
+          onPress={() => multiStore && setOpen(true)}
+          disabled={!multiStore}
+          accessibilityRole={multiStore ? 'button' : 'header'}
+          accessibilityLabel={multiStore ? `${title}. Change store` : title}
+          style={styles.titleRow}
+        >
+          <MandiText variant="title" numberOfLines={1} style={styles.flex}>{title}</MandiText>
+          {multiStore && (
+            <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
+          )}
+        </Pressable>
 
         {line !== '' && (
-          <Pressable
-            onPress={() => multiStore && setOpen(true)}
-            disabled={!multiStore}
-            accessibilityRole={multiStore ? 'button' : 'text'}
-            accessibilityLabel={multiStore ? `${line}. Change store` : line}
-            style={styles.storeRow}
-          >
-            {namesStore && (
-              <Ionicons name="storefront-outline" size={13} color={Colors.textSecondary} />
-            )}
-            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-              {line}
-            </MandiText>
-            {multiStore && (
-              <Ionicons name="chevron-down" size={12} color={Colors.textSecondary} />
-            )}
-          </Pressable>
+          <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+            {line}
+          </MandiText>
         )}
       </View>
 
@@ -133,7 +132,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   identity: { flex: 1, gap: 2 },
-  storeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  flex: { flex: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   actions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   option: {
     flexDirection: 'row',

@@ -61,6 +61,7 @@ export default function SupplierHome() {
       <View style={styles.section}>
         <MandiSectionHeader
           title="New orders"
+          count={(pending.data ?? []).length}
           subtitle={store?.responseSlaSeconds
             ? `Respond within ${Math.round(store.responseSlaSeconds / 60)} min`
             : undefined}
@@ -90,6 +91,7 @@ export default function SupplierHome() {
       <View style={styles.section}>
         <MandiSectionHeader
           title="In progress"
+          count={(active.data ?? []).length}
           actionLabel={(active.data ?? []).length ? 'See all' : undefined}
           onAction={() => router.push('/supplier/(tabs)/orders')}
         />

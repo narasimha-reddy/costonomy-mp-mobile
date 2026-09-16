@@ -6,6 +6,14 @@ import { MandiText } from './MandiText';
 
 interface MandiSectionHeaderProps {
   title: string;
+  /**
+   * How many things are in the section.
+   *
+   * <p>Appended to the label rather than shown as a badge: a count is part of
+   * what the group is called — "In progress 3" — and a badge beside it reads as
+   * something needing attention, which a count of ordinary work is not.
+   */
+  count?: number;
   subtitle?: string;
   /** "See all" affordance on the right. */
   actionLabel?: string;
@@ -22,6 +30,7 @@ interface MandiSectionHeaderProps {
  */
 export function MandiSectionHeader({
   title,
+  count,
   subtitle,
   actionLabel,
   onAction,
@@ -31,8 +40,13 @@ export function MandiSectionHeader({
   return (
     <View style={[styles.row, style]} testID={testID}>
       <View style={styles.titles}>
-        <MandiText variant="sectionTitle" accessibilityRole="header">
+        <MandiText
+          variant="sectionTitle"
+          color={Colors.textSecondary}
+          accessibilityRole="header"
+        >
           {title}
+          {count != null && count > 0 ? `  ${count}` : ''}
         </MandiText>
         {subtitle != null && (
           <MandiText variant="caption" muted>

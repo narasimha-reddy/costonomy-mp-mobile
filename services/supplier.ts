@@ -1,5 +1,5 @@
 import { apiRequest } from '@/lib/api/client';
-import type { SupplierOrder } from '@/models/procurement';
+import type { IncomingOrder, SupplierOrder } from '@/models/procurement';
 import type { Money } from '@/utils/money';
 
 export interface SupplierStore {
@@ -42,13 +42,13 @@ export function fetchStore(token: string, storeId: number): Promise<SupplierStor
 // ── Orders ────────────────────────────────────────────────────────────
 
 /** Orders awaiting this store's answer. Each carries the authoritative deadline. */
-export function fetchPendingOrders(token: string, storeId: number): Promise<SupplierOrder[]> {
-  return apiRequest<SupplierOrder[]>(`/api/v1/supplier-stores/${storeId}/orders/pending`, { token });
+export function fetchPendingOrders(token: string, storeId: number): Promise<IncomingOrder[]> {
+  return apiRequest<IncomingOrder[]>(`/api/v1/supplier-stores/${storeId}/orders/pending`, { token });
 }
 
 /** Accepted through to delivered — everything the store is still working on. */
-export function fetchActiveOrders(token: string, storeId: number): Promise<SupplierOrder[]> {
-  return apiRequest<SupplierOrder[]>(`/api/v1/supplier-stores/${storeId}/orders/active`, { token });
+export function fetchActiveOrders(token: string, storeId: number): Promise<IncomingOrder[]> {
+  return apiRequest<IncomingOrder[]>(`/api/v1/supplier-stores/${storeId}/orders/active`, { token });
 }
 
 /**

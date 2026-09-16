@@ -156,6 +156,18 @@ export interface SupplierOrder {
   supplierStoreId: number;
   supplierName: string;
   storeName: string;
+  /**
+   * Where the order is going. The order number identifies it to a system; the
+   * outlet and the restaurant identify it to a person.
+   */
+  outletId: number;
+  outletName: string | null;
+  restaurantName: string | null;
+  /** Landmark, else the street line. Where the van actually goes. */
+  outletLocality: string | null;
+  outletCity: string | null;
+  /** Kilometres from the supplier's store, or null when either end is unlocated. */
+  distanceKm: Money | null;
   status: SupplierOrderStatus;
   /** The authoritative deadline. Count down to this, never to a local timer. */
   acceptanceDeadline: string | null;
@@ -166,6 +178,40 @@ export interface SupplierOrder {
   acceptedAmount: Money | null;
   paymentMethod: PaymentMethod | null;
   paymentStatus: string | null;
+  items: SupplierOrderItem[];
+}
+
+/**
+ * A supplier's view of an order that arrived for one of their stores.
+ *
+ * <p>Mirrors `IncomingOrderResponse`, which is **not** `SupplierOrderResponse`:
+ * it is the same order seen from the other side of the trade. It carries
+ * `secondsRemaining` and the buyer's identity, and it deliberately omits
+ * `supplierName`, `storeName` and `paymentStatus` — the supplier knows who they
+ * are, and how the restaurant paid is not theirs to see beyond the method.
+ */
+export interface IncomingOrder {
+  id: number;
+  orderNumber: string;
+  outletId: number;
+  outletName: string | null;
+  restaurantName: string | null;
+  outletLocality: string | null;
+  outletCity: string | null;
+  /** Kilometres from this store, or null when either end is unlocated. */
+  distanceKm: Money | null;
+  status: SupplierOrderStatus;
+  /** The authoritative deadline. Count down to this, never to a local timer. */
+  acceptanceDeadline: string | null;
+  responseSlaSeconds: number | null;
+  /** The server's starting point for the countdown, not a substitute for the deadline. */
+  secondsRemaining: number;
+  subtotal: Money;
+  gstAmount: Money;
+  totalAmount: Money;
+  /** What the store committed to. Zero before they answer, below the total after a partial. */
+  acceptedAmount: Money;
+  paymentMethod: PaymentMethod | null;
   items: SupplierOrderItem[];
 }
 

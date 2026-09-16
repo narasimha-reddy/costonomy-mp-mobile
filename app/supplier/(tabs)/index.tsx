@@ -19,6 +19,8 @@ import {
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatMoney } from '@/utils/money';
+import { formatDistance } from '@/utils/orders';
+import { OrderCardHeading } from '@/components/order';
 import { Colors, Spacing } from '@/theme';
 
 /**
@@ -107,16 +109,24 @@ export default function SupplierHome() {
         ) : (
           (active.data ?? []).slice(0, 5).map((order) => (
             <MandiCard key={order.id} onPress={() => router.push(`/supplier/orders/${order.id}`)}>
+              <OrderCardHeading
+                primary={order.outletName}
+                secondary={[
+                  order.restaurantName,
+                  order.outletLocality,
+                  formatDistance(order.distanceKm),
+                ]}
+                items={order.items}
+                orderNumber={order.orderNumber}
+                paymentMethod={order.paymentMethod}
+                trailing={
+                  <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
+                }
+              />
               <View style={styles.row}>
-                <MandiText variant="bodyEmphasis">{order.orderNumber}</MandiText>
-                <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
-              </View>
-              <View style={styles.row}>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  {order.items.length} item{order.items.length === 1 ? '' : 's'}
-                </MandiText>
+                <MandiText variant="caption" color={Colors.textSecondary}>Order value</MandiText>
                 <MandiText variant="priceSmall">
-                  {formatMoney(order.acceptedAmount ?? order.totalAmount, true)}
+                  {formatMoney(order.acceptedAmount, true)}
                 </MandiText>
               </View>
             </MandiCard>

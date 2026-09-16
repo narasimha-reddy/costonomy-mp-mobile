@@ -1,7 +1,9 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import type { SupplierOrder } from '@/models/procurement';
+import type { IncomingOrder } from '@/models/procurement';
 import { MandiCard, MandiCountdown, MandiText } from '@/components/common';
+import { OrderCardHeading } from '@/components/order';
+import { formatDistance } from '@/utils/orders';
 import { formatMoney } from '@/utils/money';
 import { Colors, Spacing } from '@/theme';
 
@@ -18,25 +20,28 @@ export function PendingOrderCard({
   order,
   onPress,
 }: {
-  order: SupplierOrder;
+  order: IncomingOrder;
   onPress: () => void;
 }) {
   return (
     <MandiCard onPress={onPress} outlined accentColor={Colors.primary}>
-      <View style={styles.row}>
-        <View style={styles.text}>
-          <MandiText variant="bodyEmphasis">
-            {order.items.length} item{order.items.length === 1 ? '' : 's'}
-          </MandiText>
-          <MandiText variant="caption" color={Colors.textSecondary}>
-            {order.orderNumber}
-          </MandiText>
-        </View>
-        <MandiCountdown
-          deadlineAt={order.acceptanceDeadline}
-          slaSeconds={order.responseSlaSeconds ?? undefined}
-        />
-      </View>
+      <OrderCardHeading
+        primary={order.outletName}
+        secondary={[
+          order.restaurantName,
+          order.outletLocality,
+          formatDistance(order.distanceKm),
+        ]}
+        items={order.items}
+        orderNumber={order.orderNumber}
+        paymentMethod={order.paymentMethod}
+        trailing={
+          <MandiCountdown
+            deadlineAt={order.acceptanceDeadline}
+            slaSeconds={order.responseSlaSeconds ?? undefined}
+          />
+        }
+      />
       <View style={styles.row}>
         <MandiText variant="caption" color={Colors.textSecondary}>Order value</MandiText>
         <MandiText variant="price">{formatMoney(order.totalAmount)}</MandiText>
@@ -52,5 +57,4 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.md,
   },
-  text: { flex: 1, gap: Spacing.xs },
 });

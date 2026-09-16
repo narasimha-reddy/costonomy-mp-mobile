@@ -33,6 +33,8 @@ import {
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { formatDistance } from '@/utils/orders';
+import { PaymentMethodPill } from '@/components/order';
 import { track } from '@/analytics';
 import { Colors, Radius, Spacing } from '@/theme';
 
@@ -173,7 +175,13 @@ export default function SupplierOrderScreen() {
 
   return (
     <MandiScreen
-      header={<MandiHeader title={order?.orderNumber ?? 'Order'} back />}
+      header={
+        <MandiHeader
+          title={order?.outletName ?? 'Order'}
+          subtitle={order?.restaurantName ?? undefined}
+          back
+        />
+      }
       footer={renderFooter()}
     >
       {query.isPending ? (
@@ -183,9 +191,28 @@ export default function SupplierOrderScreen() {
       ) : (
         <>
           <MandiCard>
+            {/* Where it is going, then what it is called and how it is paid for.
+                The supplier is deciding inside a sixty-second window, and the
+                first of those is the one they cannot look up later. */}
             <View style={styles.row}>
-              <MandiText variant="bodyEmphasis">{order.orderNumber}</MandiText>
+              <View style={styles.where}>
+                <MandiText variant="bodyEmphasis" numberOfLines={2}>
+                  {[order.outletLocality, order.outletCity].filter(Boolean).join(', ')
+                    || order.outletName}
+                </MandiText>
+                {formatDistance(order.distanceKm) ? (
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    {formatDistance(order.distanceKm)} from your store
+                  </MandiText>
+                ) : null}
+              </View>
               <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} />
+            </View>
+            <View style={styles.identityRow}>
+              <MandiText variant="caption" color={Colors.textTertiary}>
+                {order.orderNumber}
+              </MandiText>
+              <PaymentMethodPill method={order.paymentMethod} />
             </View>
             {pending && order.acceptanceDeadline && (
               <View style={styles.deadline}>
@@ -438,6 +465,14 @@ function Row({ label, value, emphasis }: { label: string; value: string; emphasi
 }
 
 const styles = StyleSheet.create({
+  where: { flex: 1, gap: 2 },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   deadline: { marginTop: Spacing.md, gap: Spacing.xs },

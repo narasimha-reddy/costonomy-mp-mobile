@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useStores } from '@/hooks/useStores';
 import { getPreference, setPreference } from '@/lib/preferences';
-import type { SupplierStore } from '@/services/supplier';
+import type { Supplier, SupplierStore } from '@/services/supplier';
 
 const SELECTED_STORE_KEY = 'mp.selectedStoreId';
 
@@ -14,6 +14,8 @@ const SELECTED_STORE_KEY = 'mp.selectedStoreId';
  */
 interface StoreState {
   stores: SupplierStore[];
+  /** The organisation. Null when the user holds only a store-scope grant. */
+  supplier: Supplier | null;
   store: SupplierStore | null;
   storeId: number | null;
   select: (storeId: number) => void;
@@ -24,7 +26,7 @@ interface StoreState {
 const StoreContext = createContext<StoreState | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const { stores, loading, error } = useStores();
+  const { stores, supplier, loading, error } = useStores();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
 
@@ -57,12 +59,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<StoreState>(() => ({
     stores,
+    supplier,
     store,
     storeId: store?.id ?? null,
     select,
     loading: loading || !restored,
     error,
-  }), [stores, store, select, loading, restored, error]);
+  }), [stores, supplier, store, select, loading, restored, error]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

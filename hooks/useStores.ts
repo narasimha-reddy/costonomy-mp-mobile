@@ -1,5 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import { fetchStore, fetchSupplier, type SupplierStore } from '@/services/supplier';
+import { fetchStore, fetchSupplier, type Supplier, type SupplierStore } from '@/services/supplier';
 import { useSession } from '@/contexts/SessionProvider';
 import type { Membership } from '@/lib/session/types';
 
@@ -13,6 +13,14 @@ import type { Membership } from '@/lib/session/types';
  */
 export interface StoresState {
   stores: SupplierStore[];
+  /**
+   * The organisation itself — its trading name, and whether it may trade at all.
+   *
+   * <p>Null for someone granted only at store scope: they act for a branch and
+   * the organisation is not theirs to see. Screens that render it fall back to
+   * the store's name rather than inventing one.
+   */
+  supplier: Supplier | null;
   loading: boolean;
   error: unknown;
 }
@@ -52,22 +60,34 @@ export function useStores(): StoresState {
     queries: [
       ...supplierIds.map((id) => ({
         queryKey: ['supplier', id],
-        queryFn: () =>
-          fetchSupplier(accessToken as string, id).then((supplier) => supplier.stores ?? []),
+        queryFn: () => fetchSupplier(accessToken as string, id),
         enabled,
       })),
       ...storeIds.map((id) => ({
         queryKey: ['supplier-store', id],
-        queryFn: () => fetchStore(accessToken as string, id).then((store) => [store]),
+        queryFn: () => fetchStore(accessToken as string, id),
         enabled,
       })),
     ],
   });
 
-  const stores = dedupeBy(results.flatMap((r) => r.data ?? []), (store) => store.id);
+  // A supplier query yields the organisation and its stores; a store query yields
+  // one store. Splitting them here keeps both shapes out of every caller.
+  const organisations = results
+    .map((r) => r.data)
+    .filter((data): data is Supplier => data != null && 'displayName' in data);
+  const loose = results
+    .map((r) => r.data)
+    .filter((data): data is SupplierStore => data != null && !('displayName' in data));
+
+  const stores = dedupeBy(
+    [...organisations.flatMap((o) => o.stores ?? []), ...loose],
+    (store) => store.id,
+  );
 
   return {
     stores: stores.sort((a, b) => a.name.localeCompare(b.name)),
+    supplier: organisations[0] ?? null,
     loading: results.some((r) => r.isPending) && enabled,
     error: results.find((r) => r.error)?.error,
   };

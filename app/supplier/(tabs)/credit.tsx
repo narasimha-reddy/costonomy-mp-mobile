@@ -5,7 +5,7 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { approveCredit, fetchStoreAgreements, rejectCredit, suspendCredit } from '@/services/credit';
 import type { CreditAgreement } from '@/models/credit';
-import { StoreSelector } from '@/components/supplier/StoreSelector';
+import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import { CreditPosition } from '@/components/credit/CreditPosition';
 import {
   MandiButton,
@@ -13,7 +13,6 @@ import {
   MandiEmptyState,
   MandiErrorState,
   MandiFormField,
-  MandiHeader,
   MandiScreen,
   MandiSkeletonList,
   MandiStatusChip,
@@ -278,7 +277,7 @@ function Header({ tab, onTab, pendingCount }: {
   ];
   return (
     <View style={styles.header}>
-      <MandiHeader title="Credit" right={<StoreSelector />} />
+      <SupplierHeader subtitle="Credit" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {tabs.map((option) => {
           const active = option.key === tab;

@@ -1,25 +1,22 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, FontFamily, FontSize } from '@/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { tabBarOptions, tabLabel } from '@/components/common/tabBarOptions';
 
 /** `Home | Orders | Catalog | Credit | More` — doc 05 §1. */
 export default function SupplierTabs() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textTertiary,
-        tabBarStyle: { backgroundColor: Colors.surface, borderTopColor: Colors.border },
-        tabBarLabelStyle: { fontFamily: FontFamily.medium, fontSize: FontSize.xs },
-        sceneStyle: { backgroundColor: Colors.background },
-      }}
+      screenOptions={{ headerShown: false, ...tabBarOptions(insets) }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
+          tabBarLabel: tabLabel('Home'),
           tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />,
         }}
       />
@@ -27,6 +24,7 @@ export default function SupplierTabs() {
         name="orders"
         options={{
           title: 'Orders',
+          tabBarLabel: tabLabel('Orders'),
           tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} />,
         }}
       />
@@ -34,6 +32,7 @@ export default function SupplierTabs() {
         name="catalog"
         options={{
           title: 'Catalog',
+          tabBarLabel: tabLabel('Catalog'),
           tabBarIcon: ({ color, size }) => <Ionicons name="pricetags-outline" color={color} size={size} />,
         }}
       />
@@ -41,6 +40,7 @@ export default function SupplierTabs() {
         name="credit"
         options={{
           title: 'Credit',
+          tabBarLabel: tabLabel('Credit'),
           tabBarIcon: ({ color, size }) => <Ionicons name="card-outline" color={color} size={size} />,
         }}
       />
@@ -48,6 +48,7 @@ export default function SupplierTabs() {
         name="more"
         options={{
           title: 'More',
+          tabBarLabel: tabLabel('More'),
           tabBarIcon: ({ color, size }) => <Ionicons name="ellipsis-horizontal" color={color} size={size} />,
         }}
       />

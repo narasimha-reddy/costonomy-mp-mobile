@@ -23,8 +23,11 @@ export interface Supplier {
   id: number;
   legalName: string;
   displayName: string;
+  gstin: string | null;
   lifecycleStatus: string;
   verificationStatus: string;
+  /** Whether this supplier can currently receive orders. The server's answer. */
+  canTrade: boolean;
   stores: SupplierStore[];
 }
 
@@ -182,4 +185,113 @@ export function updateSku(
     token,
     body: patch,
   });
+}
+
+// ── Editing the business ──────────────────────────────────────────────
+
+export interface UpdateSupplierInput {
+  legalName?: string;
+  displayName?: string;
+  gstin?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+}
+
+export function updateSupplier(
+  token: string,
+  supplierId: number,
+  patch: UpdateSupplierInput,
+): Promise<Supplier> {
+  return apiRequest<Supplier>(`/api/v1/suppliers/${supplierId}`, {
+    method: 'PATCH',
+    token,
+    body: patch,
+  });
+}
+
+export interface UpdateStoreInput {
+  name?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  latitude?: string;
+  longitude?: string;
+  contactName?: string;
+  contactPhone?: string;
+  responseSlaSeconds?: number;
+  preparationMinutes?: number;
+  /** ACTIVE or OFFLINE. Going offline stops new orders without closing the store. */
+  status?: 'ACTIVE' | 'OFFLINE';
+}
+
+export function updateStore(
+  token: string,
+  storeId: number,
+  patch: UpdateStoreInput,
+): Promise<SupplierStore> {
+  return apiRequest<SupplierStore>(`/api/v1/supplier-stores/${storeId}`, {
+    method: 'PATCH',
+    token,
+    body: patch,
+  });
+}
+
+export function fetchVerification(token: string, supplierId: number) {
+  return apiRequest<{
+    id: number;
+    verificationType: string;
+    status: string;
+    rejectionReason: string | null;
+    verifiedAt: string | null;
+    createdAt: string;
+  }>(`/api/v1/suppliers/${supplierId}/verification`, { token });
+}
+
+// ── Creating a SKU ────────────────────────────────────────────────────
+
+export interface CreateSkuInput {
+  canonicalProductId: number;
+  skuCode?: string;
+  name: string;
+  brandName?: string;
+  packSize: string;
+  packUnit: string;
+  imageUrl?: string;
+  sellingPrice: string;
+  gstRate: string;
+  availability?: 'AVAILABLE' | 'OUT_OF_STOCK';
+  availableQuantity?: string;
+}
+
+/**
+ * List a product this store sells.
+ *
+ * <p>`canonicalProductId` ties it to the platform's product, which is what lets a
+ * restaurant compare this listing against other suppliers'. A SKU with no
+ * canonical product would be invisible in every comparison — which is why the
+ * server requires it and there is deliberately no API for a supplier to invent a
+ * canonical product of their own (doc 01 §7).
+ */
+export function createSku(
+  token: string,
+  storeId: number,
+  input: CreateSkuInput,
+): Promise<SupplierSku> {
+  return apiRequest<SupplierSku>(`/api/v1/supplier-stores/${storeId}/skus`, {
+    method: 'POST',
+    token,
+    body: input,
+  });
+}
+
+export function fetchPriceHistory(token: string, skuId: number) {
+  return apiRequest<{
+    sellingPrice: string;
+    gstRate: string;
+    availability: string;
+    effectiveFrom: string;
+    effectiveTo: string | null;
+  }[]>(`/api/v1/supplier-skus/${skuId}/price-history`, { token });
 }

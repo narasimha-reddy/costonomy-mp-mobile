@@ -131,7 +131,7 @@ export default function SupplierOrderScreen() {
       invalidate();
       setMode('view');
       toast.show('Order declined', 'info');
-      router.back();
+      router.replace('/supplier/orders');
     },
     onError: (caught) => onRefusal(caught, 'Could not decline this order.'),
   });

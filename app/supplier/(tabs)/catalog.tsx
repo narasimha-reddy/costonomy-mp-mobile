@@ -1,17 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchSkus, updateSku, type SupplierSku } from '@/services/supplier';
-import { StoreSelector } from '@/components/supplier/StoreSelector';
+import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import {
   MandiButton,
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
   MandiFormField,
-  MandiHeader,
+  MandiIconButton,
   MandiScreen,
   MandiSearchBar,
   MandiSkeletonList,
@@ -47,6 +48,7 @@ const FILTERS: { key: Filter; label: string }[] = [
  * retroactive: orders already placed keep the price they were placed at.
  */
 export default function SupplierCatalogScreen() {
+  const router = useRouter();
   const { accessToken } = useSession();
   const { storeId } = useStore();
   const [filter, setFilter] = useState<Filter>('all');
@@ -86,7 +88,21 @@ export default function SupplierCatalogScreen() {
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
     >
-      <MandiSearchBar value={term} onChangeText={setTerm} placeholder="Find a product" />
+      <View style={styles.toolbar}>
+        <MandiSearchBar
+          value={term}
+          onChangeText={setTerm}
+          placeholder="Find a product"
+          style={styles.flex}
+        />
+        <MandiIconButton
+          icon="add"
+          accessibilityLabel="List a new product"
+          background={Colors.primary}
+          color={Colors.textInverse}
+          onPress={() => router.push('/supplier/catalog/new')}
+        />
+      </View>
 
       {query.isPending ? (
         <MandiSkeletonList count={4} />
@@ -95,8 +111,12 @@ export default function SupplierCatalogScreen() {
       ) : skus.length === 0 ? (
         <MandiEmptyState
           icon="pricetags-outline"
-          title={term ? `Nothing matching "${term}"` : 'Nothing listed yet'}
-          description="Products you list here are what restaurants can order from this store."
+          title={term ? `Nothing matching "${term}"` : 'Your catalog is empty'}
+          description={term
+            ? 'Try the product name a restaurant would search for.'
+            : 'Restaurants can only order what you list here. Add your first product — it takes about a minute.'}
+          actionLabel={term ? undefined : 'List a product'}
+          onAction={term ? undefined : () => router.push('/supplier/catalog/new')}
         />
       ) : (
         skus.map((sku) => (
@@ -106,6 +126,7 @@ export default function SupplierCatalogScreen() {
             editing={editing === sku.id}
             onEdit={() => setEditing(editing === sku.id ? null : sku.id)}
             onDone={() => setEditing(null)}
+            onOpen={() => router.push(`/supplier/catalog/${sku.id}`)}
             storeId={storeId}
           />
         ))
@@ -119,12 +140,14 @@ function SkuCard({
   editing,
   onEdit,
   onDone,
+  onOpen,
   storeId,
 }: {
   sku: SupplierSku;
   editing: boolean;
   onEdit: () => void;
   onDone: () => void;
+  onOpen: () => void;
   storeId: number | null;
 }) {
   const toast = useToast();
@@ -149,27 +172,37 @@ function SkuCard({
 
   return (
     <MandiCard>
-      <View style={styles.row}>
-        <View style={styles.text}>
-          <MandiText variant="bodyEmphasis">{sku.name}</MandiText>
+      {/* Only the description opens the editor. Wrapping the whole card — action
+          buttons included — nests a button inside a button: invalid on web, and
+          two overlapping press targets on a device. */}
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${sku.name}`}
+        style={styles.summary}
+      >
+        <View style={styles.row}>
+          <View style={styles.text}>
+            <MandiText variant="bodyEmphasis">{sku.name}</MandiText>
+            <MandiText variant="caption" color={Colors.textSecondary}>
+              {sku.canonicalProductName} · {formatQuantity(sku.packSize)} {sku.packUnit}
+              {sku.skuCode ? ` · ${sku.skuCode}` : ''}
+            </MandiText>
+          </View>
+          <MandiStatusChip
+            label={!active ? 'Delisted' : available ? 'Available' : 'Out of stock'}
+            tone={!active ? 'neutral' : available ? 'success' : 'warning'}
+            size="sm"
+          />
+        </View>
+
+        <View style={styles.row}>
+          <MandiText variant="price">{formatMoney(sku.sellingPrice)}</MandiText>
           <MandiText variant="caption" color={Colors.textSecondary}>
-            {sku.canonicalProductName} · {formatQuantity(sku.packSize)} {sku.packUnit}
-            {sku.skuCode ? ` · ${sku.skuCode}` : ''}
+            GST {formatGstRate(sku.gstRate)}
           </MandiText>
         </View>
-        <MandiStatusChip
-          label={!active ? 'Inactive' : available ? 'Available' : 'Out of stock'}
-          tone={!active ? 'neutral' : available ? 'success' : 'warning'}
-          size="sm"
-        />
-      </View>
-
-      <View style={styles.row}>
-        <MandiText variant="price">{formatMoney(sku.sellingPrice)}</MandiText>
-        <MandiText variant="caption" color={Colors.textSecondary}>
-          GST {formatGstRate(sku.gstRate)}
-        </MandiText>
-      </View>
+      </Pressable>
 
       {editing ? (
         <View style={styles.editor}>
@@ -193,7 +226,7 @@ function SkuCard({
         </View>
       ) : (
         <View style={styles.actions}>
-          <MandiButton label="Change price" variant="secondary" size="md" onPress={onEdit} style={styles.flex} />
+          <MandiButton label="Quick price" variant="secondary" size="md" onPress={onEdit} style={styles.flex} />
           <MandiButton
             label={available ? 'Mark out of stock' : 'Mark available'}
             variant="tertiary"
@@ -211,7 +244,7 @@ function SkuCard({
 function Header({ filter, onFilter }: { filter: Filter; onFilter: (filter: Filter) => void }) {
   return (
     <View style={styles.header}>
-      <MandiHeader title="Catalog" right={<StoreSelector />} />
+      <SupplierHeader subtitle="Catalog" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {FILTERS.map((option) => {
           const active = option.key === filter;
@@ -240,6 +273,8 @@ function Header({ filter, onFilter }: { filter: Filter; onFilter: (filter: Filte
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { gap: Spacing.sm, paddingBottom: Spacing.sm },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  summary: { gap: Spacing.sm },
   tabs: { paddingHorizontal: Spacing.screenHorizontal, gap: Spacing.sm },
   tab: {
     paddingHorizontal: Spacing.lg,

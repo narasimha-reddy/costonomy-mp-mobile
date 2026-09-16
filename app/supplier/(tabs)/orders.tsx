@@ -5,13 +5,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchActiveOrders, fetchPendingOrders } from '@/services/supplier';
-import { StoreSelector } from '@/components/supplier/StoreSelector';
+import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import { PendingOrderCard } from '@/components/supplier/PendingOrderCard';
 import {
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
-  MandiHeader,
   MandiScreen,
   MandiSkeletonList,
   MandiStatusChip,
@@ -112,7 +111,7 @@ function Header({
 
   return (
     <View style={styles.header}>
-      <MandiHeader title="Orders" right={<StoreSelector />} />
+      <SupplierHeader subtitle="Orders" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {tabs.map((option) => {
           const active = option.key === tab;

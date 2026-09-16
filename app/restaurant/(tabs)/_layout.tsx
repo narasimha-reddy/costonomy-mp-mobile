@@ -1,7 +1,8 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, FontFamily, FontSize } from '@/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { tabBarOptions, tabLabel } from '@/components/common/tabBarOptions';
 
 /**
  * `Home | Discover | Requirements | Orders | Account` — doc 05 §1, exactly.
@@ -10,27 +11,17 @@ import { Colors, FontFamily, FontSize } from '@/theme';
  * bar a cook taps one-handed. Anything else is a push from one of these.
  */
 export default function RestaurantTabs() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textTertiary,
-        tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
-        },
-        tabBarLabelStyle: {
-          fontFamily: FontFamily.medium,
-          fontSize: FontSize.xs,
-        },
-        sceneStyle: { backgroundColor: Colors.background },
-      }}
+      screenOptions={{ headerShown: false, ...tabBarOptions(insets) }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
+          tabBarLabel: tabLabel('Home'),
           tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />,
         }}
       />
@@ -38,6 +29,7 @@ export default function RestaurantTabs() {
         name="discover"
         options={{
           title: 'Discover',
+          tabBarLabel: tabLabel('Discover'),
           tabBarIcon: ({ color, size }) => <Ionicons name="search-outline" color={color} size={size} />,
         }}
       />
@@ -45,6 +37,7 @@ export default function RestaurantTabs() {
         name="requirements"
         options={{
           title: 'Requirements',
+          tabBarLabel: tabLabel('Requirements'),
           tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" color={color} size={size} />,
         }}
       />
@@ -52,6 +45,7 @@ export default function RestaurantTabs() {
         name="orders"
         options={{
           title: 'Orders',
+          tabBarLabel: tabLabel('Orders'),
           tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} />,
         }}
       />
@@ -59,6 +53,7 @@ export default function RestaurantTabs() {
         name="account"
         options={{
           title: 'Account',
+          tabBarLabel: tabLabel('Account'),
           tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" color={color} size={size} />,
         }}
       />

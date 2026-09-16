@@ -21,6 +21,19 @@ export const Colors = {
   primary: '#FF6000',
   primaryLight: '#FFF7ED',
   primaryDark: '#CC4D00',
+  /**
+   * The brand gradient, dark end first.
+   *
+   * <p>Two stops of the same hue rather than a second colour: a gradient that
+   * changes hue reads as a different brand at each end, and this one sits behind
+   * the product's name on the first screen anyone sees.
+   */
+  gradientStart: '#B8410A',
+  gradientEnd: '#FF6000',
+  /** Text and hairlines on top of the gradient. */
+  onGradient: '#FFFFFF',
+  onGradientMuted: 'rgba(255, 255, 255, 0.78)',
+  onGradientSurface: 'rgba(255, 255, 255, 0.14)',
 
   // ── Semantic status ─────────────────────────────────────────────────
   success: '#16A34A',

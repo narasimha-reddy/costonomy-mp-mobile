@@ -36,7 +36,7 @@ export function AuthGate({
     );
   }
 
-  if (!authenticated) return <Redirect href="/auth/phone" />;
+  if (!authenticated) return <Redirect href="/welcome" />;
   if (!audiences.includes(audience)) return <Redirect href="/" />;
 
   return <>{children}</>;

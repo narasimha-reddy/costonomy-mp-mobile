@@ -30,7 +30,9 @@ export default function Index() {
     );
   }
 
-  if (!authenticated) return <Redirect href="/auth/phone" />;
+  // Signed out goes to the landing page, not straight to a form. Doc 05 §3:
+  // the first screen has to say what this is before it asks for anything.
+  if (!authenticated) return <Redirect href="/welcome" />;
 
   switch (audience) {
     case 'SUPPLIER':
@@ -42,7 +44,8 @@ export default function Index() {
       // journey they are far more likely to have opened the app for.
       return <Redirect href="/restaurant" />;
     default:
-      return <Redirect href="/onboarding" />;
+      // Signed in, no organisation. They pick a side and register one.
+      return <Redirect href="/onboarding/choose" />;
   }
 }
 

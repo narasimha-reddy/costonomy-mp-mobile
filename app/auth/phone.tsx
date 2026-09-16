@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { requestOtp } from '@/services/auth';
 import { ApiError, isApiError } from '@/lib/api/errors';
 import { MandiButton, MandiFormField, MandiText } from '@/components/common';
-import { Colors, Spacing } from '@/theme';
+import { Colors, Radius, Spacing } from '@/theme';
 
 /**
  * REST-AUTH-02 — phone entry. §23A.6, doc 05 §4.
@@ -52,24 +53,34 @@ export default function PhoneScreen() {
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <MandiText variant="display">Mandi</MandiText>
+          <View style={styles.mark}>
+            <Ionicons name="leaf" size={22} color={Colors.primary} />
+          </View>
+          <MandiText variant="display">What&rsquo;s your number?</MandiText>
           <MandiText variant="bodyRelaxed" color={Colors.textSecondary} style={styles.tagline}>
-            Everything your kitchen needs, from suppliers you can count on.
+            We use it to sign you in, and suppliers use it to reach you about an order.
+            No password to remember.
           </MandiText>
         </View>
 
         <View style={styles.form}>
-          <MandiFormField
-            label="Mobile number"
-            value={phone}
-            onChangeText={(text) => setPhone(text.replace(/\D/g, '').slice(0, 10))}
-            placeholder="98765 43210"
-            keyboardType="phone-pad"
-            autoCapitalize="none"
-            required
-            error={error}
-            hint="We'll text you a six-digit code."
-          />
+          <View style={styles.inputRow}>
+            <View style={styles.dialCode}>
+              <MandiText variant="bodyEmphasis" color={Colors.textSecondary}>+91</MandiText>
+            </View>
+            <MandiFormField
+              label="Mobile number"
+              value={phone}
+              onChangeText={(text) => setPhone(text.replace(/\D/g, '').slice(0, 10))}
+              placeholder="98765 43210"
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+              required
+              error={error}
+              hint="We'll text you a six-digit code."
+              style={styles.flex}
+            />
+          </View>
 
           <MandiButton
             label="Send code"
@@ -78,6 +89,10 @@ export default function PhoneScreen() {
             loading={submitting}
             disabled={!plausible}
           />
+
+          <MandiText variant="caption" color={Colors.textTertiary} center>
+            By continuing you agree to Mandi&rsquo;s terms and privacy policy.
+          </MandiText>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -99,6 +114,27 @@ const styles = StyleSheet.create({
     gap: Spacing.xxl,
   },
   header: { gap: Spacing.sm },
+  mark: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryLight,
+    marginBottom: Spacing.sm,
+  },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
+  dialCode: {
+    height: 48,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceSunken,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 22,
+  },
   tagline: { maxWidth: 320 },
   form: { gap: Spacing.lg },
 });

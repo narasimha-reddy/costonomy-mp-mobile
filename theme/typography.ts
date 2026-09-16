@@ -49,6 +49,18 @@ export const LineHeight = {
  */
 export const TextStyles = {
   /** Splash / onboarding hero only. */
+  /**
+   * The largest size in the system, for the one line on a screen that is the
+   * whole point of it — the landing hero. Deliberately above the scale's `xxxl`
+   * so it cannot be reached by accident from a screen that just wants "big".
+   */
+  hero: {
+    fontFamily: FontFamily.extrabold,
+    fontSize: 40,
+    lineHeight: Math.round(40 * LineHeight.tight),
+    letterSpacing: -0.8,
+  },
+
   display: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.xxxl,

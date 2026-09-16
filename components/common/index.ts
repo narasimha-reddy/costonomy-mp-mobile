@@ -21,3 +21,5 @@ export { OutletSelector } from './OutletSelector';
 export { MandiScreen } from './MandiScreen';
 export { MandiHeader, MandiHeaderAction } from './MandiHeader';
 export { MandiStickyBar } from './MandiStickyBar';
+export { MandiLocationField } from './MandiLocationField';
+export { MandiStepBar } from './MandiStepBar';

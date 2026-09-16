@@ -47,6 +47,15 @@ export interface CreditAgreement {
   id: number;
   outletId: number;
   outletName: string | null;
+  /**
+   * Who and where, in the shape an order card already uses. A supplier deciding
+   * on credit is deciding about a restaurant, and the outlet's own name —
+   * whatever they chose to call it — does not say who is asking or how far away.
+   */
+  restaurantName: string | null;
+  outletLocality: string | null;
+  outletCity: string | null;
+  distanceKm: Money | null;
   supplierStoreId: number;
   storeName: string | null;
   supplierName: string | null;

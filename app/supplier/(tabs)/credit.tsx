@@ -17,11 +17,13 @@ import {
   MandiScreen,
   MandiSkeletonList,
   MandiStatusChip,
+  PartyHeading,
   MandiText,
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
+import { formatDistance } from '@/utils/orders';
 import { track } from '@/analytics';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
@@ -145,19 +147,20 @@ function RequestCard({ agreement }: { agreement: CreditAgreement }) {
 
   return (
     <MandiCard outlined accentColor={Colors.primary}>
-      <View style={styles.row}>
-        <View style={styles.flex}>
-          <MandiText variant="bodyEmphasis">
-            {agreement.outletName ?? `Outlet ${agreement.outletId}`}
-          </MandiText>
-          {request?.purpose != null && (
-            <MandiText variant="caption" color={Colors.textSecondary}>
-              {request.purpose}
-            </MandiText>
-          )}
-        </View>
-        <MandiStatusChip label="new request" tone="pending" size="sm" />
-      </View>
+      <PartyHeading
+        primary={agreement.outletName ?? `Outlet ${agreement.outletId}`}
+        secondary={[
+          agreement.restaurantName,
+          agreement.outletLocality,
+          formatDistance(agreement.distanceKm),
+        ]}
+        trailing={<MandiStatusChip label="new request" tone="pending" size="sm" />}
+      />
+      {request?.purpose != null && (
+        <MandiText variant="caption" color={Colors.textPrimary}>
+          {request.purpose}
+        </MandiText>
+      )}
 
       <View style={styles.asked}>
         <Asked label="Limit" value={formatMoney(request?.requestedLimit)} />
@@ -199,18 +202,27 @@ function PortfolioCard({ agreement }: { agreement: CreditAgreement }) {
 
   return (
     <MandiCard onPress={() => router.push(`/supplier/credit/${agreement.id}`)}>
-      <View style={styles.row}>
-        <MandiText variant="bodyEmphasis" style={styles.flex}>
-          {agreement.outletName ?? `Outlet ${agreement.outletId}`}
-        </MandiText>
-        <MandiStatusChip
-          label={agreement.status.toLowerCase()}
-          tone={agreement.status === 'ACTIVE' ? 'success' : 'warning'}
-          size="sm"
-        />
-      </View>
+      {/* The same "who and where" an order card leads with. A supplier deciding
+          on credit is deciding about a restaurant, and an outlet's own name does
+          not say who is asking or how far away they are. */}
+      <PartyHeading
+        primary={agreement.outletName ?? `Outlet ${agreement.outletId}`}
+        secondary={[
+          agreement.restaurantName,
+          agreement.outletLocality,
+          formatDistance(agreement.distanceKm),
+        ]}
+        trailing={
+          <MandiStatusChip
+            label={agreement.status.toLowerCase()}
+            tone={agreement.status === 'ACTIVE' ? 'success' : 'warning'}
+            size="sm"
+          />
+        }
+      />
 
       <CreditPosition
+        compact
         approvedLimit={agreement.approvedLimit}
         reserved={agreement.reserved}
         utilized={agreement.utilized}
@@ -219,14 +231,17 @@ function PortfolioCard({ agreement }: { agreement: CreditAgreement }) {
         overdue={agreement.overdue}
       />
 
-      <View style={styles.cardFoot}>
-        <MandiText variant="caption" color={Colors.textSecondary}>
-          {suspended
-            ? 'Suspended — open to reinstate or change the terms'
-            : 'Open to change the limit, the period, or suspend it'}
-        </MandiText>
-        <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
-      </View>
+      {/* Only when it changes what the supplier should do. On a live agreement
+          the chevron already says the card opens, and a line of instructions
+          under every row is a line nobody reads twice. */}
+      {suspended ? (
+        <View style={styles.cardFoot}>
+          <MandiText variant="caption" color={Colors.warning}>
+            Suspended — open to reinstate or change the terms
+          </MandiText>
+          <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+        </View>
+      ) : null}
     </MandiCard>
   );
 }

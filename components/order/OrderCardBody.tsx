@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { MandiText } from '@/components/common';
+import { MandiText, PartyHeading } from '@/components/common';
 import type { PaymentMethod, SupplierOrderItem } from '@/models/procurement';
 import type { Money } from '@/utils/money';
 import { formatMoney } from '@/utils/money';
@@ -53,25 +53,13 @@ export function OrderCardBody({
   amount?: Money | null;
   trailing?: React.ReactNode;
 }) {
-  const detail = secondary.filter(Boolean).join(' · ');
   const count = items.length;
 
   return (
     <View style={styles.block}>
-      {/* Only the title shares a row with the chip. Wrapping every line in a
-          column beside it narrowed all of them by the chip's width. */}
-      <View style={styles.titleRow}>
-        <MandiText variant="bodyEmphasis" numberOfLines={1} style={styles.flex}>
-          {primary || 'Order'}
-        </MandiText>
-        {trailing}
-      </View>
-
-      {detail ? (
-        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {detail}
-        </MandiText>
-      ) : null}
+      {/* Shared with the credit cards: a supplier reads "who and where" the same
+          way wherever a restaurant appears. */}
+      <PartyHeading primary={primary || 'Order'} secondary={secondary} trailing={trailing} />
 
       <View style={styles.columns}>
         <View style={styles.left}>
@@ -126,12 +114,6 @@ export function OrderCardBody({
 
 const styles = StyleSheet.create({
   block: { gap: 2 },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-  },
   columns: {
     flexDirection: 'row',
     alignItems: 'flex-end',

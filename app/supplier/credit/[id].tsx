@@ -30,6 +30,7 @@ import {
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
+import { formatDistance } from '@/utils/orders';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -224,11 +225,16 @@ export default function SupplierCreditAgreementScreen() {
         <MandiHeader
           title={data?.outletName ?? 'Credit line'}
           subtitle={
-            // A request has no agreed terms yet, so "0 day terms" would be a
-            // statement about a line that does not exist.
-            data == null ? undefined
-              : data.status === 'REQUESTED' ? 'Credit request'
-              : `${data.creditPeriodDays ?? '—'} day terms`
+            // Who and where, then the terms — the same order a card states them
+            // in, so tapping through does not rearrange the facts. A request has
+            // no agreed terms yet, so "0 day terms" would describe a line that
+            // does not exist.
+            data == null ? undefined : [
+              data.restaurantName,
+              data.outletLocality,
+              formatDistance(data.distanceKm),
+              data.status === 'REQUESTED' ? 'Credit request' : `${data.creditPeriodDays ?? '—'} day terms`,
+            ].filter(Boolean).join(' · ')
           }
           back
           onBack={() => (mode === 'view' ? router.back() : setMode('view'))}

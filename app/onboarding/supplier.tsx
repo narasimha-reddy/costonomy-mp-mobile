@@ -46,6 +46,11 @@ export default function SupplierOnboardingScreen() {
   const toast = useToast();
   const { accessToken, reload, me } = useSession();
   const location = useDeviceLocation();
+  // Whatever the map or the coordinate fields last produced. The device hook is
+  // only one of three ways to answer, so it cannot be the only thing submitted.
+  const [picked, setPicked] = useState<{ latitude: string; longitude: string } | null>(null);
+  /** Pinned by any of the three routes: the map, the device, or typed coordinates. */
+  const pin = picked ?? location.coordinates;
 
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState('');
@@ -70,8 +75,8 @@ export default function SupplierOnboardingScreen() {
           city: city.trim(),
           state: state.trim(),
           pincode: pincode.trim() || undefined,
-          latitude: location.coordinates?.latitude,
-          longitude: location.coordinates?.longitude,
+          latitude: pin?.latitude,
+          longitude: pin?.longitude,
           contactPhone: me?.user.phone ?? undefined,
         },
       });
@@ -92,7 +97,7 @@ export default function SupplierOnboardingScreen() {
     },
     onSuccess: async ({ supplier, verificationSubmitted }) => {
       track('supplier_registered', { screen: SCREEN, entityId: supplier.id },
-        { verificationSubmitted, located: location.coordinates != null });
+        { verificationSubmitted, located: pin != null });
       await reload();
       toast.show(
         verificationSubmitted
@@ -215,10 +220,14 @@ export default function SupplierOnboardingScreen() {
             keyboardType="number-pad"
           />
 
+          {/* The map is part of registering: a store pinned wrong here is one
+              nobody can quote delivery to, and the person who would notice is
+              standing right there. */}
           <MandiLocationField
-            state={location.state}
-            coordinates={location.coordinates}
+            state={pin ? 'ready' : location.state}
+            coordinates={pin}
             onCapture={location.capture}
+            onCoordinatesChange={setPicked}
             subject="store"
           />
         </>
@@ -258,10 +267,10 @@ export default function SupplierOnboardingScreen() {
             />
             <Line
               label="Pinned"
-              value={location.coordinates
-                ? `${location.coordinates.latitude}, ${location.coordinates.longitude}`
+              value={pin
+                ? `${pin.latitude}, ${pin.longitude}`
                 : 'Not pinned — restaurants cannot be quoted delivery from here yet'}
-              warn={location.coordinates == null}
+              warn={pin == null}
             />
           </MandiCard>
 

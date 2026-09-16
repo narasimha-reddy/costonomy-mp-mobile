@@ -28,3 +28,4 @@ export { MandiFilterMenu, type FilterOption } from './MandiFilterMenu';
 export { MandiImagePicker } from './MandiImagePicker';
 export { PartyHeading } from './PartyHeading';
 export { MandiBottomSheet } from './MandiBottomSheet';
+export { MandiMapPicker } from './MandiMapPicker';

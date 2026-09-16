@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { Coordinates } from '@/hooks/useDeviceLocation';
 import { MandiButton } from './MandiButton';
 import { MandiFormField } from './MandiFormField';
+import { MandiMapPicker } from './MandiMapPicker';
 import { MandiText } from './MandiText';
 import { Colors, Radius, Spacing } from '@/theme';
 
@@ -22,8 +23,12 @@ import { Colors, Radius, Spacing } from '@/theme';
  *
  * <p><b>"Use my current location" is the wrong tool half the time.</b> Someone
  * editing store settings is usually not standing in the store, and a device fix
- * would then confidently pin their sofa. So coordinates can also be typed, and
- * the two live side by side rather than the device being the only way in.
+ * would then confidently pin their sofa. So there are three ways in — the map,
+ * the device, and typed coordinates — and all three set one value.
+ *
+ * <p>The map is shown when this is an editor and a key is configured. Without a
+ * key it says which key is missing rather than rendering an empty grey box, and
+ * the other two ways still work: a supplier is never blocked by our configuration.
  */
 export function MandiLocationField({
   state,
@@ -49,6 +54,17 @@ export function MandiLocationField({
 
   return (
     <View style={styles.panel}>
+      {editable ? (
+        <MandiMapPicker
+          value={coordinates}
+          onChange={(place) => onCoordinatesChange?.({
+            latitude: place.latitude,
+            longitude: place.longitude,
+          })}
+          searchPlaceholder={`Search for this ${subject}`}
+        />
+      ) : null}
+
       <View style={styles.row}>
         <Ionicons
           name={pinned ? 'location' : 'location-outline'}

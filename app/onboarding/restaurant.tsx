@@ -42,6 +42,11 @@ export default function RestaurantOnboardingScreen() {
   const toast = useToast();
   const { accessToken, reload, me } = useSession();
   const location = useDeviceLocation();
+  // Whatever the map or the coordinate fields last produced. The device hook is
+  // only one of three ways to answer, so it cannot be the only thing submitted.
+  const [picked, setPicked] = useState<{ latitude: string; longitude: string } | null>(null);
+  /** Pinned by any of the three routes: the map, the device, or typed coordinates. */
+  const pin = picked ?? location.coordinates;
 
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
@@ -65,14 +70,14 @@ export default function RestaurantOnboardingScreen() {
           city: city.trim(),
           state: state.trim(),
           pincode: pincode.trim() || undefined,
-          latitude: location.coordinates?.latitude,
-          longitude: location.coordinates?.longitude,
+          latitude: pin?.latitude,
+          longitude: pin?.longitude,
           contactPhone: me?.user.phone ?? undefined,
         },
       }),
     onSuccess: async (restaurant) => {
       track('restaurant_registered', { screen: SCREEN, entityId: restaurant.id },
-        { located: location.coordinates != null });
+        { located: pin != null });
       // The server now says this user is a restaurant owner. Re-read before
       // routing: `audience` comes from memberships, never from what we just did.
       await reload();
@@ -198,10 +203,14 @@ export default function RestaurantOnboardingScreen() {
             keyboardType="number-pad"
           />
 
+          {/* The map is part of registering: a outlet pinned wrong here is one
+              nobody can quote delivery to, and the person who would notice is
+              standing right there. */}
           <MandiLocationField
-            state={location.state}
-            coordinates={location.coordinates}
+            state={pin ? 'ready' : location.state}
+            coordinates={pin}
             onCapture={location.capture}
+            onCoordinatesChange={setPicked}
             subject="outlet"
           />
         </>
@@ -231,10 +240,10 @@ export default function RestaurantOnboardingScreen() {
             />
             <Line
               label="Pinned"
-              value={location.coordinates
-                ? `${location.coordinates.latitude}, ${location.coordinates.longitude}`
+              value={pin
+                ? `${pin.latitude}, ${pin.longitude}`
                 : 'Not pinned — delivery cannot be quoted yet'}
-              warn={location.coordinates == null}
+              warn={pin == null}
             />
           </MandiCard>
 

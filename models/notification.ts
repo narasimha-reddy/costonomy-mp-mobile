@@ -12,6 +12,11 @@ export interface AppNotification {
   title: string;
   body: string | null;
   targetType: string | null;
+  /**
+   * Which side of the trade was told: `OUTLET` or `SUPPLIER_STORE`.
+   * <p>Null on a row written by a build that knew an event this one does not.
+   */
+  audience: string | null;
   targetId: number | null;
   /** Critical ones are never silenced by a preference. */
   critical: boolean;

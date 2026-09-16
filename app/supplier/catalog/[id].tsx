@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
@@ -22,7 +23,7 @@ import { ApiError } from '@/lib/api/errors';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
 import { ProductThumb } from '@/components/product/ProductThumb';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'SUP-CATALOG-02';
 const GST_RATES = ['0', '5', '12', '18'];
@@ -42,7 +43,6 @@ const GST_RATES = ['0', '5', '12', '18'];
 export default function SkuEditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const skuId = Number(id);
-  const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
@@ -168,26 +168,6 @@ export default function SkuEditorScreen() {
             onChangeText={setBrandName}
             placeholder="Amul"
           />
-          {/* The only picture on this screen now, and it is the supplier's own.
-              Empty shows the catalog photo, which is what a restaurant would see,
-              so the control states the outcome rather than describing a rule. */}
-          <MandiImagePicker
-            label="Photo of your pack (optional)"
-            value={imageValue.trim() || null}
-            fallbackUri={sku.canonicalProductImageUrl}
-            onChange={(url) => setImageUrl(url ?? '')}
-            onUpload={async (file) => {
-              const uploaded = await uploadSkuImage(
-                accessToken as string, storeId as number, file);
-              return uploaded.url;
-            }}
-            hint={
-              imageValue.trim()
-                ? 'Remove it to go back to the catalog photo of the product.'
-                : 'This is the catalog photo. Add your own to show your actual pack.'
-            }
-            placeholderHint="Restaurants see this beside your price."
-          />
           <MandiFormField
             label="Selling price"
             value={priceValue}
@@ -222,30 +202,66 @@ export default function SkuEditorScreen() {
             </View>
           </View>
 
-          <View style={styles.actions}>
-            <MandiButton
+          {/* The only picture on this screen now, and it is the supplier's own.
+              Empty shows the catalog photo, which is what a restaurant would see,
+              so the control states the outcome rather than describing a rule. */}
+          <MandiImagePicker
+            label="Photo of your pack (optional)"
+            value={imageValue.trim() || null}
+            fallbackUri={sku.canonicalProductImageUrl}
+            onChange={(url) => setImageUrl(url ?? '')}
+            onUpload={async (file) => {
+              const uploaded = await uploadSkuImage(
+                accessToken as string, storeId as number, file);
+              return uploaded.url;
+            }}
+            hint={
+              imageValue.trim()
+                ? 'Remove it to go back to the catalog photo of the product.'
+                : 'This is the catalog photo. Add your own to show your actual pack.'
+            }
+            placeholderHint="Restaurants see this beside your price."
+          />
+
+          {/* Two state changes, not two buttons competing with Save.
+              As a pair of outlined pills they read as equal alternatives to the
+              primary action and to each other, which neither is: one is a daily
+              toggle, the other takes the listing off the market. As rows they
+              state what is true now and what the tap would do, and the caption
+              that used to float under them belongs to the row it explains. */}
+          <MandiCard style={styles.stateCard}>
+            <StateRow
+              icon={sku.availability === 'AVAILABLE' ? 'close-circle-outline' : 'checkmark-circle-outline'}
+              tint={sku.availability === 'AVAILABLE' ? Colors.warning : Colors.success}
+              background={sku.availability === 'AVAILABLE' ? Colors.warningLight : Colors.successLight}
               label={sku.availability === 'AVAILABLE' ? 'Mark out of stock' : 'Mark available'}
-              variant="secondary"
-              size="md"
-              loading={save.isPending}
+              detail={
+                sku.availability === 'AVAILABLE'
+                  ? 'Restaurants can order this right now.'
+                  : 'Restaurants cannot order this until you mark it available.'
+              }
+              busy={save.isPending}
               onPress={() => save.mutate({
                 availability: sku.availability === 'AVAILABLE' ? 'OUT_OF_STOCK' : 'AVAILABLE',
               })}
-              style={styles.flex}
             />
-            <MandiButton
+            <View style={styles.stateDivider} />
+            <StateRow
+              icon={sku.status === 'ACTIVE' ? 'eye-off-outline' : 'eye-outline'}
+              tint={sku.status === 'ACTIVE' ? Colors.textSecondary : Colors.success}
+              background={sku.status === 'ACTIVE' ? Colors.surfaceSunken : Colors.successLight}
               label={sku.status === 'ACTIVE' ? 'Delist' : 'Relist'}
-              variant="tertiary"
-              size="md"
-              loading={save.isPending}
-              onPress={() => save.mutate({ status: sku.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' })}
-              style={styles.flex}
+              detail={
+                sku.status === 'ACTIVE'
+                  ? 'Hides it from restaurants. Never deleted — past orders reference it.'
+                  : 'Currently hidden from restaurants.'
+              }
+              busy={save.isPending}
+              onPress={() => save.mutate({
+                status: sku.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+              })}
             />
-          </View>
-          <MandiText variant="caption" color={Colors.textTertiary}>
-            Delisting hides it from restaurants. It is never deleted, because past orders
-            reference it.
-          </MandiText>
+          </MandiCard>
 
           {(history.data ?? []).length > 0 && (
             <MandiCard>
@@ -263,15 +279,56 @@ export default function SkuEditorScreen() {
               ))}
             </MandiCard>
           )}
-
-          <MandiButton
-            label="Back to catalog"
-            variant="tertiary"
-            onPress={() => router.replace('/supplier/catalog')}
-          />
         </>
       )}
     </MandiScreen>
+  );
+}
+
+/**
+ * One state change, stated as what is true and what the tap would do.
+ *
+ * <p>A row rather than a button because these are not alternatives to saving.
+ * Side by side as outlined pills they read as equal in weight to the primary
+ * action and to each other, and they are neither: marking stock is a daily
+ * toggle, delisting takes the listing off the market. A row has space to say
+ * which is which.
+ */
+function StateRow({
+  icon,
+  tint,
+  background,
+  label,
+  detail,
+  busy,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  tint: string;
+  background: string;
+  label: string;
+  detail: string;
+  busy: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${detail}`}
+      accessibilityState={{ disabled: busy, busy }}
+      style={({ pressed }) => [styles.stateRow, pressed && styles.statePressed, busy && styles.stateBusy]}
+    >
+      <View style={[styles.stateIcon, { backgroundColor: background }]}>
+        <Ionicons name={icon} size={18} color={tint} />
+      </View>
+      <View style={styles.flex}>
+        <MandiText variant="bodyEmphasis">{label}</MandiText>
+        <MandiText variant="caption" color={Colors.textSecondary}>{detail}</MandiText>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+    </Pressable>
   );
 }
 
@@ -294,7 +351,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
   },
   chipActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  actions: { flexDirection: 'row', gap: Spacing.sm },
+  stateCard: { padding: 0, gap: 0, overflow: 'hidden' },
+  stateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    minHeight: TouchTarget.min,
+  },
+  statePressed: { backgroundColor: Colors.surfaceSunken },
+  stateBusy: { opacity: 0.6 },
+  stateIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stateDivider: { height: 1, backgroundColor: Colors.borderLight, marginLeft: 68 },
   historyRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

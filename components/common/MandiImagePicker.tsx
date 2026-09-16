@@ -153,7 +153,13 @@ export function MandiImagePicker({
 const styles = StyleSheet.create({
   block: { gap: Spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  actions: { flex: 1, gap: Spacing.xs, alignItems: 'flex-start' },
+  actions: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
   button: {
     flexDirection: 'row',
     alignItems: 'center',

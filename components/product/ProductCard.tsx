@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { Product } from '@/models/catalog';
 import { categoryFace } from '@/models/categories';
 import { MandiText } from '@/components/common';
+import { ProductThumb } from './ProductThumb';
 import { formatMoney } from '@/utils/money';
 import { Colors, Elevation, Radius, Spacing } from '@/theme';
 
@@ -17,8 +18,25 @@ import { Colors, Elevation, Radius, Spacing } from '@/theme';
  *
  * <p>A product nobody stocks says so. An absent price is a real signal (doc 07
  * §4) — "₹0" would be a lie and a blank space would look like a loading bug.
+ *
+ * <p><b>The photograph when there is one, the category glyph when there is not.</b>
+ * A tinted leaf is a decent stand-in for "some vegetable" and a poor one for
+ * "which tomatoes" — but it beats `ProductThumb`'s neutral basket, which says
+ * nothing at all. So the fallback stays the category rather than becoming generic.
  */
-export function ProductCard({ product, onPress }: { product: Product; onPress: () => void }) {
+export function ProductCard({
+  product,
+  onPress,
+  variant = 'card',
+}: {
+  product: Product;
+  onPress: () => void;
+  /**
+   * `row` is the flat, hairline-separated form a search result list wants;
+   * `card` is the elevated tile the home and category screens use.
+   */
+  variant?: 'card' | 'row';
+}) {
   const offers = product.offerCount ?? 0;
   const stocked = offers > 0 && product.lowestPrice != null;
   const face = categoryFace(product.categoryName);
@@ -32,11 +50,18 @@ export function ProductCard({ product, onPress }: { product: Product; onPress: (
           ? `${product.name}, from ${formatMoney(product.lowestPrice, true)}, ${offers} suppliers`
           : `${product.name}, not stocked`
       }
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        variant === 'row' ? styles.row : styles.card,
+        pressed && styles.pressed,
+      ]}
     >
-      <View style={[styles.thumb, { backgroundColor: face.background }]}>
-        <Ionicons name={face.icon} size={26} color={face.tint} />
-      </View>
+      {product.imageUrl ? (
+        <ProductThumb uri={product.imageUrl} size={52} radius={Radius.md} />
+      ) : (
+        <View style={[styles.thumb, { backgroundColor: face.background }]}>
+          <Ionicons name={face.icon} size={26} color={face.tint} />
+        </View>
+      )}
 
       <View style={styles.body}>
         <MandiText variant="bodyEmphasis" numberOfLines={2}>{product.name}</MandiText>
@@ -78,6 +103,14 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: Colors.surface,
     ...Elevation.card,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
   },
   pressed: { opacity: 0.75 },
   thumb: {

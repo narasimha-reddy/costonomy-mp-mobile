@@ -121,12 +121,12 @@ export default function CreditRequestScreen() {
           <MandiSkeletonList count={2} />
         ) : suppliers.error ? (
           <MandiErrorState message="Couldn't load suppliers." onRetry={() => suppliers.refetch()} />
-        ) : (suppliers.data ?? []).length === 0 ? (
+        ) : (suppliers.data?.suppliers ?? []).length === 0 ? (
           <MandiText variant="caption" color={Colors.textTertiary}>
             No supplier matching &ldquo;{settledTerm.trim()}&rdquo; delivers here.
           </MandiText>
         ) : (
-          (suppliers.data ?? []).map((supplier) => {
+          (suppliers.data?.suppliers ?? []).map((supplier) => {
             const active = supplier.supplierStoreId === storeId;
             return (
               <Pressable

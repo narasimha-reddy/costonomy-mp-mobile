@@ -1,6 +1,10 @@
 import { apiRequest } from '@/lib/api/client';
 import type { Brand, Category, Offer, Product, Suggestion } from '@/models/catalog';
-import type { ProductRecommendation, SupplierSearchResult } from '@/models/discovery';
+import type {
+  ProductRecommendation,
+  StorefrontSku,
+  SupplierSearchPage,
+} from '@/models/discovery';
 
 export function fetchCategories(token: string): Promise<Category[]> {
   return apiRequest<Category[]>('/api/v1/categories', { token });
@@ -70,22 +74,57 @@ export function fetchRecommendations(
 }
 
 /**
- * Search suppliers by name. Doc 01 §25 — secondary to product search by design.
+ * Suppliers that deliver to this outlet, nearest first.
  *
- * <p><b>`term` is required, and under two characters the server returns nothing.</b>
- * This is a search, not a directory: there is no endpoint that lists "suppliers
- * near me", and calling it without a term used to omit a required parameter and
- * come back as a 500.
+ * <p><b>With a term it is a search; without one it is the directory.</b> That
+ * second half is new — the endpoint used to require two characters, so "who can
+ * deliver to me" was a question the app could not ask.
  *
- * <p>`outletId` adds distance and whether each store actually delivers there.
+ * <p>Membership is each store's **own** declared radius, so `radiusKm` narrows a
+ * list rather than defining it, and whatever it excludes comes back as
+ * `beyondRadius` instead of vanishing.
  */
 export function searchSuppliers(
   token: string,
   term: string,
   outletId?: number,
-): Promise<SupplierSearchResult[]> {
-  return apiRequest<SupplierSearchResult[]>(
-    `/api/v1/search/suppliers${queryString({ q: term, outletId })}`,
+  radiusKm?: number,
+  signal?: AbortSignal,
+): Promise<SupplierSearchPage> {
+  return apiRequest<SupplierSearchPage>(
+    `/api/v1/search/suppliers${queryString({ q: term, outletId, radiusKm })}`,
+    { token, signal },
+  );
+}
+
+/**
+ * SKU search — the other half of `searchProducts`.
+ *
+ * <p>`searchProducts` answers "what is curd": one row per canonical product.
+ * This answers "what curd can I buy right now": one row per supplier's pack, with
+ * its own price and picture.
+ */
+export function searchSkus(
+  token: string,
+  term: string,
+  outletId?: number,
+  signal?: AbortSignal,
+): Promise<StorefrontSku[]> {
+  return apiRequest<StorefrontSku[]>(
+    `/api/v1/search/skus${queryString({ q: term, outletId })}`,
+    { token, signal },
+  );
+}
+
+/** Everything one supplier store sells, for the restaurant-facing catalog. */
+export function fetchStoreCatalog(
+  token: string,
+  storeId: number,
+  outletId?: number,
+  term?: string,
+): Promise<StorefrontSku[]> {
+  return apiRequest<StorefrontSku[]>(
+    `/api/v1/supplier-stores/${storeId}/catalog${queryString({ outletId, q: term })}`,
     { token },
   );
 }

@@ -47,6 +47,11 @@ export interface RecommendedOffer {
   explanations: ExplanationCode[];
   score: Money | null;
   scoreComponents: Record<string, Money> | null;
+  /** The SKU's own picture, already falling back to the canonical product's. */
+  imageUrl: string | null;
+  /** Null when nobody has rated this store. Absent stays absent (doc 07 §4). */
+  averageRating: Money | null;
+  ratingCount: number;
 }
 
 export interface ProductRecommendation {
@@ -67,4 +72,55 @@ export interface SupplierSearchResult {
   distanceKm: Money | null;
   serviceable: boolean;
   productCount: number | null;
+  /** Null when nobody has rated this store — never 0 standing in for "unrated". */
+  averageRating: Money | null;
+  ratingCount: number;
+  openNow: boolean;
+  opensAt: string | null;
+}
+
+/**
+ * A page of suppliers, and how many a distance filter left out.
+ *
+ * <p>`beyondRadius` is what lets the app say "4 more deliver here" instead of
+ * presenting a filtered list as the whole answer.
+ */
+export interface SupplierSearchPage {
+  suppliers: SupplierSearchResult[];
+  beyondRadius: number;
+}
+
+/**
+ * One thing a restaurant can buy, from one supplier. D-061: mirrors
+ * `DiscoveryDtos.StorefrontSku` field for field.
+ *
+ * <p>It leads with the SKU because the SKU is what is being bought — this pack,
+ * this brand, this price — and carries the supplier as context. That is the whole
+ * difference between this and `Product`, which answers "what is curd" rather than
+ * "what curd can I buy right now".
+ */
+export interface StorefrontSku {
+  offerId: number;
+  supplierSkuId: number;
+  skuName: string;
+  brandName: string | null;
+  packSize: Money;
+  packUnit: string;
+  sellingPrice: Money;
+  gstRate: Money;
+  availability: string;
+  availableQuantity: Money | null;
+  /** The SKU's own picture, already falling back to the canonical product's. */
+  imageUrl: string | null;
+  canonicalProductId: number;
+  canonicalProductName: string;
+  supplierStoreId: number;
+  supplierName: string;
+  storeName: string;
+  distanceKm: Money | null;
+  openNow: boolean;
+  opensAt: string | null;
+  preparationMinutes: number | null;
+  averageRating: Money | null;
+  ratingCount: number;
 }

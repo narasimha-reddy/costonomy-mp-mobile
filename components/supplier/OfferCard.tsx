@@ -3,14 +3,24 @@ import { StyleSheet, View } from 'react-native';
 import type { RecommendedOffer } from '@/models/discovery';
 import { explanationLabel } from '@/models/explanations';
 import { MandiBadge, MandiButton, MandiCard, MandiText } from '@/components/common';
+import { ProductThumb } from '@/components/product/ProductThumb';
+import { Ionicons } from '@expo/vector-icons';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
-import { Colors, Spacing } from '@/theme';
+import { Colors, Radius, Spacing } from '@/theme';
 
 /**
  * One supplier's offer, as compared on REST-SUP-01. Doc 05 §8.
  *
+ * <p><b>The pack leads, the supplier follows.</b> What is being chosen between is
+ * this pack — this brand, this size, this price — and the supplier is how it
+ * arrives. Leading with the supplier name, as this card used to, put the less
+ * decisive fact in the most prominent place and made two packs from one supplier
+ * look like the same thing twice.
+ *
  * <p>Shows the commercial figures side by side — pack price, GST, effective
- * total, availability, ETA — and the reasons behind the ranking.
+ * total, availability, ETA — and the reasons behind the ranking. The supplier's
+ * rating appears only when they have one: most have none, and "0.0" would read as
+ * a bad supplier rather than an unrated one (doc 07 §4).
  *
  * <p><b>`effectiveTotal` excludes delivery, and the card says so.</b> The fee is
  * not quoted until a courier is chosen after Ready for Pickup, so showing a
@@ -37,19 +47,43 @@ export function OfferCard({
       )}
 
       <View style={styles.row}>
+        <ProductThumb uri={offer.imageUrl} size={56} radius={Radius.md} />
         <View style={styles.identity}>
-          <MandiText variant="bodyEmphasis">{offer.supplierName}</MandiText>
-          <MandiText variant="caption" color={Colors.textSecondary}>
-            {offer.storeName}
-            {offer.distanceKm != null && ` · ${formatQuantity(offer.distanceKm)} km`}
+          <MandiText variant="bodyEmphasis" numberOfLines={2}>{offer.skuName}</MandiText>
+          <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+            {[offer.brandName, `${formatQuantity(offer.packSize)} ${offer.packUnit.toLowerCase()}`]
+              .filter(Boolean)
+              .join(' · ')}
           </MandiText>
         </View>
         <View style={styles.pricing}>
           <MandiText variant="price">{formatMoney(offer.unitPrice)}</MandiText>
           <MandiText variant="caption" color={Colors.textSecondary}>
-            per {formatQuantity(offer.packSize)} {offer.packUnit}
+            per pack
           </MandiText>
         </View>
+      </View>
+
+      {/* Who it comes from, and what is known about them. */}
+      <View style={styles.supplierLine}>
+        <Ionicons name="storefront-outline" size={13} color={Colors.textTertiary} />
+        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1} style={styles.flex}>
+          {offer.supplierName}
+        </MandiText>
+        {offer.averageRating != null && (
+          <View style={styles.rating}>
+            <Ionicons name="star" size={11} color={Colors.warning} />
+            <MandiText variant="caption" color={Colors.textSecondary}>
+              {formatQuantity(offer.averageRating)}
+              {offer.ratingCount > 0 ? ` (${offer.ratingCount})` : ''}
+            </MandiText>
+          </View>
+        )}
+        {offer.distanceKm != null && (
+          <MandiText variant="caption" color={Colors.textTertiary}>
+            {formatQuantity(offer.distanceKm)} km
+          </MandiText>
+        )}
       </View>
 
       <View style={styles.figures}>
@@ -120,6 +154,9 @@ const styles = StyleSheet.create({
   identity: { flex: 1, gap: Spacing.xs },
   pricing: { alignItems: 'flex-end' },
   figures: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.sm },
+  supplierLine: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  flex: { flexShrink: 1 },
+  rating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   figure: { gap: Spacing.xs },
   signals: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
 });

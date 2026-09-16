@@ -90,6 +90,8 @@ export default function StoreDetailScreen() {
   const [contactPhone, setContactPhone] = useState<string | null>(null);
   const [prep, setPrep] = useState<string | null>(null);
   const [hours, setHours] = useState<OperatingHours | null>(null);
+  // The pin the screen is editing. Null means untouched — the store's own.
+  const [pin, setPin] = useState<{ latitude: string; longitude: string } | null>(null);
 
   const [own, setOwn] = useState<boolean | null>(null);
   const [partner, setPartner] = useState<boolean | null>(null);
@@ -114,6 +116,15 @@ export default function StoreDetailScreen() {
   const hoursValue = hours ?? data?.operatingHours
     ?? { days: [], opensAt: '10:00', closesAt: '21:00' };
 
+  // Device capture and typed coordinates feed one value, so whichever the
+  // supplier used last is what gets saved.
+  const pinValue = pin
+    ?? (location.coordinates
+      ? { latitude: location.coordinates.latitude, longitude: location.coordinates.longitude }
+      : data?.latitude != null && data?.longitude != null
+        ? { latitude: String(data.latitude), longitude: String(data.longitude) }
+        : null);
+
   const ownValue = own ?? delivery.data?.ownDeliveryEnabled ?? false;
   const partnerValue = partner ?? delivery.data?.costonomyDeliveryEnabled ?? true;
   const ownFeeValue = ownFee ?? (delivery.data?.ownDeliveryFee != null
@@ -130,13 +141,12 @@ export default function StoreDetailScreen() {
   const graceDaysValue = graceDays ?? String(credit.data?.defaultGracePeriodDays ?? 5);
 
   const touched = [
-    name, line1, line2, city, stateName, pincode, contactName, contactPhone, prep, hours,
+    name, line1, line2, city, stateName, pincode, contactName, contactPhone, prep, hours, pin,
     own, partner, ownFee, ownMin, radius,
     creditOn, creditLimit, creditDays, graceDays,
   ].some((value) => value !== null) || location.coordinates != null;
 
   const online = data?.status === 'ACTIVE';
-  const located = data?.latitude != null && data?.longitude != null;
 
   // Changed is not saveable. The server refuses each of these, and a button that
   // offers an action it cannot complete is worse than one that waits.
@@ -160,11 +170,8 @@ export default function StoreDetailScreen() {
         contactPhone: contactPhoneValue.trim(),
         operatingHours: hoursValue,
         preparationMinutes: Number(prepValue) || 0,
-        ...(location.coordinates
-          ? {
-              latitude: String(location.coordinates.latitude),
-              longitude: String(location.coordinates.longitude),
-            }
+        ...(pinValue && pinValue.latitude !== '' && pinValue.longitude !== ''
+          ? { latitude: pinValue.latitude, longitude: pinValue.longitude }
           : {}),
       });
 
@@ -211,6 +218,7 @@ export default function StoreDetailScreen() {
     setPincode(null); setContactName(null); setContactPhone(null); setPrep(null); setHours(null);
     setOwn(null); setPartner(null); setOwnFee(null); setOwnMin(null); setRadius(null);
     setCreditOn(null); setCreditLimit(null); setCreditDays(null); setGraceDays(null);
+    setPin(null);
   }
 
   return (
@@ -315,11 +323,10 @@ export default function StoreDetailScreen() {
             {/* The pin, not the address, is what delivery is quoted from — an
                 address that geocodes badly is a store no restaurant can reach. */}
             <MandiLocationField
-              state={location.coordinates ? 'ready' : located ? 'ready' : location.state}
-              coordinates={location.coordinates ?? (located
-                ? { latitude: String(data.latitude), longitude: String(data.longitude) }
-                : null)}
+              state={pinValue ? 'ready' : location.state}
+              coordinates={pinValue}
               onCapture={location.capture}
+              onCoordinatesChange={setPin}
               subject="store"
             />
           </Section>

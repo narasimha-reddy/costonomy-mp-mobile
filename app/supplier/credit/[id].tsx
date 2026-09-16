@@ -189,8 +189,34 @@ export default function SupplierCreditAgreementScreen() {
 
   // A REQUESTED agreement is a question, not a credit line: it has no position
   // to show and a different set of answers.
+  /**
+   * Why the edit cannot be saved yet, or null when it can.
+   *
+   * <p>A greyed-out button with no explanation is a dead end: the reason is
+   * always knowable here, so it gets said. Returning the sentence rather than a
+   * boolean keeps the check and its explanation from drifting apart.
+   */
+  const editBlockedBy: string | null = (() => {
+    if (Number(limitValue) <= 0) return 'Enter a credit limit above zero.';
+    if (cutsBelowExposure) return 'That limit is below what they have already committed.';
+    if (reason.trim().length < 3) return 'Add a reason — the restaurant sees it.';
+    return null;
+  })();
+
   const pending = data?.status === 'REQUESTED';
   const request = data?.latestRequest;
+
+  /**
+   * Approved, but not yet usable.
+   *
+   * <p>`canFund` is the server's answer and the only one worth trusting. An
+   * APPROVED agreement whose terms were modified sits here until the restaurant
+   * accepts — doc 04 §13 — so showing "₹50,000 available to spend" would tell a
+   * supplier they have extended credit that nobody can draw on. The restaurant's
+   * side learned this as D-067; this is the same rule from the other direction.
+   */
+  const awaitingAcceptance = data != null && !pending && !data.canFund
+    && data.status !== 'SUSPENDED' && data.status !== 'REJECTED';
 
   return (
     <MandiScreen
@@ -240,6 +266,17 @@ export default function SupplierCreditAgreementScreen() {
             />
           </View>
 
+          {awaitingAcceptance && (
+            <MandiCard accentColor={Colors.info}>
+              <MandiText variant="bodyEmphasis">Waiting for them to accept</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                You approved {formatMoney(data.approvedLimit)} over {data.creditPeriodDays} days.
+                Because those terms differ from what they asked for, nothing can be drawn
+                until the restaurant accepts them.
+              </MandiText>
+            </MandiCard>
+          )}
+
           {pending ? (
             <MandiCard>
               <MandiText variant="caption" color={Colors.textSecondary}>They are asking for</MandiText>
@@ -257,6 +294,12 @@ export default function SupplierCreditAgreementScreen() {
                   &ldquo;{request.note}&rdquo;
                 </MandiText>
               )}
+            </MandiCard>
+          ) : awaitingAcceptance ? (
+            <MandiCard>
+              <Row label="Limit you approved" value={formatMoney(data.approvedLimit)} />
+              <Row label="Payment period" value={`${data.creditPeriodDays ?? '—'} days`} />
+              <Row label="Terms version" value={`v${data.termsVersion ?? 1}`} />
             </MandiCard>
           ) : (
             <CreditPosition
@@ -411,7 +454,7 @@ export default function SupplierCreditAgreementScreen() {
             </MandiCard>
           )}
 
-          {mode === 'view' && !pending && (
+          {mode === 'view' && !pending && !awaitingAcceptance && (
             <>
               <MandiCard>
                 <Row label="Approved limit" value={formatMoney(data.approvedLimit)} />
@@ -487,13 +530,26 @@ export default function SupplierCreditAgreementScreen() {
       if (mode === 'counter') {
         return (
           <MandiStickyBar>
+            <View style={styles.confirmRow}>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Approving
+              </MandiText>
+              <MandiText variant="bodyEmphasis">
+                {Number(limitValue) > 0 ? formatMoney(limitValue) : '—'} · {daysValue} days
+              </MandiText>
+            </View>
             <MandiButton
-              label="Send these terms"
+              label="Approve at these terms"
               size="lg"
               disabled={Number(limitValue) <= 0}
               loading={approve.isPending}
               onPress={() => approve.mutate(true)}
             />
+            {Number(limitValue) <= 0 && (
+              <MandiText variant="caption" color={Colors.textTertiary} center>
+                Enter a limit above zero to approve.
+              </MandiText>
+            )}
             <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
           </MandiStickyBar>
         );
@@ -549,10 +605,15 @@ export default function SupplierCreditAgreementScreen() {
           <MandiButton
             label="Save new terms"
             size="lg"
-            disabled={reason.trim().length < 3 || Number(limitValue) <= 0 || cutsBelowExposure}
+            disabled={editBlockedBy != null}
             loading={modify.isPending}
             onPress={() => modify.mutate()}
           />
+          {editBlockedBy != null && (
+            <MandiText variant="caption" color={Colors.textTertiary} center>
+              {editBlockedBy}
+            </MandiText>
+          )}
           <MandiButton
             label="Cancel"
             variant="neutral"
@@ -647,6 +708,7 @@ const styles = StyleSheet.create({
   },
   actions: { flexDirection: 'row', gap: Spacing.sm },
   spacedTop: { marginTop: Spacing.sm },
+  confirmRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.xs },
   chip: {
     paddingHorizontal: Spacing.md,

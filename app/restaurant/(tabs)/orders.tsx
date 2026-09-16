@@ -103,6 +103,7 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
         items={order.items}
         orderNumber={order.orderNumber}
         paymentMethod={order.paymentMethod}
+              createdAt={order.createdAt}
         amount={order.totalAmount}
         trailing={<MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />}
       />

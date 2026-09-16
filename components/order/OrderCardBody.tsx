@@ -5,6 +5,7 @@ import type { PaymentMethod, SupplierOrderItem } from '@/models/procurement';
 import type { Money } from '@/utils/money';
 import { formatMoney } from '@/utils/money';
 import { ITEM_NAMES_SHOWN, summariseItems } from '@/utils/orders';
+import { formatMoment } from '@/utils/dateRange';
 import { PaymentMethodPill } from './PaymentMethodPill';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -40,6 +41,7 @@ export function OrderCardBody({
   orderNumber,
   paymentMethod,
   amount,
+  createdAt,
   trailing,
 }: {
   primary: string | null | undefined;
@@ -48,6 +50,8 @@ export function OrderCardBody({
   items: Pick<SupplierOrderItem, 'skuName' | 'productName' | 'productImageUrl'>[];
   orderNumber?: string | null;
   paymentMethod?: PaymentMethod | null;
+  /** When the order was placed. Shown under the goods, as one line. */
+  createdAt?: string | null;
   /** The figure this card is about. The caller chooses which one — a supplier
    *  reads what they committed to, a restaurant what they are paying. */
   amount?: Money | null;
@@ -82,6 +86,14 @@ export function OrderCardBody({
           ) : null}
         </View>
       </View>
+
+      {createdAt ? (
+        // Last, and quiet. It is the fact you reach for when reconciling or
+        // arguing about an order, not one you scan a list by.
+        <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
+          {formatMoment(createdAt)}
+        </MandiText>
+      ) : null}
 
       {count > 0 ? (
         // Pictures share the names' line rather than taking one of their own.

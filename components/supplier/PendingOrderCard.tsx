@@ -36,6 +36,7 @@ export function PendingOrderCard({
         items={order.items}
         orderNumber={order.orderNumber}
         paymentMethod={order.paymentMethod}
+              createdAt={order.createdAt}
         amount={order.totalAmount}
         trailing={
           <MandiCountdown

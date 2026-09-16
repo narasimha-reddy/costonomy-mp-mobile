@@ -117,6 +117,7 @@ export default function SupplierHome() {
                 items={order.items}
                 orderNumber={order.orderNumber}
                 paymentMethod={order.paymentMethod}
+              createdAt={order.createdAt}
                 amount={orderValue(order)}
                 trailing={
                   <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />

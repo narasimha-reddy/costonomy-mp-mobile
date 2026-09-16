@@ -109,7 +109,7 @@ export function MandiMapPicker({
         <Ionicons name="map-outline" size={24} color={Colors.textTertiary} />
         <MandiText variant="bodyEmphasis">Map unavailable</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary} center>
-          We cannot show the map just now. You can still pin this place with the buttons
+          We cannot show the map now. You can still pin this place with the buttons
           below, and everything else on this screen works as usual.
         </MandiText>
       </View>

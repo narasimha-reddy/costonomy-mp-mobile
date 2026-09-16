@@ -60,6 +60,25 @@ export function fetchActiveOrders(token: string, storeId: number): Promise<Incom
 }
 
 /**
+ * A store's orders in a window, newest first.
+ *
+ * <p>Dated on when the order arrived. Omitting `statuses` means every status a
+ * supplier may see, which never includes an unfunded order — the server decides
+ * that, not this call.
+ */
+export function fetchOrderHistory(
+  token: string,
+  storeId: number,
+  range: { from: string; to: string },
+  statuses?: string[],
+): Promise<IncomingOrder[]> {
+  const params = new URLSearchParams({ from: range.from, to: range.to });
+  (statuses ?? []).forEach((status) => params.append('status', status));
+  return apiRequest<IncomingOrder[]>(
+    `/api/v1/supplier-stores/${storeId}/orders?${params.toString()}`, { token });
+}
+
+/**
  * Accept in full.
  *
  * <p>Carries nothing deliberately: accepting means agreeing to the order as sent.

@@ -34,6 +34,7 @@ import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatDistance, orderValue } from '@/utils/orders';
+import { formatMoment } from '@/utils/dateRange';
 import { PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { track } from '@/analytics';
@@ -225,6 +226,12 @@ export default function SupplierOrderScreen() {
                 </MandiText>
               </View>
             </View>
+
+            {/* Full width rather than in a column: it is a sentence, and squeezed
+                into half the card it wraps into three lines. */}
+            <MandiText variant="caption" color={Colors.textTertiary}>
+              Placed {formatMoment(order.createdAt)}
+            </MandiText>
             {pending && order.acceptanceDeadline && (
               <View style={styles.deadline}>
                 <MandiText variant="caption" color={Colors.textSecondary}>

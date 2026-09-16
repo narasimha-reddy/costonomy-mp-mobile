@@ -195,6 +195,7 @@ export interface SupplierOrder {
   /** The authoritative deadline. Count down to this, never to a local timer. */
   acceptanceDeadline: string | null;
   responseSlaSeconds: number | null;
+  createdAt: string;
   subtotal: Money;
   gstAmount: Money;
   totalAmount: Money;
@@ -229,6 +230,8 @@ export interface IncomingOrder {
   responseSlaSeconds: number | null;
   /** The server's starting point for the countdown, not a substitute for the deadline. */
   secondsRemaining: number;
+  /** When the order reached this store. */
+  createdAt: string;
   subtotal: Money;
   gstAmount: Money;
   totalAmount: Money;

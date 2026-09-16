@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useOutlets } from '@/hooks/useOutlets';
+import { restaurantNameFor, useOutlets } from '@/hooks/useOutlets';
+import { useSession } from '@/contexts/SessionProvider';
 import { getPreference, setPreference } from '@/lib/preferences';
 import type { Outlet } from '@/services/restaurant';
 
@@ -23,6 +24,13 @@ interface OutletState {
   outlets: Outlet[];
   outlet: Outlet | null;
   outletId: number | null;
+  /**
+   * What the selected outlet's restaurant is called.
+   *
+   * <p>Null when the grants do not name it — the header falls back to the outlet
+   * rather than inventing a business.
+   */
+  restaurantName: string | null;
   select: (outletId: number) => void;
   loading: boolean;
   error: unknown;
@@ -32,6 +40,7 @@ const OutletContext = createContext<OutletState | null>(null);
 
 export function OutletProvider({ children }: { children: React.ReactNode }) {
   const { outlets, loading, error } = useOutlets();
+  const { me } = useSession();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
 
@@ -64,14 +73,21 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
     return outlets.find((o) => o.id === selectedId) ?? outlets[0] ?? null;
   }, [outlets, selectedId]);
 
+  const memberships = me?.memberships;
+  const restaurantName = useMemo(
+    () => restaurantNameFor(memberships ?? [], outlet),
+    [memberships, outlet],
+  );
+
   const value = useMemo<OutletState>(() => ({
     outlets,
     outlet,
     outletId: outlet?.id ?? null,
+    restaurantName,
     select,
     loading: loading || !restored,
     error,
-  }), [outlets, outlet, select, loading, restored, error]);
+  }), [outlets, outlet, restaurantName, select, loading, restored, error]);
 
   return <OutletContext.Provider value={value}>{children}</OutletContext.Provider>;
 }

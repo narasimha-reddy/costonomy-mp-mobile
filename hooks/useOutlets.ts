@@ -51,6 +51,32 @@ export function directOutletIds(memberships: Membership[]): number[] {
   );
 }
 
+/**
+ * What the restaurant this outlet belongs to is called.
+ *
+ * <p>Read off the grants `/auth/me` already returned rather than fetched: the
+ * name is on a RESTAURANT grant as its own `scopeName`, and on an OUTLET grant as
+ * the parent's. A chain owner and a single-outlet manager therefore both get an
+ * answer, from different rows, with no second request.
+ *
+ * <p>Resolved per outlet, not per user, because someone can hold outlet grants in
+ * two different restaurants — the name has to follow whichever outlet is selected
+ * rather than whichever grant happens to be first.
+ */
+export function restaurantNameFor(memberships: Membership[], outlet: Outlet | null): string | null {
+  if (!outlet) return null;
+
+  const owned = memberships.find(
+    (m) => m.scopeType === 'RESTAURANT' && m.scopeId === outlet.restaurantId,
+  );
+  if (owned?.scopeName) return owned.scopeName;
+
+  const granted = memberships.find(
+    (m) => m.scopeType === 'OUTLET' && m.scopeId === outlet.id,
+  );
+  return granted?.parentScopeName ?? null;
+}
+
 export function useOutlets(): OutletsState {
   const { me, accessToken } = useSession();
   const memberships = me?.memberships ?? [];

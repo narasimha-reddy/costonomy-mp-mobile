@@ -13,8 +13,8 @@ import {
   MandiSkeletonList,
   MandiStatusChip,
   MandiText,
-  OutletSelector,
 } from '@/components/common';
+import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { formatQuantity } from '@/utils/money';
 import { Colors, Spacing } from '@/theme';
 
@@ -39,7 +39,7 @@ export default function RequirementsScreen() {
 
   return (
     <MandiScreen
-      header={<Header />}
+      header={<RestaurantHeader screen="REST-REQ-01" subtitle="Requirements" />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
     >
@@ -84,23 +84,6 @@ export default function RequirementsScreen() {
   );
 }
 
-function Header() {
-  return (
-    <View style={styles.header}>
-      <MandiText variant="title">Requirements</MandiText>
-      <OutletSelector />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.md,
-  },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
 });

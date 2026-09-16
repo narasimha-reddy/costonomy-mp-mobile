@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@/contexts/StoreProvider';
-import { storeLabel } from '@/utils/storeName';
+import { placeLabel } from '@/utils/placeName';
 import { useNotifications } from '@/hooks/useNotifications';
 import { MandiBottomSheet, MandiHeaderAction, MandiText } from '@/components/common';
 import { Colors, Spacing, TouchTarget } from '@/theme';
@@ -46,7 +46,7 @@ export function SupplierHeader({
   // once the store is the title, an icon saying "this is a store" is decoration.
   const multiStore = stores.length > 1;
   const business = supplier?.displayName ?? null;
-  const title = storeLabel(store?.name, business) ?? business ?? 'Your business';
+  const title = placeLabel(store?.name, business) ?? business ?? 'Your business';
   const line = [subtitle, store?.name ? business : null].filter(Boolean).join(' · ');
 
   return (

@@ -14,10 +14,10 @@ import {
   MandiSkeletonList,
   MandiStatusChip,
   MandiText,
-  OutletSelector,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
+import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 /** REST-ORDERS-01. Doc 05 §15 — pending, active, completed, cancelled. */
@@ -114,10 +114,7 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
 function Header({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
   return (
     <View style={styles.header}>
-      <View style={styles.titleRow}>
-        <MandiText variant="title">Orders</MandiText>
-        <OutletSelector />
-      </View>
+      <RestaurantHeader screen="REST-ORDERS-01" subtitle="Orders" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {TABS.map((option) => {
           const active = option.key === tab;
@@ -144,14 +141,7 @@ function Header({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingVertical: Spacing.sm, gap: Spacing.sm },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.screenHorizontal,
-    gap: Spacing.md,
-  },
+  header: { gap: Spacing.sm, paddingBottom: Spacing.sm },
   tabs: { paddingHorizontal: Spacing.screenHorizontal, gap: Spacing.sm },
   tab: {
     paddingHorizontal: Spacing.lg,

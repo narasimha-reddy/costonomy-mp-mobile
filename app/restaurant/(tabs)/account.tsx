@@ -10,6 +10,7 @@ import {
   MandiSectionHeader,
   MandiText,
 } from '@/components/common';
+import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { Colors, Spacing } from '@/theme';
 
 /** REST-ACCOUNT-01. Doc 05 §4. */
@@ -19,7 +20,7 @@ export default function AccountScreen() {
   const { outlets } = useOutlet();
 
   return (
-    <MandiScreen header={<Header />}>
+    <MandiScreen header={<RestaurantHeader screen="REST-ACCOUNT-01" subtitle="Account" />}>
       <MandiCard>
         <MandiText variant="caption" color={Colors.textSecondary}>Signed in as</MandiText>
         <MandiText variant="subtitle">{me?.user.name ?? me?.user.phone}</MandiText>
@@ -64,15 +65,6 @@ export default function AccountScreen() {
   );
 }
 
-function Header() {
-  return (
-    <View style={styles.header}>
-      <MandiText variant="title">Account</MandiText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: Spacing.screenHorizontal, paddingVertical: Spacing.sm },
   section: { gap: Spacing.listGap },
 });

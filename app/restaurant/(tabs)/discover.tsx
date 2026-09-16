@@ -11,8 +11,8 @@ import {
   MandiSectionHeader,
   MandiSkeletonList,
   MandiText,
-  OutletSelector,
 } from '@/components/common';
+import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { Spacing } from '@/theme';
 
 /** REST-SEARCH-01 entry. Doc 05 §6 — categories and suppliers, search is a push. */
@@ -28,7 +28,7 @@ export default function DiscoverScreen() {
   });
 
   return (
-    <MandiScreen header={<Header />}>
+    <MandiScreen header={<RestaurantHeader screen="REST-SEARCH-01" subtitle="Discover" />}>
       <MandiSearchBar
         value=""
         onChangeText={() => {}}
@@ -61,24 +61,7 @@ export default function DiscoverScreen() {
   );
 }
 
-function Header() {
-  return (
-    <View style={styles.header}>
-      <MandiText variant="title">Discover</MandiText>
-      <OutletSelector />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.md,
-  },
   section: { gap: Spacing.listGap },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   gridCard: { width: '31%', minHeight: 64, justifyContent: 'center' },

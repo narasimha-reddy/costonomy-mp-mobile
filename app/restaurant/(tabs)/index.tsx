@@ -5,8 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { useCart } from '@/hooks/useCart';
-import { useNotifications } from '@/hooks/useNotifications';
 import { fetchCategories } from '@/services/catalog';
 import { fetchOutletOrders, fetchRequirements } from '@/services/procurement';
 import { CategoryTile } from '@/components/product/CategoryTile';
@@ -14,18 +12,16 @@ import {
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
-  MandiHeader,
-  MandiHeaderAction,
   MandiScreen,
   MandiSearchBar,
   MandiSectionHeader,
   MandiSkeletonList,
   MandiStatusChip,
   MandiText,
-  OutletSelector,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
+import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { track } from '@/analytics';
 import { Colors, Elevation, Radius, Spacing } from '@/theme';
 
@@ -46,45 +42,14 @@ export default function RestaurantHome() {
   const router = useRouter();
   const { me } = useSession();
   const { outletId, outlet } = useOutlet();
-  const { itemCount } = useCart();
-  const { unreadCount } = useNotifications();
 
   return (
     <MandiScreen
-      header={
-        <MandiHeader
-          title="Mandi"
-          right={
-            <View style={styles.headerActions}>
-              <MandiHeaderAction
-                icon="notifications-outline"
-                label="Notifications"
-                badge={unreadCount}
-                onPress={() => router.push('/notifications')}
-              />
-              <MandiHeaderAction
-                icon="cart-outline"
-                label="Cart"
-                badge={itemCount}
-                onPress={() => {
-                  track('open_cart', { screen: SCREEN, outletId });
-                  router.push('/restaurant/cart');
-                }}
-              />
-            </View>
-          }
-        />
-      }
+      header={<RestaurantHeader screen={SCREEN} />}
     >
-      <View style={styles.greeting}>
-        <MandiText variant="subtitle">
-          {greeting()}{me?.user.name ? `, ${me.user.name.split(' ')[0]}` : ''}
-        </MandiText>
-        <View style={styles.outletRow}>
-          <MandiText variant="caption" color={Colors.textSecondary}>Ordering for</MandiText>
-          <OutletSelector />
-        </View>
-      </View>
+      <MandiText variant="subtitle">
+        {greeting()}{me?.user.name ? `, ${me.user.name.split(' ')[0]}` : ''}
+      </MandiText>
 
       <MandiSearchBar
         value=""
@@ -318,9 +283,6 @@ function CategoriesSection({ outletId }: { outletId: number | null }) {
 }
 
 const styles = StyleSheet.create({
-  headerActions: { flexDirection: 'row', gap: Spacing.xs },
-  greeting: { gap: Spacing.xs },
-  outletRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   section: { gap: Spacing.listGap },
   row: {
     flexDirection: 'row',

@@ -1,8 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MandiText } from './MandiText';
 import { Colors, Elevation, Radius, Spacing } from '@/theme';
 
 /**
@@ -13,68 +11,50 @@ import { Colors, Elevation, Radius, Spacing } from '@/theme';
  * button in the toolbar is fine when the list is empty and useless once it is
  * not, which is the wrong way round.
  *
- * <p><b>It clears the tab bar and the home indicator.</b> Absolute positioning
- * inside a tab screen puts it at the screen's bottom, not the content's, so the
- * inset and the bar height both have to be added back or it sits under them.
+ * <p><b>It is positioned against its container, not the window.</b> On a tab
+ * screen that container already ends where the tab bar begins, so a plain margin
+ * is the right offset — adding the tab bar's height back would float it a
+ * button's length up the screen, which is what an earlier version did.
  */
 export function MandiFab({
   icon = 'add',
-  label,
   onPress,
   accessibilityLabel,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
-  /** Turns it into an extended FAB. Keep it to two words. */
-  label?: string;
   onPress: () => void;
+  /** Required: an icon-only control has no visible text to read out. */
   accessibilityLabel: string;
 }) {
-  const insets = useSafeAreaInsets();
-
   return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.layer, { bottom: TAB_BAR_CLEARANCE + insets.bottom }]}
-    >
+    <View pointerEvents="box-none" style={styles.layer}>
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        style={({ pressed }) => [
-          styles.fab,
-          label != null && styles.extended,
-          pressed && styles.pressed,
-        ]}
+        style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
       >
-        <Ionicons name={icon} size={24} color={Colors.textInverse} />
-        {label != null && (
-          <MandiText variant="bodyEmphasis" color={Colors.textInverse}>{label}</MandiText>
-        )}
+        <Ionicons name={icon} size={26} color={Colors.textInverse} />
       </Pressable>
     </View>
   );
 }
 
-/** Matches the tab bar's content height in `tabBarOptions`, plus a gap. */
-const TAB_BAR_CLEARANCE = 64 + Spacing.lg;
-
 const styles = StyleSheet.create({
   layer: {
     position: 'absolute',
     right: Spacing.screenHorizontal,
+    bottom: Spacing.lg,
     alignItems: 'flex-end',
   },
   fab: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
     width: 56,
     height: 56,
     borderRadius: Radius.full,
     backgroundColor: Colors.primary,
     ...Elevation.floating,
   },
-  extended: { width: 'auto', paddingHorizontal: Spacing.xl },
   pressed: { opacity: 0.9 },
 });

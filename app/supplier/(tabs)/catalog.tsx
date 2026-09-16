@@ -93,7 +93,6 @@ export default function SupplierCatalogScreen() {
            wrong way round. */
         <MandiFab
           accessibilityLabel="List a new product"
-          label="Add"
           onPress={() => router.push('/supplier/catalog/new')}
         />
       )}

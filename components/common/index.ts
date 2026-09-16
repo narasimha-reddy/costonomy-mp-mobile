@@ -25,3 +25,4 @@ export { MandiLocationField } from './MandiLocationField';
 export { MandiStepBar } from './MandiStepBar';
 export { MandiFab } from './MandiFab';
 export { MandiFilterMenu, type FilterOption } from './MandiFilterMenu';
+export { MandiImagePicker } from './MandiImagePicker';

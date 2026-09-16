@@ -4,22 +4,22 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
-import { fetchPriceHistory, fetchSkus, updateSku } from '@/services/supplier';
+import { fetchPriceHistory, fetchSkus, updateSku, uploadSkuImage } from '@/services/supplier';
 import {
   MandiButton,
   MandiCard,
   MandiErrorState,
   MandiFormField,
   MandiHeader,
+  MandiImagePicker,
   MandiScreen,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiStickyBar,
   MandiText,
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
-import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { formatMoney, formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -96,11 +96,35 @@ export default function SkuEditorScreen() {
       || imageValue.trim() !== (sku.imageUrl ?? ''));
   const dirty = priceChanged || gstChanged || detailsChanged;
 
+  /**
+   * Changed is not the same as saveable. A cleared name or a zero price are
+   * changes, and the server would refuse both — so the button stays disabled
+   * rather than offering an action that cannot work.
+   */
+  const canSave = nameValue.trim().length > 1 && Number(priceValue) > 0;
+
   return (
     <MandiScreen
-      header={<MandiHeader title={sku?.name ?? 'Product'} subtitle={sku?.canonicalProductName} back />}
+      header={
+        // The canonical product *is* the header: its picture, its name, and the
+        // supplier's own name for it underneath. Repeating it in a "Listed
+        // against" card below said the same thing twice and made the screen read
+        // as being about two products.
+        <MandiHeader
+          leading={<ProductThumb uri={sku?.canonicalProductImageUrl} size={40} />}
+          title={sku?.canonicalProductName ?? 'Product'}
+          subtitle={
+            sku && sku.name !== sku.canonicalProductName ? `Your listing: ${sku.name}` : undefined
+          }
+          back
+        />
+      }
       footer={
-        dirty ? (
+        // Always present, disabled until there is something to save. Appearing
+        // only once a field changes made the bar arrive under the thumb mid-edit
+        // and moved the content up as it did — and a supplier who cannot see a
+        // save button has no way to know whether this screen saves at all.
+        sku != null ? (
           <MandiStickyBar>
             {priceChanged && (
               <MandiText variant="caption" color={Colors.textSecondary} center>
@@ -110,6 +134,7 @@ export default function SkuEditorScreen() {
             <MandiButton
               label="Save changes"
               size="lg"
+              disabled={!dirty || !canSave}
               loading={save.isPending}
               onPress={() => save.mutate({
                 name: nameValue.trim(),
@@ -136,49 +161,6 @@ export default function SkuEditorScreen() {
         />
       ) : (
         <>
-          {/* The platform product this listing maps onto, with the platform's
-              picture. Everything below is the supplier's own — and the two must
-              not be conflated, because it is the canonical product that puts
-              this listing into a restaurant's comparison (doc 01 §7). */}
-          <MandiCard>
-            <View style={styles.identity}>
-              <ProductThumb uri={sku.canonicalProductImageUrl} size={44} />
-              <View style={styles.flex}>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  Listed against
-                </MandiText>
-                <MandiText variant="bodyEmphasis" numberOfLines={1}>
-                  {sku.canonicalProductName}
-                </MandiText>
-              </View>
-            </View>
-          </MandiCard>
-
-          <MandiCard>
-            <View style={styles.row}>
-              {/* The supplier's own pack picture, beside their own price — or
-                  the canonical one standing in until they add theirs. */}
-              <ProductThumb
-                uri={sku.imageUrl || sku.canonicalProductImageUrl}
-                size={56}
-              />
-              <View style={styles.flex}>
-                <MandiText variant="caption" color={Colors.textSecondary}>Currently</MandiText>
-                <MandiText variant="priceLarge">{formatMoney(sku.sellingPrice)}</MandiText>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  per {formatQuantity(sku.packSize)} {sku.packUnit} · GST {formatGstRate(sku.gstRate)}
-                </MandiText>
-              </View>
-              <MandiStatusChip
-                label={sku.status !== 'ACTIVE' ? 'Delisted'
-                  : sku.availability === 'AVAILABLE' ? 'Available' : 'Out of stock'}
-                tone={sku.status !== 'ACTIVE' ? 'neutral'
-                  : sku.availability === 'AVAILABLE' ? 'success' : 'warning'}
-                size="sm"
-              />
-            </View>
-          </MandiCard>
-
           <MandiFormField label="Product name" value={nameValue} onChangeText={setName} required />
           <MandiFormField
             label="Brand (optional)"
@@ -186,18 +168,25 @@ export default function SkuEditorScreen() {
             onChangeText={setBrandName}
             placeholder="Amul"
           />
-          <MandiFormField
+          {/* The only picture on this screen now, and it is the supplier's own.
+              Empty shows the catalog photo, which is what a restaurant would see,
+              so the control states the outcome rather than describing a rule. */}
+          <MandiImagePicker
             label="Photo of your pack (optional)"
-            value={imageValue}
-            onChangeText={setImageUrl}
-            placeholder="https://…"
-            autoCapitalize="none"
-            keyboardType="url"
+            value={imageValue.trim() || null}
+            fallbackUri={sku.canonicalProductImageUrl}
+            onChange={(url) => setImageUrl(url ?? '')}
+            onUpload={async (file) => {
+              const uploaded = await uploadSkuImage(
+                accessToken as string, storeId as number, file);
+              return uploaded.url;
+            }}
             hint={
-              sku.imageUrl
-                ? 'Clear it to fall back to the catalog photo of the product.'
-                : 'Restaurants see the catalog photo until you add your own.'
+              imageValue.trim()
+                ? 'Remove it to go back to the catalog photo of the product.'
+                : 'This is the catalog photo. Add your own to show your actual pack.'
             }
+            placeholderHint="Restaurants see this beside your price."
           />
           <MandiFormField
             label="Selling price"

@@ -19,12 +19,19 @@ export function MandiHeader({
   back = false,
   right,
   onBack,
+  leading,
 }: {
   title: string;
   subtitle?: string;
   back?: boolean;
   right?: React.ReactNode;
   onBack?: () => void;
+  /**
+   * A thumbnail beside the titles — the thing this screen is about.
+   * <p>It belongs here rather than in a card below, because a card that only
+   * restates what the header already says reads as a second subject.
+   */
+  leading?: React.ReactNode;
 }) {
   const router = useRouter();
 
@@ -40,6 +47,7 @@ export function MandiHeader({
           <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
         </Pressable>
       )}
+      {leading}
       <View style={styles.titles}>
         <MandiText variant={back ? 'bodyEmphasis' : 'title'} numberOfLines={1}>
           {title}

@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchCategories, fetchProducts } from '@/services/catalog';
-import { createSku, fetchSkus } from '@/services/supplier';
+import { createSku, fetchSkus, uploadSkuImage } from '@/services/supplier';
 import { categoryFace } from '@/models/categories';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { CategoryTabs } from '@/components/product/CategoryTabs';
@@ -18,6 +18,7 @@ import {
   MandiErrorState,
   MandiFormField,
   MandiHeader,
+  MandiImagePicker,
   MandiScreen,
   MandiSearchBar,
   MandiSkeletonList,
@@ -405,30 +406,24 @@ export default function NewSkuScreen() {
             hint="Only for your own records. Restaurants never see it."
           />
 
-          <MandiFormField
+          <MandiImagePicker
             label="Photo of your pack (optional)"
-            value={imageUrl}
-            onChangeText={setImageUrl}
-            placeholder="https://…"
-            autoCapitalize="none"
-            keyboardType="url"
-            hint={
+            value={imageUrl || null}
+            fallbackUri={product.imageUrl}
+            onChange={(url) => setImageUrl(url ?? '')}
+            onUpload={async (file) => {
+              const uploaded = await uploadSkuImage(
+                accessToken as string, storeId as number, file);
+              return uploaded.url;
+            }}
+            hint="Remove it to use the catalog photo instead."
+            placeholderHint={
               product.imageUrl
-                ? "Leave it empty and we show the catalog photo of the product."
-                : "A link to a picture of the pack you sell."
+                ? 'This is the catalog photo. Add your own to show your actual pack.'
+                : 'This product has no catalog photo, so yours is the only one.'
             }
           />
 
-          {imageUrl.trim() ? (
-            <View style={styles.preview}>
-              <ProductThumb uri={imageUrl.trim()} size={56} radius={Radius.md} />
-              <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
-                {/* Shown rather than described: a URL that does not resolve looks
-                    identical to one that does until something tries to draw it. */}
-                This is what restaurants will see.
-              </MandiText>
-            </View>
-          ) : null}
         </>
       )}
     </MandiScreen>

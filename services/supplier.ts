@@ -1,4 +1,5 @@
 import { apiRequest } from '@/lib/api/client';
+import { uploadFile, type UploadedFile } from '@/lib/api/upload';
 import type { IncomingOrder, SupplierOrder } from '@/models/procurement';
 import type { Money } from '@/utils/money';
 
@@ -306,4 +307,20 @@ export function fetchPriceHistory(token: string, skuId: number) {
     effectiveFrom: string;
     effectiveTo: string | null;
   }[]>(`/api/v1/supplier-skus/${skuId}/price-history`, { token });
+}
+
+/**
+ * Upload a photo of a pack and get back where it now lives.
+ *
+ * <p>Deliberately does not attach it to anything. Picking an image and saving a
+ * SKU are separate acts: a supplier who changes their mind should leave an
+ * orphaned object, which a lifecycle rule cleans up, rather than a listing that
+ * is half-changed.
+ */
+export function uploadSkuImage(
+  token: string,
+  storeId: number,
+  file: { uri: string; name: string; type: string },
+): Promise<UploadedFile> {
+  return uploadFile(`/api/v1/supplier-stores/${storeId}/sku-images`, file, token);
 }

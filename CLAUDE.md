@@ -51,7 +51,7 @@ docs/specs/     the specification set (shared with costonomy-mp-api)
 
 ```bash
 npm start          # expo dev server
-npm run web        # expo on http://localhost:7001 — the default way to check a screen
+npm run web        # expo on http://localhost:7071 — the default way to check a screen
 npm run typecheck  # tsc --noEmit
 npm run lint       # eslint — includes the colour-literal guard
 npm test           # jest
@@ -62,7 +62,7 @@ a live gallery of every primitive — check it before building a new component.
 
 ### Checking a screen against a real backend
 
-Run the API on the `local` profile and `npm run web`. The local profile fixes the
+Run the API on the `local` profile (port 7070) and `npm run web` (port 7071). The local profile fixes the
 OTP at `123456` (`costonomy.mp.otp.mock-code`), so any number signs in — but the
 **resend cooldown and attempt limits are real**, which is deliberate: those paths
 are part of the screen. Expect a genuine 429 if you re-request a code for the same

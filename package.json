@@ -7,7 +7,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web --port 7001",
+    "web": "expo start --web --port 7071",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "jest"

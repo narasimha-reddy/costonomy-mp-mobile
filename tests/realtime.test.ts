@@ -1,6 +1,6 @@
 import { socketUrl } from '@/contexts/RealtimeProvider';
 
-const BASE = 'http://localhost:8080/costonomy-mp-api';
+const BASE = 'http://localhost:7070/costonomy-mp-api';
 
 describe('socketUrl', () => {
   it('keeps the API context path', () => {
@@ -9,7 +9,7 @@ describe('socketUrl', () => {
     // /costonomy-mp-api — the socket then never connects, the app falls back to
     // polling forever, and nothing looks wrong.
     expect(socketUrl('/api/v1/realtime/socket', 'abc', BASE))
-      .toBe('ws://localhost:8080/costonomy-mp-api/api/v1/realtime/socket?ticket=abc');
+      .toBe('ws://localhost:7070/costonomy-mp-api/api/v1/realtime/socket?ticket=abc');
   });
 
   it('upgrades https to wss', () => {
@@ -33,7 +33,7 @@ describe('socketUrl', () => {
   });
 
   it('tolerates a base with a trailing slash and a path without a leading one', () => {
-    expect(socketUrl('api/v1/realtime/socket', 'abc', 'http://localhost:8080/mp/'))
-      .toBe('ws://localhost:8080/mp/api/v1/realtime/socket?ticket=abc');
+    expect(socketUrl('api/v1/realtime/socket', 'abc', 'http://localhost:7070/mp/'))
+      .toBe('ws://localhost:7070/mp/api/v1/realtime/socket?ticket=abc');
   });
 });

@@ -14,7 +14,8 @@ import { Platform } from 'react-native';
  * Expo and is the only thing that needs changing to run against a deployed
  * backend.
  */
-const DEFAULT_PORT = 8080;
+/** The API's local port. Matches `server.port` in the API's application.properties. */
+const DEFAULT_PORT = 7070;
 const CONTEXT_PATH = '/costonomy-mp-api';
 
 function defaultHost(): string {

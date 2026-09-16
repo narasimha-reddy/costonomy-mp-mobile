@@ -385,7 +385,7 @@ export default function SupplierOrderScreen() {
       );
     }
 
-    if (order.status === 'ACCEPTED' || order.status === 'PARTIALLY_ACCEPTED') {
+    if (order.status === 'CONFIRMED' || order.status === 'PARTIALLY_ACCEPTED') {
       return (
         <MandiStickyBar>
           <MandiButton

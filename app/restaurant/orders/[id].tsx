@@ -148,7 +148,7 @@ export default function OrderDetailScreen() {
 
     const trackable = ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'PREPARING'].includes(order.status);
     const receivable = order.status === 'DELIVERED';
-    const settled = order.status === 'RECEIVED';
+    const settled = order.status === 'COMPLETED';
 
     if (!trackable && !receivable && !settled) return undefined;
 

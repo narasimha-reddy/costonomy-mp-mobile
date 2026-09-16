@@ -233,7 +233,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
   // as in flight would tell the restaurant something untrue about an order
   // nobody is working on.
   const active = (query.data ?? []).filter(
-    (order) => !['DRAFT', 'DELIVERED', 'RECEIVED', 'CANCELLED', 'REJECTED', 'EXPIRED']
+    (order) => !['DRAFT', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED']
       .includes(order.status),
   );
 

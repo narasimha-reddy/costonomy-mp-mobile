@@ -32,9 +32,9 @@ const TABS: { key: Tab; label: string; statuses: Status[] }[] = [
   {
     key: 'active',
     label: 'Active',
-    statuses: ['ACCEPTED', 'PARTIALLY_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'],
+    statuses: ['CONFIRMED', 'PARTIALLY_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'],
   },
-  { key: 'completed', label: 'Completed', statuses: ['DELIVERED', 'RECEIVED'] },
+  { key: 'completed', label: 'Completed', statuses: ['DELIVERED', 'COMPLETED'] },
   // Rejection, expiry and cancellation are separate business outcomes and keep
   // their own labels on the card (rule 11); they share a tab only because a
   // restaurant looks for all three in the same place.

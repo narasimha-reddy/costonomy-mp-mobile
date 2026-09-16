@@ -41,3 +41,29 @@ describe('status registry', () => {
     expect(resolveStatus(SupplierOrderStatus, null).label).toBe('Unknown');
   });
 });
+
+describe('status spellings match the server', () => {
+  // These exist because they did not hold. The app declared an accepted order
+  // as ACCEPTED and a received one as RECEIVED; the server has only ever sent
+  // CONFIRMED and COMPLETED. Every comparison type-checked and every one was
+  // false, which is how the supplier's "Start preparing" button came to be
+  // unreachable. The `satisfies` guard in models/status.ts now makes a wrong
+  // key a compile error; these assert the right ones are actually present.
+  it.each([
+    ['DRAFT'], ['PENDING_ACCEPTANCE'], ['CONFIRMED'], ['PARTIALLY_ACCEPTED'],
+    ['PREPARING'], ['READY_FOR_PICKUP'], ['OUT_FOR_DELIVERY'], ['DELIVERED'],
+    ['COMPLETED'], ['REJECTED'], ['EXPIRED'], ['CANCELLED'],
+  ])('knows %s', (code) => {
+    expect(SupplierOrderStatus[code]).toBeDefined();
+  });
+
+  it.each([['ACCEPTED'], ['RECEIVED']])('has no entry for the invented %s', (code) => {
+    expect(SupplierOrderStatus[code]).toBeUndefined();
+  });
+
+  it('degrades an unheard-of status rather than rendering an empty chip', () => {
+    // Mobile releases lag the API, which is why the registry stays widened to
+    // Record<string, …> after the satisfies check.
+    expect(unknownStatus('SOMETHING_NEW').label).toBeTruthy();
+  });
+});

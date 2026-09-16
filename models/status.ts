@@ -1,4 +1,9 @@
 import type { StatusTone } from '@/components/common/MandiStatusChip';
+import type {
+  ProcurementStatus as ProcurementStatusCode,
+  RequirementStatus as RequirementStatusCode,
+  SupplierOrderStatus as SupplierOrderStatusCode,
+} from './procurement';
 
 /**
  * Domain status → display.
@@ -19,8 +24,28 @@ export interface StatusDisplay {
   tone: StatusTone;
 }
 
+/**
+ * Why the maps below are written as `satisfies Record<Code, StatusDisplay>` and
+ * only then widened to `Record<string, StatusDisplay>`.
+ *
+ * <p>The widening is deliberate and has to stay: `resolveStatus` must survive a
+ * status this build has never heard of, because mobile releases lag the API. But
+ * a bare `Record<string, StatusDisplay>` on the literal meant the keys were never
+ * checked against anything, and the app shipped for weeks believing an accepted
+ * order was `ACCEPTED` when the server has only ever said `CONFIRMED`. Every
+ * comparison against it type-checked — `'ACCEPTED'` was a member of the union it
+ * was compared to — and every one was false. The supplier's "Start preparing"
+ * button lived behind one of them.
+ *
+ * <p>`satisfies` closes both halves: a status in the union with no entry here is
+ * an error, and an entry here that is not a real status is an error too. The
+ * union is the server's spelling, so this file can no longer drift from it in
+ * silence.
+ */
+const widen = <T extends Record<string, StatusDisplay>>(map: T): Record<string, StatusDisplay> => map;
+
 /** Supplier order — doc 03 §5. */
-export const SupplierOrderStatus: Record<string, StatusDisplay> = {
+export const SupplierOrderStatus = widen({
   // DRAFT means the payment never completed, so the order never reached its
   // supplier (guardrail 16, D-020). "Draft" describes the row; it tells the
   // restaurant nothing about why nobody is acting on their order.
@@ -38,10 +63,10 @@ export const SupplierOrderStatus: Record<string, StatusDisplay> = {
   // and must never be collapsed into one chip.
   EXPIRED: { label: 'No response', tone: 'danger' },
   CANCELLED: { label: 'Cancelled', tone: 'neutral' },
-};
+} satisfies Record<SupplierOrderStatusCode, StatusDisplay>);
 
 /** Procurement — doc 03 §4. */
-export const ProcurementStatus: Record<string, StatusDisplay> = {
+export const ProcurementStatus = widen({
   DRAFT: { label: 'Draft', tone: 'neutral' },
   VALIDATING: { label: 'Checking availability', tone: 'pending' },
   READY: { label: 'Ready to submit', tone: 'info' },
@@ -51,17 +76,17 @@ export const ProcurementStatus: Record<string, StatusDisplay> = {
   REJECTED: { label: 'Rejected', tone: 'danger' },
   CANCELLED: { label: 'Cancelled', tone: 'neutral' },
   FAILED: { label: 'Submission failed', tone: 'danger' },
-};
+} satisfies Record<ProcurementStatusCode, StatusDisplay>);
 
 /** Requirement — doc 03 §3. */
-export const RequirementStatus: Record<string, StatusDisplay> = {
+export const RequirementStatus = widen({
   OPEN: { label: 'Open', tone: 'info' },
   SOURCING: { label: 'Sourcing', tone: 'pending' },
   PARTIALLY_FULFILLED: { label: 'Partially fulfilled', tone: 'warning' },
   FULFILLED: { label: 'Fulfilled', tone: 'success' },
   CANCELLED: { label: 'Cancelled', tone: 'neutral' },
   EXPIRED: { label: 'Expired', tone: 'neutral' },
-};
+} satisfies Record<RequirementStatusCode, StatusDisplay>);
 
 /** Payment — doc 03 §6. */
 export const PaymentStatus: Record<string, StatusDisplay> = {

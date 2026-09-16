@@ -1,9 +1,15 @@
 import type { Money } from '@/utils/money';
 
-/** Doc 03 §3–§6 and doc 04 §10–§11. */
+/**
+ * Doc 03 §3–§6 and doc 04 §10–§11.
+ *
+ * <p>These are the server's spellings, verbatim. They were not: this union once
+ * said CART, VALIDATED and COMPLETED, none of which the API has ever sent, and
+ * every comparison against them was silently false while type-checking perfectly.
+ */
 export type ProcurementStatus =
-  | 'CART' | 'VALIDATED' | 'PENDING_APPROVAL' | 'APPROVED'
-  | 'REJECTED' | 'SUBMITTED' | 'COMPLETED' | 'CANCELLED';
+  | 'DRAFT' | 'VALIDATING' | 'READY' | 'PENDING_APPROVAL' | 'APPROVED'
+  | 'SUBMITTED' | 'REJECTED' | 'CANCELLED' | 'FAILED';
 
 export type ApprovalStatus = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -94,7 +100,7 @@ export interface Procurement {
 // ── Requirements ──────────────────────────────────────────────────────
 
 export type RequirementStatus =
-  | 'OPEN' | 'SOURCING' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'CANCELLED';
+  | 'OPEN' | 'SOURCING' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'CANCELLED' | 'EXPIRED';
 
 export interface RequirementItem {
   id: number;
@@ -122,10 +128,19 @@ export interface Requirement {
 
 // ── Supplier orders ───────────────────────────────────────────────────
 
+/**
+ * The server's spellings, verbatim.
+ *
+ * <p>An order the supplier accepts in full is **CONFIRMED**, not `ACCEPTED`, and
+ * a received order is **COMPLETED**, not `RECEIVED`. This union said otherwise,
+ * so `order.status === 'ACCEPTED'` compiled — it is a member of the declared
+ * union — and was never once true. The supplier's "Start preparing" button sat
+ * behind that comparison and simply never appeared.
+ */
 export type SupplierOrderStatus =
-  | 'DRAFT' | 'PENDING_ACCEPTANCE' | 'ACCEPTED' | 'PARTIALLY_ACCEPTED'
+  | 'DRAFT' | 'PENDING_ACCEPTANCE' | 'CONFIRMED' | 'PARTIALLY_ACCEPTED'
   | 'REJECTED' | 'EXPIRED' | 'PREPARING' | 'READY_FOR_PICKUP'
-  | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'RECEIVED' | 'CANCELLED';
+  | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
 
 /**
  * A line on a supplier order.

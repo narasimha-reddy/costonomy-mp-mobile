@@ -5,11 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import {
+  approveCredit,
   fetchAgreement,
   fetchInvoices,
   fetchLedger,
   modifyCredit,
   reinstateCredit,
+  rejectCredit,
   suspendCredit,
 } from '@/services/credit';
 import { CreditPosition } from '@/components/credit/CreditPosition';
@@ -35,7 +37,7 @@ import { Colors, Radius, Spacing } from '@/theme';
 const SCREEN = 'SUP-CREDIT-02';
 const PERIODS = [7, 15, 30, 45, 60];
 
-type Mode = 'view' | 'edit' | 'suspend';
+type Mode = 'view' | 'edit' | 'suspend' | 'counter' | 'decline';
 
 /**
  * One credit line, from the supplier's side. Doc 05 §32.
@@ -86,8 +88,16 @@ export default function SupplierCreditAgreementScreen() {
   });
 
   const data = agreement.data;
-  const limitValue = limit ?? (data ? String(Number(data.approvedLimit)) : '');
-  const daysValue = days ?? data?.creditPeriodDays ?? 30;
+  const asked = data?.latestRequest;
+  const limitValue = limit
+    ?? (asked != null && data?.status === 'REQUESTED'
+      ? String(Number(asked.requestedLimit))
+      : data ? String(Number(data.approvedLimit)) : '');
+  const daysValue = days
+    ?? (asked != null && data?.status === 'REQUESTED'
+      ? asked.requestedPeriodDays
+      : data?.creditPeriodDays)
+    ?? 30;
 
   function invalidate() {
     void queryClient.invalidateQueries({ queryKey: ['credit-agreement', agreementId] });
@@ -130,6 +140,40 @@ export default function SupplierCreditAgreementScreen() {
     onError: (caught) => onFailure(caught, 'Could not suspend this line.'),
   });
 
+  const approve = useMutation({
+    // Values make it a modification; no values approves what was asked for.
+    // Doc 04 §13: a modification is explicit and versioned, and the credit does
+    // not work until the restaurant accepts it — so the copy says so rather than
+    // letting a supplier believe they have simply trimmed a number.
+    mutationFn: (modified: boolean) =>
+      approveCredit(accessToken as string, agreementId,
+        modified
+          ? { approvedLimit: limitValue, creditPeriodDays: daysValue, note: reason.trim() || undefined }
+          : {}),
+    onSuccess: (_data, modified) => {
+      track('credit_approved', { screen: SCREEN, entityId: agreementId }, { modified });
+      invalidate();
+      setMode('view');
+      setReason('');
+      toast.show(
+        modified ? 'Sent back with your terms — they have to accept' : 'Credit approved',
+        'success',
+      );
+    },
+    onError: (caught) => onFailure(caught, 'Could not approve this request.'),
+  });
+
+  const decline = useMutation({
+    mutationFn: () => rejectCredit(accessToken as string, agreementId, reason.trim()),
+    onSuccess: () => {
+      track('credit_rejected', { screen: SCREEN, entityId: agreementId });
+      invalidate();
+      toast.show('Request declined', 'info');
+      router.replace('/supplier/credit');
+    },
+    onError: (caught) => onFailure(caught, 'Could not decline this request.'),
+  });
+
   const reinstate = useMutation({
     mutationFn: () => reinstateCredit(accessToken as string, agreementId),
     onSuccess: () => {
@@ -143,12 +187,23 @@ export default function SupplierCreditAgreementScreen() {
   const exposure = data ? Number(data.reserved) + Number(data.utilized) : 0;
   const cutsBelowExposure = Number(limitValue) < exposure;
 
+  // A REQUESTED agreement is a question, not a credit line: it has no position
+  // to show and a different set of answers.
+  const pending = data?.status === 'REQUESTED';
+  const request = data?.latestRequest;
+
   return (
     <MandiScreen
       header={
         <MandiHeader
           title={data?.outletName ?? 'Credit line'}
-          subtitle={data ? `${data.creditPeriodDays ?? '—'} day terms` : undefined}
+          subtitle={
+            // A request has no agreed terms yet, so "0 day terms" would be a
+            // statement about a line that does not exist.
+            data == null ? undefined
+              : data.status === 'REQUESTED' ? 'Credit request'
+              : `${data.creditPeriodDays ?? '—'} day terms`
+          }
           back
           onBack={() => (mode === 'view' ? router.back() : setMode('view'))}
         />
@@ -175,8 +230,8 @@ export default function SupplierCreditAgreementScreen() {
           )}
 
           <View style={styles.row}>
-            <MandiText variant="bodyEmphasis" style={styles.flex}>
-              {data.outletName ?? `Outlet ${data.outletId}`}
+            <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+              {pending ? 'Waiting on your answer' : 'Credit line'}
             </MandiText>
             <MandiStatusChip
               label={data.status.toLowerCase()}
@@ -185,14 +240,34 @@ export default function SupplierCreditAgreementScreen() {
             />
           </View>
 
-          <CreditPosition
-            approvedLimit={data.approvedLimit}
-            reserved={data.reserved}
-            utilized={data.utilized}
-            available={data.available}
-            due={data.due}
-            overdue={data.overdue}
-          />
+          {pending ? (
+            <MandiCard>
+              <MandiText variant="caption" color={Colors.textSecondary}>They are asking for</MandiText>
+              <MandiText variant="display">{formatMoney(request?.requestedLimit)}</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                payable in {request?.requestedPeriodDays ?? '—'} days
+              </MandiText>
+              {request?.purpose != null && (
+                <MandiText variant="body" color={Colors.textSecondary} style={styles.spacedTop}>
+                  {request.purpose}
+                </MandiText>
+              )}
+              {request?.note != null && (
+                <MandiText variant="caption" color={Colors.textTertiary}>
+                  &ldquo;{request.note}&rdquo;
+                </MandiText>
+              )}
+            </MandiCard>
+          ) : (
+            <CreditPosition
+              approvedLimit={data.approvedLimit}
+              reserved={data.reserved}
+              utilized={data.utilized}
+              available={data.available}
+              due={data.due}
+              overdue={data.overdue}
+            />
+          )}
 
           {mode === 'edit' && (
             <MandiCard>
@@ -246,6 +321,78 @@ export default function SupplierCreditAgreementScreen() {
             </MandiCard>
           )}
 
+          {mode === 'counter' && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">Approve on your terms</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Anything you change makes this a modification — the restaurant has to accept
+                it before the credit works.
+              </MandiText>
+
+              <MandiFormField
+                label="Credit limit"
+                value={limitValue}
+                onChangeText={(text) => setLimit(text.replace(/[^\d.]/g, ''))}
+                keyboardType="decimal-pad"
+                required
+                hint={`They asked for ${formatMoney(request?.requestedLimit)}.`}
+              />
+
+              <View>
+                <MandiText variant="label">Payment period</MandiText>
+                <View style={styles.chips}>
+                  {PERIODS.map((option) => {
+                    const active = option === daysValue;
+                    return (
+                      <Pressable
+                        key={option}
+                        onPress={() => setDays(option)}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: active }}
+                        style={[styles.chip, active && styles.chipActive]}
+                      >
+                        <MandiText
+                          variant="captionEmphasis"
+                          color={active ? Colors.primary : Colors.textSecondary}
+                        >
+                          {option} days
+                        </MandiText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <MandiText variant="caption" color={Colors.textTertiary}>
+                  They asked for {request?.requestedPeriodDays ?? '—'} days.
+                </MandiText>
+              </View>
+
+              <MandiFormField
+                label="Note (optional)"
+                value={reason}
+                onChangeText={setReason}
+                placeholder="Happy to start here and review in three months"
+                hint="The restaurant sees this alongside your terms."
+              />
+            </MandiCard>
+          )}
+
+          {mode === 'decline' && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">Decline this request</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                They can ask again later. Nothing else about your relationship changes.
+              </MandiText>
+              <MandiFormField
+                label="Reason"
+                value={reason}
+                onChangeText={setReason}
+                placeholder="Not extending credit to new accounts yet"
+                required
+                hint="The restaurant sees this."
+              />
+            </MandiCard>
+          )}
+
           {mode === 'suspend' && (
             <MandiCard accentColor={Colors.warning}>
               <MandiText variant="bodyEmphasis">Suspend this line</MandiText>
@@ -264,7 +411,7 @@ export default function SupplierCreditAgreementScreen() {
             </MandiCard>
           )}
 
-          {mode === 'view' && (
+          {mode === 'view' && !pending && (
             <>
               <MandiCard>
                 <Row label="Approved limit" value={formatMoney(data.approvedLimit)} />
@@ -335,6 +482,66 @@ export default function SupplierCreditAgreementScreen() {
 
   function renderFooter() {
     if (data == null) return undefined;
+
+    if (pending) {
+      if (mode === 'counter') {
+        return (
+          <MandiStickyBar>
+            <MandiButton
+              label="Send these terms"
+              size="lg"
+              disabled={Number(limitValue) <= 0}
+              loading={approve.isPending}
+              onPress={() => approve.mutate(true)}
+            />
+            <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
+          </MandiStickyBar>
+        );
+      }
+
+      if (mode === 'decline') {
+        return (
+          <MandiStickyBar>
+            <MandiButton
+              label="Decline this request"
+              size="lg"
+              variant="destructive"
+              disabled={reason.trim().length < 3}
+              loading={decline.isPending}
+              onPress={() => decline.mutate()}
+            />
+            <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
+          </MandiStickyBar>
+        );
+      }
+
+      return (
+        <MandiStickyBar>
+          <MandiButton
+            label="Approve as asked"
+            size="lg"
+            loading={approve.isPending}
+            onPress={() => approve.mutate(false)}
+          />
+          <View style={styles.actions}>
+            <MandiButton
+              label="Approve on my terms"
+              variant="secondary"
+              size="md"
+              onPress={() => setMode('counter')}
+              style={styles.flex}
+            />
+            <MandiButton
+              label="Decline"
+              variant="neutral"
+              size="md"
+              onPress={() => setMode('decline')}
+              style={styles.flex}
+            />
+          </View>
+        </MandiStickyBar>
+      );
+    }
 
     if (mode === 'edit') {
       return (
@@ -439,6 +646,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
   },
   actions: { flexDirection: 'row', gap: Spacing.sm },
+  spacedTop: { marginTop: Spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.xs },
   chip: {
     paddingHorizontal: Spacing.md,

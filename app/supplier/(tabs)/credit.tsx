@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
-import { approveCredit, fetchStoreAgreements, rejectCredit } from '@/services/credit';
+import { approveCredit, fetchStoreAgreements } from '@/services/credit';
 import type { CreditAgreement } from '@/models/credit';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import { CreditPosition } from '@/components/credit/CreditPosition';
@@ -14,7 +14,6 @@ import {
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
-  MandiFormField,
   MandiScreen,
   MandiSkeletonList,
   MandiStatusChip,
@@ -114,7 +113,7 @@ export default function SupplierCreditScreen() {
       ) : (
         list.map((agreement) =>
           tab === 'requests'
-            ? <RequestCard key={agreement.id} agreement={agreement} storeId={storeId} />
+            ? <RequestCard key={agreement.id} agreement={agreement} />
             : <PortfolioCard key={agreement.id} agreement={agreement} />,
         )
       )}
@@ -122,92 +121,75 @@ export default function SupplierCreditScreen() {
   );
 }
 
-function RequestCard({ agreement, storeId }: { agreement: CreditAgreement; storeId: number | null }) {
+function RequestCard({ agreement }: { agreement: CreditAgreement }) {
+  const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
-  const [limit, setLimit] = useState(String(agreement.latestRequest?.requestedLimit ?? ''));
-  const [editing, setEditing] = useState(false);
-
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['store', storeId, 'credit-agreements'] });
+  const { storeId } = useStore();
+  const request = agreement.latestRequest;
 
   const approve = useMutation({
-    mutationFn: (modified: boolean) =>
-      approveCredit(accessToken as string, agreement.id, modified ? { approvedLimit: limit } : {}),
-    onSuccess: (_data, modified) => {
-      track('credit_approved', { screen: SCREEN, entityId: agreement.id }, { modified });
-      void invalidate();
-      toast.show(modified ? 'Sent back with new terms' : 'Credit approved', 'success');
+    // No arguments approves exactly what was asked for. Anything else is a
+    // modification the restaurant has to accept, which is a decision worth a
+    // screen rather than a text box on a list.
+    mutationFn: () => approveCredit(accessToken as string, agreement.id, {}),
+    onSuccess: () => {
+      track('credit_approved', { screen: SCREEN, entityId: agreement.id }, { modified: false });
+      void queryClient.invalidateQueries({ queryKey: ['store', storeId, 'credit-agreements'] });
+      toast.show('Credit approved', 'success');
     },
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not approve.', 'error'),
   });
 
-  const reject = useMutation({
-    mutationFn: () => rejectCredit(accessToken as string, agreement.id, 'Not extending credit here'),
-    onSuccess: () => {
-      void invalidate();
-      toast.show('Request declined', 'info');
-    },
-    onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not decline.', 'error'),
-  });
-
-  const request = agreement.latestRequest;
-
   return (
     <MandiCard outlined accentColor={Colors.primary}>
-      <MandiText variant="bodyEmphasis">{agreement.outletName ?? `Outlet ${agreement.outletId}`}</MandiText>
-      <MandiText variant="caption" color={Colors.textSecondary}>
-        Asking for {formatMoney(request?.requestedLimit)} over {request?.requestedPeriodDays} days
-      </MandiText>
-      {request?.purpose && (
-        <MandiText variant="caption" color={Colors.textTertiary}>{request.purpose}</MandiText>
-      )}
+      <View style={styles.row}>
+        <View style={styles.flex}>
+          <MandiText variant="bodyEmphasis">
+            {agreement.outletName ?? `Outlet ${agreement.outletId}`}
+          </MandiText>
+          {request?.purpose != null && (
+            <MandiText variant="caption" color={Colors.textSecondary}>
+              {request.purpose}
+            </MandiText>
+          )}
+        </View>
+        <MandiStatusChip label="new request" tone="pending" size="sm" />
+      </View>
 
-      {editing && (
-        <>
-          <MandiFormField
-            label="Approve a different limit"
-            value={limit}
-            onChangeText={(text) => setLimit(text.replace(/[^\d.]/g, ''))}
-            keyboardType="decimal-pad"
-            hint="A different limit is a modification — the restaurant has to accept it before the credit works."
-          />
-          <MandiButton
-            label="Send modified terms"
-            size="md"
-            loading={approve.isPending}
-            onPress={() => approve.mutate(true)}
-          />
-        </>
-      )}
+      <View style={styles.asked}>
+        <Asked label="Limit" value={formatMoney(request?.requestedLimit)} />
+        <Asked label="Period" value={`${request?.requestedPeriodDays ?? '—'} days`} />
+      </View>
 
       <View style={styles.actions}>
         <MandiButton
           label="Approve as asked"
           size="md"
-          loading={approve.isPending && !editing}
-          onPress={() => approve.mutate(false)}
+          loading={approve.isPending}
+          onPress={() => approve.mutate()}
           style={styles.flex}
         />
         <MandiButton
-          label={editing ? 'Cancel' : 'Change limit'}
-          variant="secondary"
+          label="Review"
+          variant="neutral"
           size="md"
-          onPress={() => setEditing(!editing)}
+          onPress={() => router.push(`/supplier/credit/${agreement.id}`)}
           style={styles.flex}
         />
       </View>
-      <MandiButton
-        label="Decline"
-        variant="tertiary"
-        size="md"
-        loading={reject.isPending}
-        onPress={() => reject.mutate()}
-      />
     </MandiCard>
+  );
+}
+
+function Asked({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.askedCell}>
+      <MandiText variant="caption" color={Colors.textSecondary}>{label}</MandiText>
+      <MandiText variant="bodyEmphasis">{value}</MandiText>
+    </View>
   );
 }
 
@@ -307,6 +289,8 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: Colors.primary },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   actions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  asked: { flexDirection: 'row', gap: Spacing.xl, marginVertical: Spacing.sm },
+  askedCell: { gap: 2 },
   cardFoot: {
     flexDirection: 'row',
     alignItems: 'center',

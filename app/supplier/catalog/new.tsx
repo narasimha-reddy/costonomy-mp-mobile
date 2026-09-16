@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,8 @@ import { useStore } from '@/contexts/StoreProvider';
 import { fetchCategories, fetchProducts } from '@/services/catalog';
 import { createSku, fetchSkus } from '@/services/supplier';
 import { categoryFace } from '@/models/categories';
-import type { Category, Product } from '@/models/catalog';
+import { CategoryTabs } from '@/components/product/CategoryTabs';
+import type { Product } from '@/models/catalog';
 import {
   MandiButton,
   MandiCard,
@@ -233,13 +234,13 @@ export default function NewSkuScreen() {
             }}
           />
 
-          {(products.data ?? []).length > 8 && (
-            <MandiSearchBar
-              value={filter}
-              onChangeText={setFilter}
-              placeholder="Narrow this list"
-            />
-          )}
+          {/* Always present, not only once the list is long: a supplier who knows
+              the name should never have to scroll to find the box. */}
+          <MandiSearchBar
+            value={filter}
+            onChangeText={setFilter}
+            placeholder="Search this category"
+          />
 
           {products.isPending ? (
             <MandiSkeletonList count={5} />
@@ -396,52 +397,6 @@ export default function NewSkuScreen() {
         </>
       )}
     </MandiScreen>
-  );
-}
-
-function CategoryTabs({
-  categories,
-  selected,
-  onSelect,
-}: {
-  categories: Category[];
-  selected: number | null;
-  onSelect: (id: number | null) => void;
-}) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.tabs}
-    >
-      <Tab label="All" active={selected == null} onPress={() => onSelect(null)} />
-      {categories.map((category) => (
-        <Tab
-          key={category.id}
-          label={category.name}
-          active={selected === category.id}
-          onPress={() => onSelect(category.id)}
-        />
-      ))}
-    </ScrollView>
-  );
-}
-
-function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
-      style={[styles.tab, active && styles.tabActive]}
-    >
-      <MandiText
-        variant="captionEmphasis"
-        color={active ? Colors.textInverse : Colors.textSecondary}
-      >
-        {label}
-      </MandiText>
-    </Pressable>
   );
 }
 

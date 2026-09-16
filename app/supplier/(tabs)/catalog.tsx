@@ -1,11 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchSkus, updateSku, type SupplierSku } from '@/services/supplier';
+import { fetchCategories } from '@/services/catalog';
+import { CategoryTabs } from '@/components/product/CategoryTabs';
+import type { Category } from '@/models/catalog';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import {
   MandiButton,
@@ -14,11 +17,13 @@ import {
   MandiErrorState,
   MandiFormField,
   MandiFab,
+  MandiFilterMenu,
   MandiScreen,
   MandiSearchBar,
   MandiSkeletonList,
   MandiText,
   useToast,
+  type FilterOption,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
@@ -29,11 +34,11 @@ const SCREEN = 'SUP-CATALOG-01';
 
 type Filter = 'all' | 'available' | 'out_of_stock' | 'inactive';
 
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'All' },
+const STATUS_FILTERS: FilterOption<Filter>[] = [
+  { key: 'all', label: 'Any status' },
   { key: 'available', label: 'Available' },
   { key: 'out_of_stock', label: 'Out of stock' },
-  { key: 'inactive', label: 'Inactive' },
+  { key: 'inactive', label: 'Delisted' },
 ];
 
 /**
@@ -52,8 +57,16 @@ export default function SupplierCatalogScreen() {
   const { accessToken } = useSession();
   const { storeId } = useStore();
   const [filter, setFilter] = useState<Filter>('all');
+  const [categoryId, setCategoryId] = useState<number | null>(null);
   const [term, setTerm] = useState('');
   const [editing, setEditing] = useState<number | null>(null);
+
+  const categories = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => fetchCategories(accessToken as string),
+    enabled: accessToken != null,
+    staleTime: 60 * 60 * 1000,
+  });
 
   const query = useQuery({
     queryKey: ['store', storeId, 'skus'],
@@ -61,14 +74,22 @@ export default function SupplierCatalogScreen() {
     enabled: storeId != null && accessToken != null,
   });
 
+  /** The category tab narrows first; status and text narrow what is left. */
+  const inCategory = useMemo(
+    () => (query.data ?? []).filter(
+      (sku) => categoryId == null || sku.categoryId === categoryId,
+    ),
+    [query.data, categoryId],
+  );
+
   const skus = useMemo(() => {
-    const all = query.data ?? [];
-    const matching = term.trim()
-      ? all.filter((sku) =>
+    const needle = term.trim().toLowerCase();
+    const matching = needle
+      ? inCategory.filter((sku) =>
           `${sku.name} ${sku.canonicalProductName} ${sku.skuCode ?? ''}`
             .toLowerCase()
-            .includes(term.trim().toLowerCase()))
-      : all;
+            .includes(needle))
+      : inCategory;
 
     switch (filter) {
       case 'available':
@@ -80,11 +101,36 @@ export default function SupplierCatalogScreen() {
       default:
         return matching;
     }
-  }, [query.data, filter, term]);
+  }, [inCategory, filter, term]);
+
+  /** Counts on the tabs, so an empty category is visible before it is opened. */
+  const counts = useMemo(() => {
+    const map = new Map<number | null, number>();
+    const all = query.data ?? [];
+    map.set(null, all.length);
+    all.forEach((sku) => {
+      if (sku.categoryId == null) return;
+      map.set(sku.categoryId, (map.get(sku.categoryId) ?? 0) + 1);
+    });
+    return map;
+  }, [query.data]);
+
+  /** Categories this store actually lists in — an empty tab helps nobody. */
+  const stocked = useMemo(
+    () => (categories.data ?? []).filter((c: Category) => (counts.get(c.id) ?? 0) > 0),
+    [categories.data, counts],
+  );
 
   return (
     <MandiScreen
-      header={<Header filter={filter} onFilter={setFilter} />}
+      header={(
+        <Header
+          categories={stocked}
+          categoryId={categoryId}
+          onCategory={setCategoryId}
+          counts={counts}
+        />
+      )}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
       floating={(
@@ -97,7 +143,20 @@ export default function SupplierCatalogScreen() {
         />
       )}
     >
-      <MandiSearchBar value={term} onChangeText={setTerm} placeholder="Find a product" />
+      <View style={styles.toolbar}>
+        <MandiSearchBar
+          value={term}
+          onChangeText={setTerm}
+          placeholder="Find a product"
+          style={styles.flex}
+        />
+        <MandiFilterMenu
+          options={STATUS_FILTERS}
+          selected={filter}
+          onSelect={setFilter}
+          title="Show"
+        />
+      </View>
 
       {query.isPending ? (
         <MandiSkeletonList count={4} />
@@ -187,10 +246,16 @@ function SkuCard({
         <View style={styles.identity}>
           <View style={styles.text}>
             <MandiText variant="bodyEmphasis" numberOfLines={1}>{sku.name}</MandiText>
+            {/* The canonical product first: a supplier naming a SKU "BTR-1KG"
+                still needs to see that it is Butter, and that name is what a
+                restaurant searches by. The SKU code is internal and lives in the
+                editor. */}
             <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-              {formatQuantity(sku.packSize)} {sku.packUnit}
-              {sku.brandName ? ` · ${sku.brandName}` : ''}
-              {sku.skuCode ? ` · ${sku.skuCode}` : ''}
+              {[
+                sku.canonicalProductName !== sku.name ? sku.canonicalProductName : null,
+                `${formatQuantity(sku.packSize)} ${sku.packUnit}`,
+                sku.brandName,
+              ].filter(Boolean).join(' · ')}
             </MandiText>
           </View>
 
@@ -264,31 +329,28 @@ function SkuCard({
   );
 }
 
-function Header({ filter, onFilter }: { filter: Filter; onFilter: (filter: Filter) => void }) {
+function Header({
+  categories,
+  categoryId,
+  onCategory,
+  counts,
+}: {
+  categories: Category[];
+  categoryId: number | null;
+  onCategory: (id: number | null) => void;
+  counts: Map<number | null, number>;
+}) {
   return (
     <View style={styles.header}>
       <SupplierHeader subtitle="Catalog" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-        {FILTERS.map((option) => {
-          const active = option.key === filter;
-          return (
-            <Pressable
-              key={option.key}
-              onPress={() => onFilter(option.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              style={[styles.tab, active && styles.tabActive]}
-            >
-              <MandiText
-                variant="captionEmphasis"
-                color={active ? Colors.textInverse : Colors.textSecondary}
-              >
-                {option.label}
-              </MandiText>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      {categories.length > 0 && (
+        <CategoryTabs
+          categories={categories}
+          selected={categoryId}
+          onSelect={onCategory}
+          counts={counts}
+        />
+      )}
     </View>
   );
 }
@@ -296,6 +358,7 @@ function Header({ filter, onFilter }: { filter: Filter; onFilter: (filter: Filte
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { gap: Spacing.sm, paddingBottom: Spacing.sm },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   summary: { gap: Spacing.md },
   identity: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },

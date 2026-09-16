@@ -149,6 +149,8 @@ export interface SupplierSku {
   supplierStoreId: number;
   canonicalProductId: number;
   canonicalProductName: string;
+  /** The canonical product's category, for grouping a supplier's own catalog. */
+  categoryId: number | null;
   skuCode: string | null;
   name: string;
   brandName: string | null;

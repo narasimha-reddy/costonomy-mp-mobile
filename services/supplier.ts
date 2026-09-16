@@ -8,6 +8,7 @@ export interface SupplierStore {
   supplierOrganizationId: number;
   name: string;
   addressLine1: string | null;
+  addressLine2: string | null;
   city: string | null;
   state: string | null;
   pincode: string | null;
@@ -15,6 +16,12 @@ export interface SupplierStore {
   longitude: Money | null;
   contactName: string | null;
   contactPhone: string | null;
+  operatingHours: OperatingHours;
+  /**
+   * Read-only. The countdown a supplier answers against, set by operations —
+   * a supplier who could set their own window could never be late, and
+   * "responds quickly" would stop being comparable across the marketplace.
+   */
   responseSlaSeconds: number | null;
   preparationMinutes: number | null;
   status: string;
@@ -234,9 +241,17 @@ export function updateSupplier(
   });
 }
 
+/** Day names and `HH:mm`, in the store's local time. */
+export interface OperatingHours {
+  days: string[];
+  opensAt: string;
+  closesAt: string;
+}
+
 export interface UpdateStoreInput {
   name?: string;
   addressLine1?: string;
+  addressLine2?: string;
   city?: string;
   state?: string;
   pincode?: string;
@@ -244,7 +259,7 @@ export interface UpdateStoreInput {
   longitude?: string;
   contactName?: string;
   contactPhone?: string;
-  responseSlaSeconds?: number;
+  operatingHours?: OperatingHours;
   preparationMinutes?: number;
   /** ACTIVE or OFFLINE. Going offline stops new orders without closing the store. */
   status?: 'ACTIVE' | 'OFFLINE';
@@ -337,4 +352,86 @@ export function uploadSkuImage(
   file: { uri: string; name: string; type: string },
 ): Promise<UploadedFile> {
   return uploadFile(`/api/v1/supplier-stores/${storeId}/sku-images`, file, token);
+}
+
+// ── Delivery policy ───────────────────────────────────────────────────
+
+/**
+ * How this store delivers.
+ *
+ * <p>Absent on the server means the platform default — Costonomy delivery only.
+ * A store that has never opened the screen has not opted out of anything.
+ */
+export interface DeliveryPolicy {
+  supplierStoreId: number;
+  ownDeliveryEnabled: boolean;
+  costonomyDeliveryEnabled: boolean;
+  ownDeliveryFee: Money | null;
+  /** Null means no minimum. */
+  ownDeliveryMinOrderValue: Money | null;
+  /** Null means no limit beyond the platform's own serviceability. */
+  maxDeliveryRadiusKm: Money | null;
+}
+
+export function fetchDeliveryPolicy(token: string, storeId: number): Promise<DeliveryPolicy> {
+  return apiRequest<DeliveryPolicy>(
+    `/api/v1/supplier-stores/${storeId}/delivery-policy`, { token });
+}
+
+export function saveDeliveryPolicy(
+  token: string,
+  storeId: number,
+  policy: {
+    ownDeliveryEnabled: boolean;
+    costonomyDeliveryEnabled: boolean;
+    ownDeliveryFee?: string;
+    ownDeliveryMinOrderValue?: string | null;
+    maxDeliveryRadiusKm?: string | null;
+  },
+): Promise<DeliveryPolicy> {
+  return apiRequest<DeliveryPolicy>(
+    `/api/v1/supplier-stores/${storeId}/delivery-policy`,
+    { method: 'PUT', token, body: policy });
+}
+
+// ── Credit policy ─────────────────────────────────────────────────────
+
+/**
+ * A store's standing credit offer. Doc 01 §18.
+ *
+ * <p>Credit here is supplier-funded and supplier-controlled: absent means the
+ * supplier has not opted in, never "enabled with sensible defaults".
+ */
+export interface CreditPolicy {
+  supplierStoreId: number;
+  creditEnabled: boolean;
+  defaultCreditLimit: Money | null;
+  defaultCreditPeriodDays: number | null;
+  defaultGracePeriodDays: number | null;
+  maxSingleOrderCredit: Money | null;
+  maxOverdueAmount: Money | null;
+  autoSuspendEnabled: boolean | null;
+}
+
+export function fetchCreditPolicy(token: string, storeId: number): Promise<CreditPolicy> {
+  return apiRequest<CreditPolicy>(
+    `/api/v1/supplier-stores/${storeId}/credit-policy`, { token });
+}
+
+export function saveCreditPolicy(
+  token: string,
+  storeId: number,
+  policy: {
+    creditEnabled: boolean;
+    defaultCreditLimit?: string | null;
+    defaultCreditPeriodDays?: number | null;
+    defaultGracePeriodDays?: number | null;
+    maxSingleOrderCredit?: string | null;
+    maxOverdueAmount?: string | null;
+    autoSuspendEnabled?: boolean;
+  },
+): Promise<CreditPolicy> {
+  return apiRequest<CreditPolicy>(
+    `/api/v1/supplier-stores/${storeId}/credit-policy`,
+    { method: 'PUT', token, body: policy });
 }

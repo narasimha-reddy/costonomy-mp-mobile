@@ -62,7 +62,7 @@ export function SupplierHeader({
           accessibilityLabel={multiStore ? `${title}. Change store` : title}
           style={styles.titleRow}
         >
-          <MandiText variant="title" numberOfLines={1} style={styles.flex}>{title}</MandiText>
+          <MandiText variant="title" numberOfLines={1} style={styles.titleText}>{title}</MandiText>
           {multiStore && (
             <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
           )}
@@ -132,8 +132,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   identity: { flex: 1, gap: 2 },
-  flex: { flex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  // The row wraps the title rather than filling the header, so the chevron sits
+  // against the name it belongs to. Filling, it drifted to the far edge and read
+  // as an unrelated control — the gap beside "Whitefield" was the whole header.
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  // Shrink, not grow: a long store name gives way and truncates, and the chevron
+  // stays beside it instead of being pushed off the end.
+  titleText: { flexShrink: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   option: {
     flexDirection: 'row',

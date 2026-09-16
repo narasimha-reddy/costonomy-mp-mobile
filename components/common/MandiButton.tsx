@@ -41,7 +41,20 @@ interface MandiButtonProps {
 
 const VARIANTS: Record<
   ButtonVariant,
-  { bg: string; fg: string; border?: string }
+  {
+    bg: string;
+    fg: string;
+    border?: string;
+    /**
+     * Renders the label at regular weight in a secondary tone.
+     *
+     * <p>Only `neutral` sets it, and it is what that variant always meant: its
+     * own note says "the right weight for most inline actions". Bold and dark it
+     * was not that — two of them under a product name out-shouted the name, and a
+     * list of them read as a list of buttons rather than a list of products.
+     */
+    quiet?: boolean;
+  }
 > = {
   primary: { bg: Colors.primary, fg: Colors.textInverse },
   secondary: { bg: Colors.surface, fg: Colors.primary, border: Colors.primary },
@@ -55,7 +68,12 @@ const VARIANTS: Record<
    * reads as a row of warnings. Neutral is the right weight for most inline
    * actions; `secondary` is for the one that leads.
    */
-  neutral: { bg: Colors.surfaceSunken, fg: Colors.textPrimary, border: Colors.border },
+  neutral: {
+    bg: Colors.surfaceSunken,
+    fg: Colors.textSecondary,
+    border: Colors.border,
+    quiet: true,
+  },
   destructive: { bg: Colors.danger, fg: Colors.textInverse },
 };
 
@@ -89,6 +107,7 @@ export function MandiButton({
   const fg = inert && variant !== 'primary' && variant !== 'destructive'
     ? Colors.textDisabled
     : palette.fg;
+  const quiet = palette.quiet === true;
 
   // A dense action should not carry a CTA's padding, or three of them will not
   // fit on one row at 390pt.
@@ -131,7 +150,12 @@ export function MandiButton({
             <Ionicons name={icon} size={size === 'sm' ? IconSize.sm : IconSize.md} color={fg} />
           )}
           <MandiText
-            style={[size === 'sm' ? TextStyles.captionEmphasis : TextStyles.bodyEmphasis, { color: fg }]}
+            style={[
+              size === 'sm'
+                ? (quiet ? TextStyles.caption : TextStyles.captionEmphasis)
+                : (quiet ? TextStyles.body : TextStyles.bodyEmphasis),
+              { color: fg },
+            ]}
             numberOfLines={1}
           >
             {label}

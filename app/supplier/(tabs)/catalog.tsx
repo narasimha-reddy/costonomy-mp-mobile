@@ -215,10 +215,14 @@ function SkuCard({
   const active = sku.status === 'ACTIVE';
   // Three states, three readings. Out of stock is a fact about today, not a
   // fault, so it is amber rather than red — red is kept for money and refusals.
+  //
+  // **Available is not coloured.** Nearly every row in a catalog is available, and
+  // colouring all of them makes the one row that is not look like the rest. The
+  // tone is reserved for the states worth noticing.
   const stateTone = !active
     ? { label: 'Delisted', tint: Colors.textSecondary, background: Colors.surfaceSunken, icon: 'eye-off-outline' as const }
     : available
-      ? { label: 'Available', tint: Colors.success, background: Colors.successLight, icon: 'checkmark-circle' as const }
+      ? { label: 'Available', tint: Colors.textSecondary, background: Colors.successLight, icon: 'checkmark-circle' as const }
       : { label: 'Out of stock', tint: Colors.warning, background: Colors.warningLight, icon: 'alert-circle' as const };
 
   const save = useMutation({
@@ -244,39 +248,49 @@ function SkuCard({
         accessibilityLabel={`Edit ${sku.name}`}
         style={styles.summary}
       >
+        {/* Two columns: what it is on the left, what it costs on the right.
+            Stacked, the price sat on a line of its own under a full-width name
+            and the availability chip floated opposite nothing — three bands for
+            four short facts. Side by side the eye runs down one column of names
+            and one of prices, which is how a catalog is read. */}
         <View style={styles.identity}>
           {/* The supplier's own pack where they have photographed it, the
               platform's product where they have not. This is the listing as it
               exists, and a supplier looking at their catalog should see the
               picture a restaurant will see. */}
-          <ProductThumb uri={sku.imageUrl || sku.canonicalProductImageUrl} size={44} />
+          <ProductThumb uri={sku.imageUrl || sku.canonicalProductImageUrl} size={40} />
+
           <View style={styles.text}>
             <MandiText variant="bodyEmphasis" numberOfLines={1}>{sku.name}</MandiText>
             {/* The canonical product first: a supplier naming a SKU "BTR-1KG"
                 still needs to see that it is Butter, and that name is what a
-                restaurant searches by. The SKU code is internal and lives in the
-                editor. */}
-            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-              {[
-                sku.canonicalProductName !== sku.name ? sku.canonicalProductName : null,
-                formatPack(sku.packSize, sku.packUnit, sku.measureValue, sku.measureUnit),
-                sku.brandName,
-              ].filter(Boolean).join(' · ')}
-            </MandiText>
+                restaurant searches by. Availability joins this line rather than
+                keeping a chip of its own — for a catalog that is almost entirely
+                available, a badge on every row is a badge that says nothing, and
+                the one that matters is the one that reads "Out of stock". */}
+            <View style={styles.metaRow}>
+              <MandiText
+                variant="caption"
+                color={Colors.textSecondary}
+                numberOfLines={1}
+                style={styles.flex}
+              >
+                {[
+                  sku.canonicalProductName !== sku.name ? sku.canonicalProductName : null,
+                  formatPack(sku.packSize, sku.packUnit, sku.measureValue, sku.measureUnit),
+                  sku.brandName,
+                ].filter(Boolean).join(' · ')}
+                {' · '}
+                <MandiText variant="caption" color={stateTone.tint}>{stateTone.label}</MandiText>
+              </MandiText>
+            </View>
           </View>
 
-          <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
-        </View>
-
-        <View style={styles.priceRow}>
-          <MandiText variant="price">{formatMoney(sku.sellingPrice)}</MandiText>
-          <MandiText variant="caption" color={Colors.textTertiary}>
-            GST {formatGstRate(sku.gstRate)}
-          </MandiText>
-          <View style={styles.spacer} />
-          <View style={[styles.state, { backgroundColor: stateTone.background }]}>
-            <Ionicons name={stateTone.icon} size={12} color={stateTone.tint} />
-            <MandiText variant="caption" color={stateTone.tint}>{stateTone.label}</MandiText>
+          <View style={styles.money}>
+            <MandiText variant="priceSmall">{formatMoney(sku.sellingPrice)}</MandiText>
+            <MandiText variant="caption" color={Colors.textTertiary}>
+              GST {formatGstRate(sku.gstRate)}
+            </MandiText>
           </View>
         </View>
       </Pressable>
@@ -308,6 +322,9 @@ function SkuCard({
           </View>
         </View>
       ) : (
+        // The chevron sits with the actions rather than beside the name: it is
+        // the third thing you can do to this row, and on its own line it cost the
+        // card a whole band to say "there is more".
         <View style={styles.actions}>
           <MandiButton
             label="Change price"
@@ -329,6 +346,15 @@ function SkuCard({
             onPress={() => save.mutate({ availability: available ? 'OUT_OF_STOCK' : 'AVAILABLE' })}
             fullWidth={false}
           />
+          <View style={styles.spacer} />
+          <Pressable
+            onPress={onOpen}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${sku.name}`}
+            hitSlop={8}
+          >
+            <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+          </Pressable>
         </View>
       )}
     </MandiCard>
@@ -365,9 +391,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { gap: Spacing.sm, paddingBottom: Spacing.sm },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  summary: { gap: Spacing.md },
+  summary: { gap: 0 },
   identity: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  metaRow: { flexDirection: 'row', alignItems: 'center' },
+  money: { alignItems: 'flex-end', gap: 1 },
   spacer: { flex: 1 },
   state: {
     flexDirection: 'row',
@@ -388,6 +415,11 @@ const styles = StyleSheet.create({
   },
   tabActive: { backgroundColor: Colors.primary },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  text: { flex: 1, gap: Spacing.xs },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.md },
+  text: { flex: 1, gap: 1 },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
 });

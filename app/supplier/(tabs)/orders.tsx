@@ -7,7 +7,7 @@ import { useStore } from '@/contexts/StoreProvider';
 import { fetchActiveOrders, fetchPendingOrders } from '@/services/supplier';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import { PendingOrderCard } from '@/components/supplier/PendingOrderCard';
-import { OrderCardHeading } from '@/components/order';
+import { OrderCardBody } from '@/components/order';
 import {
   MandiCard,
   MandiEmptyState,
@@ -18,7 +18,6 @@ import {
   MandiText,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
-import { formatMoney } from '@/utils/money';
 import { formatDistance } from '@/utils/orders';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
@@ -78,7 +77,10 @@ export default function SupplierOrdersScreen() {
       ) : (
         orders.map((order) => (
           <MandiCard key={order.id} onPress={() => router.push(`/supplier/orders/${order.id}`)}>
-            <OrderCardHeading
+            {/* The amount is what the store committed to, not what was asked
+                for. After a partial acceptance those differ, and only the
+                first is theirs. */}
+            <OrderCardBody
               primary={order.outletName}
               secondary={[
                 order.restaurantName,
@@ -88,18 +90,11 @@ export default function SupplierOrdersScreen() {
               items={order.items}
               orderNumber={order.orderNumber}
               paymentMethod={order.paymentMethod}
+              amount={order.acceptedAmount}
               trailing={
                 <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
               }
             />
-            <View style={styles.row}>
-              {/* What the store committed to, not what was asked for. After a
-                  partial acceptance those differ, and only the first is theirs. */}
-              <MandiText variant="caption" color={Colors.textSecondary}>Order value</MandiText>
-              <MandiText variant="priceSmall">
-                {formatMoney(order.acceptedAmount, true)}
-              </MandiText>
-            </View>
           </MandiCard>
         ))
       )}

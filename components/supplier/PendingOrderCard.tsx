@@ -1,11 +1,9 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
 import type { IncomingOrder } from '@/models/procurement';
-import { MandiCard, MandiCountdown, MandiText } from '@/components/common';
-import { OrderCardHeading } from '@/components/order';
+import { MandiCard, MandiCountdown } from '@/components/common';
+import { OrderCardBody } from '@/components/order';
 import { formatDistance } from '@/utils/orders';
-import { formatMoney } from '@/utils/money';
-import { Colors, Spacing } from '@/theme';
+import { Colors } from '@/theme';
 
 /**
  * An order awaiting this store's answer. Doc 05 §24 — "urgent acceptance items
@@ -15,6 +13,9 @@ import { Colors, Spacing } from '@/theme';
  * that instant on every tick. A local timer started when the card mounted would
  * drift from the deadline the backend actually enforces, and this is the one
  * number the supplier is making a decision against.
+ *
+ * <p>The amount is the full total, not `acceptedAmount`: nothing has been
+ * accepted yet, and a committed figure of zero is not what is being decided on.
  */
 export function PendingOrderCard({
   order,
@@ -25,7 +26,7 @@ export function PendingOrderCard({
 }) {
   return (
     <MandiCard onPress={onPress} outlined accentColor={Colors.primary}>
-      <OrderCardHeading
+      <OrderCardBody
         primary={order.outletName}
         secondary={[
           order.restaurantName,
@@ -35,6 +36,7 @@ export function PendingOrderCard({
         items={order.items}
         orderNumber={order.orderNumber}
         paymentMethod={order.paymentMethod}
+        amount={order.totalAmount}
         trailing={
           <MandiCountdown
             deadlineAt={order.acceptanceDeadline}
@@ -42,19 +44,6 @@ export function PendingOrderCard({
           />
         }
       />
-      <View style={styles.row}>
-        <MandiText variant="caption" color={Colors.textSecondary}>Order value</MandiText>
-        <MandiText variant="price">{formatMoney(order.totalAmount)}</MandiText>
-      </View>
     </MandiCard>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-  },
-});

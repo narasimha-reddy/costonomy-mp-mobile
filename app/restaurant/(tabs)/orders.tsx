@@ -17,8 +17,7 @@ import {
   OutletSelector,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
-import { formatMoney } from '@/utils/money';
-import { OrderCardHeading } from '@/components/order';
+import { OrderCardBody } from '@/components/order';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 /** REST-ORDERS-01. Doc 05 §15 — pending, active, completed, cancelled. */
@@ -95,7 +94,7 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
           restaurant already knows whose order it is, and the counterparty is
           what identifies it. The outlet still comes before the order number —
           a restaurant with three kitchens reads its list by kitchen. */}
-      <OrderCardHeading
+      <OrderCardBody
         primary={order.supplierName}
         secondary={[
           order.outletName,
@@ -104,9 +103,9 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
         items={order.items}
         orderNumber={order.orderNumber}
         paymentMethod={order.paymentMethod}
+        amount={order.totalAmount}
         trailing={<MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />}
       />
-      <MandiText variant="price">{formatMoney(order.totalAmount)}</MandiText>
     </MandiCard>
   );
 }

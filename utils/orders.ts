@@ -46,7 +46,7 @@ export function summariseItems(
  * whether the money is already secured or whether this one sits against a limit
  * they granted, and those are the two words they use for it.
  */
-export function formatDistance(km: Money | null | undefined): string | null {
+export function formatDistance(km: Money | number | null | undefined): string | null {
   // Absent means unlocated, not nearby. "0 km" would tell a supplier the order
   // is next door, which is the one wrong answer a guess can give here.
   if (km == null) return null;

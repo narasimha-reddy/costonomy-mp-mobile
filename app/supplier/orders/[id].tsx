@@ -208,11 +208,23 @@ export default function SupplierOrderScreen() {
               </View>
               <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} />
             </View>
-            <View style={styles.identityRow}>
-              <MandiText variant="caption" color={Colors.textTertiary}>
-                {order.orderNumber}
-              </MandiText>
-              <PaymentMethodPill method={order.paymentMethod} />
+            {/* The same two columns as the card, so a supplier who tapped
+                through finds the four facts where they already were. */}
+            <View style={styles.columns}>
+              <View style={styles.left}>
+                <PaymentMethodPill method={order.paymentMethod} />
+                <MandiText variant="caption" color={Colors.textTertiary}>
+                  {order.orderNumber}
+                </MandiText>
+              </View>
+              <View style={styles.right}>
+                <MandiText variant="price">
+                  {formatMoney(pending ? order.totalAmount : order.acceptedAmount)}
+                </MandiText>
+                <MandiText variant="caption" color={Colors.textTertiary}>
+                  {order.items.length} item{order.items.length === 1 ? '' : 's'}
+                </MandiText>
+              </View>
             </View>
             {pending && order.acceptanceDeadline && (
               <View style={styles.deadline}>
@@ -466,13 +478,15 @@ function Row({ label, value, emphasis }: { label: string; value: string; emphasi
 
 const styles = StyleSheet.create({
   where: { flex: 1, gap: 2 },
-  identityRow: {
+  columns: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    gap: Spacing.sm,
-    marginTop: Spacing.xs,
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
   },
+  left: { flex: 1, gap: 2, alignItems: 'flex-start' },
+  right: { gap: 2, alignItems: 'flex-end' },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   deadline: { marginTop: Spacing.md, gap: Spacing.xs },

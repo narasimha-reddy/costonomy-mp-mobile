@@ -15,13 +15,11 @@ import {
   MandiSectionHeader,
   MandiSkeletonList,
   MandiStatusChip,
-  MandiText,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
-import { formatMoney } from '@/utils/money';
 import { formatDistance } from '@/utils/orders';
-import { OrderCardHeading } from '@/components/order';
-import { Colors, Spacing } from '@/theme';
+import { OrderCardBody } from '@/components/order';
+import { Spacing } from '@/theme';
 
 /**
  * SUP-HOME-01. Doc 05 §24.
@@ -109,7 +107,7 @@ export default function SupplierHome() {
         ) : (
           (active.data ?? []).slice(0, 5).map((order) => (
             <MandiCard key={order.id} onPress={() => router.push(`/supplier/orders/${order.id}`)}>
-              <OrderCardHeading
+              <OrderCardBody
                 primary={order.outletName}
                 secondary={[
                   order.restaurantName,
@@ -119,16 +117,11 @@ export default function SupplierHome() {
                 items={order.items}
                 orderNumber={order.orderNumber}
                 paymentMethod={order.paymentMethod}
+                amount={order.acceptedAmount}
                 trailing={
                   <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
                 }
               />
-              <View style={styles.row}>
-                <MandiText variant="caption" color={Colors.textSecondary}>Order value</MandiText>
-                <MandiText variant="priceSmall">
-                  {formatMoney(order.acceptedAmount, true)}
-                </MandiText>
-              </View>
             </MandiCard>
           ))
         )}

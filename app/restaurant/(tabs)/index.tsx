@@ -25,8 +25,7 @@ import {
   OutletSelector,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
-import { formatMoney } from '@/utils/money';
-import { OrderCardHeading } from '@/components/order';
+import { OrderCardBody } from '@/components/order';
 import { track } from '@/analytics';
 import { Colors, Elevation, Radius, Spacing } from '@/theme';
 
@@ -262,7 +261,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
             key={order.id}
             onPress={() => router.push(`/restaurant/orders/${order.id}`)}
           >
-            <OrderCardHeading
+            <OrderCardBody
               primary={order.supplierName}
               secondary={[
                 order.outletName,
@@ -271,14 +270,11 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
               items={order.items}
               orderNumber={order.orderNumber}
               paymentMethod={order.paymentMethod}
+              amount={order.totalAmount}
               trailing={
                 <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
               }
             />
-            <View style={styles.row}>
-              <MandiText variant="caption" color={Colors.textSecondary}>Order value</MandiText>
-              <MandiText variant="priceSmall">{formatMoney(order.totalAmount, true)}</MandiText>
-            </View>
           </MandiCard>
         ))
       )}

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
+import { MandiBottomSheet } from './MandiBottomSheet';
 import { Colors, ControlHeight, Radius, Spacing, TouchTarget } from '@/theme';
 
 export interface FilterOption<T extends string> {
@@ -59,46 +60,36 @@ export function MandiFilterMenu<T extends string>({
         </MandiText>
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable
-          style={styles.scrim}
-          onPress={() => setOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close the filter"
-        >
-          <Pressable
-            style={styles.sheet}
-            onPress={(event) => event.stopPropagation()}
-            accessibilityViewIsModal
-            accessibilityLabel={title}
-          >
-            <MandiText variant="subtitle">{title}</MandiText>
-            {options.map((option) => {
-              const chosen = option.key === selected;
-              return (
-                <Pressable
-                  key={option.key}
-                  onPress={() => {
-                    onSelect(option.key);
-                    setOpen(false);
-                  }}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: chosen }}
-                  style={styles.option}
-                >
-                  <MandiText variant="body" style={styles.optionLabel}>{option.label}</MandiText>
-                  {option.hint != null && (
-                    <MandiText variant="caption" color={Colors.textTertiary}>
-                      {option.hint}
-                    </MandiText>
-                  )}
-                  {chosen && <Ionicons name="checkmark" size={20} color={Colors.primary} />}
-                </Pressable>
-              );
-            })}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <MandiBottomSheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        title={title}
+        closeLabel="Close the filter"
+      >
+        {options.map((option) => {
+          const chosen = option.key === selected;
+          return (
+            <Pressable
+              key={option.key}
+              onPress={() => {
+                onSelect(option.key);
+                setOpen(false);
+              }}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: chosen }}
+              style={styles.option}
+            >
+              <MandiText variant="body" style={styles.optionLabel}>{option.label}</MandiText>
+              {option.hint != null && (
+                <MandiText variant="caption" color={Colors.textTertiary}>
+                  {option.hint}
+                </MandiText>
+              )}
+              {chosen && <Ionicons name="checkmark" size={20} color={Colors.primary} />}
+            </Pressable>
+          );
+        })}
+      </MandiBottomSheet>
     </>
   );
 }
@@ -117,14 +108,6 @@ const styles = StyleSheet.create({
     maxWidth: 150,
   },
   triggerActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  scrim: { flex: 1, backgroundColor: Colors.scrim, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: Colors.surfaceElevated,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    padding: Spacing.xl,
-    gap: Spacing.xs,
-  },
   option: {
     flexDirection: 'row',
     alignItems: 'center',

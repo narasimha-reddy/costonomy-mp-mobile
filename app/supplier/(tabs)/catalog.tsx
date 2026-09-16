@@ -164,15 +164,30 @@ export default function SupplierCatalogScreen() {
       ) : query.error ? (
         <MandiErrorState message="Couldn't load your catalog." onRetry={() => query.refetch()} />
       ) : skus.length === 0 ? (
-        <MandiEmptyState
-          icon="pricetags-outline"
-          title={term ? `Nothing matching "${term}"` : 'Your catalog is empty'}
-          description={term
-            ? 'Try the product name a restaurant would search for.'
-            : 'Restaurants can only order what you list here. Add your first product — it takes about a minute.'}
-          actionLabel={term ? undefined : 'List a product'}
-          onAction={term ? undefined : () => router.push('/supplier/catalog/new')}
-        />
+        // Three different nothings, and only one of them means "add a product".
+        // Told "your catalog is empty" while holding twenty-four listings, a
+        // supplier's first thought is that they have lost them.
+        (() => {
+          const narrowed = term !== '' || filter !== 'all' || categoryId != null;
+          const filterLabel = STATUS_FILTERS.find((f) => f.key === filter)?.label;
+          return (
+            <MandiEmptyState
+              icon="pricetags-outline"
+              title={
+                term ? `Nothing matching "${term}"`
+                  : narrowed ? `Nothing ${(filterLabel ?? '').toLowerCase() || 'here'}`
+                  : 'Your catalog is empty'
+              }
+              description={
+                term ? 'Try the product name a restaurant would search for.'
+                  : narrowed ? 'Nothing in your catalog matches this filter. Widen it to see the rest.'
+                  : 'Restaurants can only order what you list here. Add your first product — it takes about a minute.'
+              }
+              actionLabel={narrowed ? undefined : 'List a product'}
+              onAction={narrowed ? undefined : () => router.push('/supplier/catalog/new')}
+            />
+          );
+        })()
       ) : (
         skus.map((sku) => (
           <SkuCard

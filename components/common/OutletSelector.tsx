@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { MandiText } from './MandiText';
-import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
+import { MandiBottomSheet } from './MandiBottomSheet';
+import { Colors, Spacing, TouchTarget } from '@/theme';
 
 /**
  * The globally accessible outlet switcher (doc 05 §1).
@@ -38,22 +39,12 @@ export function OutletSelector() {
         {!single && <Ionicons name="chevron-down" size={14} color={Colors.textSecondary} />}
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable
-          style={styles.scrim}
-          onPress={() => setOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close the outlet list"
-        >
-          {/* Swallows taps so they do not reach the scrim behind. Marked modal so
-              a screen reader stays inside the sheet while it is open. */}
-          <Pressable
-            style={styles.sheet}
-            onPress={(event) => event.stopPropagation()}
-            accessibilityViewIsModal
-            accessibilityLabel="Choose an outlet"
-          >
-            <MandiText variant="subtitle" style={styles.sheetTitle}>Choose an outlet</MandiText>
+      <MandiBottomSheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        title="Choose an outlet"
+        closeLabel="Close the outlet list"
+      >
             <ScrollView>
               {outlets.map((option) => {
                 const active = option.id === outlet.id;
@@ -79,9 +70,7 @@ export function OutletSelector() {
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </MandiBottomSheet>
     </>
   );
 }
@@ -94,15 +83,6 @@ const styles = StyleSheet.create({
     minHeight: TouchTarget.min,
   },
   name: { maxWidth: 200 },
-  scrim: { flex: 1, backgroundColor: Colors.scrim, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: Colors.surfaceElevated,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    padding: Spacing.xl,
-    maxHeight: '70%',
-    gap: Spacing.sm,
-  },
   sheetTitle: { marginBottom: Spacing.sm },
   option: {
     flexDirection: 'row',

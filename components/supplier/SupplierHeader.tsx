@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@/contexts/StoreProvider';
 import { useNotifications } from '@/hooks/useNotifications';
-import { MandiHeaderAction, MandiText } from '@/components/common';
-import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
+import { MandiBottomSheet, MandiHeaderAction, MandiText } from '@/components/common';
+import { Colors, Spacing, TouchTarget } from '@/theme';
 
 /**
  * The header every supplier tab wears.
@@ -86,20 +86,12 @@ export function SupplierHeader({
         />
       </View>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable
-          style={styles.scrim}
-          onPress={() => setOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close the store list"
-        >
-          <Pressable
-            style={styles.sheet}
-            onPress={(event) => event.stopPropagation()}
-            accessibilityViewIsModal
-            accessibilityLabel="Choose a store"
-          >
-            <MandiText variant="subtitle">Choose a store</MandiText>
+      <MandiBottomSheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        title="Choose a store"
+        closeLabel="Close the store list"
+      >
             <ScrollView>
               {stores.map((option) => {
                 const active = option.id === store?.id;
@@ -125,9 +117,7 @@ export function SupplierHeader({
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </MandiBottomSheet>
     </View>
   );
 }
@@ -145,15 +135,6 @@ const styles = StyleSheet.create({
   identity: { flex: 1, gap: 2 },
   storeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   actions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  scrim: { flex: 1, backgroundColor: Colors.scrim, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: Colors.surfaceElevated,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    padding: Spacing.xl,
-    maxHeight: '70%',
-    gap: Spacing.sm,
-  },
   option: {
     flexDirection: 'row',
     alignItems: 'center',

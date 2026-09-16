@@ -82,6 +82,41 @@ export function approveCredit(
   });
 }
 
+export interface ModifyCreditInput {
+  approvedLimit: string;
+  creditPeriodDays: number;
+  gracePeriodDays?: number;
+  maxSingleOrderCredit?: string;
+  maxOverdueAmount?: string;
+  /**
+   * Required by the server, not optional politeness.
+   *
+   * <p>Doc 01 §18: every adjustment is auditable, and an unexplained limit cut is
+   * exactly what that requirement exists to stop. The restaurant sees this.
+   */
+  reason: string;
+}
+
+/**
+ * Change the terms of a live agreement.
+ *
+ * <p><b>Commitments already made stand.</b> A limit cut below current exposure
+ * does not claw anything back — it leaves nothing available until the outstanding
+ * orders resolve, and the server refuses a cut below reserved + utilized outright
+ * (D-024).
+ */
+export function modifyCredit(
+  token: string,
+  agreementId: number,
+  input: ModifyCreditInput,
+): Promise<CreditAgreement> {
+  return apiRequest<CreditAgreement>(`/api/v1/credit/agreements/${agreementId}/modify`, {
+    method: 'POST',
+    token,
+    body: input,
+  });
+}
+
 export function rejectCredit(
   token: string,
   agreementId: number,

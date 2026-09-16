@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { searchSuppliers } from '@/services/catalog';
+import { useDebounced } from '@/hooks/useDebounced';
 import { requestCredit } from '@/services/credit';
 import {
   MandiButton,
@@ -14,6 +15,7 @@ import {
   MandiFormField,
   MandiHeader,
   MandiScreen,
+  MandiSearchBar,
   MandiSkeletonList,
   MandiStickyBar,
   MandiText,
@@ -42,14 +44,21 @@ export default function CreditRequestScreen() {
   const { outletId, outlet } = useOutlet();
 
   const [storeId, setStoreId] = useState<number | null>(null);
+  const [supplierTerm, setSupplierTerm] = useState('');
   const [limit, setLimit] = useState('');
   const [days, setDays] = useState(30);
   const [purpose, setPurpose] = useState('');
 
+  // There is no "suppliers serving this outlet" endpoint — supplier search is
+  // search, and returns nothing under two characters. Asking for a name is
+  // honest here: a restaurant requesting credit already knows who from.
+  const settledTerm = useDebounced(supplierTerm, 250);
+  const searching = settledTerm.trim().length >= 2;
+
   const suppliers = useQuery({
-    queryKey: ['outlet', outletId, 'suppliers'],
-    queryFn: () => searchSuppliers(accessToken as string, outletId as number),
-    enabled: outletId != null && accessToken != null,
+    queryKey: ['search', 'suppliers', settledTerm.trim(), outletId],
+    queryFn: () => searchSuppliers(accessToken as string, settledTerm.trim(), outletId ?? undefined),
+    enabled: searching && accessToken != null,
   });
 
   const submit = useMutation({
@@ -94,10 +103,28 @@ export default function CreditRequestScreen() {
     >
       <MandiCard>
         <MandiText variant="bodyEmphasis">Which supplier?</MandiText>
-        {suppliers.isPending ? (
+        <MandiText variant="caption" color={Colors.textSecondary}>
+          Search for one you already order from.
+        </MandiText>
+        <MandiSearchBar
+          value={supplierTerm}
+          onChangeText={setSupplierTerm}
+          placeholder="Supplier name"
+          loading={suppliers.isFetching}
+          style={styles.search}
+        />
+        {!searching ? (
+          <MandiText variant="caption" color={Colors.textTertiary}>
+            Type at least two letters.
+          </MandiText>
+        ) : suppliers.isPending ? (
           <MandiSkeletonList count={2} />
         ) : suppliers.error ? (
           <MandiErrorState message="Couldn't load suppliers." onRetry={() => suppliers.refetch()} />
+        ) : (suppliers.data ?? []).length === 0 ? (
+          <MandiText variant="caption" color={Colors.textTertiary}>
+            No supplier matching &ldquo;{settledTerm.trim()}&rdquo; delivers here.
+          </MandiText>
         ) : (
           (suppliers.data ?? []).map((supplier) => {
             const active = supplier.supplierStoreId === storeId;
@@ -172,6 +199,7 @@ export default function CreditRequestScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  search: { marginTop: Spacing.sm },
   option: {
     flexDirection: 'row',
     alignItems: 'center',

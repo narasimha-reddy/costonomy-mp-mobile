@@ -3,11 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
-import { useOutlet } from '@/contexts/OutletProvider';
-import { fetchCategories, searchSuppliers } from '@/services/catalog';
+import { fetchCategories } from '@/services/catalog';
 import {
   MandiCard,
-  MandiEmptyState,
   MandiScreen,
   MandiSearchBar,
   MandiSectionHeader,
@@ -15,25 +13,18 @@ import {
   MandiText,
   OutletSelector,
 } from '@/components/common';
-import { Colors, Spacing } from '@/theme';
+import { Spacing } from '@/theme';
 
 /** REST-SEARCH-01 entry. Doc 05 §6 — categories and suppliers, search is a push. */
 export default function DiscoverScreen() {
   const router = useRouter();
   const { accessToken } = useSession();
-  const { outletId } = useOutlet();
 
   const categories = useQuery({
     queryKey: ['categories'],
     queryFn: () => fetchCategories(accessToken as string),
     enabled: accessToken != null,
     staleTime: 60 * 60 * 1000,
-  });
-
-  const suppliers = useQuery({
-    queryKey: ['outlet', outletId, 'suppliers'],
-    queryFn: () => searchSuppliers(accessToken as string, outletId as number),
-    enabled: outletId != null && accessToken != null,
   });
 
   return (
@@ -66,33 +57,6 @@ export default function DiscoverScreen() {
         )}
       </View>
 
-      <View style={styles.section}>
-        <MandiSectionHeader title="Suppliers near you" />
-        {suppliers.isPending ? (
-          <MandiSkeletonList count={2} />
-        ) : (suppliers.data ?? []).length === 0 ? (
-          <MandiEmptyState
-            icon="storefront-outline"
-            title="No suppliers serving this outlet yet"
-            description="We'll show them here as they start delivering to your area."
-          />
-        ) : (
-          (suppliers.data ?? []).map((supplier) => (
-            <MandiCard key={supplier.supplierStoreId}>
-              <MandiText variant="bodyEmphasis">{supplier.supplierName}</MandiText>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                {[supplier.storeName, supplier.city].filter(Boolean).join(' · ')}
-                {supplier.productCount != null && ` · ${supplier.productCount} products`}
-              </MandiText>
-              {!supplier.serviceable && (
-                <MandiText variant="caption" color={Colors.textTertiary}>
-                  Not currently delivering to this outlet
-                </MandiText>
-              )}
-            </MandiCard>
-          ))
-        )}
-      </View>
     </MandiScreen>
   );
 }

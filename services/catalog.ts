@@ -69,13 +69,23 @@ export function fetchRecommendations(
   );
 }
 
+/**
+ * Search suppliers by name. Doc 01 §25 — secondary to product search by design.
+ *
+ * <p><b>`term` is required, and under two characters the server returns nothing.</b>
+ * This is a search, not a directory: there is no endpoint that lists "suppliers
+ * near me", and calling it without a term used to omit a required parameter and
+ * come back as a 500.
+ *
+ * <p>`outletId` adds distance and whether each store actually delivers there.
+ */
 export function searchSuppliers(
   token: string,
-  outletId: number,
-  term?: string,
+  term: string,
+  outletId?: number,
 ): Promise<SupplierSearchResult[]> {
   return apiRequest<SupplierSearchResult[]>(
-    `/api/v1/search/suppliers${queryString({ outletId, q: term })}`,
+    `/api/v1/search/suppliers${queryString({ q: term, outletId })}`,
     { token },
   );
 }

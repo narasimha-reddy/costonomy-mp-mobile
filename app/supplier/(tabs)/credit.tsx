@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
-import { approveCredit, fetchStoreAgreements, rejectCredit, suspendCredit } from '@/services/credit';
+import { approveCredit, fetchStoreAgreements, rejectCredit } from '@/services/credit';
 import type { CreditAgreement } from '@/models/credit';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import { CreditPosition } from '@/components/credit/CreditPosition';
@@ -113,7 +115,7 @@ export default function SupplierCreditScreen() {
         list.map((agreement) =>
           tab === 'requests'
             ? <RequestCard key={agreement.id} agreement={agreement} storeId={storeId} />
-            : <PortfolioCard key={agreement.id} agreement={agreement} storeId={storeId} />,
+            : <PortfolioCard key={agreement.id} agreement={agreement} />,
         )
       )}
     </MandiScreen>
@@ -209,25 +211,14 @@ function RequestCard({ agreement, storeId }: { agreement: CreditAgreement; store
   );
 }
 
-function PortfolioCard({ agreement, storeId }: { agreement: CreditAgreement; storeId: number | null }) {
-  const toast = useToast();
-  const queryClient = useQueryClient();
-  const { accessToken } = useSession();
-
-  const suspend = useMutation({
-    mutationFn: () => suspendCredit(accessToken as string, agreement.id, 'Overdue balance'),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['store', storeId, 'credit-agreements'] });
-      toast.show('Credit suspended', 'info');
-    },
-    onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not suspend.', 'error'),
-  });
+function PortfolioCard({ agreement }: { agreement: CreditAgreement }) {
+  const router = useRouter();
+  const suspended = agreement.status === 'SUSPENDED';
 
   return (
-    <MandiCard>
+    <MandiCard onPress={() => router.push(`/supplier/credit/${agreement.id}`)}>
       <View style={styles.row}>
-        <MandiText variant="bodyEmphasis">
+        <MandiText variant="bodyEmphasis" style={styles.flex}>
           {agreement.outletName ?? `Outlet ${agreement.outletId}`}
         </MandiText>
         <MandiStatusChip
@@ -246,15 +237,14 @@ function PortfolioCard({ agreement, storeId }: { agreement: CreditAgreement; sto
         overdue={agreement.overdue}
       />
 
-      {agreement.status === 'ACTIVE' && (
-        <MandiButton
-          label="Suspend this line"
-          variant="tertiary"
-          size="md"
-          loading={suspend.isPending}
-          onPress={() => suspend.mutate()}
-        />
-      )}
+      <View style={styles.cardFoot}>
+        <MandiText variant="caption" color={Colors.textSecondary}>
+          {suspended
+            ? 'Suspended — open to reinstate or change the terms'
+            : 'Open to change the limit, the period, or suspend it'}
+        </MandiText>
+        <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+      </View>
     </MandiCard>
   );
 }
@@ -317,6 +307,13 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: Colors.primary },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   actions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  cardFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
   exposure: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.sm, marginTop: Spacing.sm },
   figure: { gap: Spacing.xs },
 });

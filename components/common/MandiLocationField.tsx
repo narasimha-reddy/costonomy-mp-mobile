@@ -169,6 +169,9 @@ function message(state: string, coordinates: Coordinates | null, subject: string
 const styles = StyleSheet.create({
   panel: {
     gap: Spacing.md,
+    // The panel is a block of its own, not another field: butted against the
+    // input above it, the map read as part of the State box.
+    marginTop: Spacing.md,
     padding: Spacing.cardPadding,
     borderRadius: Radius.lg,
     backgroundColor: Colors.surfaceSunken,

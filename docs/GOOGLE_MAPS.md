@@ -51,6 +51,15 @@ restricted to the loosest of the three.
 Any key used for server-side geocoding stays out of all of this and is never
 shipped to a client.
 
+## What the store owner sees
+
+Nothing about any of this. With no key the panel says "Map unavailable" and that
+the place can still be pinned another way — the setting's name and the API names
+go to the browser console, where a developer is looking, and to this file.
+
+Printing our own configuration into the product is meaningless to the person
+holding the phone and is a small thing to hand a stranger.
+
 ## What was verified without a key
 
 - the loader builds the script tag and `google.maps` initialises

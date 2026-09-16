@@ -214,20 +214,30 @@ export function MandiMapPicker({
 }
 
 /**
- * What a map looks like with no key.
+ * What a map looks like when it cannot be shown.
  *
- * <p>It says which key and where, because "map unavailable" sends someone reading
- * code to find out. There is no mock: this integration talks to Google or it does
- * not work.
+ * <p><b>The setting's name is not on the screen.</b> A store owner has no use for
+ * an environment variable, and printing our own configuration into the product is
+ * both meaningless to them and a small thing to hand a stranger. The detail that
+ * a developer needs goes to the console, where a developer is looking; the person
+ * holding the phone gets the two things they can act on — that the map is
+ * unavailable, and that they can still pin the place another way.
  */
 function NotConfigured({ height }: { height: number }) {
+  useEffect(() => {
+    // For whoever is running the app, not for whoever is using it.
+    console.warn(
+      '[maps] No API key configured — see docs/GOOGLE_MAPS.md for what to create '
+      + 'and where to put it.');
+  }, []);
+
   return (
     <View style={[styles.missing, { minHeight: height }]}>
       <Ionicons name="map-outline" size={24} color={Colors.textTertiary} />
-      <MandiText variant="bodyEmphasis">Map not configured</MandiText>
+      <MandiText variant="bodyEmphasis">Map unavailable</MandiText>
       <MandiText variant="caption" color={Colors.textSecondary} center>
-        Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to a Google Maps browser key with the Maps
-        JavaScript and Places APIs enabled. You can still type coordinates below.
+        We cannot show the map just now. You can still pin this place with the buttons
+        below, and everything else on this screen works as usual.
       </MandiText>
     </View>
   );

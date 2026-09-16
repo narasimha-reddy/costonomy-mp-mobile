@@ -101,13 +101,16 @@ export function MandiMapPicker({
   }
 
   if (!MAPS_CONFIGURED) {
+    // The setting's name belongs in the console and the docs, not on a screen a
+    // store owner is reading. They get the two things they can act on.
+    console.warn('[maps] No API key configured — see docs/GOOGLE_MAPS.md.');
     return (
       <View style={[styles.missing, { minHeight: height }]}>
         <Ionicons name="map-outline" size={24} color={Colors.textTertiary} />
-        <MandiText variant="bodyEmphasis">Map not configured</MandiText>
+        <MandiText variant="bodyEmphasis">Map unavailable</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary} center>
-          Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY, and the platform keys in app.json. You can
-          still type coordinates below.
+          We cannot show the map just now. You can still pin this place with the buttons
+          below, and everything else on this screen works as usual.
         </MandiText>
       </View>
     );

@@ -61,3 +61,32 @@ export function paymentMethodLabel(method: 'PREPAID' | 'CREDIT' | null): string 
   if (method === 'CREDIT') return 'On credit';
   return null;
 }
+
+/**
+ * The figure an order card should show.
+ *
+ * <p>`acceptedAmount` is what the supplier committed to, and it is the right
+ * number the moment they have committed to anything — after a partial acceptance
+ * it is the only honest one. But it is **zero on every order nobody accepted**,
+ * so reading it unconditionally showed an expired ₹10,587.97 order as ₹0.00, as
+ * if it had been worth nothing. It was worth exactly what was asked for; what it
+ * never got was an answer.
+ *
+ * <p>So: the committed figure once there is a commitment, the requested figure
+ * before and instead of one.
+ */
+const COMMITTED: ReadonlySet<string> = new Set([
+  'CONFIRMED', 'PARTIALLY_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP',
+  'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
+]);
+
+export function orderValue(order: {
+  status: string;
+  totalAmount: Money;
+  acceptedAmount?: Money | null;
+}): Money {
+  if (!COMMITTED.has(order.status) || order.acceptedAmount == null) {
+    return order.totalAmount;
+  }
+  return order.acceptedAmount;
+}

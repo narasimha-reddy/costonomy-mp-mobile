@@ -156,7 +156,15 @@ export interface SupplierSku {
   brandName: string | null;
   packSize: Money;
   packUnit: string;
+  /** This SKU's own picture — the supplier's pack. Usually null. */
   imageUrl: string | null;
+  /**
+   * The canonical product's picture, so a listing has a face even when the
+   * supplier has not given it one. Kept separate from `imageUrl` rather than
+   * merged: a screen showing a supplier what *they* uploaded has to be able to
+   * tell their picture from the platform's.
+   */
+  canonicalProductImageUrl: string | null;
   status: string;
   sellingPrice: Money;
   gstRate: Money;
@@ -180,6 +188,8 @@ export function updateSku(
     status: 'ACTIVE' | 'INACTIVE';
     name: string;
     brandName: string;
+    /** Empty string clears it, returning the listing to the catalog picture. */
+    imageUrl: string;
   }>,
 ): Promise<SupplierSku> {
   return apiRequest<SupplierSku>(`/api/v1/supplier-skus/${skuId}`, {

@@ -21,6 +21,7 @@ import {
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
+import { ProductThumb } from '@/components/product/ProductThumb';
 import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'SUP-CATALOG-02';
@@ -65,12 +66,14 @@ export default function SkuEditorScreen() {
   const [brandName, setBrandName] = useState<string | null>(null);
   const [sellingPrice, setSellingPrice] = useState<string | null>(null);
   const [gstRate, setGstRate] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   // Seeded from the server the first time it arrives, edited locally after.
   const nameValue = name ?? sku?.name ?? '';
   const brandValue = brandName ?? sku?.brandName ?? '';
   const priceValue = sellingPrice ?? (sku ? String(sku.sellingPrice) : '');
   const gstValue = gstRate ?? (sku ? String(Number(sku.gstRate)) : '5');
+  const imageValue = imageUrl ?? sku?.imageUrl ?? '';
 
   const save = useMutation({
     mutationFn: (patch: Parameters<typeof updateSku>[2]) =>
@@ -88,7 +91,9 @@ export default function SkuEditorScreen() {
   const priceChanged = sku != null && Number(priceValue) !== Number(sku.sellingPrice);
   const gstChanged = sku != null && Number(gstValue) !== Number(sku.gstRate);
   const detailsChanged = sku != null
-    && (nameValue.trim() !== sku.name || brandValue.trim() !== (sku.brandName ?? ''));
+    && (nameValue.trim() !== sku.name
+      || brandValue.trim() !== (sku.brandName ?? '')
+      || imageValue.trim() !== (sku.imageUrl ?? ''));
   const dirty = priceChanged || gstChanged || detailsChanged;
 
   return (
@@ -109,6 +114,10 @@ export default function SkuEditorScreen() {
               onPress={() => save.mutate({
                 name: nameValue.trim(),
                 brandName: brandValue.trim(),
+                // Empty string, not undefined: the update applies any non-null
+                // field, so "" is how a supplier takes their own photo back down
+                // and returns the listing to the catalog picture.
+                imageUrl: imageValue.trim(),
                 sellingPrice: priceValue,
                 gstRate: gstValue,
               })}
@@ -127,8 +136,32 @@ export default function SkuEditorScreen() {
         />
       ) : (
         <>
+          {/* The platform product this listing maps onto, with the platform's
+              picture. Everything below is the supplier's own — and the two must
+              not be conflated, because it is the canonical product that puts
+              this listing into a restaurant's comparison (doc 01 §7). */}
+          <MandiCard>
+            <View style={styles.identity}>
+              <ProductThumb uri={sku.canonicalProductImageUrl} size={44} />
+              <View style={styles.flex}>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  Listed against
+                </MandiText>
+                <MandiText variant="bodyEmphasis" numberOfLines={1}>
+                  {sku.canonicalProductName}
+                </MandiText>
+              </View>
+            </View>
+          </MandiCard>
+
           <MandiCard>
             <View style={styles.row}>
+              {/* The supplier's own pack picture, beside their own price — or
+                  the canonical one standing in until they add theirs. */}
+              <ProductThumb
+                uri={sku.imageUrl || sku.canonicalProductImageUrl}
+                size={56}
+              />
               <View style={styles.flex}>
                 <MandiText variant="caption" color={Colors.textSecondary}>Currently</MandiText>
                 <MandiText variant="priceLarge">{formatMoney(sku.sellingPrice)}</MandiText>
@@ -152,6 +185,19 @@ export default function SkuEditorScreen() {
             value={brandValue}
             onChangeText={setBrandName}
             placeholder="Amul"
+          />
+          <MandiFormField
+            label="Photo of your pack (optional)"
+            value={imageValue}
+            onChangeText={setImageUrl}
+            placeholder="https://…"
+            autoCapitalize="none"
+            keyboardType="url"
+            hint={
+              sku.imageUrl
+                ? 'Clear it to fall back to the catalog photo of the product.'
+                : 'Restaurants see the catalog photo until you add your own.'
+            }
           />
           <MandiFormField
             label="Selling price"
@@ -247,6 +293,7 @@ function shortDate(iso: string): string {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.xs },
   chip: {

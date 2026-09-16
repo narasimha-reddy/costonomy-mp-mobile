@@ -1,6 +1,7 @@
 import {
   formatDistance,
   ITEM_NAMES_SHOWN,
+  orderValue,
   paymentMethodLabel,
   summariseItems,
 } from '@/utils/orders';
@@ -81,5 +82,32 @@ describe('formatDistance', () => {
 
   it('returns null rather than NaN for a value it cannot read', () => {
     expect(formatDistance('not a number')).toBeNull();
+  });
+});
+
+describe('orderValue', () => {
+  it('shows what the supplier committed to once they have committed', () => {
+    // A partial acceptance: the requested total is not what anyone owes.
+    expect(orderValue({
+      status: 'PARTIALLY_ACCEPTED', totalAmount: '1618.68', acceptedAmount: '809.34',
+    })).toBe('809.34');
+  });
+
+  it('shows what was asked for when nobody answered', () => {
+    // This is the bug it exists for: acceptedAmount is 0 on an expired order,
+    // so reading it unconditionally showed a ₹10,587.97 order as ₹0.00 — as if
+    // it had been worth nothing, when what it lacked was an answer.
+    expect(orderValue({
+      status: 'EXPIRED', totalAmount: '10587.97', acceptedAmount: '0',
+    })).toBe('10587.97');
+  });
+
+  it.each([['REJECTED'], ['CANCELLED'], ['DRAFT'], ['PENDING_ACCEPTANCE']])(
+    'shows the requested total for %s', (status) => {
+      expect(orderValue({ status, totalAmount: '500', acceptedAmount: '0' })).toBe('500');
+    });
+
+  it('falls back to the requested total when the committed figure is absent', () => {
+    expect(orderValue({ status: 'CONFIRMED', totalAmount: '500' })).toBe('500');
   });
 });

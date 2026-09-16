@@ -28,6 +28,7 @@ import {
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
+import { ProductThumb } from '@/components/product/ProductThumb';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'SUP-CATALOG-01';
@@ -244,6 +245,11 @@ function SkuCard({
         style={styles.summary}
       >
         <View style={styles.identity}>
+          {/* The supplier's own pack where they have photographed it, the
+              platform's product where they have not. This is the listing as it
+              exists, and a supplier looking at their catalog should see the
+              picture a restaurant will see. */}
+          <ProductThumb uri={sku.imageUrl || sku.canonicalProductImageUrl} size={44} />
           <View style={styles.text}>
             <MandiText variant="bodyEmphasis" numberOfLines={1}>{sku.name}</MandiText>
             {/* The canonical product first: a supplier naming a SKU "BTR-1KG"

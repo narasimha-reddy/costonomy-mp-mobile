@@ -17,7 +17,7 @@ import {
   MandiStatusChip,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
-import { formatDistance } from '@/utils/orders';
+import { formatDistance, orderValue } from '@/utils/orders';
 import { OrderCardBody } from '@/components/order';
 import { Spacing } from '@/theme';
 
@@ -117,7 +117,7 @@ export default function SupplierHome() {
                 items={order.items}
                 orderNumber={order.orderNumber}
                 paymentMethod={order.paymentMethod}
-                amount={order.acceptedAmount}
+                amount={orderValue(order)}
                 trailing={
                   <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
                 }

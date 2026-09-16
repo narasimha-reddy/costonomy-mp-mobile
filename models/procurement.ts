@@ -154,6 +154,14 @@ export interface SupplierOrderItem {
   id: number;
   canonicalProductId: number;
   productName: string;
+  /**
+   * The canonical product's picture, or null when it has none.
+   *
+   * <p>Platform-owned: the image belongs to the product every supplier maps
+   * onto, not to one supplier's SKU, so two suppliers' paneer show the same
+   * paneer. Null is common and normal — render a fallback, never a broken frame.
+   */
+  productImageUrl: string | null;
   skuName: string;
   requestedQuantity: Money;
   /** Null until the supplier answers; zero means they declined this line. */

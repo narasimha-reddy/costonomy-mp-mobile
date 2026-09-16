@@ -18,7 +18,7 @@ import {
   MandiText,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
-import { formatDistance } from '@/utils/orders';
+import { formatDistance, orderValue } from '@/utils/orders';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 type Tab = 'new' | 'active';
@@ -90,7 +90,7 @@ export default function SupplierOrdersScreen() {
               items={order.items}
               orderNumber={order.orderNumber}
               paymentMethod={order.paymentMethod}
-              amount={order.acceptedAmount}
+              amount={orderValue(order)}
               trailing={
                 <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
               }

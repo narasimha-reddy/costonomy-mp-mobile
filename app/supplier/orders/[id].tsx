@@ -33,8 +33,9 @@ import {
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
-import { formatDistance } from '@/utils/orders';
+import { formatDistance, orderValue } from '@/utils/orders';
 import { PaymentMethodPill } from '@/components/order';
+import { ProductThumb } from '@/components/product/ProductThumb';
 import { track } from '@/analytics';
 import { Colors, Radius, Spacing } from '@/theme';
 
@@ -218,9 +219,7 @@ export default function SupplierOrderScreen() {
                 </MandiText>
               </View>
               <View style={styles.right}>
-                <MandiText variant="price">
-                  {formatMoney(pending ? order.totalAmount : order.acceptedAmount)}
-                </MandiText>
+                <MandiText variant="price">{formatMoney(orderValue(order))}</MandiText>
                 <MandiText variant="caption" color={Colors.textTertiary}>
                   {order.items.length} item{order.items.length === 1 ? '' : 's'}
                 </MandiText>
@@ -258,6 +257,10 @@ export default function SupplierOrderScreen() {
                 return (
                   <View key={item.id} style={styles.item}>
                     <View style={styles.itemHead}>
+                      {/* 44pt, not the card's 26: on the detail screen the
+                          supplier is checking they have the right thing, and a
+                          picture too small to recognise is decoration. */}
+                      <ProductThumb uri={item.productImageUrl} size={44} />
                       <View style={styles.itemText}>
                         <MandiText variant="body">{item.productName}</MandiText>
                         <MandiText variant="caption" color={Colors.textSecondary}>
@@ -497,7 +500,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.borderLight,
   },
-  itemHead: { flexDirection: 'row', gap: Spacing.md },
+  itemHead: { flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start' },
   itemText: { flex: 1, gap: Spacing.xs },
   itemFoot: {
     flexDirection: 'row',

@@ -8,6 +8,7 @@ import { useStore } from '@/contexts/StoreProvider';
 import { fetchCategories, fetchProducts } from '@/services/catalog';
 import { createSku, fetchSkus } from '@/services/supplier';
 import { categoryFace } from '@/models/categories';
+import { ProductThumb } from '@/components/product/ProductThumb';
 import { CategoryTabs } from '@/components/product/CategoryTabs';
 import type { Product } from '@/models/catalog';
 import {
@@ -75,6 +76,7 @@ export default function NewSkuScreen() {
   const [packUnit, setPackUnit] = useState('KG');
   const [sellingPrice, setSellingPrice] = useState('');
   const [gstRate, setGstRate] = useState('5');
+  const [imageUrl, setImageUrl] = useState('');
 
   const categories = useQuery({
     queryKey: ['categories'],
@@ -160,6 +162,7 @@ export default function NewSkuScreen() {
         packUnit,
         sellingPrice: sellingPrice.trim(),
         gstRate,
+        imageUrl: imageUrl.trim() || undefined,
         availability: 'AVAILABLE',
       }),
     onSuccess: (sku) => {
@@ -288,18 +291,25 @@ export default function NewSkuScreen() {
         <>
           <MandiCard>
             <View style={styles.chosen}>
-              <View
-                style={[
-                  styles.chosenIcon,
-                  { backgroundColor: categoryFace(product.categoryName).background },
-                ]}
-              >
-                <Ionicons
-                  name={categoryFace(product.categoryName).icon}
-                  size={20}
-                  color={categoryFace(product.categoryName).tint}
-                />
-              </View>
+              {/* Still the canonical picture: this card says which platform
+                  product the new SKU maps onto, so it must show that product
+                  and not the pack the supplier is about to describe. */}
+              {product.imageUrl ? (
+                <ProductThumb uri={product.imageUrl} size={40} radius={Radius.md} />
+              ) : (
+                <View
+                  style={[
+                    styles.chosenIcon,
+                    { backgroundColor: categoryFace(product.categoryName).background },
+                  ]}
+                >
+                  <Ionicons
+                    name={categoryFace(product.categoryName).icon}
+                    size={20}
+                    color={categoryFace(product.categoryName).tint}
+                  />
+                </View>
+              )}
               <View style={styles.flex}>
                 <MandiText variant="bodyEmphasis">{product.name}</MandiText>
                 <MandiText variant="caption" color={Colors.textSecondary}>
@@ -394,6 +404,31 @@ export default function NewSkuScreen() {
             placeholder="PNR-1KG"
             hint="Only for your own records. Restaurants never see it."
           />
+
+          <MandiFormField
+            label="Photo of your pack (optional)"
+            value={imageUrl}
+            onChangeText={setImageUrl}
+            placeholder="https://…"
+            autoCapitalize="none"
+            keyboardType="url"
+            hint={
+              product.imageUrl
+                ? "Leave it empty and we show the catalog photo of the product."
+                : "A link to a picture of the pack you sell."
+            }
+          />
+
+          {imageUrl.trim() ? (
+            <View style={styles.preview}>
+              <ProductThumb uri={imageUrl.trim()} size={56} radius={Radius.md} />
+              <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+                {/* Shown rather than described: a URL that does not resolve looks
+                    identical to one that does until something tries to draw it. */}
+                This is what restaurants will see.
+              </MandiText>
+            </View>
+          ) : null}
         </>
       )}
     </MandiScreen>
@@ -421,9 +456,18 @@ function ProductRow({
       }
       style={({ pressed }) => [styles.productRow, pressed && styles.pressed]}
     >
-      <View style={[styles.chosenIcon, { backgroundColor: face.background }]}>
-        <Ionicons name={face.icon} size={20} color={face.tint} />
-      </View>
+      {/* The canonical picture, always — this screen is the platform catalog, and
+          a supplier's own pack does not exist here yet. Where a product has no
+          photograph the category tile stays, as it did before there were any:
+          in a list already grouped under DAIRY it reads as the group's colour,
+          not as a claim about the product. */}
+      {product.imageUrl ? (
+        <ProductThumb uri={product.imageUrl} size={40} radius={Radius.md} />
+      ) : (
+        <View style={[styles.chosenIcon, { backgroundColor: face.background }]}>
+          <Ionicons name={face.icon} size={20} color={face.tint} />
+        </View>
+      )}
 
       <View style={styles.flex}>
         <MandiText variant="bodyEmphasis">{product.name}</MandiText>
@@ -518,4 +562,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  preview: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
 });

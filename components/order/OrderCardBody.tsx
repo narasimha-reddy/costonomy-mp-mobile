@@ -4,9 +4,10 @@ import { MandiText } from '@/components/common';
 import type { PaymentMethod, SupplierOrderItem } from '@/models/procurement';
 import type { Money } from '@/utils/money';
 import { formatMoney } from '@/utils/money';
-import { summariseItems } from '@/utils/orders';
+import { ITEM_NAMES_SHOWN, summariseItems } from '@/utils/orders';
 import { PaymentMethodPill } from './PaymentMethodPill';
-import { Colors, Spacing } from '@/theme';
+import { ProductThumb } from '@/components/product/ProductThumb';
+import { Colors, Radius, Spacing } from '@/theme';
 
 /**
  * Everything on an order card, in the order its reader asks for it.
@@ -44,7 +45,7 @@ export function OrderCardBody({
   primary: string | null | undefined;
   /** Nulls are dropped rather than rendered as gaps — an absent fact stays absent. */
   secondary: (string | null | undefined)[];
-  items: Pick<SupplierOrderItem, 'skuName' | 'productName'>[];
+  items: Pick<SupplierOrderItem, 'skuName' | 'productName' | 'productImageUrl'>[];
   orderNumber?: string | null;
   paymentMethod?: PaymentMethod | null;
   /** The figure this card is about. The caller chooses which one — a supplier
@@ -95,9 +96,29 @@ export function OrderCardBody({
       </View>
 
       {count > 0 ? (
-        <MandiText variant="caption" color={Colors.textPrimary} numberOfLines={1}>
-          {summariseItems(items)}
-        </MandiText>
+        // Pictures share the names' line rather than taking one of their own.
+        // The same three the names list, so the row reads as one statement about
+        // the goods instead of two competing ones.
+        <View style={styles.goods}>
+          <View style={styles.thumbs}>
+            {items.slice(0, ITEM_NAMES_SHOWN).map((item, index) => (
+              <ProductThumb
+                key={`${item.productName ?? item.skuName ?? 'item'}-${index}`}
+                uri={item.productImageUrl}
+                size={26}
+                radius={Radius.sm}
+              />
+            ))}
+          </View>
+          <MandiText
+            variant="caption"
+            color={Colors.textPrimary}
+            numberOfLines={1}
+            style={styles.flex}
+          >
+            {summariseItems(items)}
+          </MandiText>
+        </View>
       ) : null}
     </View>
   );
@@ -119,6 +140,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   left: { flex: 1, gap: 2, alignItems: 'flex-start' },
+  goods: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  thumbs: { flexDirection: 'row', gap: 3 },
   right: { gap: 2, alignItems: 'flex-end' },
   flex: { flex: 1 },
 });

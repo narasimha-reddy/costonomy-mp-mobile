@@ -26,7 +26,7 @@ import {
   type FilterOption,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
-import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { formatGstRate, formatMoney, formatPack } from '@/utils/money';
 import { track } from '@/analytics';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
@@ -259,7 +259,7 @@ function SkuCard({
             <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
               {[
                 sku.canonicalProductName !== sku.name ? sku.canonicalProductName : null,
-                `${formatQuantity(sku.packSize)} ${sku.packUnit}`,
+                formatPack(sku.packSize, sku.packUnit, sku.measureValue, sku.measureUnit),
                 sku.brandName,
               ].filter(Boolean).join(' · ')}
             </MandiText>

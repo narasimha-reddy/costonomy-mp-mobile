@@ -96,3 +96,22 @@ function queryString(params: Record<string, unknown>): string {
     .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`);
   return pairs.length ? `?${pairs.join('&')}` : '';
 }
+
+/**
+ * The unit vocabulary, fetched rather than hard-coded.
+ *
+ * <p>D-079 is the reason this is a request: a client keeping its own copy of a
+ * server vocabulary compiles perfectly while being wrong, and nothing notices
+ * until a comparison silently stops matching. Cached for the session — the list
+ * changes when the server is deployed, not while someone is filling in a form.
+ */
+export interface Units {
+  packUnits: string[];
+  /** Pack units that must also state what is inside them. */
+  requiresMeasure: string[];
+  measureUnits: string[];
+}
+
+export function fetchUnits(token: string): Promise<Units> {
+  return apiRequest<Units>('/api/v1/units', { token });
+}

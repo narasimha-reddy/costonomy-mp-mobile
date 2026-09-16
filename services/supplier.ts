@@ -157,6 +157,13 @@ export interface SupplierSku {
   brandName: string | null;
   packSize: Money;
   packUnit: string;
+  /**
+   * What is inside one pack, or null when the pack unit already says.
+   * <p>"1 PKT" is a bundle; "1 PKT of 500 GM" is an amount. Set for the container
+   * units (PKT, CASE, BULK, TIN, BUNDLE) and null for the rest.
+   */
+  measureValue: Money | null;
+  measureUnit: string | null;
   /** This SKU's own picture — the supplier's pack. Usually null. */
   imageUrl: string | null;
   /**
@@ -189,6 +196,10 @@ export function updateSku(
     status: 'ACTIVE' | 'INACTIVE';
     name: string;
     brandName: string;
+    packSize: string;
+    packUnit: string;
+    measureValue: string;
+    measureUnit: string;
     /** Empty string clears it, returning the listing to the catalog picture. */
     imageUrl: string;
   }>,
@@ -271,6 +282,9 @@ export interface CreateSkuInput {
   brandName?: string;
   packSize: string;
   packUnit: string;
+  /** Required when packUnit is a container; refused otherwise. */
+  measureValue?: string;
+  measureUnit?: string;
   imageUrl?: string;
   sellingPrice: string;
   gstRate: string;

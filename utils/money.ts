@@ -75,3 +75,23 @@ export function formatGstRate(rate: Money | number | null | undefined): string {
   if (!Number.isFinite(n)) return '—';
   return `${Number.isInteger(n) ? n : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}%`;
 }
+
+/**
+ * A pack, as a person reads it.
+ *
+ * <p>`1 PKT` and `1 PKT · 500 GM` are different statements: the first says how
+ * the goods are bundled, the second says how much is being bought. A screen that
+ * prints only the pack unit for a container has told a restaurant nothing they
+ * can compare a price against, which is the whole point of the canonical product
+ * the SKU maps onto.
+ */
+export function formatPack(
+  packSize: Money | number | null | undefined,
+  packUnit: string | null | undefined,
+  measureValue?: Money | number | null,
+  measureUnit?: string | null,
+): string {
+  const pack = `${formatQuantity(packSize)} ${packUnit ?? ''}`.trim();
+  if (measureValue == null || !measureUnit) return pack;
+  return `${pack} · ${formatQuantity(measureValue)} ${measureUnit}`;
+}

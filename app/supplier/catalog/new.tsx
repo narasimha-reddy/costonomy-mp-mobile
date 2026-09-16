@@ -5,11 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
-import { fetchCategories, fetchProducts } from '@/services/catalog';
+import { fetchCategories, fetchProducts, fetchUnits } from '@/services/catalog';
 import { createSku, fetchSkus, uploadSkuImage } from '@/services/supplier';
 import { categoryFace } from '@/models/categories';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { CategoryTabs } from '@/components/product/CategoryTabs';
+import { PackFields } from '@/components/product/PackFields';
 import type { Product } from '@/models/catalog';
 import {
   MandiButton,
@@ -34,7 +35,6 @@ import { Colors, Elevation, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'SUP-CATALOG-02';
 const STEPS = ['Choose the product', 'Pack and price'];
-const UNITS = ['KG', 'L', 'PIECE', 'DOZEN', 'BOX'];
 const GST_RATES = ['0', '5', '12', '18'];
 
 /** Big enough to hold the whole catalog in one call; the server pages at 20. */
@@ -77,7 +77,18 @@ export default function NewSkuScreen() {
   const [packUnit, setPackUnit] = useState('KG');
   const [sellingPrice, setSellingPrice] = useState('');
   const [gstRate, setGstRate] = useState('5');
+  const [measureValue, setMeasureValue] = useState('');
+  const [measureUnit, setMeasureUnit] = useState('GM');
   const [imageUrl, setImageUrl] = useState('');
+
+  const units = useQuery({
+    queryKey: ['units'],
+    queryFn: () => fetchUnits(accessToken as string),
+    enabled: accessToken != null,
+    // The vocabulary changes when the server is deployed, not while a supplier
+    // is filling in a form.
+    staleTime: 60 * 60 * 1000,
+  });
 
   const categories = useQuery({
     queryKey: ['categories'],
@@ -147,8 +158,13 @@ export default function NewSkuScreen() {
     track('sku_product_chosen', { screen: SCREEN, entityId: chosen.id });
     setProduct(chosen);
     setName(chosen.name);
+    // The canonical product's unit, as the starting point. Most SKUs are sold in
+    // the unit their product is measured in, and a supplier who sells packets
+    // changes it — which is cheaper than making everyone choose from fifteen.
     setPackUnit(chosen.baseUnit || 'KG');
     setPackSize(String(chosen.basePackSize ?? '1').replace(/\.0+$/, ''));
+    setMeasureValue('');
+    setMeasureUnit('GM');
     setStep(1);
   }
 
@@ -161,6 +177,10 @@ export default function NewSkuScreen() {
         skuCode: skuCode.trim() || undefined,
         packSize: packSize.trim(),
         packUnit,
+        // Sent only when the pack unit calls for it — the server refuses a
+        // measure on a unit that already states an amount.
+        measureValue: needsMeasure ? measureValue.trim() : undefined,
+        measureUnit: needsMeasure ? measureUnit : undefined,
         sellingPrice: sellingPrice.trim(),
         gstRate,
         imageUrl: imageUrl.trim() || undefined,
@@ -184,7 +204,12 @@ export default function NewSkuScreen() {
 
   const priceValid = Number(sellingPrice) > 0;
   const packValid = Number(packSize) > 0;
-  const canSave = product != null && name.trim().length > 1 && priceValid && packValid;
+  const needsMeasure = (units.data?.requiresMeasure ?? []).includes(packUnit);
+  // A container with no contents is a listing nobody can compare, so it cannot
+  // be saved — the server refuses it, and the button should not offer it.
+  const measureValid = !needsMeasure || (Number(measureValue) > 0 && measureUnit !== '');
+  const canSave = product != null && name.trim().length > 1
+    && priceValid && packValid && measureValid;
 
   return (
     <MandiScreen
@@ -350,29 +375,17 @@ export default function NewSkuScreen() {
             placeholder="Amul"
           />
 
-          <View style={styles.row}>
-            <MandiFormField
-              label="Pack size"
-              value={packSize}
-              onChangeText={(text) => setPackSize(text.replace(/[^\d.]/g, ''))}
-              keyboardType="decimal-pad"
-              required
-              style={styles.flex}
-            />
-            <View style={styles.flex}>
-              <MandiText variant="label">Unit</MandiText>
-              <View style={styles.chips}>
-                {UNITS.map((unit) => (
-                  <Chip
-                    key={unit}
-                    label={unit}
-                    active={unit === packUnit}
-                    onPress={() => setPackUnit(unit)}
-                  />
-                ))}
-              </View>
-            </View>
-          </View>
+          <PackFields
+            packSize={packSize}
+            onPackSize={setPackSize}
+            packUnit={packUnit}
+            onPackUnit={setPackUnit}
+            measureValue={measureValue}
+            onMeasureValue={setMeasureValue}
+            measureUnit={measureUnit}
+            onMeasureUnit={setMeasureUnit}
+            units={units.data}
+          />
 
           <MandiFormField
             label="Selling price"

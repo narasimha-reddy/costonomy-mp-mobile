@@ -6,6 +6,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchPriceHistory, fetchSkus, updateSku, uploadSkuImage } from '@/services/supplier';
+import { fetchUnits } from '@/services/catalog';
+import { PackFields } from '@/components/product/PackFields';
 import {
   MandiButton,
   MandiCard,
@@ -20,7 +22,7 @@ import {
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
-import { formatMoney, formatQuantity } from '@/utils/money';
+import { formatMoney, formatPack } from '@/utils/money';
 import { track } from '@/analytics';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
@@ -54,6 +56,13 @@ export default function SkuEditorScreen() {
     enabled: storeId != null && accessToken != null,
   });
 
+  const units = useQuery({
+    queryKey: ['units'],
+    queryFn: () => fetchUnits(accessToken as string),
+    enabled: accessToken != null,
+    staleTime: 60 * 60 * 1000,
+  });
+
   const history = useQuery({
     queryKey: ['sku', skuId, 'price-history'],
     queryFn: () => fetchPriceHistory(accessToken as string, skuId),
@@ -67,6 +76,10 @@ export default function SkuEditorScreen() {
   const [sellingPrice, setSellingPrice] = useState<string | null>(null);
   const [gstRate, setGstRate] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [packUnit, setPackUnit] = useState<string | null>(null);
+  const [packSize, setPackSize] = useState<string | null>(null);
+  const [measureValue, setMeasureValue] = useState<string | null>(null);
+  const [measureUnit, setMeasureUnit] = useState<string | null>(null);
 
   // Seeded from the server the first time it arrives, edited locally after.
   const nameValue = name ?? sku?.name ?? '';
@@ -74,6 +87,12 @@ export default function SkuEditorScreen() {
   const priceValue = sellingPrice ?? (sku ? String(sku.sellingPrice) : '');
   const gstValue = gstRate ?? (sku ? String(Number(sku.gstRate)) : '5');
   const imageValue = imageUrl ?? sku?.imageUrl ?? '';
+  const packUnitValue = packUnit ?? sku?.packUnit ?? '';
+  const packSizeValue = packSize ?? (sku ? String(Number(sku.packSize)) : '');
+  const measureValueValue = measureValue ?? (sku?.measureValue != null
+    ? String(Number(sku.measureValue)) : '');
+  const measureUnitValue = measureUnit ?? sku?.measureUnit ?? 'GM';
+  const needsMeasure = (units.data?.requiresMeasure ?? []).includes(packUnitValue);
 
   const save = useMutation({
     mutationFn: (patch: Parameters<typeof updateSku>[2]) =>
@@ -93,7 +112,11 @@ export default function SkuEditorScreen() {
   const detailsChanged = sku != null
     && (nameValue.trim() !== sku.name
       || brandValue.trim() !== (sku.brandName ?? '')
-      || imageValue.trim() !== (sku.imageUrl ?? ''));
+      || imageValue.trim() !== (sku.imageUrl ?? '')
+      || packUnitValue !== sku.packUnit
+      || Number(packSizeValue) !== Number(sku.packSize)
+      || Number(measureValueValue || 0) !== Number(sku.measureValue ?? 0)
+      || (needsMeasure && measureUnitValue !== (sku.measureUnit ?? '')));
   const dirty = priceChanged || gstChanged || detailsChanged;
 
   /**
@@ -101,7 +124,12 @@ export default function SkuEditorScreen() {
    * changes, and the server would refuse both — so the button stays disabled
    * rather than offering an action that cannot work.
    */
-  const canSave = nameValue.trim().length > 1 && Number(priceValue) > 0;
+  const canSave = nameValue.trim().length > 1
+    && Number(priceValue) > 0
+    && Number(packSizeValue) > 0
+    // A container with no contents is a listing nobody can compare. The server
+    // refuses it; the button should not offer it.
+    && (!needsMeasure || (Number(measureValueValue) > 0 && measureUnitValue !== ''));
 
   return (
     <MandiScreen
@@ -143,6 +171,14 @@ export default function SkuEditorScreen() {
                 // field, so "" is how a supplier takes their own photo back down
                 // and returns the listing to the catalog picture.
                 imageUrl: imageValue.trim(),
+                packUnit: packUnitValue,
+                packSize: packSizeValue,
+                // Sent only when the unit calls for it. On a unit that already
+                // states an amount the server clears whatever was there, which
+                // is what should happen to a stale 500 GM on a SKU now sold by
+                // the kilo.
+                measureValue: needsMeasure ? measureValueValue : undefined,
+                measureUnit: needsMeasure ? measureUnitValue : undefined,
                 sellingPrice: priceValue,
                 gstRate: gstValue,
               })}
@@ -168,13 +204,25 @@ export default function SkuEditorScreen() {
             onChangeText={setBrandName}
             placeholder="Amul"
           />
+          <PackFields
+            packSize={packSizeValue}
+            onPackSize={setPackSize}
+            packUnit={packUnitValue}
+            onPackUnit={setPackUnit}
+            measureValue={measureValueValue}
+            onMeasureValue={setMeasureValue}
+            measureUnit={measureUnitValue}
+            onMeasureUnit={setMeasureUnit}
+            units={units.data}
+          />
+
           <MandiFormField
             label="Selling price"
             value={priceValue}
             onChangeText={(text) => setSellingPrice(text.replace(/[^\d.]/g, ''))}
             keyboardType="decimal-pad"
             required
-            hint={`Per ${formatQuantity(sku.packSize)} ${sku.packUnit}, before GST.`}
+            hint={`Per ${formatPack(packSizeValue, packUnitValue, needsMeasure ? measureValueValue : null, needsMeasure ? measureUnitValue : null)}, before GST.`}
           />
 
           <View>

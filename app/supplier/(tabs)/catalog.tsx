@@ -35,7 +35,7 @@ const SCREEN = 'SUP-CATALOG-01';
 type Filter = 'all' | 'available' | 'out_of_stock' | 'inactive';
 
 const STATUS_FILTERS: FilterOption<Filter>[] = [
-  { key: 'all', label: 'Any status' },
+  { key: 'all', label: 'All' },
   { key: 'available', label: 'Available' },
   { key: 'out_of_stock', label: 'Out of stock' },
   { key: 'inactive', label: 'Delisted' },

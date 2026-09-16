@@ -1,19 +1,19 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
-import { useDebounced } from '@/hooks/useDebounced';
-import { searchProducts } from '@/services/catalog';
-import { createSku } from '@/services/supplier';
+import { fetchCategories, fetchProducts } from '@/services/catalog';
+import { createSku, fetchSkus } from '@/services/supplier';
 import { categoryFace } from '@/models/categories';
-import type { Product } from '@/models/catalog';
+import type { Category, Product } from '@/models/catalog';
 import {
   MandiButton,
   MandiCard,
   MandiEmptyState,
+  MandiErrorState,
   MandiFormField,
   MandiHeader,
   MandiScreen,
@@ -27,25 +27,34 @@ import {
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
-import { Colors, Elevation, Radius, Spacing } from '@/theme';
+import { Colors, Elevation, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'SUP-CATALOG-02';
-const STEPS = ['Find the product', 'Pack and price'];
+const STEPS = ['Choose the product', 'Pack and price'];
 const UNITS = ['KG', 'L', 'PIECE', 'DOZEN', 'BOX'];
 const GST_RATES = ['0', '5', '12', '18'];
+
+/** Big enough to hold the whole catalog in one call; the server pages at 20. */
+const PAGE_SIZE = 200;
 
 /**
  * SUP-CATALOG-02. Doc 05 §29.
  *
- * <p><b>You pick a platform product, you do not invent one.</b> A SKU is tied to
- * a canonical product, and that link is what puts this listing into a
- * restaurant's comparison against every other supplier. A free-text product name
- * would list something nobody could ever find — which is why the server requires
- * the id and there is deliberately no API for a supplier to create a canonical
- * product (doc 01 §7).
+ * <p><b>You browse the platform catalog, you do not search it blind.</b> A search
+ * box asks a supplier to guess what a product is called here before they can list
+ * anything — and a wrong guess looks identical to "we don't stock that". Browsing
+ * by category shows them the actual vocabulary, which is the thing they need to
+ * learn once and then never think about again. The filter above the list narrows
+ * what is already on screen rather than querying into the dark.
  *
- * <p>So step one is search, not a text box. What you call it is step two, and
- * defaults to the platform's name because most of the time that is right.
+ * <p><b>A SKU is tied to a canonical product</b>, and that link is what puts this
+ * listing into a restaurant's comparison against every other supplier. There is
+ * deliberately no API for a supplier to invent a canonical product (doc 01 §7) —
+ * one invented per supplier could never be compared with anything.
+ *
+ * <p>Products this store already lists are marked and route to the editor instead
+ * of the form, because the useful action there is changing a price, not creating
+ * a second listing of the same thing.
  */
 export default function NewSkuScreen() {
   const router = useRouter();
@@ -55,7 +64,8 @@ export default function NewSkuScreen() {
   const { storeId } = useStore();
 
   const [step, setStep] = useState(0);
-  const [term, setTerm] = useState('');
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [filter, setFilter] = useState('');
   const [product, setProduct] = useState<Product | null>(null);
   const [name, setName] = useState('');
   const [brandName, setBrandName] = useState('');
@@ -65,16 +75,72 @@ export default function NewSkuScreen() {
   const [sellingPrice, setSellingPrice] = useState('');
   const [gstRate, setGstRate] = useState('5');
 
-  const settled = useDebounced(term, 250);
-  const searching = settled.trim().length >= 2;
-
-  const results = useQuery({
-    queryKey: ['search', 'products', settled.trim()],
-    queryFn: ({ signal }) => searchProducts(accessToken as string, settled.trim(), signal),
-    enabled: searching && accessToken != null,
+  const categories = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => fetchCategories(accessToken as string),
+    enabled: accessToken != null,
+    staleTime: 60 * 60 * 1000,
   });
 
-  function pick(chosen: Product) {
+  const products = useQuery({
+    queryKey: ['products', { categoryId, size: PAGE_SIZE }],
+    queryFn: () => fetchProducts(accessToken as string, { categoryId, size: PAGE_SIZE }),
+    enabled: accessToken != null,
+  });
+
+  const listed = useQuery({
+    queryKey: ['store', storeId, 'skus'],
+    queryFn: () => fetchSkus(accessToken as string, storeId as number),
+    enabled: storeId != null && accessToken != null,
+  });
+
+  /** canonicalProductId → the SKU this store already has for it. */
+  const alreadyListed = useMemo(() => {
+    const map = new Map<number, number>();
+    (listed.data ?? []).forEach((sku) => {
+      if (!map.has(sku.canonicalProductId)) map.set(sku.canonicalProductId, sku.id);
+    });
+    return map;
+  }, [listed.data]);
+
+  const visible = useMemo(() => {
+    const term = filter.trim().toLowerCase();
+    const all = products.data ?? [];
+    return term.length === 0
+      ? all
+      : all.filter((item) => item.name.toLowerCase().includes(term));
+  }, [products.data, filter]);
+
+  /**
+   * When browsing everything, group under category headings rather than one long
+   * list — and order the groups the way the category tabs are ordered, not the
+   * way product ids happen to fall. Otherwise "Cleaning & Hygiene" leads the
+   * catalog of a food marketplace, purely because those rows were seeded first.
+   */
+  const grouped = useMemo(() => {
+    if (categoryId != null) return null;
+
+    const byCategory = new Map<string, Product[]>();
+    visible.forEach((item) => {
+      const key = item.categoryName ?? 'Other';
+      byCategory.set(key, [...(byCategory.get(key) ?? []), item]);
+    });
+
+    const order = new Map((categories.data ?? []).map((c, index) => [c.name, index]));
+    return [...byCategory.entries()].sort(
+      ([a], [b]) => (order.get(a) ?? Number.MAX_SAFE_INTEGER)
+        - (order.get(b) ?? Number.MAX_SAFE_INTEGER),
+    );
+  }, [visible, categoryId, categories.data]);
+
+  function choose(chosen: Product) {
+    const existing = alreadyListed.get(chosen.id);
+    if (existing != null) {
+      track('sku_open_existing', { screen: SCREEN, entityId: existing });
+      router.replace(`/supplier/catalog/${existing}`);
+      return;
+    }
+    track('sku_product_chosen', { screen: SCREEN, entityId: chosen.id });
     setProduct(chosen);
     setName(chosen.name);
     setPackUnit(chosen.baseUnit || 'KG');
@@ -101,8 +167,7 @@ export default function NewSkuScreen() {
       void queryClient.invalidateQueries({ queryKey: ['store', storeId, 'skus'] });
       toast.show(`${sku.name} is live`, 'success');
       // `replace`, not `back`: this screen can be reached by a deep link with no
-      // history behind it, and `back` would then do nothing at all — leaving the
-      // supplier on a form whose product they have just created.
+      // history behind it, and `back` would then do nothing at all.
       router.replace('/supplier/catalog');
     },
     onError: (caught) =>
@@ -120,9 +185,9 @@ export default function NewSkuScreen() {
     <MandiScreen
       header={
         <MandiHeader
-          title="List a product"
+          title={step === 0 ? 'Add to your catalog' : 'Pack and price'}
           back
-          onBack={() => (step === 0 ? router.back() : setStep(0))}
+          onBack={() => (step === 0 ? router.replace('/supplier/catalog') : setStep(0))}
         />
       }
       footer={
@@ -152,37 +217,67 @@ export default function NewSkuScreen() {
       {step === 0 && (
         <>
           <View style={styles.intro}>
-            <MandiText variant="display">What are you selling?</MandiText>
+            <MandiText variant="display">What do you stock?</MandiText>
             <MandiText variant="bodyRelaxed" color={Colors.textSecondary}>
-              Pick it from the platform catalog so restaurants can compare your price
-              against other suppliers.
+              Pick from the platform catalog so restaurants can compare your price
+              against other suppliers. Tap anything to set your price.
             </MandiText>
           </View>
 
-          <MandiSearchBar
-            value={term}
-            onChangeText={setTerm}
-            placeholder="Paneer, basmati rice, sunflower oil…"
+          <CategoryTabs
+            categories={categories.data ?? []}
+            selected={categoryId}
+            onSelect={(id) => {
+              setCategoryId(id);
+              setFilter('');
+            }}
           />
 
-          {!searching ? (
-            <MandiEmptyState
-              compact
-              icon="search-outline"
-              title="Start typing"
-              description="Two letters is enough."
+          {(products.data ?? []).length > 8 && (
+            <MandiSearchBar
+              value={filter}
+              onChangeText={setFilter}
+              placeholder="Narrow this list"
             />
-          ) : results.isPending ? (
-            <MandiSkeletonList count={4} />
-          ) : (results.data ?? []).length === 0 ? (
+          )}
+
+          {products.isPending ? (
+            <MandiSkeletonList count={5} />
+          ) : products.error ? (
+            <MandiErrorState
+              message="Couldn't load the catalog."
+              onRetry={() => products.refetch()}
+            />
+          ) : visible.length === 0 ? (
             <MandiEmptyState
               icon="help-circle-outline"
-              title={`Nothing called "${settled.trim()}"`}
-              description="Try the common name for it. If it genuinely isn't listed, tell us and we'll add it to the catalog."
+              title={filter ? `Nothing here matches "${filter}"` : 'Nothing in this category yet'}
+              description="If something you stock genuinely isn't in the catalog, tell us and we'll add it."
             />
+          ) : grouped != null ? (
+            grouped.map(([category, items]) => (
+              <View key={category} style={styles.group}>
+                <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
+                  {category.toUpperCase()}
+                </MandiText>
+                {items.map((item) => (
+                  <ProductRow
+                    key={item.id}
+                    product={item}
+                    listed={alreadyListed.has(item.id)}
+                    onPress={() => choose(item)}
+                  />
+                ))}
+              </View>
+            ))
           ) : (
-            (results.data ?? []).map((item) => (
-              <ProductRow key={item.id} product={item} onPress={() => pick(item)} />
+            visible.map((item) => (
+              <ProductRow
+                key={item.id}
+                product={item}
+                listed={alreadyListed.has(item.id)}
+                onPress={() => choose(item)}
+              />
             ))
           )}
         </>
@@ -193,7 +288,10 @@ export default function NewSkuScreen() {
           <MandiCard>
             <View style={styles.chosen}>
               <View
-                style={[styles.chosenIcon, { backgroundColor: categoryFace(product.categoryName).background }]}
+                style={[
+                  styles.chosenIcon,
+                  { backgroundColor: categoryFace(product.categoryName).background },
+                ]}
               >
                 <Ionicons
                   name={categoryFace(product.categoryName).icon}
@@ -205,7 +303,9 @@ export default function NewSkuScreen() {
                 <MandiText variant="bodyEmphasis">{product.name}</MandiText>
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {product.categoryName}
-                  {product.offerCount ? ` · ${product.offerCount} suppliers already listing this` : ''}
+                  {product.offerCount
+                    ? ` · ${product.offerCount} suppliers already listing this`
+                    : ''}
                 </MandiText>
               </View>
               <Pressable
@@ -299,26 +399,98 @@ export default function NewSkuScreen() {
   );
 }
 
-function ProductRow({ product, onPress }: { product: Product; onPress: () => void }) {
+function CategoryTabs({
+  categories,
+  selected,
+  onSelect,
+}: {
+  categories: Category[];
+  selected: number | null;
+  onSelect: (id: number | null) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.tabs}
+    >
+      <Tab label="All" active={selected == null} onPress={() => onSelect(null)} />
+      {categories.map((category) => (
+        <Tab
+          key={category.id}
+          label={category.name}
+          active={selected === category.id}
+          onPress={() => onSelect(category.id)}
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
+function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      style={[styles.tab, active && styles.tabActive]}
+    >
+      <MandiText
+        variant="captionEmphasis"
+        color={active ? Colors.textInverse : Colors.textSecondary}
+      >
+        {label}
+      </MandiText>
+    </Pressable>
+  );
+}
+
+function ProductRow({
+  product,
+  listed,
+  onPress,
+}: {
+  product: Product;
+  listed: boolean;
+  onPress: () => void;
+}) {
   const face = categoryFace(product.categoryName);
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`List ${product.name}`}
+      accessibilityLabel={
+        listed
+          ? `${product.name}, already in your catalog. Edit it.`
+          : `List ${product.name}`
+      }
       style={({ pressed }) => [styles.productRow, pressed && styles.pressed]}
     >
       <View style={[styles.chosenIcon, { backgroundColor: face.background }]}>
         <Ionicons name={face.icon} size={20} color={face.tint} />
       </View>
+
       <View style={styles.flex}>
         <MandiText variant="bodyEmphasis">{product.name}</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>
-          {[product.categoryName, product.baseUnit && `sold per ${product.baseUnit}`]
-            .filter(Boolean).join(' · ')}
+          {product.baseUnit ? `Sold per ${product.baseUnit}` : ''}
+          {product.offerCount ? ` · ${product.offerCount} listing this` : ''}
         </MandiText>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+
+      <View style={styles.trailing}>
+        {listed ? (
+          <View style={styles.listedPill}>
+            <Ionicons name="checkmark" size={12} color={Colors.success} />
+            <MandiText variant="caption" color={Colors.success}>In catalog</MandiText>
+          </View>
+        ) : product.lowestPrice != null ? (
+          <MandiText variant="caption" color={Colors.textTertiary}>
+            from {formatMoney(product.lowestPrice, true)}
+          </MandiText>
+        ) : null}
+        <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+      </View>
     </Pressable>
   );
 }
@@ -342,6 +514,16 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   intro: { gap: Spacing.sm },
   row: { flexDirection: 'row', gap: Spacing.md },
+  group: { gap: Spacing.sm },
+  tabs: { gap: Spacing.sm, paddingRight: Spacing.md },
+  tab: {
+    paddingHorizontal: Spacing.lg,
+    justifyContent: 'center',
+    minHeight: TouchTarget.min - 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceSunken,
+  },
+  tabActive: { backgroundColor: Colors.primary },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.xs },
   chip: {
     paddingHorizontal: Spacing.md,
@@ -362,6 +544,16 @@ const styles = StyleSheet.create({
     ...Elevation.card,
   },
   pressed: { opacity: 0.75 },
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  listedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.successLight,
+  },
   chosen: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   chosenIcon: {
     width: 40,

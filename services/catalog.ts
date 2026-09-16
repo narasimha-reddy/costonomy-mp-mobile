@@ -14,6 +14,7 @@ export interface ProductQuery {
   [key: string]: unknown;
   categoryId?: number | null;
   page?: number;
+  /** Defaults to 20 server-side, which is a page rather than a catalog. */
   size?: number;
 }
 

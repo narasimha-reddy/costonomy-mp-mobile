@@ -18,6 +18,7 @@ export function MandiScreen({
   contentStyle,
   header,
   footer,
+  floating,
 }: {
   children: React.ReactNode;
   onRefresh?: () => void;
@@ -28,6 +29,14 @@ export function MandiScreen({
   header?: React.ReactNode;
   /** Pinned below it — a checkout summary bar. */
   footer?: React.ReactNode;
+  /**
+   * Floats over the content — a FAB.
+   *
+   * <p>A sibling of the scroll view, not a child of it: put inside, "bottom"
+   * means the bottom of the content, so on a short list the thing floats in the
+   * middle of the screen.
+   */
+  floating?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -53,6 +62,7 @@ export function MandiScreen({
       ) : (
         body
       )}
+      {floating}
       {footer}
       {!footer && <View style={{ height: insets.bottom }} />}
     </View>

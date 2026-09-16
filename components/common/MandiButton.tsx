@@ -10,8 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, ControlHeight, IconSize, Radius, Spacing, TextStyles } from '@/theme';
 import { MandiText } from './MandiText';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'destructive';
-export type ButtonSize = 'md' | 'lg';
+export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'neutral' | 'destructive';
+export type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface MandiButtonProps {
   label: string;
@@ -46,6 +46,16 @@ const VARIANTS: Record<
   primary: { bg: Colors.primary, fg: Colors.textInverse },
   secondary: { bg: Colors.surface, fg: Colors.primary, border: Colors.primary },
   tertiary: { bg: 'transparent', fg: Colors.primary },
+  /**
+   * A routine action that is not the point of the screen.
+   *
+   * <p>Brand colour is a claim about importance. Spending it on "mark out of
+   * stock" — something a supplier does a dozen times a day — leaves nothing to
+   * distinguish the action that actually matters, and a row of orange buttons
+   * reads as a row of warnings. Neutral is the right weight for most inline
+   * actions; `secondary` is for the one that leads.
+   */
+  neutral: { bg: Colors.surfaceSunken, fg: Colors.textPrimary, border: Colors.border },
   destructive: { bg: Colors.danger, fg: Colors.textInverse },
 };
 
@@ -72,11 +82,19 @@ export function MandiButton({
 }: MandiButtonProps) {
   const palette = VARIANTS[variant];
   const inert = disabled || loading;
-  const height = size === 'lg' ? ControlHeight.lg : ControlHeight.md;
+  const height = size === 'lg' ? ControlHeight.lg
+    : size === 'sm' ? ControlHeight.sm
+    : ControlHeight.md;
 
   const fg = inert && variant !== 'primary' && variant !== 'destructive'
     ? Colors.textDisabled
     : palette.fg;
+
+  // A dense action should not carry a CTA's padding, or three of them will not
+  // fit on one row at 390pt.
+  const paddingHorizontal = size === 'sm' ? Spacing.md
+    : size === 'md' ? Spacing.lg
+    : Spacing.xxl;
 
   return (
     <Pressable
@@ -93,6 +111,7 @@ export function MandiButton({
         styles.base,
         {
           height,
+          paddingHorizontal,
           backgroundColor: inert && variant === 'primary' ? Colors.borderStrong
             : inert && variant === 'destructive' ? Colors.borderStrong
             : palette.bg,
@@ -109,13 +128,16 @@ export function MandiButton({
       ) : (
         <View style={styles.content}>
           {icon && iconPosition === 'leading' && (
-            <Ionicons name={icon} size={IconSize.md} color={fg} />
+            <Ionicons name={icon} size={size === 'sm' ? IconSize.sm : IconSize.md} color={fg} />
           )}
-          <MandiText style={[TextStyles.bodyEmphasis, { color: fg }]} numberOfLines={1}>
+          <MandiText
+            style={[size === 'sm' ? TextStyles.captionEmphasis : TextStyles.bodyEmphasis, { color: fg }]}
+            numberOfLines={1}
+          >
             {label}
           </MandiText>
           {icon && iconPosition === 'trailing' && (
-            <Ionicons name={icon} size={IconSize.md} color={fg} />
+            <Ionicons name={icon} size={size === 'sm' ? IconSize.sm : IconSize.md} color={fg} />
           )}
         </View>
       )}
@@ -128,7 +150,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.full,
-    paddingHorizontal: Spacing.xxl,
   },
   fullWidth: { alignSelf: 'stretch' },
   pressed: { opacity: 0.85 },

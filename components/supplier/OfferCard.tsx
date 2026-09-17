@@ -5,7 +5,7 @@ import type { RecommendedOffer } from '@/models/discovery';
 import { MandiBadge, MandiCard, MandiQuantityStepper, MandiText } from '@/components/common';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { placeLabel } from '@/utils/placeName';
-import { formatMoney, formatQuantity } from '@/utils/money';
+import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
@@ -48,6 +48,9 @@ export function OfferCard({
 }) {
   const unavailable = offer.availability !== 'AVAILABLE';
   const branch = placeLabel(offer.storeName, offer.supplierName) ?? offer.storeName;
+  // On a one-unit pack the price per unit *is* the pack price, and printing both
+  // says the same number twice. It earns its place on a 25 kg sack.
+  const perUnit = Number(offer.packSize) === 1 ? null : offer.pricePerBaseUnit;
 
   return (
     <MandiCard outlined={recommended} accentColor={recommended ? Colors.primary : undefined}>
@@ -61,14 +64,20 @@ export function OfferCard({
             {[
               offer.brandName,
               `${formatQuantity(offer.packSize)} ${offer.packUnit.toLowerCase()}`,
-              offer.pricePerBaseUnit != null
-                ? `${formatMoney(offer.pricePerBaseUnit)}/${offer.packUnit.toLowerCase()}`
-                : null,
+              perUnit != null ? `${formatMoney(perUnit)}/${offer.packUnit.toLowerCase()}` : null,
             ].filter(Boolean).join(' · ')}
           </MandiText>
         </View>
 
-        <MandiText variant="price">{formatMoney(offer.unitPrice)}</MandiText>
+        {/* What you pay for one pack, tax and all. The rate is named beneath it
+            rather than left to be inferred — a price that quietly includes tax is
+            indistinguishable from one that quietly excludes it. */}
+        <View style={styles.pricing}>
+          <MandiText variant="price">{formatMoney(offer.unitPriceInclusiveGst)}</MandiText>
+          <MandiText variant="caption" color={Colors.textTertiary}>
+            Inc. {formatGstRate(offer.gstRate)} GST
+          </MandiText>
+        </View>
       </View>
 
       {/* Who you are buying it from — name, standing, and reach, in one panel.
@@ -174,6 +183,7 @@ const GAP = Spacing.md;
 const styles = StyleSheet.create({
   sku: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   names: { flex: 1, gap: 2 },
+  pricing: { alignItems: 'flex-end', gap: 1 },
 
   supplier: {
     gap: Spacing.sm,

@@ -53,7 +53,15 @@ export interface RecommendedOffer {
   averageRating: Money | null;
   ratingCount: number;
   /**
-   * Pack price ÷ pack size, computed by the server.
+   * One pack including GST — what is actually paid for it.
+   *
+   * <p>`unitPrice` is the supplier's pre-tax price, which is what the order is
+   * built from and the wrong figure to lead a card with: it sat beside a line
+   * total that did include GST, so one card showed two numbers on two bases.
+   */
+  unitPriceInclusiveGst: Money;
+  /**
+   * What one base unit costs including GST, computed by the server.
    *
    * <p>What makes a 1 kg pack and a 25 kg sack comparable, which is the point of
    * the screen. Null when the pack is not measured in the product's own unit —

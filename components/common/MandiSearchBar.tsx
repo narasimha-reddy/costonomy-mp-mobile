@@ -33,6 +33,16 @@ interface MandiSearchBarProps {
    */
   readOnly?: boolean;
   onPress?: () => void;
+  /**
+   * Rendered inside the field, before the search glyph.
+   *
+   * <p>The search screen puts its back button here rather than beside the field:
+   * on a screen that is nothing but a search, two separate targets at the top
+   * read as two controls of equal weight, and the field is not one of two things.
+   */
+  leading?: React.ReactNode;
+  /** Fully rounded and taller — the search screen's own field. */
+  pill?: boolean;
   style?: ViewStyle;
   testID?: string;
 }
@@ -53,11 +63,14 @@ export function MandiSearchBar({
   autoFocus = false,
   readOnly = false,
   onPress,
+  leading,
+  pill = false,
   style,
   testID,
 }: MandiSearchBarProps) {
   const body = (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, pill && styles.pill, style]}>
+      {leading}
       <Ionicons name="search" size={IconSize.md} color={Colors.textTertiary} />
 
       {readOnly ? (
@@ -126,6 +139,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     backgroundColor: Colors.surfaceSunken,
     borderRadius: Radius.md,
+  },
+  pill: {
+    height: ControlHeight.lg,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
   },
   input: {
     flex: 1,

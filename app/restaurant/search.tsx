@@ -87,7 +87,7 @@ export default function SearchScreen() {
     queryKey: ['search', 'suppliers', query, outletId, radiusKm],
     queryFn: ({ signal }) =>
       searchSuppliers(accessToken as string, query, outletId ?? undefined, radiusKm, signal),
-    enabled: tab === 'suppliers' && accessToken != null,
+    enabled: tab === 'suppliers' && searching && accessToken != null,
   });
 
   function openProduct(productId: number) {
@@ -108,7 +108,9 @@ export default function SearchScreen() {
     openProduct(canonicalProductId);
   }
 
-  const idle = !searching && tab !== 'suppliers';
+  // Below two characters there is nothing to search and nothing to slice three
+  // ways, so the screen is its zero state: the tabs are not yet a question.
+  const idle = !searching;
 
   return (
     <MandiScreen
@@ -119,11 +121,12 @@ export default function SearchScreen() {
           tab={tab}
           onTab={setTab}
           loading={products.isFetching || skus.isFetching || suppliers.isFetching}
+          showTabs={searching}
         />
       }
     >
       {idle ? (
-        <RecentSearches recent={recent} onPick={setTerm} onClear={clear} />
+        <ZeroState recent={recent} onPick={setTerm} onClear={clear} />
       ) : tab === 'products' ? (
         <Results
           query={products}
@@ -160,9 +163,7 @@ export default function SearchScreen() {
       ) : (
         <Suppliers
           query={suppliers}
-          searching={searching}
           term={query}
-          radiusKm={radiusKm}
           onWiden={() => setRadiusKm(undefined)}
           onOpen={openSupplier}
         />
@@ -197,18 +198,21 @@ function Results<T>({
   return <>{render(list)}</>;
 }
 
+/**
+ * Suppliers matching the term — those stocking it, and those named it.
+ *
+ * <p>Only reached with a term, because the tabs only exist once there is one.
+ * The endpoint still answers with an empty term, which is the "who delivers here
+ * at all" directory; nothing surfaces that today.
+ */
 function Suppliers({
   query,
-  searching,
   term,
-  radiusKm,
   onWiden,
   onOpen,
 }: {
   query: UseQueryResult<SupplierSearchPage>;
-  searching: boolean;
   term: string;
-  radiusKm: number | undefined;
   onWiden: () => void;
   onOpen: (storeId: number) => void;
 }) {
@@ -226,12 +230,8 @@ function Suppliers({
       <View style={styles.section}>
         <MandiEmptyState
           icon="storefront-outline"
-          title={searching ? `No supplier matching "${term}"` : 'No supplier delivers here yet'}
-          description={
-            searching
-              ? 'Try the business name rather than the branch.'
-              : 'Suppliers appear here once one covers this outlet.'
-          }
+          title={`No supplier has "${term}"`}
+          description="Nobody delivering here stocks it, under that name or any other they use for it."
         />
         {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
       </View>
@@ -240,10 +240,7 @@ function Suppliers({
 
   return (
     <View style={styles.section}>
-      <MandiSectionHeader
-        title={searching ? 'Matching suppliers' : `Within ${radiusKm ?? '—'} km`}
-        count={list.length}
-      />
+      <MandiSectionHeader title="Matching suppliers" count={list.length} />
       {list.map((supplier) => (
         <SupplierRow
           key={supplier.supplierStoreId}
@@ -273,7 +270,20 @@ function WidenRow({ count, onWiden }: { count: number; onWiden: () => void }) {
   );
 }
 
-function RecentSearches({
+/**
+ * The screen before anything has been typed.
+ *
+ * <p>Recent searches are chips rather than rows: they are one or two words each,
+ * and a full-width row per word wastes the space that a wrapped set of chips
+ * fills — six terms fit where three rows did, which is the difference between
+ * seeing your history and scrolling it.
+ *
+ * <p>Deliberately no thumbnails, unlike the consumer apps this borrows from. A
+ * picture beside "curd" would be one supplier's curd standing for the search, and
+ * we would be picking which — on a marketplace whose whole point is that the
+ * choice is the restaurant's.
+ */
+function ZeroState({
   recent,
   onPick,
   onClear,
@@ -294,18 +304,30 @@ function RecentSearches({
 
   return (
     <View style={styles.section}>
-      <MandiSectionHeader title="Recent" actionLabel="Clear" onAction={onClear} />
-      {recent.map((item) => (
-        <Pressable
-          key={item}
-          onPress={() => onPick(item)}
-          accessibilityRole="button"
-          style={styles.recentRow}
-        >
-          <Ionicons name="time-outline" size={16} color={Colors.textTertiary} />
-          <MandiText variant="body">{item}</MandiText>
-        </Pressable>
-      ))}
+      <MandiSectionHeader
+        title="Recent searches"
+        actionLabel="Clear"
+        onAction={onClear}
+        inlineAction
+      />
+      <View style={styles.chips}>
+        {recent.map((item) => (
+          <Pressable
+            key={item}
+            onPress={() => onPick(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`Search ${item}`}
+            style={styles.chip}
+          >
+            <Ionicons name="time-outline" size={14} color={Colors.textTertiary} />
+            <MandiText variant="body" numberOfLines={1}>{item}</MandiText>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Top picks for you goes here — a feed built from what this outlet has
+          searched and ordered before. Left out rather than stubbed: a heading
+          with nothing under it is worse than no heading. */}
     </View>
   );
 }
@@ -316,60 +338,68 @@ function Header({
   tab,
   onTab,
   loading,
+  showTabs,
 }: {
   term: string;
   onTerm: (term: string) => void;
   tab: Tab;
   onTab: (tab: Tab) => void;
   loading: boolean;
+  /** Hidden until there is something to slice three ways. */
+  showTabs: boolean;
 }) {
   const router = useRouter();
   return (
     <View style={styles.header}>
       <View style={styles.searchRow}>
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          style={styles.back}
-        >
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-        </Pressable>
         <MandiSearchBar
           value={term}
           onChangeText={onTerm}
-          placeholder="Search paneer, rice, oil…"
+          placeholder="Search for paneer, rice, oil and more"
           autoFocus
+          pill
           loading={loading}
           style={styles.field}
+          leading={
+            <Pressable
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              hitSlop={12}
+            >
+              <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+            </Pressable>
+          }
         />
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabs}
-      >
-        {TABS.map((option) => {
-          const active = option.key === tab;
-          return (
-            <Pressable
-              key={option.key}
-              onPress={() => onTab(option.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              style={[styles.tab, active && styles.tabActive]}
-            >
-              <MandiText
-                variant="captionEmphasis"
-                color={active ? Colors.textInverse : Colors.textSecondary}
+      {showTabs && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabs}
+        >
+          {TABS.map((option) => {
+            const active = option.key === tab;
+            return (
+              <Pressable
+                key={option.key}
+                onPress={() => onTab(option.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                style={[styles.tab, active && styles.tabActive]}
               >
-                {option.label}
-              </MandiText>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                <MandiText
+                  variant="captionEmphasis"
+                  color={active ? Colors.textInverse : Colors.textSecondary}
+                >
+                  {option.label}
+                </MandiText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -382,12 +412,6 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingHorizontal: Spacing.screenHorizontal,
   },
-  back: {
-    width: TouchTarget.min,
-    height: TouchTarget.min,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   field: { flex: 1 },
   tabs: { paddingHorizontal: Spacing.screenHorizontal, gap: Spacing.sm },
   tab: {
@@ -399,11 +423,18 @@ const styles = StyleSheet.create({
   },
   tabActive: { backgroundColor: Colors.primary },
   section: { gap: Spacing.sm },
-  recentRow: {
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    minHeight: TouchTarget.min,
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    minHeight: TouchTarget.min - 8,
+    maxWidth: '100%',
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
   },
   widen: {
     flexDirection: 'row',

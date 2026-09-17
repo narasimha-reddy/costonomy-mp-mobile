@@ -18,6 +18,14 @@ interface MandiSectionHeaderProps {
   /** "See all" affordance on the right. */
   actionLabel?: string;
   onAction?: () => void;
+  /**
+   * Drops the chevron, for an action that acts on this section rather than
+   * opening another screen.
+   *
+   * <p>"See all ›" goes somewhere; "Clear" does something here. The same arrow on
+   * both makes one of them a lie, and the one it lies about is the destructive one.
+   */
+  inlineAction?: boolean;
   style?: ViewStyle;
   testID?: string;
 }
@@ -34,6 +42,7 @@ export function MandiSectionHeader({
   subtitle,
   actionLabel,
   onAction,
+  inlineAction = false,
   style,
   testID,
 }: MandiSectionHeaderProps) {
@@ -66,7 +75,9 @@ export function MandiSectionHeader({
           <MandiText variant="captionEmphasis" color={Colors.primary}>
             {actionLabel}
           </MandiText>
-          <Ionicons name="chevron-forward" size={IconSize.sm} color={Colors.primary} />
+          {!inlineAction && (
+            <Ionicons name="chevron-forward" size={IconSize.sm} color={Colors.primary} />
+          )}
         </Pressable>
       )}
     </View>

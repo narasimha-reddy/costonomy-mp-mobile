@@ -347,7 +347,7 @@ export default function SupplierOrderScreen() {
             loading={reject.isPending}
             onPress={() => reject.mutate()}
           />
-          <MandiButton label="Back" variant="tertiary" size="md" onPress={() => setMode('view')} />
+          <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
         </MandiStickyBar>
       );
     }
@@ -361,7 +361,7 @@ export default function SupplierOrderScreen() {
             loading={partial.isPending}
             onPress={() => partial.mutate(partialItems)}
           />
-          <MandiButton label="Back" variant="tertiary" size="md" onPress={() => setMode('view')} />
+          <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
         </MandiStickyBar>
       );
     }
@@ -369,9 +369,17 @@ export default function SupplierOrderScreen() {
     if (pending) {
       return (
         <MandiStickyBar>
+          {/* One answer leads and two are available, and the colours say so.
+              All three were brand-coloured, which is what `neutral` exists to
+              stop: "a row of orange buttons reads as a row of warnings", and on
+              a screen with a countdown on it that is the wrong thing to say
+              three times. Accept in full is the answer most orders get; taking
+              part of it is still accepting, so it keeps the outline; declining
+              is the way out and is weighted like one. */}
           <MandiButton
             label="Accept in full"
             size="lg"
+            icon="checkmark-circle-outline"
             loading={accept.isPending}
             onPress={() => accept.mutate()}
           />
@@ -383,9 +391,11 @@ export default function SupplierOrderScreen() {
               onPress={() => setMode('partial')}
               style={styles.flex}
             />
+            {/* Neutral rather than destructive: this opens the decline screen,
+                where a reason is required. Nothing is refused by this tap. */}
             <MandiButton
               label="Decline"
-              variant="tertiary"
+              variant="neutral"
               size="md"
               onPress={() => setMode('reject')}
               style={styles.flex}

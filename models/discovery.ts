@@ -72,6 +72,12 @@ export interface SupplierSearchResult {
   distanceKm: Money | null;
   serviceable: boolean;
   productCount: number | null;
+  /**
+   * How many of this store's buyable items matched the term.
+   *
+   * <p>Zero with no term, and zero for a store that matched on its name alone.
+   */
+  matchingProductCount: number;
   /** Null when nobody has rated this store — never 0 standing in for "unrated". */
   averageRating: Money | null;
   ratingCount: number;

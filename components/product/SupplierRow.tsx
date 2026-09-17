@@ -14,6 +14,10 @@ import { Colors, Radius, Spacing } from '@/theme';
  * in the list — so the row answers the next questions instead: how far, how well
  * rated, how much do they stock, and are they open now.
  *
+ * <p>When a search put them here, the row leads with **why**: "4 matching items"
+ * rather than a bare total, because a restaurant searching "pan" is choosing
+ * between suppliers on whether they have paneer, not on how big their catalog is.
+ *
  * <p>There is no logo. Suppliers have not uploaded any, and a generated initial
  * on a coloured circle is decoration standing where a fact should be; the
  * storefront glyph says "supplier" without pretending to identify one.
@@ -63,11 +67,16 @@ export function SupplierRow({
               </MandiText>
             </View>
           )}
-          {supplier.productCount != null && supplier.productCount > 0 && (
+          {supplier.matchingProductCount > 0 ? (
+            <MandiText variant="captionEmphasis" color={Colors.primary}>
+              {supplier.matchingProductCount} matching
+              {supplier.matchingProductCount === 1 ? ' item' : ' items'}
+            </MandiText>
+          ) : supplier.productCount != null && supplier.productCount > 0 ? (
             <MandiText variant="caption" color={Colors.textTertiary}>
               {supplier.productCount} items
             </MandiText>
-          )}
+          ) : null}
         </View>
 
         {!supplier.openNow && (

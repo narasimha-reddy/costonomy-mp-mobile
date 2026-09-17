@@ -24,6 +24,7 @@ import {
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
+import { placeLabel } from '@/utils/placeName';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
@@ -74,14 +75,11 @@ export default function CartScreen() {
         empty ? undefined : (
           <MandiStickyBar>
             <View style={styles.barRow}>
-              <View>
-                <MandiText variant="caption" color={Colors.textSecondary}>Total</MandiText>
-                <MandiText variant="priceLarge">{formatMoney(cart.totalAmount)}</MandiText>
-              </View>
-              <MandiText variant="caption" color={Colors.textTertiary}>
-                {cart.supplierGroups.length} supplier
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Total · {cart.supplierGroups.length} supplier
                 {cart.supplierGroups.length === 1 ? '' : 's'}
               </MandiText>
+              <MandiText variant="priceLarge">{formatMoney(cart.totalAmount)}</MandiText>
             </View>
             <MandiButton
               label="Proceed to checkout"
@@ -116,11 +114,17 @@ export default function CartScreen() {
 
           {cart.supplierGroups.map((group) => (
             <MandiCard key={group.supplierStoreId}>
+              {/* One card per supplier, because one card is one order. The branch
+                  leads and the business follows, as everywhere else. */}
               <View style={styles.supplierRow}>
-                <Ionicons name="storefront-outline" size={16} color={Colors.textSecondary} />
-                <MandiText variant="bodyEmphasis" style={styles.supplierName}>
-                  {group.supplierName}
-                </MandiText>
+                <View style={styles.supplierName}>
+                  <MandiText variant="bodyEmphasis" numberOfLines={1}>
+                    {placeLabel(group.storeName, group.supplierName) ?? group.storeName}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+                    {group.supplierName}
+                  </MandiText>
+                </View>
                 <MandiText variant="priceSmall">{formatMoney(group.total, true)}</MandiText>
               </View>
 
@@ -128,27 +132,43 @@ export default function CartScreen() {
                 <View key={item.id} style={styles.item}>
                   <View style={styles.itemHead}>
                     <View style={styles.itemText}>
-                      <MandiText variant="body">{item.productName}</MandiText>
+                      <MandiText variant="bodyEmphasis" numberOfLines={2}>
+                        {item.skuName}
+                      </MandiText>
+                      {/* "+ 5% GST" rather than "GST 5%": the price beside it is
+                          the supplier's pre-tax figure while the line total below
+                          includes tax, and a row holding both on unstated bases is
+                          a row nobody can check. */}
                       <MandiText variant="caption" color={Colors.textSecondary}>
-                        {formatQuantity(item.packSize)} {item.packUnit} ·{' '}
-                        {formatMoney(item.unitPrice)} · GST {formatGstRate(item.gstRate)}
+                        {[
+                          item.brandName,
+                          `${formatQuantity(item.packSize)} ${item.packUnit.toLowerCase()} pack`,
+                          `${formatMoney(item.unitPrice)} + ${formatGstRate(item.gstRate)} GST`,
+                        ].filter(Boolean).join(' · ')}
                       </MandiText>
                     </View>
                     <MandiIconButton
                       icon="trash-outline"
-                      accessibilityLabel={`Remove ${item.productName}`}
+                      size="md"
+                      color={Colors.textTertiary}
+                      accessibilityLabel={`Remove ${item.skuName}`}
                       onPress={() => remove.mutate(item.id)}
                     />
                   </View>
                   <View style={styles.itemFoot}>
+                    {/* Packs. `item.unit` is the product's base unit, and labelling
+                        the count with it read "3 KG" for three 25 kg sacks. */}
                     <MandiQuantityStepper
                       value={Number(item.quantity)}
                       onChange={(quantity) =>
                         update.mutate({ itemId: item.id, quantity: String(quantity) })
                       }
                       min={1}
-                      unit={item.unit}
+                      unit={Number(item.quantity) === 1 ? 'pack' : 'packs'}
+                      itemLabel={item.skuName}
                     />
+                    {/* Lighter than the supplier's total above it: that figure is
+                        what this order is worth, this one is a line inside it. */}
                     <MandiText variant="bodyEmphasis">{formatMoney(item.lineTotal)}</MandiText>
                   </View>
                 </View>
@@ -158,9 +178,12 @@ export default function CartScreen() {
 
           <TotalsPanel procurement={cart} />
 
-          <MandiText variant="caption" color={Colors.textTertiary}>
-            Prices are re-checked at checkout. You will be asked to confirm anything that moved.
-          </MandiText>
+          <View style={styles.note}>
+            <Ionicons name="information-circle-outline" size={14} color={Colors.textTertiary} />
+            <MandiText variant="caption" color={Colors.textTertiary} style={styles.flex}>
+              Prices are re-checked at checkout. You will be asked to confirm anything that moved.
+            </MandiText>
+          </View>
         </>
       )}
     </MandiScreen>
@@ -168,8 +191,8 @@ export default function CartScreen() {
 }
 
 const styles = StyleSheet.create({
-  supplierRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  supplierName: { flex: 1 },
+  supplierRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  supplierName: { flex: 1, gap: 1 },
   item: {
     gap: Spacing.sm,
     paddingTop: Spacing.md,
@@ -178,12 +201,19 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.borderLight,
   },
   itemHead: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
-  itemText: { flex: 1, gap: Spacing.xs },
+  itemText: { flex: 1, gap: 2 },
   itemFoot: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
   },
-  barRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  barRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  note: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs },
+  flex: { flex: 1 },
 });

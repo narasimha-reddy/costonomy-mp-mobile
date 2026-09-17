@@ -72,8 +72,9 @@ export default function SearchScreen() {
   const searching = query.length >= MIN_TERM;
 
   const products = useQuery({
-    queryKey: ['search', 'products', query],
-    queryFn: ({ signal }) => searchProducts(accessToken as string, query, signal),
+    queryKey: ['search', 'products', query, outletId],
+    queryFn: ({ signal }) =>
+      searchProducts(accessToken as string, query, outletId ?? undefined, signal),
     enabled: tab === 'products' && searching && accessToken != null,
   });
 

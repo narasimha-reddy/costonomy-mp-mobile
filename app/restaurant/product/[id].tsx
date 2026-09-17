@@ -47,8 +47,10 @@ export default function ProductScreen() {
   const [quantity, setQuantity] = useState(1);
 
   const product = useQuery({
-    queryKey: ['product', productId],
-    queryFn: () => fetchProduct(accessToken as string, productId),
+    // The outlet is in the key because it changes the answer: "3 suppliers" is
+    // three who deliver *here*, and a cached count from another outlet is wrong.
+    queryKey: ['product', productId, outletId],
+    queryFn: () => fetchProduct(accessToken as string, productId, outletId ?? undefined),
     enabled: Number.isFinite(productId) && accessToken != null,
   });
 

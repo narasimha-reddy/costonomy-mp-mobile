@@ -65,8 +65,9 @@ export default function DiscoverScreen() {
   // total to notice with: when the catalog outgrows one page, this screen needs
   // real paging rather than a bigger number.
   const products = useQuery({
-    queryKey: ['products', 'all'],
-    queryFn: () => fetchProducts(accessToken as string, { size: CATALOG_PAGE }),
+    queryKey: ['products', 'all', outletId],
+    queryFn: () =>
+      fetchProducts(accessToken as string, { size: CATALOG_PAGE, outletId }),
     enabled: accessToken != null,
     staleTime: 5 * 60 * 1000,
   });

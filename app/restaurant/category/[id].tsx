@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
+import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchCategories, fetchProducts } from '@/services/catalog';
 import { ProductCard } from '@/components/product/ProductCard';
 import {
@@ -21,6 +22,7 @@ export default function CategoryScreen() {
   const categoryId = Number(id);
   const router = useRouter();
   const { accessToken } = useSession();
+  const { outletId } = useOutlet();
 
   const categories = useQuery({
     queryKey: ['categories'],
@@ -30,8 +32,8 @@ export default function CategoryScreen() {
   });
 
   const products = useQuery({
-    queryKey: ['products', { categoryId }],
-    queryFn: () => fetchProducts(accessToken as string, { categoryId }),
+    queryKey: ['products', { categoryId, outletId }],
+    queryFn: () => fetchProducts(accessToken as string, { categoryId, outletId }),
     enabled: Number.isFinite(categoryId) && accessToken != null,
   });
 

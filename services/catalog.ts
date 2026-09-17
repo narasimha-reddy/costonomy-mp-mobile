@@ -20,6 +20,14 @@ export interface ProductQuery {
   page?: number;
   /** Defaults to 20 server-side, which is a page rather than a catalog. */
   size?: number;
+  /**
+   * Scopes "N suppliers" and "from ₹X" to suppliers who deliver to this outlet.
+   *
+   * <p>Without it those figures are platform-wide, which is a different and
+   * usually larger number — a supplier in another city counts. Every restaurant
+   * screen passes it; the figures are the reason someone taps the card.
+   */
+  outletId?: number | null;
 }
 
 export function fetchProducts(token: string, query: ProductQuery = {}): Promise<Product[]> {
@@ -33,11 +41,16 @@ export function fetchProducts(token: string, query: ProductQuery = {}): Promise<
  * present that as the checkout price** — it is a catalog figure that can be
  * minutes old, and the authoritative price is the one validation returns.
  */
-export function searchProducts(token: string, term: string, signal?: AbortSignal): Promise<Product[]> {
-  return apiRequest<Product[]>(`/api/v1/search/products?q=${encodeURIComponent(term)}`, {
-    token,
-    signal,
-  });
+export function searchProducts(
+  token: string,
+  term: string,
+  outletId?: number,
+  signal?: AbortSignal,
+): Promise<Product[]> {
+  return apiRequest<Product[]>(
+    `/api/v1/search/products${queryString({ q: term, outletId })}`,
+    { token, signal },
+  );
 }
 
 export function fetchSuggestions(
@@ -51,8 +64,15 @@ export function fetchSuggestions(
   });
 }
 
-export function fetchProduct(token: string, productId: number): Promise<Product> {
-  return apiRequest<Product>(`/api/v1/products/${productId}`, { token });
+export function fetchProduct(
+  token: string,
+  productId: number,
+  outletId?: number,
+): Promise<Product> {
+  return apiRequest<Product>(
+    `/api/v1/products/${productId}${queryString({ outletId })}`,
+    { token },
+  );
 }
 
 /** Live offers for a product, cheapest first. `outletId` scopes serviceability. */

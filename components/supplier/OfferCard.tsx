@@ -2,91 +2,85 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { RecommendedOffer } from '@/models/discovery';
-import {
-  MandiBadge,
-  MandiButton,
-  MandiCard,
-  MandiQuantityStepper,
-  MandiText,
-} from '@/components/common';
+import { MandiBadge, MandiCard, MandiQuantityStepper, MandiText } from '@/components/common';
 import { ProductThumb } from '@/components/product/ProductThumb';
+import { placeLabel } from '@/utils/placeName';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
  * One supplier's pack, as compared on REST-SUP-01. Doc 05 §8.
  *
- * <p><b>The pack leads, the supplier follows.</b> What is being chosen between is
- * this pack — this brand, this size, this price — and the supplier is how it
- * arrives. The card opens with the picture, the name and the pack, and carries
- * the seller beneath with the three facts that separate two of them: how well
- * rated, how far, how soon.
+ * <p>Two bands, because the card answers two questions and they were being read
+ * as one. Above: <b>what you are buying</b> — the picture, the SKU, its brand and
+ * pack and what a unit of it costs, then the pack price. Below, on its own tinted
+ * panel: <b>who you are buying it from</b> — the store under its business, its
+ * rating, how far it is and how soon it can be there.
  *
- * <p><b>Quantity is counted in packs, and lives here rather than on the product.</b>
- * The product screen used to own one quantity for every supplier, in the
- * product's base unit — so asking for 25 kg of rice from a supplier who sells
- * 25 kg sacks ordered twenty-five sacks. A pack is a thing you can count; a kilo
- * is not, when what is on the shelf is a sack.
+ * <p><b>The stepper is the only control, and it starts at zero.</b> A separate Add
+ * meant choosing a number and then confirming it, which is two decisions for one
+ * intention; here the first tap puts one pack in the cart and every later tap
+ * changes it, down to zero, which takes it out. The line total appears beside it
+ * once there is one.
  *
- * <p><b>Nothing here multiplies.</b> The pack price and the per-unit price both
- * arrive from the server (guardrail 3); the line total appears in the cart, where
- * the server computed it. A card doing its own arithmetic is how a screen comes
- * to disagree with the order it produces.
- *
- * <p>The ranking is the order of the list. There are no reason chips: three
- * badges under every card explained the sort at the cost of the thing being
- * sorted, and the recommended one keeps an accent edge instead.
+ * <p><b>That total comes from the cart, not from this card.</b> Nothing here
+ * multiplies a price by a quantity — guardrail 3 — so the figure shown is the one
+ * the server computed for the line that actually exists, and the screen cannot
+ * come to disagree with the order it produces.
  */
 export function OfferCard({
   offer,
   recommended,
   quantity,
   onQuantity,
-  onAdd,
-  adding,
+  lineTotal,
+  busy,
 }: {
   offer: RecommendedOffer;
+  /** Drawn with an accent edge; the reason is the order, not a label. */
   recommended?: boolean;
+  /** Packs currently in the cart from this supplier. Zero means none. */
   quantity: number;
   onQuantity: (next: number) => void;
-  onAdd: () => void;
-  adding?: boolean;
+  /** The server's total for this line, present only once something is in it. */
+  lineTotal?: string | null;
+  busy?: boolean;
 }) {
   const unavailable = offer.availability !== 'AVAILABLE';
+  const branch = placeLabel(offer.storeName, offer.supplierName) ?? offer.storeName;
 
   return (
     <MandiCard outlined={recommended} accentColor={recommended ? Colors.primary : undefined}>
-      <View style={styles.identity}>
+      {/* What you are buying. */}
+      <View style={styles.sku}>
         <ProductThumb uri={offer.imageUrl} size={56} radius={Radius.md} />
 
         <View style={styles.names}>
           <MandiText variant="bodyEmphasis" numberOfLines={2}>{offer.skuName}</MandiText>
           <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-            {[offer.brandName, `${formatQuantity(offer.packSize)} ${offer.packUnit.toLowerCase()}`]
-              .filter(Boolean)
-              .join(' · ')}
+            {[
+              offer.brandName,
+              `${formatQuantity(offer.packSize)} ${offer.packUnit.toLowerCase()}`,
+              offer.pricePerBaseUnit != null
+                ? `${formatMoney(offer.pricePerBaseUnit)}/${offer.packUnit.toLowerCase()}`
+                : null,
+            ].filter(Boolean).join(' · ')}
           </MandiText>
         </View>
 
-        <View style={styles.pricing}>
-          <MandiText variant="price">{formatMoney(offer.unitPrice)}</MandiText>
-          {offer.pricePerBaseUnit != null && (
-            <MandiText variant="caption" color={Colors.textSecondary}>
-              {formatMoney(offer.pricePerBaseUnit)}/{offer.packUnit.toLowerCase()}
+        <MandiText variant="price">{formatMoney(offer.unitPrice)}</MandiText>
+      </View>
+
+      {/* Who you are buying it from. */}
+      <View style={styles.supplier}>
+        <View style={styles.identity}>
+          <MandiText variant="captionEmphasis" numberOfLines={1}>{branch}</MandiText>
+          {branch !== offer.supplierName && (
+            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+              {offer.supplierName}
             </MandiText>
           )}
         </View>
-      </View>
-
-      <View style={styles.supplier}>
-        <MandiText
-          variant="caption"
-          color={Colors.textSecondary}
-          numberOfLines={1}
-          style={styles.flex}
-        >
-          {offer.supplierName}
-        </MandiText>
 
         {offer.averageRating != null ? (
           <View style={styles.rating}>
@@ -108,14 +102,16 @@ export function OfferCard({
       </View>
 
       {/* How far and how soon, together — they answer one question. */}
-      <View style={styles.logistics}>
-        {offer.distanceKm != null && (
-          <Fact icon="navigate-outline" text={`${formatQuantity(offer.distanceKm)} km away`} />
-        )}
-        {offer.etaMinutes != null && (
-          <Fact icon="time-outline" text={`~${offer.etaMinutes} min`} />
-        )}
-      </View>
+      {(offer.distanceKm != null || offer.etaMinutes != null) && (
+        <View style={styles.logistics}>
+          {offer.distanceKm != null && (
+            <Fact icon="navigate-outline" text={`${formatQuantity(offer.distanceKm)} km away`} />
+          )}
+          {offer.etaMinutes != null && (
+            <Fact icon="time-outline" text={`~${offer.etaMinutes} min`} />
+          )}
+        </View>
+      )}
 
       {unavailable ? (
         <MandiBadge
@@ -136,17 +132,17 @@ export function OfferCard({
         <MandiQuantityStepper
           value={quantity}
           onChange={onQuantity}
-          min={1}
+          min={0}
+          disabled={unavailable || busy}
           unit={quantity === 1 ? 'pack' : 'packs'}
+          itemLabel={`${offer.skuName} from ${offer.supplierName}`}
         />
-        <MandiButton
-          label={unavailable ? 'Unavailable' : 'Add'}
-          onPress={onAdd}
-          disabled={unavailable}
-          loading={adding}
-          variant={recommended ? 'primary' : 'secondary'}
-          style={styles.add}
-        />
+        {quantity > 0 && lineTotal != null && (
+          <View style={styles.line}>
+            <MandiText variant="caption" color={Colors.textSecondary}>In cart</MandiText>
+            <MandiText variant="bodyEmphasis">{formatMoney(lineTotal)}</MandiText>
+          </View>
+        )}
       </View>
     </MandiCard>
   );
@@ -162,14 +158,21 @@ function Fact({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: stri
 }
 
 const styles = StyleSheet.create({
-  identity: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  sku: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   names: { flex: 1, gap: 2 },
-  pricing: { alignItems: 'flex-end' },
-  supplier: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  flex: { flexShrink: 1 },
+  supplier: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surfaceSunken,
+  },
+  identity: { flex: 1, gap: 1 },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   logistics: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  add: { flex: 1 },
+  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
+  line: { alignItems: 'flex-end' },
 });

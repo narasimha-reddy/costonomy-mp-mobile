@@ -366,12 +366,31 @@ export default function SupplierOrderScreen() {
                         />
                       </View>
                     ) : (
-                      <MandiText variant="caption" color={Colors.textSecondary}>
-                        {formatQuantity(item.requestedQuantity)} {item.unit}
-                        {item.acceptedQuantity != null &&
-                          Number(item.acceptedQuantity) !== requested &&
-                          ` · you accepted ${formatQuantity(item.acceptedQuantity)} ${item.unit}`}
-                      </MandiText>
+                      <View style={styles.quantities}>
+                        <MandiText variant="caption" color={Colors.textSecondary}>
+                          {formatQuantity(item.requestedQuantity)} {item.unit} asked for
+                        </MandiText>
+                        {/* What was committed to, when it is not what was asked.
+                            It was a clause on the end of the requested quantity in
+                            the same grey — the one line on the screen that says
+                            this order is not what it looks like, set as an aside.
+                            It is what the packer has to read. */}
+                        {item.acceptedQuantity != null
+                          && Number(item.acceptedQuantity) !== requested && (
+                            <View style={styles.shortRow}>
+                              <Ionicons
+                                name="alert-circle-outline"
+                                size={14}
+                                color={Colors.warning}
+                              />
+                              <MandiText variant="captionEmphasis" color={Colors.warning}>
+                                {Number(item.acceptedQuantity) === 0
+                                  ? 'You declined this line'
+                                  : `You accepted ${formatQuantity(item.acceptedQuantity)} ${item.unit}`}
+                              </MandiText>
+                            </View>
+                          )}
+                      </View>
                     )}
                   </View>
                 );
@@ -691,6 +710,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.md,
   },
+  quantities: { gap: Spacing.xs, alignItems: 'flex-start' },
+  shortRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   totalsValue: { alignItems: 'flex-end' },
   lineValue: { alignItems: 'flex-end' },
   totalsRow: {

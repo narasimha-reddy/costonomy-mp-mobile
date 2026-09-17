@@ -427,26 +427,14 @@ export default function SupplierOrderScreen() {
                 )}
               </>
             ) : settled ? (
-              // Answered, and for less than was asked. The ordered figures are
-              // kept struck rather than dropped: a supplier checking what they
-              // committed to also needs to see what they were asked for.
+              // One figure per row: what the supplier committed to. What was
+              // asked for is struck on the lines above, where it belongs to a
+              // particular item — a summary carrying two numbers per row stops
+              // summarising anything.
               <>
-                <Row
-                  label="Subtotal"
-                  value={formatMoney(order.acceptedSubtotal)}
-                  was={formatMoney(order.subtotal)}
-                />
-                <Row
-                  label="GST"
-                  value={formatMoney(order.acceptedGst)}
-                  was={formatMoney(order.gstAmount)}
-                />
-                <Row
-                  label="You supply"
-                  value={formatMoney(order.acceptedAmount)}
-                  was={formatMoney(order.totalAmount)}
-                  emphasis
-                />
+                <Row label="Subtotal" value={formatMoney(order.acceptedSubtotal)} />
+                <Row label="GST" value={formatMoney(order.acceptedGst)} />
+                <Row label="You supply" value={formatMoney(order.acceptedAmount)} emphasis />
               </>
             ) : (
               <>
@@ -626,29 +614,13 @@ function RejectPanel({
   );
 }
 
-function Row({
-  label,
-  value,
-  was,
-  emphasis,
-}: {
-  label: string;
-  value: string;
-  /** What this was before the supplier answered. Struck, and only when it differs. */
-  was?: string;
-  emphasis?: boolean;
-}) {
+function Row({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (
     <View style={styles.totalsRow}>
       <MandiText variant={emphasis ? 'bodyEmphasis' : 'body'} color={Colors.textSecondary}>
         {label}
       </MandiText>
-      <View style={styles.totalsValue}>
-        {was != null && was !== value && (
-          <MandiText variant="caption" color={Colors.textTertiary} struck>{was}</MandiText>
-        )}
-        <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
-      </View>
+      <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
     </View>
   );
 }
@@ -712,7 +684,6 @@ const styles = StyleSheet.create({
   },
   quantities: { gap: Spacing.xs, alignItems: 'flex-start' },
   shortRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  totalsValue: { alignItems: 'flex-end' },
   lineValue: { alignItems: 'flex-end' },
   totalsRow: {
     flexDirection: 'row',

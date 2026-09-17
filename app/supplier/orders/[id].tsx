@@ -23,7 +23,9 @@ import {
   MandiCountdown,
   MandiErrorState,
   MandiFormField,
+  MandiConfirm,
   MandiHeader,
+  MandiHeaderAction,
   MandiQuantityStepper,
   MandiScreen,
   MandiSkeletonList,
@@ -80,6 +82,7 @@ export default function SupplierOrderScreen() {
 
   const [mode, setMode] = useState<Mode>('view');
   const [accepted, setAccepted] = useState<Record<number, number>>({});
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const [reason, setReason] = useState<RejectionReason | null>(null);
   const [note, setNote] = useState('');
   const [idempotencyKey] = useState(() => newIdempotencyKey());
@@ -205,10 +208,36 @@ export default function SupplierOrderScreen() {
           title={order?.outletName ?? 'Order'}
           subtitle={order?.restaurantName ?? undefined}
           back
+          right={
+            // Only while quantities have been changed: a reset that resets
+            // nothing is a button that does nothing.
+            mode === 'partial' && Object.keys(accepted).length > 0 ? (
+              <MandiHeaderAction
+                icon="refresh-outline"
+                label="Reset quantities"
+                onPress={() => setConfirmingReset(true)}
+              />
+            ) : undefined
+          }
         />
       }
       footer={renderFooter()}
     >
+      {/* Worth confirming: the quantities are typed one line at a time and
+          there is no way back to them once they are gone. */}
+      <MandiConfirm
+        visible={confirmingReset}
+        title="Start again?"
+        message="Every line goes back to the quantity the restaurant asked for."
+        confirmLabel="Reset quantities"
+        cancelLabel="Keep what I entered"
+        onConfirm={() => {
+          setAccepted({});
+          setConfirmingReset(false);
+        }}
+        onCancel={() => setConfirmingReset(false)}
+      />
+
       {query.isPending ? (
         <MandiSkeletonList count={3} />
       ) : query.error || order == null ? (
@@ -340,12 +369,7 @@ export default function SupplierOrderScreen() {
           )}
 
           {mode === 'partial' && anyReduced && (
-            <MandiCard accentColor={Colors.warning}>
-              <MandiText variant="bodyEmphasis">The rest goes back to the restaurant</MandiText>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                Anything you cannot supply stays on their requirement so they can source it
-                elsewhere. You are only charged for what you accept.
-              </MandiText>
+            <MandiCard>
               <MandiFormField
                 label="Note (optional)"
                 value={note}
@@ -365,7 +389,7 @@ export default function SupplierOrderScreen() {
                   value={formatMoney(preview.data.acceptedTotal)}
                   emphasis
                 />
-                {anyReduced && (
+                {anyReduced && preview.data.anyAccepted && (
                   <MandiText variant="caption" color={Colors.textTertiary}>
                     Ordered {formatMoney(order.totalAmount)}. You are only charged for what you
                     accept.
@@ -407,21 +431,24 @@ export default function SupplierOrderScreen() {
     if (mode === 'partial') {
       return (
         <MandiStickyBar>
-          {/* Zero on every line is recorded as a rejection, not as a partial
-              acceptance of nothing — so a button saying "accept" must not be the
-              way someone declines an order. */}
-          <MandiButton
-            label="Send partial acceptance"
-            size="lg"
-            disabled={preview.data != null && !preview.data.anyAccepted}
-            loading={partial.isPending}
-            onPress={() => partial.mutate(partialItems)}
-          />
-          {preview.data != null && !preview.data.anyAccepted && (
-            <MandiText variant="caption" color={Colors.textTertiary} style={styles.footNote}>
-              Nothing left to supply. Use Decline instead — it asks why, and the restaurant
-              needs the reason.
-            </MandiText>
+          {/* Nothing left to supply is a decline, and the server records it as
+              one. Rather than disabling the button and explaining why, the button
+              becomes the thing it would actually do — and goes to the screen that
+              asks for a reason, which a decline needs and this one would lose. */}
+          {preview.data != null && !preview.data.anyAccepted ? (
+            <MandiButton
+              label="Decline this order"
+              size="lg"
+              variant="destructive"
+              onPress={() => setMode('reject')}
+            />
+          ) : (
+            <MandiButton
+              label="Send partial acceptance"
+              size="lg"
+              loading={partial.isPending}
+              onPress={() => partial.mutate(partialItems)}
+            />
           )}
           <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
         </MandiStickyBar>
@@ -595,7 +622,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.md,
   },
-  footNote: { textAlign: 'center' },
   totalsRow: {
     flexDirection: 'row',
     alignItems: 'center',

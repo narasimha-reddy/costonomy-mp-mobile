@@ -71,53 +71,57 @@ export function OfferCard({
         <MandiText variant="price">{formatMoney(offer.unitPrice)}</MandiText>
       </View>
 
-      {/* Who you are buying it from. */}
+      {/* Who you are buying it from — name, standing, and reach, in one panel.
+          Distance and ETA sit inside it because they are facts about the seller;
+          floating below they read as a third thing the card is telling you. */}
       <View style={styles.supplier}>
-        <View style={styles.identity}>
-          <MandiText variant="captionEmphasis" numberOfLines={1}>{branch}</MandiText>
-          {branch !== offer.supplierName && (
-            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-              {offer.supplierName}
-            </MandiText>
-          )}
-        </View>
-
-        {offer.averageRating != null ? (
-          <View style={styles.rating}>
-            <Ionicons name="star" size={12} color={Colors.warning} />
-            <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
-              {formatQuantity(offer.averageRating)}
-            </MandiText>
-            {offer.ratingCount > 0 && (
-              <MandiText variant="caption" color={Colors.textTertiary}>
-                ({offer.ratingCount})
+        <View style={styles.supplierTop}>
+          <View style={styles.identity}>
+            <MandiText variant="captionEmphasis" numberOfLines={1}>{branch}</MandiText>
+            {branch !== offer.supplierName && (
+              <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+                {offer.supplierName}
               </MandiText>
             )}
           </View>
-        ) : (
-          // Said rather than left blank: an empty space where a score goes reads
-          // as a bad score, not as nobody having rated them yet (doc 07 §4).
-          <MandiText variant="caption" color={Colors.textTertiary}>Not yet rated</MandiText>
-        )}
-      </View>
 
-      {/* How far and how soon, together — they answer one question. */}
-      {(offer.distanceKm != null || offer.etaMinutes != null) && (
-        <View style={styles.logistics}>
-          {offer.distanceKm != null && (
-            <Fact icon="navigate-outline" text={`${formatQuantity(offer.distanceKm)} km away`} />
-          )}
-          {offer.etaMinutes != null && (
-            <Fact icon="time-outline" text={`~${offer.etaMinutes} min`} />
+          {offer.averageRating != null ? (
+            <View style={styles.rating}>
+              <Ionicons name="star" size={12} color={Colors.warning} />
+              <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
+                {formatQuantity(offer.averageRating)}
+              </MandiText>
+              {offer.ratingCount > 0 && (
+                <MandiText variant="caption" color={Colors.textTertiary}>
+                  ({offer.ratingCount})
+                </MandiText>
+              )}
+            </View>
+          ) : (
+            // Said rather than left blank: an empty space where a score goes
+            // reads as a bad score, not as nobody having rated them yet.
+            <MandiText variant="caption" color={Colors.textTertiary}>Not yet rated</MandiText>
           )}
         </View>
-      )}
+
+        {(offer.distanceKm != null || offer.etaMinutes != null) && (
+          <View style={styles.logistics}>
+            {offer.distanceKm != null && (
+              <Fact icon="navigate-outline" text={`${formatQuantity(offer.distanceKm)} km away`} />
+            )}
+            {offer.etaMinutes != null && (
+              <Fact icon="time-outline" text={`~${offer.etaMinutes} min`} />
+            )}
+          </View>
+        )}
+      </View>
 
       {unavailable ? (
         <MandiBadge
           label="Out of stock"
           color={Colors.danger}
           backgroundColor={Colors.dangerLight}
+          style={styles.notice}
         />
       ) : offer.availableQuantity != null && !offer.coversFullQuantity ? (
         <MandiBadge
@@ -125,6 +129,7 @@ export function OfferCard({
           icon="alert-circle-outline"
           color={Colors.warning}
           backgroundColor={Colors.warningLight}
+          style={styles.notice}
         />
       ) : null}
 
@@ -157,22 +162,39 @@ function Fact({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: stri
   );
 }
 
+/**
+ * The card's own vertical rhythm.
+ *
+ * <p>`MandiCard` sets padding and no gap, so spacing between the bands is this
+ * component's to state. Stated once here rather than as margins on each block:
+ * the three bands are one rhythm, and a margin per block is how it drifts.
+ */
+const GAP = Spacing.md;
+
 const styles = StyleSheet.create({
   sku: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   names: { flex: 1, gap: 2 },
+
   supplier: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    marginTop: GAP,
+    padding: Spacing.md,
     borderRadius: Radius.md,
     backgroundColor: Colors.surfaceSunken,
   },
+  supplierTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   identity: { flex: 1, gap: 1 },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   logistics: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
-  line: { alignItems: 'flex-end' },
+
+  notice: { marginTop: GAP, alignSelf: 'flex-start' },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    marginTop: GAP,
+  },
+  line: { alignItems: 'flex-end', gap: 1 },
 });

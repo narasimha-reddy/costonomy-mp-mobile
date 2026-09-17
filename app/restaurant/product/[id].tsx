@@ -13,7 +13,6 @@ import {
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
-  MandiQuantityStepper,
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
@@ -21,7 +20,6 @@ import {
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
-import { formatQuantity } from '@/utils/money';
 import { Colors, Spacing, TouchTarget } from '@/theme';
 
 /**
@@ -31,9 +29,16 @@ import { Colors, Spacing, TouchTarget } from '@/theme';
  * should I buy it from" — and splitting them would mean two round trips and a
  * back-and-forth to change quantity.
  *
- * <p><b>Quantity drives the ranking.</b> The recommendation feed is asked for a
- * specific quantity, so the offers it returns already account for who can
- * actually cover it — `coversFullQuantity` is meaningless without one.
+ * <p><b>Quantity belongs to the pack, not to the product.</b> One quantity for
+ * every supplier, counted in the product's base unit, was wrong the moment two
+ * suppliers packed it differently: asking for 25 kg of rice from a supplier
+ * selling 25 kg sacks ordered twenty-five sacks, because the cart counts packs
+ * and the stepper counted kilos. Each card now counts its own packs, which is the
+ * only unit that means the same thing on both sides.
+ *
+ * <p>The feed is therefore asked to rank a single pack. `coversFullQuantity` then
+ * answers "is there at least one", and the quantity a restaurant actually wants
+ * is chosen per supplier, after seeing what a pack is.
  */
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,7 +49,9 @@ export default function ProductScreen() {
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
 
-  const [quantity, setQuantity] = useState(1);
+  // Packs, per offer. Absent means one — nobody has touched that card's stepper.
+  const [packs, setPacks] = useState<Record<number, number>>({});
+  const packsFor = (offerId: number) => packs[offerId] ?? 1;
 
   const product = useQuery({
     // The outlet is in the key because it changes the answer: "3 suppliers" is
@@ -55,9 +62,9 @@ export default function ProductScreen() {
   });
 
   const recommendations = useQuery({
-    queryKey: ['product', productId, 'recommendations', outletId, quantity],
+    queryKey: ['product', productId, 'recommendations', outletId],
     queryFn: () =>
-      fetchRecommendations(accessToken as string, productId, outletId as number, String(quantity)),
+      fetchRecommendations(accessToken as string, productId, outletId as number, '1'),
     enabled: Number.isFinite(productId) && outletId != null && accessToken != null,
   });
 
@@ -65,7 +72,9 @@ export default function ProductScreen() {
     mutationFn: (offerId: number) =>
       addCartItem(accessToken as string, outletId as number, {
         supplierOfferId: offerId,
-        quantity: String(quantity),
+        // Packs. The server prices `sellingPrice × quantity`, and `sellingPrice`
+        // is the price of one pack.
+        quantity: String(packsFor(offerId)),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['outlet', outletId, 'cart'] });
@@ -102,29 +111,20 @@ export default function ProductScreen() {
               {product.data.description}
             </MandiText>
           )}
-          <View style={styles.quantityRow}>
-            <MandiText variant="bodyEmphasis">
-              Quantity ({product.data?.baseUnit ?? 'unit'})
-            </MandiText>
-            <MandiQuantityStepper
-              value={quantity}
-              onChange={setQuantity}
-              min={1}
-              unit={product.data?.baseUnit}
-            />
-          </View>
-          {product.data?.basePackSize != null && (
-            <MandiText variant="caption" color={Colors.textTertiary}>
-              Standard pack {formatQuantity(product.data.basePackSize)} {product.data.baseUnit}
-            </MandiText>
-          )}
         </MandiCard>
       )}
 
       <View style={styles.section}>
         <MandiSectionHeader
           title="Compare suppliers"
-          subtitle={offers.length ? `${offers.length} stocking this` : undefined}
+          count={offers.length}
+          subtitle={
+            offers.length
+              // Said once for the whole list rather than on every card. It is a
+              // fact about how delivery is priced, not about any one supplier.
+              ? 'Prices exclude delivery, which is quoted once a courier is assigned.'
+              : undefined
+          }
         />
 
         {recommendations.isPending ? (
@@ -155,6 +155,9 @@ export default function ProductScreen() {
               // must never re-sort — doing so would quietly substitute its own
               // ranking for the one doc 07 specifies and tests.
               recommended={index === 0}
+              quantity={packsFor(offer.offerId)}
+              onQuantity={(next) =>
+                setPacks((current) => ({ ...current, [offer.offerId]: next }))}
               adding={add.isPending && add.variables === offer.offerId}
               onAdd={() => add.mutate(offer.offerId)}
             />
@@ -201,11 +204,4 @@ const styles = StyleSheet.create({
   back: { width: TouchTarget.min, height: TouchTarget.min, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1 },
   section: { gap: Spacing.listGap },
-  quantityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
-  },
 });

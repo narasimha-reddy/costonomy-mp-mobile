@@ -52,6 +52,14 @@ export interface RecommendedOffer {
   /** Null when nobody has rated this store. Absent stays absent (doc 07 §4). */
   averageRating: Money | null;
   ratingCount: number;
+  /**
+   * Pack price ÷ pack size, computed by the server.
+   *
+   * <p>What makes a 1 kg pack and a 25 kg sack comparable, which is the point of
+   * the screen. Null when the pack is not measured in the product's own unit —
+   * a price "per PKT" against a product sold by the kilo says nothing.
+   */
+  pricePerBaseUnit: Money | null;
 }
 
 export interface ProductRecommendation {

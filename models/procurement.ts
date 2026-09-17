@@ -169,7 +169,15 @@ export interface SupplierOrderItem {
   unit: string;
   unitPrice: Money;
   gstRate: Money;
+  /** What was asked for. After a partial acceptance, not what anyone pays. */
   lineTotal: Money;
+  /**
+   * What this line is worth at the quantity the supplier committed to.
+   *
+   * <p>Null until they answer — absent is not zero, and ₹0.00 against an
+   * unanswered line would report a refusal that has not happened.
+   */
+  acceptedLineTotal: Money | null;
   status: string;
 }
 
@@ -200,6 +208,9 @@ export interface SupplierOrder {
   gstAmount: Money;
   totalAmount: Money;
   acceptedAmount: Money | null;
+  /** `acceptedAmount` split the way the ordered total is, so the two can be shown side by side. */
+  acceptedSubtotal: Money;
+  acceptedGst: Money;
   paymentMethod: PaymentMethod | null;
   paymentStatus: string | null;
   items: SupplierOrderItem[];

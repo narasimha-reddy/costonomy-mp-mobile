@@ -8,6 +8,14 @@ interface MandiTextProps extends TextProps {
   color?: string;
   /** Convenience for the very common muted-secondary case. */
   muted?: boolean;
+  /**
+   * Struck through: a figure that was true and has been superseded.
+   *
+   * <p>For showing what an order was worth beside what it is worth now. Never
+   * for a figure that was simply wrong — a strike says "this was replaced", and
+   * anything else is better deleted than crossed out.
+   */
+  struck?: boolean;
   center?: boolean;
   style?: TextStyle | TextStyle[];
 }
@@ -23,6 +31,7 @@ export function MandiText({
   variant = 'body',
   color,
   muted = false,
+  struck = false,
   center = false,
   style,
   ...rest
@@ -34,6 +43,7 @@ export function MandiText({
         TextStyles[variant],
         { color: color ?? (muted ? Colors.textSecondary : Colors.textPrimary) },
         center && { textAlign: 'center' as const },
+        struck && { textDecorationLine: 'line-through' as const },
         style,
       ])}
     />

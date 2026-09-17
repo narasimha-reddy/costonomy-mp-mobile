@@ -192,6 +192,15 @@ export default function SupplierOrderScreen() {
     placeholderData: (previous) => previous,
   });
 
+  /**
+   * Answered, and for less than was asked. Only then do two sets of figures
+   * exist; before an answer `acceptedAmount` is zero and means "not yet".
+   */
+  const settled = order != null
+    && order.acceptedAmount != null
+    && order.items.some((item) => item.acceptedQuantity != null)
+    && Number(order.acceptedAmount) !== Number(order.totalAmount);
+
   const anyReduced = useMemo(
     () => order != null && order.items.some(
       (item) => (accepted[item.id] ?? Number(item.requestedQuantity)) < Number(item.requestedQuantity),
@@ -327,16 +336,18 @@ export default function SupplierOrderScreen() {
                           {formatGstRate(item.gstRate)}
                         </MandiText>
                       </View>
-                      {/* In partial mode this is what the line is worth at the
-                          quantity chosen, from the server. Outside it, the line
-                          as ordered. */}
-                      <MandiText variant="bodyEmphasis">
-                        {formatMoney(
+                      {/* What this line is worth now. In partial mode that is
+                          the quantity being chosen; afterwards it is what was
+                          committed to. The ordered figure stays, struck, because
+                          the difference is the point. */}
+                      <LineValue
+                        ordered={item.lineTotal}
+                        settled={
                           mode === 'partial'
-                            ? previewLine(preview.data, item.id) ?? item.lineTotal
-                            : item.lineTotal,
-                        )}
-                      </MandiText>
+                            ? previewLine(preview.data, item.id)
+                            : item.acceptedLineTotal
+                        }
+                      />
                     </View>
 
                     {mode === 'partial' ? (
@@ -395,6 +406,28 @@ export default function SupplierOrderScreen() {
                     accept.
                   </MandiText>
                 )}
+              </>
+            ) : settled ? (
+              // Answered, and for less than was asked. The ordered figures are
+              // kept struck rather than dropped: a supplier checking what they
+              // committed to also needs to see what they were asked for.
+              <>
+                <Row
+                  label="Subtotal"
+                  value={formatMoney(order.acceptedSubtotal)}
+                  was={formatMoney(order.subtotal)}
+                />
+                <Row
+                  label="GST"
+                  value={formatMoney(order.acceptedGst)}
+                  was={formatMoney(order.gstAmount)}
+                />
+                <Row
+                  label="You supply"
+                  value={formatMoney(order.acceptedAmount)}
+                  was={formatMoney(order.totalAmount)}
+                  emphasis
+                />
               </>
             ) : (
               <>
@@ -574,13 +607,49 @@ function RejectPanel({
   );
 }
 
-function Row({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+function Row({
+  label,
+  value,
+  was,
+  emphasis,
+}: {
+  label: string;
+  value: string;
+  /** What this was before the supplier answered. Struck, and only when it differs. */
+  was?: string;
+  emphasis?: boolean;
+}) {
   return (
     <View style={styles.totalsRow}>
       <MandiText variant={emphasis ? 'bodyEmphasis' : 'body'} color={Colors.textSecondary}>
         {label}
       </MandiText>
-      <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
+      <View style={styles.totalsValue}>
+        {was != null && was !== value && (
+          <MandiText variant="caption" color={Colors.textTertiary} struck>{was}</MandiText>
+        )}
+        <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A line's value, with the ordered figure struck when it no longer applies.
+ *
+ * <p>Both figures, never one: the new number alone leaves a supplier wondering
+ * whether they misread the order, and the old one alone is a lie.
+ */
+function LineValue({ ordered, settled }: { ordered: string; settled?: string | null }) {
+  const changed = settled != null && settled !== ordered;
+  return (
+    <View style={styles.lineValue}>
+      {changed && (
+        <MandiText variant="caption" color={Colors.textTertiary} struck>
+          {formatMoney(ordered)}
+        </MandiText>
+      )}
+      <MandiText variant="bodyEmphasis">{formatMoney(settled ?? ordered)}</MandiText>
     </View>
   );
 }
@@ -622,6 +691,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.md,
   },
+  totalsValue: { alignItems: 'flex-end' },
+  lineValue: { alignItems: 'flex-end' },
   totalsRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -50,6 +50,18 @@ export default function OrderDetailScreen() {
 
   const order = query.data;
 
+  /**
+   * The supplier answered, and for less than was asked.
+   *
+   * <p>Only then are there two sets of figures. Before an answer
+   * `acceptedAmount` is zero and means "not yet" rather than "nothing" — reading
+   * it as a total would tell a restaurant their order was worthless.
+   */
+  const settled = order != null
+    && order.acceptedAmount != null
+    && order.items.some((item) => item.acceptedQuantity != null)
+    && Number(order.acceptedAmount) !== Number(order.totalAmount);
+
   return (
     <MandiScreen
       header={<MandiHeader title={order?.orderNumber ?? 'Order'} subtitle={order?.supplierName} back />}
@@ -108,24 +120,48 @@ export default function OrderDetailScreen() {
                       </View>
                     )}
                   </View>
-                  <MandiText variant="bodyEmphasis">{formatMoney(item.lineTotal)}</MandiText>
+                  {/* What this line will cost. The ordered figure stays, struck,
+                      so a shortfall is visible as a change rather than as a
+                      number that happens not to match the quantity above it. */}
+                  <View style={styles.lineValue}>
+                    {item.acceptedLineTotal != null
+                      && item.acceptedLineTotal !== item.lineTotal && (
+                        <MandiText variant="caption" color={Colors.textTertiary} struck>
+                          {formatMoney(item.lineTotal)}
+                        </MandiText>
+                      )}
+                    <MandiText variant="bodyEmphasis">
+                      {formatMoney(item.acceptedLineTotal ?? item.lineTotal)}
+                    </MandiText>
+                  </View>
                 </View>
               );
             })}
           </MandiCard>
 
           <MandiCard>
-            <Row label="Subtotal" value={formatMoney(order.subtotal)} />
-            <Row label="GST" value={formatMoney(order.gstAmount)} />
-            <Row label="Total" value={formatMoney(order.totalAmount)} emphasis />
-            {order.acceptedAmount != null &&
-              Number(order.acceptedAmount) !== Number(order.totalAmount) && (
-                <Row
-                  label="Accepted value"
-                  value={formatMoney(order.acceptedAmount)}
-                  hint="You are charged for what the supplier accepted."
-                />
-              )}
+            {/* After a partial acceptance the ordered figures are history. They
+                are kept, struck, because the restaurant needs to see what is
+                missing — but the total that leads is the one being charged.
+                Showing the ordered total in the strong position and the accepted
+                one beneath it as a footnote had it exactly backwards. */}
+            <Row
+              label="Subtotal"
+              value={formatMoney(settled ? order.acceptedSubtotal : order.subtotal)}
+              was={settled ? formatMoney(order.subtotal) : undefined}
+            />
+            <Row
+              label="GST"
+              value={formatMoney(settled ? order.acceptedGst : order.gstAmount)}
+              was={settled ? formatMoney(order.gstAmount) : undefined}
+            />
+            <Row
+              label={settled ? 'You pay' : 'Total'}
+              value={formatMoney(settled ? order.acceptedAmount : order.totalAmount)}
+              was={settled ? formatMoney(order.totalAmount) : undefined}
+              hint={settled ? 'You are charged for what the supplier accepted.' : undefined}
+              emphasis
+            />
             {order.paymentStatus && (
               <Row label="Payment" value={humanise(order.paymentStatus)} />
             )}
@@ -192,11 +228,14 @@ export default function OrderDetailScreen() {
 function Row({
   label,
   value,
+  was,
   emphasis,
   hint,
 }: {
   label: string;
   value: string;
+  /** What this was before the supplier answered. Struck, and only when it differs. */
+  was?: string;
   emphasis?: boolean;
   hint?: string;
 }) {
@@ -210,7 +249,12 @@ function Row({
           <MandiText variant="caption" color={Colors.textTertiary}>{hint}</MandiText>
         )}
       </View>
-      <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
+      <View style={styles.totalsValue}>
+        {was != null && was !== value && (
+          <MandiText variant="caption" color={Colors.textTertiary} struck>{was}</MandiText>
+        )}
+        <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
+      </View>
     </View>
   );
 }
@@ -234,6 +278,8 @@ const styles = StyleSheet.create({
   },
   itemText: { flex: 1, gap: Spacing.xs },
   shortRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  totalsValue: { alignItems: 'flex-end' },
+  lineValue: { alignItems: 'flex-end' },
   totalsRow: {
     flexDirection: 'row',
     alignItems: 'center',

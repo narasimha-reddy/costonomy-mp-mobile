@@ -196,7 +196,9 @@ function Results<T>({
   if (list.length === 0) {
     return <MandiEmptyState icon="search-outline" title={empty} description={hint} />;
   }
-  return <>{render(list)}</>;
+  // Wrapped, so `MandiScreen`'s section gap applies to the list rather than
+  // between every row of it — the rows carry their own padding and separator.
+  return <View style={styles.list}>{render(list)}</View>;
 }
 
 /**
@@ -242,13 +244,15 @@ function Suppliers({
   return (
     <View style={styles.section}>
       <MandiSectionHeader title="Matching suppliers" count={list.length} />
-      {list.map((supplier) => (
-        <SupplierRow
-          key={supplier.supplierStoreId}
-          supplier={supplier}
-          onPress={() => onOpen(supplier.supplierStoreId)}
-        />
-      ))}
+      <View style={styles.list}>
+        {list.map((supplier) => (
+          <SupplierRow
+            key={supplier.supplierStoreId}
+            supplier={supplier}
+            onPress={() => onOpen(supplier.supplierStoreId)}
+          />
+        ))}
+      </View>
       {/* Nothing serviceable is hidden — it is one tap away and says how many. */}
       {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
     </View>
@@ -424,6 +428,7 @@ const styles = StyleSheet.create({
   },
   tabActive: { backgroundColor: Colors.primary },
   section: { gap: Spacing.sm },
+  list: {},
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   chip: {
     flexDirection: 'row',

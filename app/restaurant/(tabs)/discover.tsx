@@ -148,14 +148,20 @@ export default function DiscoverScreen() {
           }
         />
       ) : (
-        visible.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            variant="row"
-            onPress={() => open(product.id)}
-          />
-        ))
+        // One child, not thirty: `MandiScreen` puts `sectionGap` between its
+        // direct children, which is right between sections and wrong between the
+        // rows of a list — twenty-four points on top of each row's own padding
+        // left the separators floating in the middle of nothing.
+        <View style={styles.list}>
+          {visible.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              variant="row"
+              onPress={() => open(product.id)}
+            />
+          ))}
+        </View>
       )}
     </MandiScreen>
   );
@@ -163,4 +169,7 @@ export default function DiscoverScreen() {
 
 const styles = StyleSheet.create({
   header: { gap: Spacing.sm, paddingBottom: Spacing.sm },
+  // No gap: each row carries its own padding and a hairline beneath it, and the
+  // hairline is what separates them.
+  list: {},
 });

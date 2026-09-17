@@ -1,4 +1,5 @@
 import type { Money } from '@/utils/money';
+import type { RecommendedOffer } from './discovery';
 
 /**
  * Doc 03 §3–§6 and doc 04 §10–§11.
@@ -113,6 +114,29 @@ export interface RequirementItem {
   unit: string;
   status: string;
   notes: string | null;
+}
+
+/**
+ * Somewhere still to buy what a supplier would not supply. Doc 15.
+ *
+ * <p>Ranked against what is **still** needed rather than the original quantity,
+ * so a supplier who can cover the remaining 8 kg counts even though they could
+ * never have covered the original 20.
+ */
+export interface RequirementAlternative {
+  requirementItemId: number;
+  canonicalProductId: number;
+  productName: string;
+  remainingQuantity: Money;
+  unit: string;
+  offers: RecommendedOffer[];
+  /** Why nobody can serve it, when nobody can. Shown, never silently dropped. */
+  unservedReason: string | null;
+}
+
+export interface Alternatives {
+  requirementId: number;
+  items: RequirementAlternative[];
 }
 
 export interface Requirement {

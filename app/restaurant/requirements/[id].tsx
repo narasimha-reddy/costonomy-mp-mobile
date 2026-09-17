@@ -4,7 +4,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { fetchRequirements } from '@/services/procurement';
+import { Ionicons } from '@expo/vector-icons';
+import { fetchRequirements, findSuppliersForRequirement } from '@/services/procurement';
+import type { Alternatives, RequirementAlternative } from '@/models/procurement';
 import {
   MandiButton,
   MandiCard,
@@ -42,6 +44,21 @@ export default function RequirementDetailScreen() {
   });
 
   const requirement = (query.data ?? []).find((item) => item.id === requirementId);
+
+  /**
+   * Who could still supply what is missing.
+   *
+   * <p>Only asked once something is actually short: a fulfilled requirement has
+   * nothing to source, and ranking every line of it would be a round trip spent
+   * to display nothing.
+   */
+  const alternatives = useQuery({
+    queryKey: ['requirement', requirementId, 'alternatives'],
+    queryFn: () => findSuppliersForRequirement(accessToken as string, requirementId),
+    enabled:
+      accessToken != null
+      && (requirement?.items ?? []).some((item) => Number(item.remainingQuantity) > 0),
+  });
 
   return (
     <MandiScreen
@@ -92,12 +109,28 @@ export default function RequirementDetailScreen() {
                   />
                 </View>
                 {remaining > 0 && (
-                  <MandiButton
-                    label="Find suppliers for the rest"
-                    variant="secondary"
-                    size="md"
-                    onPress={() => router.push(`/restaurant/product/${item.canonicalProductId}`)}
-                  />
+                  <>
+                    {/* Who can still cover the shortfall, ranked against what is
+                        left rather than what was ordered — a supplier who can do
+                        the remaining 8 kg counts even though they could never
+                        have done the original 20 (doc 15). */}
+                    <Shortfall
+                      alternative={alternativeFor(alternatives.data, item.id)}
+                      loading={alternatives.isPending}
+                    />
+                    <MandiButton
+                      label="Find suppliers for the rest"
+                      variant="secondary"
+                      size="md"
+                      // The requirement item rides along, so whatever is bought
+                      // credits back to this need instead of becoming an
+                      // unattached order (guardrail 14).
+                      onPress={() => router.push(
+                        `/restaurant/product/${item.canonicalProductId}`
+                        + `?requirementItemId=${item.id}`,
+                      )}
+                    />
+                  </>
                 )}
               </MandiCard>
             );
@@ -106,6 +139,58 @@ export default function RequirementDetailScreen() {
       )}
     </MandiScreen>
   );
+}
+
+/**
+ * What can be done about a shortfall, before anyone taps anything.
+ *
+ * <p>An item nobody can serve says why rather than looking like an item nobody
+ * has looked at — doc 15: an unmet need is shown, never silently dropped.
+ */
+function Shortfall({
+  alternative,
+  loading,
+}: {
+  alternative: RequirementAlternative | undefined;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <MandiText variant="caption" color={Colors.textTertiary}>
+        Looking for suppliers…
+      </MandiText>
+    );
+  }
+  if (alternative == null) return null;
+
+  const count = alternative.offers.length;
+  if (count === 0) {
+    return (
+      <View style={styles.shortfall}>
+        <Ionicons name="alert-circle-outline" size={14} color={Colors.warning} />
+        <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+          {alternative.unservedReason
+            ?? 'Nobody delivering to this outlet can cover the rest right now.'}
+        </MandiText>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.shortfall}>
+      <Ionicons name="storefront-outline" size={14} color={Colors.success} />
+      <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+        {count} supplier{count === 1 ? '' : 's'} can cover the rest
+      </MandiText>
+    </View>
+  );
+}
+
+function alternativeFor(
+  alternatives: Alternatives | undefined,
+  requirementItemId: number,
+): RequirementAlternative | undefined {
+  return alternatives?.items.find((item) => item.requirementItemId === requirementItemId);
 }
 
 function Figure({ label, value, tone }: { label: string; value: string; tone?: string }) {
@@ -120,5 +205,7 @@ function Figure({ label, value, tone }: { label: string; value: string; tone?: s
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   figures: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.sm, marginVertical: Spacing.sm },
+  shortfall: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  flex: { flex: 1 },
   figure: { gap: Spacing.xs },
 });

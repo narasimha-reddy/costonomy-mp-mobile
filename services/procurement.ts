@@ -1,5 +1,6 @@
 import { apiRequest, newIdempotencyKey } from '@/lib/api/client';
 import type {
+  Alternatives,
   PaymentMethod,
   Procurement,
   Requirement,
@@ -154,6 +155,23 @@ export function createRequirement(
 }
 
 // ── Orders ────────────────────────────────────────────────────────────
+
+/**
+ * Who could still supply what is missing. Doc 15's recovery path.
+ *
+ * <p>A POST because it ranks: the server prices and scores every candidate
+ * against each item's remaining quantity. It changes nothing — the restaurant
+ * chooses, and choosing is a separate act.
+ */
+export function findSuppliersForRequirement(
+  token: string,
+  requirementId: number,
+): Promise<Alternatives> {
+  return apiRequest<Alternatives>(`/api/v1/requirements/${requirementId}/find-suppliers`, {
+    method: 'POST',
+    token,
+  });
+}
 
 export function fetchOutletOrders(token: string, outletId: number): Promise<SupplierOrder[]> {
   return apiRequest<SupplierOrder[]>(`/api/v1/outlets/${outletId}/supplier-orders`, { token });

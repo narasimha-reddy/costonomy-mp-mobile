@@ -8,6 +8,7 @@ import { fetchRequirements } from '@/services/procurement';
 import {
   MandiCard,
   MandiEmptyState,
+  MandiFab,
   MandiErrorState,
   MandiScreen,
   MandiSkeletonList,
@@ -42,6 +43,12 @@ export default function RequirementsScreen() {
       header={<RestaurantHeader screen="REST-REQ-01" subtitle="Requirements" />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
+      floating={
+        <MandiFab
+          accessibilityLabel="Raise a requirement"
+          onPress={() => router.push('/restaurant/requirements/new')}
+        />
+      }
     >
       {outletLoading || query.isPending ? (
         <MandiSkeletonList count={3} />
@@ -51,7 +58,9 @@ export default function RequirementsScreen() {
         <MandiEmptyState
           icon="clipboard-outline"
           title="No requirements yet"
-          description="Raise one to track what you still need across suppliers."
+          description="Raise one to track what you still need across suppliers. Anything a supplier cannot fill stays on it, so you never retype an order."
+          actionLabel="Raise a requirement"
+          onAction={() => router.push('/restaurant/requirements/new')}
         />
       ) : (
         (query.data ?? []).map((requirement) => (

@@ -44,8 +44,13 @@ import { Colors, Spacing, TouchTarget } from '@/theme';
  * sides of the wire.
  */
 export default function ProductScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, requirementItemId } = useLocalSearchParams<{
+    id: string;
+    /** Set when this purchase is sourcing a requirement. */
+    requirementItemId?: string;
+  }>();
   const productId = Number(id);
+  const servingRequirement = Number(requirementItemId);
   const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -112,6 +117,11 @@ export default function ProductScreen() {
           // Packs. The server prices `sellingPrice × quantity`, and
           // `sellingPrice` is the price of one pack.
           quantity: String(packs),
+          // Links the line to the need it serves, so the accepted quantity
+          // credits back to the requirement and a shortfall stays sourceable
+          // (guardrail 14). Absent when someone is just shopping.
+          requirementItemId: Number.isFinite(servingRequirement)
+            ? servingRequirement : undefined,
         });
       }
       // Zero is not a quantity; it is the absence of the line.

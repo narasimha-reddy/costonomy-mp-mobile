@@ -11,6 +11,8 @@ import {
   markPreparing,
   markReady,
   partialAcceptOrder,
+  previewPartialAccept,
+  type PartialAcceptPreview,
   rejectOrder,
   type PartialAcceptItem,
   type RejectionReason,
@@ -166,6 +168,27 @@ export default function SupplierOrderScreen() {
     }));
   }, [order, accepted]);
 
+  /**
+   * What the order comes to at the quantities currently on screen.
+   *
+   * <p>Asked of the server rather than worked out here: it is money, and
+   * guardrail 3 puts every rupee of arithmetic on the far side of the wire. The
+   * endpoint prices it with the same code the acceptance runs, so what is shown
+   * and what happens cannot drift apart.
+   *
+   * <p>Only while the partial screen is open, and keyed by the quantities, so
+   * moving a stepper re-asks and moving it back is served from cache.
+   */
+  const preview = useQuery({
+    queryKey: ['supplier-order', orderId, 'partial-preview', partialItems],
+    queryFn: ({ signal }) =>
+      previewPartialAccept(accessToken as string, orderId, partialItems, signal),
+    enabled: mode === 'partial' && partialItems.length > 0 && accessToken != null,
+    // The previous figures stay on screen while the next ones are in flight,
+    // so the totals do not blink to nothing between taps.
+    placeholderData: (previous) => previous,
+  });
+
   const anyReduced = useMemo(
     () => order != null && order.items.some(
       (item) => (accepted[item.id] ?? Number(item.requestedQuantity)) < Number(item.requestedQuantity),
@@ -275,7 +298,16 @@ export default function SupplierOrderScreen() {
                           {formatGstRate(item.gstRate)}
                         </MandiText>
                       </View>
-                      <MandiText variant="bodyEmphasis">{formatMoney(item.lineTotal)}</MandiText>
+                      {/* In partial mode this is what the line is worth at the
+                          quantity chosen, from the server. Outside it, the line
+                          as ordered. */}
+                      <MandiText variant="bodyEmphasis">
+                        {formatMoney(
+                          mode === 'partial'
+                            ? previewLine(preview.data, item.id) ?? item.lineTotal
+                            : item.lineTotal,
+                        )}
+                      </MandiText>
                     </View>
 
                     {mode === 'partial' ? (
@@ -324,9 +356,29 @@ export default function SupplierOrderScreen() {
           )}
 
           <MandiCard>
-            <Row label="Subtotal" value={formatMoney(order.subtotal)} />
-            <Row label="GST" value={formatMoney(order.gstAmount)} />
-            <Row label="Order value" value={formatMoney(order.totalAmount)} emphasis />
+            {mode === 'partial' && preview.data != null ? (
+              <>
+                <Row label="Subtotal" value={formatMoney(preview.data.acceptedValue)} />
+                <Row label="GST" value={formatMoney(preview.data.acceptedGst)} />
+                <Row
+                  label="You would supply"
+                  value={formatMoney(preview.data.acceptedTotal)}
+                  emphasis
+                />
+                {anyReduced && (
+                  <MandiText variant="caption" color={Colors.textTertiary}>
+                    Ordered {formatMoney(order.totalAmount)}. You are only charged for what you
+                    accept.
+                  </MandiText>
+                )}
+              </>
+            ) : (
+              <>
+                <Row label="Subtotal" value={formatMoney(order.subtotal)} />
+                <Row label="GST" value={formatMoney(order.gstAmount)} />
+                <Row label="Order value" value={formatMoney(order.totalAmount)} emphasis />
+              </>
+            )}
           </MandiCard>
         </>
       )}
@@ -355,12 +407,22 @@ export default function SupplierOrderScreen() {
     if (mode === 'partial') {
       return (
         <MandiStickyBar>
+          {/* Zero on every line is recorded as a rejection, not as a partial
+              acceptance of nothing — so a button saying "accept" must not be the
+              way someone declines an order. */}
           <MandiButton
             label="Send partial acceptance"
             size="lg"
+            disabled={preview.data != null && !preview.data.anyAccepted}
             loading={partial.isPending}
             onPress={() => partial.mutate(partialItems)}
           />
+          {preview.data != null && !preview.data.anyAccepted && (
+            <MandiText variant="caption" color={Colors.textTertiary} style={styles.footNote}>
+              Nothing left to supply. Use Decline instead — it asks why, and the restaurant
+              needs the reason.
+            </MandiText>
+          )}
           <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
         </MandiStickyBar>
       );
@@ -496,6 +558,14 @@ function Row({ label, value, emphasis }: { label: string; value: string; emphasi
   );
 }
 
+/** This line's value at the quantity being offered, when the server has priced it. */
+function previewLine(
+  preview: PartialAcceptPreview | undefined,
+  itemId: number,
+): string | undefined {
+  return preview?.lines.find((line) => line.supplierOrderItemId === itemId)?.lineTotal;
+}
+
 const styles = StyleSheet.create({
   where: { flex: 1, gap: 2 },
   columns: {
@@ -525,6 +595,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.md,
   },
+  footNote: { textAlign: 'center' },
   totalsRow: {
     flexDirection: 'row',
     alignItems: 'center',

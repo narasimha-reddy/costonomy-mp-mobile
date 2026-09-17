@@ -107,6 +107,43 @@ export interface PartialAcceptItem {
  * not a declined one (doc 04 §11) — so the screen sends a quantity for each,
  * including the zeroes.
  */
+/**
+ * What a partial acceptance would come to, without making one.
+ *
+ * <p>The supplier reduces a line and the order's value has to follow — and that
+ * value is money, so guardrail 3 puts the arithmetic on the server. It is the
+ * same code the acceptance itself runs, so what is previewed and what happens
+ * cannot differ in the last paisa.
+ */
+export interface PartialAcceptLine {
+  supplierOrderItemId: number;
+  acceptedQuantity: Money;
+  lineValue: Money;
+  lineGst: Money;
+  lineTotal: Money;
+}
+
+export interface PartialAcceptPreview {
+  lines: PartialAcceptLine[];
+  acceptedValue: Money;
+  acceptedGst: Money;
+  acceptedTotal: Money;
+  /** False when every line is zero — which the server records as a rejection. */
+  anyAccepted: boolean;
+}
+
+export function previewPartialAccept(
+  token: string,
+  orderId: number,
+  items: PartialAcceptItem[],
+  signal?: AbortSignal,
+): Promise<PartialAcceptPreview> {
+  return apiRequest<PartialAcceptPreview>(
+    `/api/v1/supplier-orders/${orderId}/partial-accept/preview`,
+    { method: 'POST', token, body: { items }, signal },
+  );
+}
+
 export function partialAcceptOrder(
   token: string,
   orderId: number,

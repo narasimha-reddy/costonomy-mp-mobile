@@ -49,9 +49,11 @@ export function MandiSectionHeader({
   return (
     <View style={[styles.row, style]} testID={testID}>
       <View style={styles.titles}>
+        {/* Primary, not secondary: it is the heading for everything below it,
+            and a grey heading over black cards reads as a caption for them. */}
         <MandiText
           variant="sectionTitle"
-          color={Colors.textSecondary}
+          color={Colors.textPrimary}
           accessibilityRole="header"
         >
           {title}

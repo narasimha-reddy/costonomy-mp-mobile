@@ -61,7 +61,6 @@ export default function SupplierRequestScreen() {
 
   const [offered, setOffered] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState('');
-  const [eta, setEta] = useState('');
   const [confirmDecline, setConfirmDecline] = useState(false);
 
   const query = useQuery({
@@ -133,7 +132,6 @@ export default function SupplierRequestScreen() {
         // quantities while a request is open, so accepting without saying which
         // version you read is accepting whatever it happens to be now.
         expectedRevision: request?.revision,
-        etaMinutes: eta.trim() === '' ? undefined : Number(eta),
         notes: notes.trim() === '' ? undefined : notes.trim(),
       }),
     onSuccess: () => {
@@ -245,13 +243,6 @@ export default function SupplierRequestScreen() {
 
           {answerable ? (
             <MandiCard>
-              <MandiFormField
-                label="Delivery estimate (minutes, optional)"
-                value={eta}
-                onChangeText={setEta}
-                keyboardType="number-pad"
-                placeholder="e.g. 90"
-              />
               <MandiFormField
                 label="Note for the restaurant (optional)"
                 value={notes}

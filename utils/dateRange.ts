@@ -129,6 +129,28 @@ export function formatMomentWithRecency(
   return recent ? `${absolute(when)} (${relative(when, now)})` : absolute(when);
 }
 
+/**
+ * How long ago while that is the useful fact, and the date once it is not.
+ *
+ * <p>The inverse of {@link formatMomentWithRecency}, and the right way round for
+ * a card: on something from this morning "20 mins ago" is what you want and the
+ * date is clutter, while on something from last month the age is vague — "23
+ * days ago" makes you count backwards — and the date is what you would quote.
+ *
+ * <p>The two exist together because a list and a detail screen want opposite
+ * halves first, not because either is a fallback for the other.
+ */
+export function formatAgeOrMoment(
+  iso: string | null | undefined,
+  now = new Date(),
+): string {
+  const when = parseMoment(iso);
+  if (when == null) return '—';
+
+  const elapsed = now.getTime() - when.getTime();
+  return elapsed < DAY_MS ? relative(when, now) : absolute(when);
+}
+
 function parseMoment(iso: string | null | undefined): Date | null {
   if (!iso) return null;
   const when = new Date(iso);

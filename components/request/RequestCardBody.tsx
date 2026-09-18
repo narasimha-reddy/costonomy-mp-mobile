@@ -12,7 +12,7 @@ import type { IntentItem } from '@/models/intent';
 import { ITEM_NAMES_SHOWN } from '@/utils/orders';
 import { skuTitle } from '@/utils/skuLabel';
 import { formatMoney, type Money } from '@/utils/money';
-import { relative } from '@/utils/dateRange';
+import { formatAgeOrMoment } from '@/utils/dateRange';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
@@ -67,9 +67,10 @@ export function RequestCardBody({
   /**
    * When the request was raised.
    *
-   * <p>Shown as "20 hrs ago" rather than the order card's full moment: it
-   * shares a line with the reference here, and the relative form is both the
-   * half that fits and the half somebody scanning a list actually reads.
+   * <p>Shown as "20 hrs ago" while that is the useful fact, and as the date
+   * once it is not — on a card from this morning the age is what you want and
+   * the date is clutter, while "23 days ago" makes you count backwards to
+   * something the date would have told you outright.
    */
   occurredAt?: string | null;
   amount?: Money | null;
@@ -95,7 +96,7 @@ export function RequestCardBody({
           </MandiText>
           {occurredAt != null && (
             <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
-              {relative(new Date(occurredAt))}
+              {formatAgeOrMoment(occurredAt)}
             </MandiText>
           )}
         </View>

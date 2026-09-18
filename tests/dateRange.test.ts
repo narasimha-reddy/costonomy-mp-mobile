@@ -2,6 +2,7 @@ import {
   customRange,
   defaultRange,
   describeRange,
+  formatAgeOrMoment,
   formatMoment,
   formatMomentWithRecency,
   rangeFor,
@@ -153,5 +154,36 @@ describe('formatMomentWithRecency', () => {
   it('survives a missing or unparseable value', () => {
     expect(formatMomentWithRecency(null)).toBe('—');
     expect(formatMomentWithRecency('not a date')).toBe('—');
+  });
+});
+
+describe('formatAgeOrMoment', () => {
+  const when = '2026-09-15T19:34:00';
+
+  // On a card from this morning the age is the useful fact and the date is
+  // clutter; a month later the age is vague and the date is what you'd quote.
+  it('gives the age while the age is the useful half', () => {
+    expect(formatAgeOrMoment(when, new Date('2026-09-15T21:34:00'))).toBe('2 hrs ago');
+    expect(formatAgeOrMoment(when, new Date('2026-09-15T19:40:00'))).toBe('6 mins ago');
+  });
+
+  it('gives the date once the age stops meaning anything', () => {
+    expect(formatAgeOrMoment(when, new Date('2026-10-08T08:00:00')))
+      .toBe('15th Sep 2026 at 7:34 PM');
+  });
+
+  // Just inside the boundary `relative` has already rounded to "1 day ago" —
+  // it reports hours only below 24 and rounds 23h59m up. Asserted as it
+  // behaves rather than as it might read, because the switch to the date is
+  // what this function decides and the wording is `relative`'s to own.
+  it('switches at the day boundary, not before it', () => {
+    expect(formatAgeOrMoment(when, new Date('2026-09-16T19:33:00'))).toBe('1 day ago');
+    expect(formatAgeOrMoment(when, new Date('2026-09-16T19:35:00')))
+      .toBe('15th Sep 2026 at 7:34 PM');
+  });
+
+  it('survives a missing or unparseable value', () => {
+    expect(formatAgeOrMoment(null)).toBe('—');
+    expect(formatAgeOrMoment('not a date')).toBe('—');
   });
 });

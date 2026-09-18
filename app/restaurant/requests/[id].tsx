@@ -357,9 +357,6 @@ export default function RequestDetailScreen() {
                 hint="Delivery is quoted once a courier is assigned, and is not in this total."
                 emphasis
               />
-              {request.acceptance.etaMinutes != null && (
-                <Row label="Estimated delivery" value={`${request.acceptance.etaMinutes} min`} />
-              )}
               {request.acceptance.notes != null && (
                 <MandiText variant="caption" color={Colors.textSecondary} style={styles.note}>
                   “{request.acceptance.notes}”

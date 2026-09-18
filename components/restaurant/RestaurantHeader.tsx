@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { useCart } from '@/hooks/useCart';
+import { useRequestBasket } from '@/hooks/useRequestBasket';
 import { useNotifications } from '@/hooks/useNotifications';
 import { placeLabel } from '@/utils/placeName';
 import { MandiBottomSheet, MandiHeaderAction, MandiText } from '@/components/common';
@@ -14,7 +14,7 @@ import { Colors, Spacing, TouchTarget } from '@/theme';
  * The header every restaurant tab wears. The mirror of `SupplierHeader`.
  *
  * <p><b>The outlet leads, the restaurant follows.</b> A cook orders for one
- * kitchen at a time, and "which outlet is this cart for" is the question the
+ * kitchen at a time, and "which outlet is this basket for" is the question the
  * header has to answer before any other — a wrong answer there sends a delivery
  * to the wrong address. The restaurant's name sits beneath it because it is a
  * thing nobody forgets.
@@ -23,9 +23,9 @@ import { Colors, Spacing, TouchTarget } from '@/theme';
  * most restaurants have a single outlet, and a picker with one option is noise on
  * every screen in the app.
  *
- * <p>One component rather than five, so the cart badge cannot be present on Home
+ * <p>One component rather than five, so the basket badge cannot be present on Home
  * and missing on Discover — which is what happened when each tab built its own
- * header, and it meant a cook could add to a cart and then lose sight of it.
+ * header, and it meant a cook could add to a basket and then lose sight of it.
  */
 export function RestaurantHeader({
   screen,
@@ -35,8 +35,8 @@ export function RestaurantHeader({
   /**
    * The doc 05 code of the screen wearing this header, e.g. `REST-ORDERS-01`.
    *
-   * <p>Required rather than derived: the cart is now reachable from five screens
-   * instead of one, and "opened the cart" is only worth recording if it says from
+   * <p>Required rather than derived: the basket is now reachable from five screens
+   * instead of one, and "opened the basket" is only worth recording if it says from
    * where. A route path would answer the same question in a second vocabulary.
    */
   screen: string;
@@ -46,7 +46,7 @@ export function RestaurantHeader({
 }) {
   const router = useRouter();
   const { outlet, outlets, restaurantName, select } = useOutlet();
-  const { itemCount } = useCart();
+  const { itemCount } = useRequestBasket();
   const { unreadCount } = useNotifications();
   const [open, setOpen] = useState(false);
 
@@ -87,10 +87,10 @@ export function RestaurantHeader({
         />
         <MandiHeaderAction
           icon="cart-outline"
-          label="Cart"
+          label="Requests"
           badge={itemCount}
           onPress={() => {
-            track('open_cart', { screen, outletId: outlet?.id ?? null });
+            track('open_basket', { screen, outletId: outlet?.id ?? null });
             router.push('/restaurant/cart');
           }}
         />

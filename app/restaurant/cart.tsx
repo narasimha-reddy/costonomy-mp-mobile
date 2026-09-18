@@ -26,7 +26,7 @@ import {
 import type { HeldRequest, Intent } from '@/models/intent';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
-import { skuSecondaryLine } from '@/utils/skuLabel';
+import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Radius, Spacing } from '@/theme';
 
@@ -226,20 +226,20 @@ function SupplierRequest({
 
       {draft.items.map((item) => (
         <View key={item.id} style={styles.item}>
-          <ProductThumb uri={item.imageUrl} size={44} />
+          <ProductThumb uri={item.sku?.imageUrl} size={44} />
           <View style={styles.itemText}>
             <MandiText variant="body" numberOfLines={1}>
-              {item.productName ?? item.skuName ?? 'Item'}
+              {skuTitle(item.sku)}
             </MandiText>
             <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-              {skuSecondaryLine(item.productName, item.skuName, item.packLabel)}
+              {skuSecondaryLine(item.sku)}
             </MandiText>
             <MandiQuantityStepper
               value={Number(item.requestedQuantity)}
               onChange={(quantity) => onChangeQuantity(item.id, String(quantity))}
               min={0}
               unit={item.unit}
-              itemLabel={item.productName ?? 'item'}
+              itemLabel={skuTitle(item.sku)}
             />
           </View>
 
@@ -273,7 +273,7 @@ function SupplierRequest({
 
           <MandiIconButton
             icon="close"
-            accessibilityLabel={`Remove ${item.productName ?? 'item'}`}
+            accessibilityLabel={`Remove ${skuTitle(item.sku)}`}
             onPress={() => onRemove(item.id)}
           />
         </View>

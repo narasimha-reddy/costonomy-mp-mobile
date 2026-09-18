@@ -29,7 +29,7 @@ import type { IntentItem } from '@/models/intent';
 import { supplierIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney, formatQuantity } from '@/utils/money';
-import { skuSecondaryLine } from '@/utils/skuLabel';
+import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -346,13 +346,13 @@ function LineRow({
 
   return (
     <View style={styles.item}>
-      <ProductThumb uri={item.imageUrl} size={44} />
+      <ProductThumb uri={item.sku?.imageUrl} size={44} />
       <View style={styles.itemText}>
         <MandiText variant="body" numberOfLines={1}>
-          {item.productName ?? item.skuName ?? 'Item'}
+          {skuTitle(item.sku)}
         </MandiText>
         <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {skuSecondaryLine(item.productName, item.skuName, item.packLabel)}
+          {skuSecondaryLine(item.sku)}
         </MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>
           They asked for {formatQuantity(item.requestedQuantity)} {item.unit}
@@ -372,7 +372,7 @@ function LineRow({
               min={0}
               max={requested}
               unit={item.unit}
-              itemLabel={item.productName ?? 'item'}
+              itemLabel={skuTitle(item.sku)}
             />
             {declined && (
               <MandiText variant="caption" color={Colors.danger}>

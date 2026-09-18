@@ -25,7 +25,7 @@ import type { IntentItem } from '@/models/intent';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
-import { skuSecondaryLine } from '@/utils/skuLabel';
+import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -325,13 +325,13 @@ function RequestLine({ item, answered }: { item: IntentItem; answered: boolean }
 
   return (
     <View style={styles.item}>
-      <ProductThumb uri={item.imageUrl} size={44} />
+      <ProductThumb uri={item.sku?.imageUrl} size={44} />
       <View style={styles.itemText}>
         <MandiText variant="body" numberOfLines={1}>
-          {item.productName ?? item.skuName ?? 'Item'}
+          {skuTitle(item.sku)}
         </MandiText>
         <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {skuSecondaryLine(item.productName, item.skuName, item.packLabel)}
+          {skuSecondaryLine(item.sku)}
         </MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>
           Asked for {formatQuantity(item.requestedQuantity)} {item.unit}

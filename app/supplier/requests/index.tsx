@@ -19,6 +19,7 @@ import {
 import type { Intent, IntentStatus as IntentStatusCode } from '@/models/intent';
 import { supplierIntentStatus } from '@/models/status';
 import { formatMoney } from '@/utils/money';
+import { skuTitle } from '@/utils/skuLabel';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /** Narrow by what the supplier would actually go looking for. */
@@ -133,7 +134,7 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
           numberOfLines={2}
           style={styles.items}
         >
-          {request.items.map((item) => item.productName ?? item.skuName).filter(Boolean).join(', ')}
+          {request.items.map((item) => skuTitle(item.sku)).filter(Boolean).join(', ')}
         </MandiText>
 
         {/* What this store said it would supply. Only meaningful once answered,

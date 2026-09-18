@@ -1,4 +1,5 @@
 import type { Money } from '@/utils/money';
+import type { SkuDescriptor } from '@/utils/skuLabel';
 
 /**
  * Requests — what a restaurant asks a supplier for, before any money. D-088.
@@ -39,10 +40,8 @@ export interface IntentItem {
   id: number;
   supplierSkuId: number;
   canonicalProductId: number;
-  productName: string | null;
-  skuName: string | null;
-  packLabel: string | null;
-  imageUrl: string | null;
+  /** One shape for every screen that shows a pack. See `utils/skuLabel.ts`. */
+  sku: SkuDescriptor | null;
   requestedQuantity: Money;
   unit: string;
   notes: string | null;

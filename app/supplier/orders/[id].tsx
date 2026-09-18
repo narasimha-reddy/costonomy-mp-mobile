@@ -42,6 +42,7 @@ import { formatMoment } from '@/utils/dateRange';
 import { PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { track } from '@/analytics';
+import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'SUP-ORD-01';
@@ -332,7 +333,7 @@ export default function SupplierOrderScreen() {
                       <View style={styles.itemText}>
                         <MandiText variant="body">{item.productName}</MandiText>
                         <MandiText variant="caption" color={Colors.textSecondary}>
-                          {item.skuName} · {formatMoney(item.unitPrice)} per {item.unit} · GST{' '}
+                          {skuSecondaryLine(item.sku)} · {formatMoney(item.unitPrice)} per {item.unit} · GST{' '}
                           {formatGstRate(item.gstRate)}
                         </MandiText>
                       </View>

@@ -47,7 +47,7 @@ export function OrderCardBody({
   primary: string | null | undefined;
   /** Nulls are dropped rather than rendered as gaps — an absent fact stays absent. */
   secondary: (string | null | undefined)[];
-  items: Pick<SupplierOrderItem, 'skuName' | 'productName' | 'productImageUrl'>[];
+  items: Pick<SupplierOrderItem, 'sku' | 'productName' | 'productImageUrl'>[];
   orderNumber?: string | null;
   paymentMethod?: PaymentMethod | null;
   /** When the order was placed. Shown under the goods, as one line. */
@@ -103,7 +103,7 @@ export function OrderCardBody({
           <View style={styles.thumbs}>
             {items.slice(0, ITEM_NAMES_SHOWN).map((item, index) => (
               <ProductThumb
-                key={`${item.productName ?? item.skuName ?? 'item'}-${index}`}
+                key={`${item.productName ?? item.sku?.skuName ?? 'item'}-${index}`}
                 uri={item.productImageUrl}
                 size={26}
                 radius={Radius.sm}

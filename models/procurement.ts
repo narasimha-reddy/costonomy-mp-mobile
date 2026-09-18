@@ -1,4 +1,5 @@
 import type { Money } from '@/utils/money';
+import type { SkuDescriptor } from '@/utils/skuLabel';
 import type { RecommendedOffer } from './discovery';
 
 /**
@@ -186,7 +187,8 @@ export interface SupplierOrderItem {
    * paneer. Null is common and normal — render a fallback, never a broken frame.
    */
   productImageUrl: string | null;
-  skuName: string;
+  /** The same pack description the request screens use. */
+  sku: SkuDescriptor | null;
   requestedQuantity: Money;
   /** Null until the supplier answers; zero means they declined this line. */
   acceptedQuantity: Money | null;

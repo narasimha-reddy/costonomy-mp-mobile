@@ -17,6 +17,7 @@ import {
 } from '@/components/common';
 import type { Intent } from '@/models/intent';
 import { supplierIntentStatus } from '@/models/status';
+import { skuTitle } from '@/utils/skuLabel';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
@@ -118,7 +119,7 @@ function RequestTile({ request, onPress }: { request: Intent; onPress: () => voi
             supplier decides whether to open this by whether they stock it. */}
         <MandiText variant="caption" color={Colors.textPrimary} numberOfLines={2}>
           {request.items
-            .map((item) => item.productName ?? item.skuName)
+            .map((item) => skuTitle(item.sku))
             .filter(Boolean)
             .join(', ')}
         </MandiText>

@@ -141,6 +141,10 @@ export function RequestCardBody({
           two facts that change while the card sits on screen, and reading them
           as a pair is what tells somebody whether to act now. */}
       <View style={styles.footerRow}>
+        {/* Status first: it is the one thing every card has, so it anchors the
+            row rather than shifting position depending on whether a clock
+            happens to be running. */}
+        <MandiStatusChip {...status} size="sm" />
         {running ? (
           <View style={styles.clock}>
             <MandiCountdown
@@ -155,10 +159,7 @@ export function RequestCardBody({
               </MandiText>
             ) : null}
           </View>
-        ) : (
-          <View style={styles.flex} />
-        )}
-        <MandiStatusChip {...status} size="sm" />
+        ) : null}
       </View>
 
       {footer}
@@ -187,7 +188,7 @@ export function summariseRequestItems(items: IntentItem[]): string {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   block: { gap: 2 },
-  clock: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flex: 1 },
+  clock: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',

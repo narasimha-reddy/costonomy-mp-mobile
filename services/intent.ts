@@ -1,5 +1,6 @@
 import { apiRequest, newIdempotencyKey } from '@/lib/api/client';
 import type {
+  Basket,
   CreatedOrder,
   Intent,
   IntentFulfilment,
@@ -16,8 +17,8 @@ import type {
  * one request per supplier happens while shopping, which is what keeps one
  * request to one order.
  */
-export function fetchDrafts(token: string, outletId: number): Promise<Intent[]> {
-  return apiRequest<Intent[]>(`/api/v1/outlets/${outletId}/intent-drafts`, { token });
+export function fetchDrafts(token: string, outletId: number): Promise<Basket> {
+  return apiRequest<Basket>(`/api/v1/outlets/${outletId}/intent-drafts`, { token });
 }
 
 /**

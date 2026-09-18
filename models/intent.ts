@@ -57,6 +57,15 @@ export interface IntentItem {
   lineTotal: Money | null;
   gstRate: Money | null;
   supplierNotes: string | null;
+  /**
+   * What this line would cost at the supplier's current listed price.
+   *
+   * <p>Draft-only, and a commitment by nobody — the supplier's reply decides
+   * both quantity and price. Null when the SKU has no live offer, which is
+   * absent rather than zero because a missing price is not a free product.
+   */
+  indicativeUnitPrice: Money | null;
+  indicativeLineTotal: Money | null;
 }
 
 /** The supplier's commercial statement. A quote, not a transaction. */
@@ -116,9 +125,31 @@ export interface Intent {
   editable: boolean;
   withinOrderWindow: boolean;
   items: IntentItem[];
+  /** Draft-only. `indicativeComplete` false means a line could not be priced. */
+  indicativeValue: Money | null;
+  indicativeGst: Money | null;
+  indicativeTotal: Money | null;
+  indicativeComplete: boolean;
   acceptance: IntentAcceptance | null;
   supplierOrderId: number | null;
   supplierOrderNumber: string | null;
+}
+
+/**
+ * The basket: every unsent request, and what the lot would come to.
+ *
+ * <p>The totals come from the server rather than being summed here. Adding up
+ * money on the client is what guardrail 3 forbids, and a client-side sum of
+ * rounded per-supplier figures is exactly the kind that ends up a paisa off.
+ */
+export interface Basket {
+  requests: Intent[];
+  supplierCount: number;
+  itemCount: number;
+  indicativeValue: Money;
+  indicativeGst: Money;
+  indicativeTotal: Money;
+  indicativeComplete: boolean;
 }
 
 /** What creating the order right now would cost. */

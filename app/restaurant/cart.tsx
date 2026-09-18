@@ -18,12 +18,13 @@ import {
   MandiQuantityStepper,
   MandiScreen,
   MandiSkeletonList,
+  MandiStickyBar,
   MandiText,
   useToast,
 } from '@/components/common';
 import type { Intent } from '@/models/intent';
 import { ApiError } from '@/lib/api/errors';
-import { formatQuantity } from '@/utils/money';
+import { formatMoney } from '@/utils/money';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -49,7 +50,7 @@ export default function BasketScreen() {
   const toast = useToast();
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
-  const { drafts, loading, error, refetch } = useRequestBasket();
+  const { basket, drafts, loading, error, refetch } = useRequestBasket();
   const invalidate = useInvalidateBasket();
 
   const update = useMutation({
@@ -85,6 +86,31 @@ export default function BasketScreen() {
     <MandiScreen
       header={<MandiHeader title="Your requests" back />}
       onRefresh={() => refetch()}
+      footer={
+        empty || basket == null ? undefined : (
+          <MandiStickyBar>
+            <View style={styles.totalRow}>
+              <View style={styles.flex}>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {basket.itemCount} item{basket.itemCount === 1 ? '' : 's'} ·{' '}
+                  {basket.supplierCount} supplier{basket.supplierCount === 1 ? '' : 's'}
+                </MandiText>
+                {/* "About", always. This is the sum of today's listed prices,
+                    and what a supplier actually quotes may differ -- calling it
+                    a total would make it a promise the app cannot keep. */}
+                <MandiText variant="caption" color={Colors.textTertiary}>
+                  {basket.indicativeComplete
+                    ? 'Estimate at current prices'
+                    : 'Estimate — some items have no price'}
+                </MandiText>
+              </View>
+              <MandiText variant="priceLarge">
+                ~{formatMoney(basket.indicativeTotal)}
+              </MandiText>
+            </View>
+          </MandiStickyBar>
+        )
+      }
     >
       {loading ? (
         <MandiSkeletonList count={3} />
@@ -175,6 +201,27 @@ function SupplierRequest({
               itemLabel={item.productName ?? 'item'}
             />
           </View>
+
+          <View style={styles.lineAmount}>
+            {item.indicativeLineTotal != null ? (
+              <>
+                <MandiText variant="bodyEmphasis">
+                  ~{formatMoney(item.indicativeLineTotal)}
+                </MandiText>
+                {item.indicativeUnitPrice != null && (
+                  <MandiText variant="caption" color={Colors.textTertiary}>
+                    {formatMoney(item.indicativeUnitPrice)} each
+                  </MandiText>
+                )}
+              </>
+            ) : (
+              // No live offer behind this line. Said plainly rather than shown
+              // as zero, which would read as free.
+              <MandiText variant="caption" color={Colors.warning}>
+                No price
+              </MandiText>
+            )}
+          </View>
           {/* A sibling of the row rather than inside it: a button nested in a
               pressable is invalid on web and swallows its own taps. */}
           <MandiIconButton
@@ -185,10 +232,29 @@ function SupplierRequest({
         </View>
       ))}
 
+      {/* This supplier's own estimate. Per card because each card is sent
+          separately and becomes its own order -- a kitchen deciding whether to
+          send this one needs this one's figure, not the basket's. */}
+      {draft.indicativeTotal != null && (
+        <View style={styles.cardTotals}>
+          <Row label="Items" value={`~${formatMoney(draft.indicativeValue ?? '0')}`} />
+          <Row label="GST" value={`~${formatMoney(draft.indicativeGst ?? '0')}`} />
+          <Row
+            label="Estimated total"
+            value={`~${formatMoney(draft.indicativeTotal)}`}
+            emphasis
+          />
+          {!draft.indicativeComplete && (
+            <MandiText variant="caption" color={Colors.warning}>
+              One or more items have no current price, so this is less than the whole.
+            </MandiText>
+          )}
+        </View>
+      )}
+
       <View style={styles.sendRow}>
         <MandiText variant="caption" color={Colors.textTertiary} style={styles.flex}>
-          {formatQuantity(String(draft.items.length))} line
-          {draft.items.length === 1 ? '' : 's'} · no charge yet
+          Nothing is charged until they reply and you order.
         </MandiText>
         <MandiButton
           label="Send request"
@@ -198,6 +264,21 @@ function SupplierRequest({
         />
       </View>
     </MandiCard>
+  );
+}
+
+function Row({ label, value, emphasis }: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <View style={styles.totalsRow}>
+      <MandiText variant={emphasis ? 'bodyEmphasis' : 'body'} color={Colors.textSecondary}>
+        {label}
+      </MandiText>
+      <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
+    </View>
   );
 }
 
@@ -228,6 +309,26 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.borderLight,
   },
   itemText: { flex: 1, gap: Spacing.xs },
+  lineAmount: { alignItems: 'flex-end', gap: 2, minWidth: 84 },
+  cardTotals: {
+    gap: Spacing.xs,
+    paddingTop: Spacing.md,
+    marginTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.borderLight,
+  },
+  totalsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
   sendRow: {
     flexDirection: 'row',
     alignItems: 'center',

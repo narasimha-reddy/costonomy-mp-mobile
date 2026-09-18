@@ -57,9 +57,14 @@ export default function SupplierRequestsScreen() {
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
     >
+      {/* flexGrow 0 or the rail claims the whole column: a ScrollView nested in
+          a scrolling screen expands to fill it, and the chips — centred on the
+          cross axis so their pill shape reads right — then float in the middle
+          of a tall empty box. */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterRail}
         contentContainerStyle={styles.filters}
       >
         {FILTERS.map((option) => {
@@ -147,6 +152,7 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  filterRail: { flexGrow: 0, flexShrink: 0 },
   filters: {
     gap: Spacing.sm,
     paddingVertical: Spacing.xs,

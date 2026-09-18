@@ -5,10 +5,9 @@ import { useMutation } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { useCart, useInvalidateCart } from '@/hooks/useCart';
-import { removeCartItem, updateCartItem } from '@/services/procurement';
-import { PriceChangeNotice } from '@/components/procurement/PriceChangeNotice';
-import { TotalsPanel } from '@/components/procurement/TotalsPanel';
+import { useRequestBasket, useInvalidateBasket } from '@/hooks/useRequestBasket';
+import { removeIntentItem, sendIntent, updateIntentItem } from '@/services/intent';
+import { ProductThumb } from '@/components/product/ProductThumb';
 import {
   MandiButton,
   MandiCard,
@@ -19,201 +18,220 @@ import {
   MandiQuantityStepper,
   MandiScreen,
   MandiSkeletonList,
-  MandiStickyBar,
   MandiText,
   useToast,
 } from '@/components/common';
+import type { Intent } from '@/models/intent';
 import { ApiError } from '@/lib/api/errors';
-import { placeLabel } from '@/utils/placeName';
-import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { formatQuantity } from '@/utils/money';
+import { skuSecondaryLine } from '@/utils/skuLabel';
 import { track } from '@/analytics';
-import { Colors, Spacing } from '@/theme';
+import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'REST-CART-01';
 
 /**
- * REST-CART-01. Doc 05 §11.
+ * The basket — one request per supplier. D-088.
  *
- * <p>Grouped by supplier, because that is what an order actually is: the
- * restaurant sees one cart, the backend places one order per supplier, and
- * hiding that would make the acceptance screens that follow incomprehensible.
+ * <p><b>There are no prices on this screen, and that is the point.</b> A request
+ * says what this kitchen wants; what it costs is the supplier's answer. The old
+ * cart showed a total and took payment against it, then let the supplier reduce
+ * the order afterwards — so the total was a guess, and the order paid for was not
+ * the order received. Showing a figure here would be the app inventing one
+ * (guardrail 3), and it would be wrong as often as stock is short.
  *
- * <p><b>Nothing here computes money.</b> Each quantity change round-trips and the
- * server returns the whole procurement with every figure recalculated — which is
- * also what surfaces a price change at the moment it happens rather than at
- * checkout.
+ * <p>Each supplier is sent separately, because each is a separate conversation.
+ * There is no combined "checkout": the money step happens later, once per
+ * request, on the screen where the supplier's actual prices are shown.
  */
-export default function CartScreen() {
+export default function BasketScreen() {
   const router = useRouter();
   const toast = useToast();
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
-  const { cart, loading, error, refetch } = useCart();
-  const invalidate = useInvalidateCart();
+  const { drafts, loading, error, refetch } = useRequestBasket();
+  const invalidate = useInvalidateBasket();
 
   const update = useMutation({
     mutationFn: ({ itemId, quantity }: { itemId: number; quantity: string }) =>
-      updateCartItem(accessToken as string, itemId, quantity),
+      updateIntentItem(accessToken as string, itemId, quantity),
     onSuccess: () => void invalidate(),
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not update that.', 'error'),
   });
 
   const remove = useMutation({
-    mutationFn: (itemId: number) => removeCartItem(accessToken as string, itemId),
+    mutationFn: (itemId: number) => removeIntentItem(accessToken as string, itemId),
     onSuccess: () => void invalidate(),
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not remove that.', 'error'),
   });
 
-  const empty = !cart || cart.supplierGroups.length === 0;
+  const send = useMutation({
+    mutationFn: (intentId: number) => sendIntent(accessToken as string, intentId),
+    onSuccess: (intent) => {
+      track('intent_sent', { screen: SCREEN, outletId, entityId: intent.id });
+      void invalidate();
+      toast.show('Request sent', 'success');
+      router.push(`/restaurant/requests/${intent.id}`);
+    },
+    onError: (caught) =>
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not send that.', 'error'),
+  });
+
+  const empty = drafts.length === 0;
 
   return (
     <MandiScreen
-      header={<MandiHeader title="Cart" back />}
-      footer={
-        empty ? undefined : (
-          <MandiStickyBar>
-            <View style={styles.barRow}>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                Total · {cart.supplierGroups.length} supplier
-                {cart.supplierGroups.length === 1 ? '' : 's'}
-              </MandiText>
-              <MandiText variant="priceLarge">{formatMoney(cart.totalAmount)}</MandiText>
-            </View>
-            <MandiButton
-              label="Proceed to checkout"
-              size="lg"
-              onPress={() => {
-                track('checkout_start', { screen: SCREEN, outletId, entityId: cart.id });
-                router.push(`/restaurant/checkout/${cart.id}`);
-              }}
-            />
-          </MandiStickyBar>
-        )
-      }
+      header={<MandiHeader title="Your requests" back />}
+      onRefresh={() => refetch()}
     >
       {loading ? (
         <MandiSkeletonList count={3} />
       ) : error ? (
-        <MandiErrorState message="Couldn't load your cart." onRetry={() => refetch()} />
+        <MandiErrorState message="Couldn't load your requests." onRetry={() => refetch()} />
       ) : empty ? (
         <MandiEmptyState
           icon="cart-outline"
-          title="Your cart is empty"
-          description="Search the catalog and compare every supplier stocking what you need."
+          title="Nothing here yet"
+          description="Find what you need and add it. You'll send a request to each supplier, and only pay once they confirm what they can supply."
           actionLabel="Start searching"
           onAction={() => router.push('/restaurant/search')}
         />
       ) : (
         <>
-          <PriceChangeNotice
-            changes={cart.priceChanges}
-            onAccept={() => router.push(`/restaurant/checkout/${cart.id}`)}
-          />
-
-          {cart.supplierGroups.map((group) => (
-            <MandiCard key={group.supplierStoreId}>
-              {/* One card per supplier, because one card is one order. The branch
-                  leads and the business follows, as everywhere else. */}
-              <View style={styles.supplierRow}>
-                <View style={styles.supplierName}>
-                  <MandiText variant="bodyEmphasis" numberOfLines={1}>
-                    {placeLabel(group.storeName, group.supplierName) ?? group.storeName}
-                  </MandiText>
-                  <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-                    {group.supplierName}
-                  </MandiText>
-                </View>
-                <MandiText variant="priceSmall">{formatMoney(group.total, true)}</MandiText>
-              </View>
-
-              {group.items.map((item) => (
-                <View key={item.id} style={styles.item}>
-                  <View style={styles.itemHead}>
-                    <View style={styles.itemText}>
-                      <MandiText variant="bodyEmphasis" numberOfLines={2}>
-                        {item.skuName}
-                      </MandiText>
-                      {/* "+ 5% GST" rather than "GST 5%": the price beside it is
-                          the supplier's pre-tax figure while the line total below
-                          includes tax, and a row holding both on unstated bases is
-                          a row nobody can check. */}
-                      <MandiText variant="caption" color={Colors.textSecondary}>
-                        {[
-                          item.brandName,
-                          `${formatQuantity(item.packSize)} ${item.packUnit.toLowerCase()} pack`,
-                          `${formatMoney(item.unitPrice)} + ${formatGstRate(item.gstRate)} GST`,
-                        ].filter(Boolean).join(' · ')}
-                      </MandiText>
-                    </View>
-                    <MandiIconButton
-                      icon="trash-outline"
-                      size="md"
-                      color={Colors.textTertiary}
-                      accessibilityLabel={`Remove ${item.skuName}`}
-                      onPress={() => remove.mutate(item.id)}
-                    />
-                  </View>
-                  <View style={styles.itemFoot}>
-                    {/* Packs. `item.unit` is the product's base unit, and labelling
-                        the count with it read "3 KG" for three 25 kg sacks. */}
-                    <MandiQuantityStepper
-                      value={Number(item.quantity)}
-                      onChange={(quantity) =>
-                        update.mutate({ itemId: item.id, quantity: String(quantity) })
-                      }
-                      min={1}
-                      unit={Number(item.quantity) === 1 ? 'pack' : 'packs'}
-                      itemLabel={item.skuName}
-                    />
-                    {/* Lighter than the supplier's total above it: that figure is
-                        what this order is worth, this one is a line inside it. */}
-                    <MandiText variant="bodyEmphasis">{formatMoney(item.lineTotal)}</MandiText>
-                  </View>
-                </View>
-              ))}
-            </MandiCard>
-          ))}
-
-          <TotalsPanel procurement={cart} />
-
-          <View style={styles.note}>
-            <Ionicons name="information-circle-outline" size={14} color={Colors.textTertiary} />
-            <MandiText variant="caption" color={Colors.textTertiary} style={styles.flex}>
-              Prices are re-checked at checkout. You will be asked to confirm anything that moved.
+          <View style={styles.intro}>
+            <Ionicons name="information-circle-outline" size={16} color={Colors.textTertiary} />
+            <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+              You&apos;re asking, not buying. Each supplier replies with what they have and
+              what it costs — you pay only after that, and only for what you order.
             </MandiText>
           </View>
+
+          {drafts.map((draft) => (
+            <SupplierRequest
+              key={draft.id}
+              draft={draft}
+              onChangeQuantity={(itemId, quantity) => update.mutate({ itemId, quantity })}
+              onRemove={(itemId) => remove.mutate(itemId)}
+              onSend={() => send.mutate(draft.id)}
+              sending={send.isPending && send.variables === draft.id}
+            />
+          ))}
         </>
       )}
     </MandiScreen>
   );
 }
 
+/** One supplier's request: their branch, their lines, and one Send. */
+function SupplierRequest({
+  draft,
+  onChangeQuantity,
+  onRemove,
+  onSend,
+  sending,
+}: {
+  draft: Intent;
+  onChangeQuantity: (itemId: number, quantity: string) => void;
+  onRemove: (itemId: number) => void;
+  onSend: () => void;
+  sending: boolean;
+}) {
+  return (
+    <MandiCard>
+      {/* The branch leads and the business follows, as everywhere else. */}
+      <View style={styles.supplierRow}>
+        <View style={styles.flex}>
+          <MandiText variant="bodyEmphasis" numberOfLines={1}>
+            {draft.storeName ?? 'Supplier'}
+          </MandiText>
+          {draft.supplierName != null && draft.supplierName !== draft.storeName && (
+            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+              {draft.supplierName}
+            </MandiText>
+          )}
+        </View>
+        <MandiText variant="caption" color={Colors.textTertiary}>
+          {draft.items.length} item{draft.items.length === 1 ? '' : 's'}
+        </MandiText>
+      </View>
+
+      {draft.items.map((item) => (
+        <View key={item.id} style={styles.item}>
+          <ProductThumb uri={item.imageUrl} size={44} />
+          <View style={styles.itemText}>
+            <MandiText variant="body" numberOfLines={1}>
+              {item.productName ?? item.skuName ?? 'Item'}
+            </MandiText>
+            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+              {skuSecondaryLine(item.productName, item.skuName, item.packLabel)}
+            </MandiText>
+            <MandiQuantityStepper
+              value={Number(item.requestedQuantity)}
+              onChange={(quantity) => onChangeQuantity(item.id, String(quantity))}
+              min={0}
+              unit={item.unit}
+              itemLabel={item.productName ?? 'item'}
+            />
+          </View>
+          {/* A sibling of the row rather than inside it: a button nested in a
+              pressable is invalid on web and swallows its own taps. */}
+          <MandiIconButton
+            icon="close"
+            accessibilityLabel={`Remove ${item.productName ?? 'item'}`}
+            onPress={() => onRemove(item.id)}
+          />
+        </View>
+      ))}
+
+      <View style={styles.sendRow}>
+        <MandiText variant="caption" color={Colors.textTertiary} style={styles.flex}>
+          {formatQuantity(String(draft.items.length))} line
+          {draft.items.length === 1 ? '' : 's'} · no charge yet
+        </MandiText>
+        <MandiButton
+          label="Send request"
+          size="md"
+          loading={sending}
+          onPress={onSend}
+        />
+      </View>
+    </MandiCard>
+  );
+}
+
 const styles = StyleSheet.create({
-  supplierRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  supplierName: { flex: 1, gap: 1 },
-  item: {
+  flex: { flex: 1 },
+  intro: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: Spacing.sm,
-    paddingTop: Spacing.md,
-    marginTop: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.borderLight,
+    padding: Spacing.md,
+    backgroundColor: Colors.surfaceSunken,
+    borderRadius: Radius.md,
   },
-  itemHead: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
-  itemText: { flex: 1, gap: 2 },
-  itemFoot: {
+  supplierRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
+    gap: Spacing.sm,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
   },
-  barRow: {
+  item: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
   },
-  note: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs },
-  flex: { flex: 1 },
+  itemText: { flex: 1, gap: Spacing.xs },
+  sendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingTop: Spacing.md,
+  },
 });

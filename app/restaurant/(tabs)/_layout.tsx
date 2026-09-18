@@ -34,11 +34,11 @@ export default function RestaurantTabs() {
         }}
       />
       <Tabs.Screen
-        name="requirements"
+        name="requests"
         options={{
-          title: 'Requirements',
+          title: 'Requests',
           tabBarLabel: tabLabel('Requirements'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" color={color} size={size} />,
         }}
       />
       <Tabs.Screen

@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { useAddToCart } from '@/hooks/useAddToCart';
+import { useAddToRequest } from '@/hooks/useAddToRequest';
 import { useDebounced } from '@/hooks/useDebounced';
 import { fetchStoreCatalog } from '@/services/catalog';
 import { SkuRow } from '@/components/product/SkuRow';
@@ -44,7 +44,7 @@ export default function SupplierCatalogScreen() {
   const storeId = Number(id);
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
-  const addToCart = useAddToCart();
+  const addToRequest = useAddToRequest();
   const [term, setTerm] = useState('');
 
   const settled = useDebounced(term, 250);
@@ -113,8 +113,8 @@ export default function SupplierCatalogScreen() {
               key={sku.offerId}
               sku={sku}
               hideSupplier
-              onAdd={() => addToCart.mutate(sku.offerId)}
-              adding={addToCart.isPending && addToCart.variables === sku.offerId}
+              onAdd={() => addToRequest.mutate(sku.supplierSkuId)}
+              adding={addToRequest.isPending && addToRequest.variables === sku.offerId}
             />
           ))}
         </View>

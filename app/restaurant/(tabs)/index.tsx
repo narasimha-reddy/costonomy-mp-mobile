@@ -6,7 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchCategories } from '@/services/catalog';
-import { fetchOutletOrders, fetchRequirements } from '@/services/procurement';
+import { fetchOutletOrders } from '@/services/procurement';
+import { fetchIntents } from '@/services/intent';
+import { intentsKey } from '@/lib/queryKeys';
 import { CategoryTile } from '@/components/product/CategoryTile';
 import {
   MandiCard,
@@ -19,7 +21,7 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
-import { resolveStatus, SupplierOrderStatus } from '@/models/status';
+import { IntentStatus, resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { track } from '@/analytics';
@@ -63,7 +65,7 @@ export default function RestaurantHome() {
       />
 
       <QuickActions outletId={outletId} outletName={outlet?.name} />
-      <RequirementsSection outletId={outletId} />
+      <RequestsSection outletId={outletId} />
       <OrdersSection outletId={outletId} />
       <CategoriesSection outletId={outletId} />
     </MandiScreen>
@@ -90,11 +92,11 @@ function QuickActions({ outletId, outletName }: { outletId: number | null; outle
       onPress: () => router.push('/restaurant/(tabs)/discover'),
     },
     {
-      key: 'requirements',
-      icon: 'clipboard-outline' as const,
-      label: 'Requirements',
-      hint: outletName ? `For ${outletName}` : 'What you still need',
-      onPress: () => router.push('/restaurant/(tabs)/requirements'),
+      key: 'requests',
+      icon: 'document-text-outline' as const,
+      label: 'Requests',
+      hint: outletName ? `For ${outletName}` : 'What you asked for',
+      onPress: () => router.push('/restaurant/(tabs)/requests'),
     },
   ];
 
@@ -124,56 +126,62 @@ function QuickActions({ outletId, outletName }: { outletId: number | null; outle
   );
 }
 
-function RequirementsSection({ outletId }: { outletId: number | null }) {
+/**
+ * Requests still waiting on somebody.
+ *
+ * <p>Open ones first, then replies that can still be ordered from — the second
+ * group has a deadline attached, which makes it the more urgent of the two even
+ * though it looks like progress.
+ */
+function RequestsSection({ outletId }: { outletId: number | null }) {
   const router = useRouter();
   const { accessToken } = useSession();
 
   const query = useQuery({
-    queryKey: ['outlet', outletId, 'requirements'],
-    queryFn: () => fetchRequirements(accessToken as string, outletId as number),
+    queryKey: intentsKey(outletId),
+    queryFn: () => fetchIntents(accessToken as string, outletId as number),
     enabled: outletId != null && accessToken != null,
   });
 
-  const open = (query.data ?? []).filter(
-    (r) => r.status === 'OPEN' || r.status === 'SOURCING' || r.status === 'PARTIALLY_FULFILLED',
+  const live = (query.data ?? []).filter(
+    (intent) => intent.status === 'OPEN' || intent.status === 'RESPONSES_RECEIVED',
   );
 
   return (
     <View style={styles.section}>
       <MandiSectionHeader
-        title="Open requirements"
-        actionLabel={open.length ? 'See all' : undefined}
-        onAction={() => router.push('/restaurant/(tabs)/requirements')}
+        title="Open requests"
+        actionLabel={live.length ? 'See all' : undefined}
+        onAction={() => router.push('/restaurant/(tabs)/requests')}
       />
       {query.isPending ? (
         <MandiSkeletonList count={2} />
       ) : query.error ? (
-        <MandiErrorState message="Couldn't load requirements." onRetry={() => query.refetch()} />
-      ) : open.length === 0 ? (
+        <MandiErrorState message="Couldn't load requests." onRetry={() => query.refetch()} />
+      ) : live.length === 0 ? (
         <MandiEmptyState
           compact
-          icon="clipboard-outline"
+          icon="document-text-outline"
           title="Nothing outstanding"
-          description="Requirements you raise show here until they're fulfilled."
+          description="Requests you send show here until you order from them."
         />
       ) : (
-        open.slice(0, 3).map((requirement) => (
+        live.slice(0, 3).map((intent) => (
           <MandiCard
-            key={requirement.id}
-            onPress={() => router.push(`/restaurant/requirements/${requirement.id}`)}
+            key={intent.id}
+            onPress={() => router.push(`/restaurant/requests/${intent.id}`)}
           >
             <View style={styles.row}>
-              <MandiText variant="bodyEmphasis">
-                {requirement.items.length} item{requirement.items.length === 1 ? '' : 's'}
+              <MandiText variant="bodyEmphasis" numberOfLines={1}>
+                {intent.storeName ?? 'Supplier'}
               </MandiText>
-              <MandiStatusChip
-                label={requirement.status.replace(/_/g, ' ').toLowerCase()}
-                tone="pending"
-                size="sm"
-              />
+              <MandiStatusChip {...resolveStatus(IntentStatus, intent.status)} size="sm" />
             </View>
             <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-              {requirement.items.map((item) => item.productName).slice(0, 3).join(', ')}
+              {intent.items.length} item{intent.items.length === 1 ? '' : 's'}
+              {intent.status === 'RESPONSES_RECEIVED' && intent.withinOrderWindow
+                ? ' · ready to order'
+                : ''}
             </MandiText>
           </MandiCard>
         ))

@@ -8,7 +8,7 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import { searchProducts, searchSkus, searchSuppliers } from '@/services/catalog';
 import { useDebounced } from '@/hooks/useDebounced';
 import { useRecentSearches } from '@/hooks/useRecentSearches';
-import { useAddToCart } from '@/hooks/useAddToCart';
+import { useAddToRequest } from '@/hooks/useAddToRequest';
 import { ProductCard } from '@/components/product/ProductCard';
 import { SkuRow } from '@/components/product/SkuRow';
 import { SupplierRow } from '@/components/product/SupplierRow';
@@ -65,7 +65,7 @@ export default function SearchScreen() {
   const [tab, setTab] = useState<Tab>('products');
   const [radiusKm, setRadiusKm] = useState<number | undefined>(NEARBY_KM);
   const { recent, remember, clear } = useRecentSearches();
-  const addToCart = useAddToCart();
+  const addToRequest = useAddToRequest();
 
   const settled = useDebounced(term, 250);
   const query = settled.trim();
@@ -155,8 +155,8 @@ export default function SearchScreen() {
                 key={sku.offerId}
                 sku={sku}
                 onPress={() => openSkuComparison(sku.canonicalProductId)}
-                onAdd={() => addToCart.mutate(sku.offerId)}
-                adding={addToCart.isPending && addToCart.variables === sku.offerId}
+                onAdd={() => addToRequest.mutate(sku.supplierSkuId)}
+                adding={addToRequest.isPending && addToRequest.variables === sku.offerId}
               />
             ))
           }

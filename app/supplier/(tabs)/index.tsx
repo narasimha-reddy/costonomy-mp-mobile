@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
+import { RequestCarousel } from '@/components/supplier/RequestCarousel';
 import { fetchActiveOrders, fetchPendingOrders } from '@/services/supplier';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import { PendingOrderCard } from '@/components/supplier/PendingOrderCard';
@@ -58,6 +59,10 @@ export default function SupplierHome() {
       }}
       refreshing={pending.isRefetching || active.isRefetching}
     >
+      {/* Above New orders: an order here has already been agreed to, while a
+          request has somebody waiting on an answer only this store can give. */}
+      <RequestCarousel />
+
       <View style={styles.section}>
         <MandiSectionHeader
           title="New orders"

@@ -23,6 +23,15 @@ interface MandiCountdownProps {
    */
   slaSeconds?: number;
   size?: 'sm' | 'lg';
+  /**
+   * What the window is for, as a verb phrase — "to respond", "to order".
+   *
+   * <p>This component was written for the supplier's acceptance SLA and said
+   * "to respond" unconditionally. A restaurant counting down its window to
+   * create an order is not responding to anything, and being told it is makes
+   * the one number they are acting on describe somebody else's job.
+   */
+  action?: string;
   /** Called once when the countdown reaches zero — e.g. to refetch the order. */
   onExpire?: () => void;
   style?: ViewStyle;
@@ -58,6 +67,7 @@ export function MandiCountdown({
   deadlineAt,
   slaSeconds = 60,
   size = 'lg',
+  action = 'to respond',
   onExpire,
   style,
   testID,
@@ -113,8 +123,8 @@ export function MandiCountdown({
       // Spelled out, because "0:47" is read as "zero colon forty-seven".
       accessibilityLabel={
         expired
-          ? 'Response window expired'
-          : `${Math.floor(remaining / 60)} minutes ${remaining % 60} seconds left to respond`
+          ? 'Window expired'
+          : `${Math.floor(remaining / 60)} minutes ${remaining % 60} seconds left ${action}`
       }
       // Polite, not assertive: an assertive region would interrupt the screen
       // reader every single second.
@@ -133,7 +143,7 @@ export function MandiCountdown({
       </MandiText>
       {size === 'lg' && !expired && (
         <MandiText variant="caption" color={palette.fg}>
-          to respond
+          {action}
         </MandiText>
       )}
     </View>

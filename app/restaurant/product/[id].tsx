@@ -5,10 +5,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { useCart } from '@/hooks/useCart';
+import { useRequestBasket } from '@/hooks/useRequestBasket';
 import { fetchProduct, fetchRecommendations } from '@/services/catalog';
-import { addCartItem, removeCartItem, updateCartItem } from '@/services/procurement';
-import type { ProcurementItem } from '@/models/procurement';
+import { addIntentItem, removeIntentItem, updateIntentItem } from '@/services/intent';
+import type { IntentItem } from '@/models/intent';
+import { draftsKey } from '@/lib/queryKeys';
 import { OfferCard } from '@/components/supplier/OfferCard';
 import {
   MandiButton,
@@ -20,7 +21,6 @@ import {
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
-import { formatMoney } from '@/utils/money';
 import { Colors, Spacing, TouchTarget } from '@/theme';
 
 /**
@@ -44,19 +44,14 @@ import { Colors, Spacing, TouchTarget } from '@/theme';
  * sides of the wire.
  */
 export default function ProductScreen() {
-  const { id, requirementItemId } = useLocalSearchParams<{
-    id: string;
-    /** Set when this purchase is sourcing a requirement. */
-    requirementItemId?: string;
-  }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const productId = Number(id);
-  const servingRequirement = Number(requirementItemId);
   const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
-  const { cart } = useCart();
+  const { drafts } = useRequestBasket();
 
   const product = useQuery({
     // The outlet is in the key because it changes the answer: "3 suppliers" is
@@ -74,18 +69,18 @@ export default function ProductScreen() {
   });
 
   /**
-   * Cart lines by SKU.
+   * Request lines by SKU.
    *
-   * <p>A line records the SKU it was bought as rather than the offer, so that is
-   * what joins a card to what is already in the basket — and it is the right key
-   * anyway: the same SKU re-priced is still the same thing you are buying.
+   * <p>The SKU is the join, and now it is also what the line stores: a request
+   * carries no offer and no price, because what a thing costs is the supplier's
+   * answer rather than something the basket can know.
    */
   const inCart = useMemo(() => {
-    const map = new Map<number, ProcurementItem>();
-    cart?.supplierGroups.forEach((group) =>
-      group.items.forEach((item) => map.set(item.supplierSkuId, item)));
+    const map = new Map<number, IntentItem>();
+    drafts.forEach((draft) =>
+      draft.items.forEach((item) => map.set(item.supplierSkuId, item)));
     return map;
-  }, [cart]);
+  }, [drafts]);
 
   /**
    * What the stepper shows while the server catches up.
@@ -105,34 +100,29 @@ export default function ProductScreen() {
   }, []);
 
   const change = useMutation({
-    mutationFn: async ({ offerId, skuId, packs }: {
+    mutationFn: async ({ skuId, packs }: {
       offerId: number;
       skuId: number;
       packs: number;
     }) => {
       const line = inCart.get(skuId);
       if (line == null) {
-        return addCartItem(accessToken as string, outletId as number, {
-          supplierOfferId: offerId,
-          // Packs. The server prices `sellingPrice × quantity`, and
-          // `sellingPrice` is the price of one pack.
+        // The SKU decides which supplier, and therefore which request this
+        // lands on. Packs, because that is what is being asked for.
+        return addIntentItem(accessToken as string, outletId as number, {
+          supplierSkuId: skuId,
           quantity: String(packs),
-          // Links the line to the need it serves, so the accepted quantity
-          // credits back to the requirement and a shortfall stays sourceable
-          // (guardrail 14). Absent when someone is just shopping.
-          requirementItemId: Number.isFinite(servingRequirement)
-            ? servingRequirement : undefined,
         });
       }
       // Zero is not a quantity; it is the absence of the line.
       return packs <= 0
-        ? removeCartItem(accessToken as string, line.id)
-        : updateCartItem(accessToken as string, line.id, String(packs));
+        ? removeIntentItem(accessToken as string, line.id)
+        : updateIntentItem(accessToken as string, line.id, String(packs));
     },
     onSuccess: async (_data, variables) => {
       // Awaited, then released: dropping the local value before the cart has
       // refetched would flash the old quantity for a frame.
-      await queryClient.invalidateQueries({ queryKey: ['outlet', outletId, 'cart'] });
+      await queryClient.invalidateQueries({ queryKey: draftsKey(outletId) });
       setDesired((current) => {
         const next = { ...current };
         delete next[variables.skuId];
@@ -174,15 +164,15 @@ export default function ProductScreen() {
 
   const offers = recommendations.data?.offers ?? [];
 
-  const cartCount = cart?.supplierGroups.reduce((n, g) => n + g.items.length, 0) ?? 0;
+  const cartCount = drafts.reduce((n, draft) => n + draft.items.length, 0);
 
   return (
     <MandiScreen
       header={<Header title={product.data?.name} subtitle={product.data?.categoryName} />}
       footer={
         <CartBar
-          total={cart?.totalAmount}
           count={cartCount}
+          supplierCount={drafts.length}
           onPress={() => router.push('/restaurant/cart')}
         />
       }
@@ -229,7 +219,7 @@ export default function ProductScreen() {
               // must never re-sort — doing so would quietly substitute its own
               // ranking for the one doc 07 specifies and tests.
               recommended={index === 0}
-              quantity={desired[offer.supplierSkuId] ?? (line ? Number(line.quantity) : 0)}
+              quantity={desired[offer.supplierSkuId] ?? (line ? Number(line.requestedQuantity) : 0)}
               lineTotal={line?.lineTotal}
               busy={change.isPending && change.variables?.offerId === offer.offerId}
               onQuantity={(packs) =>
@@ -249,27 +239,40 @@ export default function ProductScreen() {
  * the cart holds lines from other products too, and adding up the visible ones
  * would quietly contradict the cart it links to.
  */
+/**
+ * What is waiting to be sent, and the way to it.
+ *
+ * <p><b>No total, deliberately.</b> This bar used to carry the cart's value, and
+ * there is no equivalent here: a request holds no prices, so any figure would be
+ * one the app invented. What it says instead is how many suppliers are about to
+ * be asked, which is the thing that actually surprises people — three items can
+ * be three separate conversations.
+ */
 function CartBar({
-  total,
   count,
+  supplierCount,
   onPress,
 }: {
-  total?: string;
   count: number;
+  supplierCount: number;
   onPress: () => void;
 }) {
   return (
     <View style={styles.cartBar}>
       <View style={styles.cartTotals}>
         <MandiText variant="caption" color={Colors.textSecondary}>
-          {count === 0 ? 'Cart is empty' : `${count} item${count === 1 ? '' : 's'} in cart`}
+          {count === 0
+            ? 'Nothing added yet'
+            : `${count} item${count === 1 ? '' : 's'} · ${supplierCount} supplier${supplierCount === 1 ? '' : 's'}`}
         </MandiText>
-        {count > 0 && total != null && (
-          <MandiText variant="price">{formatMoney(total)}</MandiText>
+        {count > 0 && (
+          <MandiText variant="caption" color={Colors.textTertiary}>
+            Prices come with their reply
+          </MandiText>
         )}
       </View>
       <MandiButton
-        label="Go to cart"
+        label="Review requests"
         variant={count > 0 ? 'primary' : 'secondary'}
         onPress={onPress}
         fullWidth={false}

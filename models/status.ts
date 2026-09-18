@@ -4,6 +4,10 @@ import type {
   RequirementStatus as RequirementStatusCode,
   SupplierOrderStatus as SupplierOrderStatusCode,
 } from './procurement';
+import type {
+  IntentFulfilment as IntentFulfilmentCode,
+  IntentStatus as IntentStatusCode,
+} from './intent';
 
 /**
  * Domain status → display.
@@ -172,3 +176,56 @@ export function resolveStatus(
   if (!status) return { label: 'Unknown', tone: 'neutral' };
   return registry[status] ?? unknownStatus(status);
 }
+
+/**
+ * Request lifecycle — where a request has got to. D-088.
+ *
+ * <p>Written from the restaurant's side, because that is who raised it. The
+ * supplier's list re-labels two of these: see {@link SupplierIntentStatus}.
+ */
+export const IntentStatus = widen({
+  DRAFT: { label: 'Not sent', tone: 'neutral' },
+  OPEN: { label: 'Waiting for a reply', tone: 'pending' },
+  RESPONSES_RECEIVED: { label: 'Supplier replied', tone: 'info' },
+  ORDERED: { label: 'Ordered', tone: 'success' },
+  CANCELLED: { label: 'Cancelled', tone: 'neutral' },
+  // Two different endings, and they must not read the same. EXPIRED is the
+  // supplier never answering; ORDER_CREATION_EXPIRED is them answering and the
+  // restaurant letting the window pass. Calling both "Expired" would blame the
+  // supplier for the restaurant's delay.
+  EXPIRED: { label: 'No reply in time', tone: 'danger' },
+  ORDER_CREATION_EXPIRED: { label: 'Reply expired', tone: 'warning' },
+} satisfies Record<IntentStatusCode, StatusDisplay>);
+
+/**
+ * The same lifecycle, as the supplier sees it.
+ *
+ * <p>"Waiting for a reply" is the restaurant's view of OPEN; from the other side
+ * it is a job to do. And ORDER_CREATION_EXPIRED is the restaurant's lapse, not
+ * the supplier's — telling a supplier their reply "expired" would read as a
+ * reprimand for work they did on time.
+ */
+export const SupplierIntentStatus = widen({
+  DRAFT: { label: 'Not sent', tone: 'neutral' },
+  OPEN: { label: 'Needs your reply', tone: 'pending' },
+  RESPONSES_RECEIVED: { label: 'You replied', tone: 'info' },
+  ORDERED: { label: 'Ordered', tone: 'success' },
+  CANCELLED: { label: 'Cancelled by restaurant', tone: 'neutral' },
+  EXPIRED: { label: 'Not answered in time', tone: 'danger' },
+  ORDER_CREATION_EXPIRED: { label: 'Not ordered in time', tone: 'neutral' },
+} satisfies Record<IntentStatusCode, StatusDisplay>);
+
+/**
+ * How much of a request was available — the axis the restaurant filters on.
+ *
+ * <p>Deliberately not a status. A request can be ORDERED and only a third
+ * filled, and "what didn't I get?" is the question being asked.
+ */
+export const IntentFulfilment = widen({
+  // Not zero. Nobody has answered yet, and showing this as "none available"
+  // would have a restaurant re-sourcing against a reply that is still coming.
+  AWAITING: { label: 'Awaiting reply', tone: 'pending' },
+  FULFILLED: { label: 'All available', tone: 'success' },
+  PARTIALLY_FULFILLED: { label: 'Partly available', tone: 'warning' },
+  NOT_FULFILLED: { label: 'None available', tone: 'danger' },
+} satisfies Record<IntentFulfilmentCode, StatusDisplay>);

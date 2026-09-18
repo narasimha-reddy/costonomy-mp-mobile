@@ -15,7 +15,6 @@ import {
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
-  MandiStatusChip,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatDistance, orderValue } from '@/utils/orders';
@@ -127,9 +126,7 @@ export default function SupplierHome() {
                 paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
                 amount={orderValue(order)}
-                trailing={
-                  <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
-                }
+                status={resolveStatus(SupplierOrderStatus, order.status)}
               />
             </MandiCard>
           ))

@@ -1,7 +1,8 @@
 import React from 'react';
 import type { IncomingOrder } from '@/models/procurement';
-import { MandiCard, MandiCountdown } from '@/components/common';
+import { MandiCard } from '@/components/common';
 import { OrderCardBody } from '@/components/order';
+import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatDistance } from '@/utils/orders';
 import { Colors } from '@/theme';
 
@@ -38,12 +39,11 @@ export function PendingOrderCard({
         paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
         amount={order.totalAmount}
-        trailing={
-          <MandiCountdown
-            deadlineAt={order.acceptanceDeadline}
-            slaSeconds={order.responseSlaSeconds ?? undefined}
-          />
-        }
+        status={resolveStatus(SupplierOrderStatus, order.status)}
+        // The acceptance clock, in the footer slot a request's clock uses.
+        deadlineAt={order.acceptanceDeadline}
+        deadlineSeconds={order.responseSlaSeconds ?? undefined}
+        deadlineAction="to answer"
       />
     </MandiCard>
   );

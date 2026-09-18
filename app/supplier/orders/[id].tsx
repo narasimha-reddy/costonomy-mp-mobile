@@ -38,7 +38,7 @@ import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatDistance, orderValue } from '@/utils/orders';
-import { formatMoment } from '@/utils/dateRange';
+import { formatMomentWithRecency } from '@/utils/dateRange';
 import { PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { track } from '@/analytics';
@@ -255,9 +255,21 @@ export default function SupplierOrderScreen() {
       ) : (
         <>
           <MandiCard>
-            {/* Where it is going, then what it is called and how it is paid for.
-                The supplier is deciding inside a sixty-second window, and the
-                first of those is the one they cannot look up later. */}
+            {/* Status leads and the reference follows, as on a request: the
+                two screens describe stages of one thing, and a reader should
+                not have to re-learn where to look. */}
+            <View style={styles.row}>
+              <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} />
+              <MandiText variant="caption" color={Colors.textTertiary}>
+                {order.orderNumber}
+              </MandiText>
+            </View>
+            <MandiText variant="caption" color={Colors.textTertiary}>
+              {formatMomentWithRecency(order.createdAt)}
+            </MandiText>
+
+            {/* Where it is going. The supplier is deciding inside a window, and
+                this is the fact they cannot look up later. */}
             <View style={styles.row}>
               <View style={styles.where}>
                 <MandiText variant="bodyEmphasis" numberOfLines={2}>
@@ -270,30 +282,17 @@ export default function SupplierOrderScreen() {
                   </MandiText>
                 ) : null}
               </View>
-              <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} />
-            </View>
-            {/* The same two columns as the card, so a supplier who tapped
-                through finds the four facts where they already were. */}
-            <View style={styles.columns}>
-              <View style={styles.left}>
-                <PaymentMethodPill method={order.paymentMethod} />
-                <MandiText variant="caption" color={Colors.textTertiary}>
-                  {order.orderNumber}
-                </MandiText>
-              </View>
-              <View style={styles.right}>
-                <MandiText variant="price">{formatMoney(orderValue(order))}</MandiText>
-                <MandiText variant="caption" color={Colors.textTertiary}>
-                  {order.items.length} item{order.items.length === 1 ? '' : 's'}
-                </MandiText>
-              </View>
             </View>
 
-            {/* Full width rather than in a column: it is a sentence, and squeezed
-                into half the card it wraps into three lines. */}
-            <MandiText variant="caption" color={Colors.textTertiary}>
-              Placed {formatMoment(order.createdAt)}
-            </MandiText>
+            {/* Value, count and how it is paid — one line under the party, the
+                same order the card uses. */}
+            <View style={styles.valueRow}>
+              <MandiText variant="price">{formatMoney(orderValue(order))}</MandiText>
+              <MandiText variant="caption" color={Colors.textTertiary}>
+                {order.items.length} item{order.items.length === 1 ? '' : 's'}
+              </MandiText>
+              <PaymentMethodPill method={order.paymentMethod} />
+            </View>
             {pending && order.acceptanceDeadline && (
               <View style={styles.deadline}>
                 <MandiText variant="caption" color={Colors.textSecondary}>
@@ -658,6 +657,12 @@ function previewLine(
 
 const styles = StyleSheet.create({
   where: { flex: 1, gap: 2 },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
   columns: {
     flexDirection: 'row',
     alignItems: 'flex-end',

@@ -245,9 +245,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
               paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
               amount={order.totalAmount}
-              trailing={
-                <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
-              }
+              status={resolveStatus(SupplierOrderStatus, order.status)}
             />
           </MandiCard>
         ))

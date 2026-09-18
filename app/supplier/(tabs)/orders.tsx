@@ -15,7 +15,6 @@ import {
   MandiErrorState,
   MandiScreen,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
@@ -137,9 +136,7 @@ export default function SupplierOrdersScreen() {
               paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
               amount={orderValue(order)}
-              trailing={
-                <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
-              }
+              status={resolveStatus(SupplierOrderStatus, order.status)}
             />
           </MandiCard>
         ))

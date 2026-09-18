@@ -12,7 +12,6 @@ import {
   MandiErrorState,
   MandiScreen,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
@@ -105,7 +104,7 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
         paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
         amount={order.totalAmount}
-        trailing={<MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />}
+        status={resolveStatus(SupplierOrderStatus, order.status)}
       />
     </MandiCard>
   );

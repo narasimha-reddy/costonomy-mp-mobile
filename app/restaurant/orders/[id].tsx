@@ -19,6 +19,7 @@ import {
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, Spacing } from '@/theme';
 
@@ -29,6 +30,10 @@ import { Colors, Spacing } from '@/theme';
  * **the server's instant**, counted down to directly. A local timer started when
  * the screen opened would drift from the deadline the backend will actually
  * enforce, and the one number a restaurant is watching would be wrong.
+ *
+ * <p>The header carries only the order number: the card below leads with the
+ * supplier, and repeating it two lines above would push the status down the
+ * screen.
  *
  * <p>A partial acceptance shows requested and accepted side by side. Guardrail
  * 14: the shortfall is never silently dropped, and this is where it becomes
@@ -65,7 +70,7 @@ export default function OrderDetailScreen() {
 
   return (
     <MandiScreen
-      header={<MandiHeader title={order?.orderNumber ?? 'Order'} subtitle={order?.supplierName} back />}
+      header={<MandiHeader title={order?.orderNumber ?? 'Order'} back />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
       footer={renderActions()}
@@ -77,10 +82,19 @@ export default function OrderDetailScreen() {
       ) : (
         <>
           <MandiCard>
+            {/* Status leads and the date follows it, as on a request: the two
+                screens describe stages of one thing, and a reader should not
+                have to re-learn where to look. */}
             <View style={styles.row}>
-              <MandiText variant="bodyEmphasis">{order.supplierName}</MandiText>
               <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} />
+              {/* The number is the screen's title; only the date belongs here. */}
+              <MandiText variant="caption" color={Colors.textTertiary}>
+                {formatMomentWithRecency(order.createdAt)}
+              </MandiText>
             </View>
+            <MandiText variant="bodyEmphasis" style={styles.party}>
+              {order.supplierName}
+            </MandiText>
             <MandiText variant="caption" color={Colors.textSecondary}>
               {order.storeName}
             </MandiText>
@@ -263,6 +277,7 @@ function humanise(value: string): string {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  party: { marginTop: Spacing.xs },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   item: {
     flexDirection: 'row',

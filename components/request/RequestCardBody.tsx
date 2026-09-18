@@ -12,6 +12,7 @@ import type { IntentItem } from '@/models/intent';
 import { ITEM_NAMES_SHOWN } from '@/utils/orders';
 import { skuTitle } from '@/utils/skuLabel';
 import { formatMoney, type Money } from '@/utils/money';
+import { relative } from '@/utils/dateRange';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
@@ -40,6 +41,7 @@ export function RequestCardBody({
   deadlineSeconds,
   deadlineAction,
   reference,
+  occurredAt,
   amount,
   amountLabel,
   items,
@@ -62,6 +64,14 @@ export function RequestCardBody({
   deadlineSeconds?: number | null;
   deadlineAction?: string;
   reference?: string | null;
+  /**
+   * When the request was raised.
+   *
+   * <p>Shown as "20 hrs ago" rather than the order card's full moment: it
+   * shares a line with the reference here, and the relative form is both the
+   * half that fits and the half somebody scanning a list actually reads.
+   */
+  occurredAt?: string | null;
   amount?: Money | null;
   /** What the amount is, in two or three words. */
   amountLabel?: string;
@@ -74,51 +84,32 @@ export function RequestCardBody({
 
   return (
     <View style={styles.block}>
-      {/* The clock, or the status on its own when none is running. A finished
-          request still needs to say what it is. */}
-      <View style={styles.clockRow}>
-        {running ? (
-          // The small countdown hides its own label, which leaves a bare
-          // "18:00" — a number with no unit of meaning. The card has the room,
-          // so the label sits beside it rather than being dropped.
-          <View style={styles.clock}>
-            <MandiCountdown
-              deadlineAt={deadlineAt}
-              slaSeconds={deadlineSeconds ?? undefined}
-              action={deadlineAction}
-              size="sm"
-            />
-            {deadlineAction ? (
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                {deadlineAction}
-              </MandiText>
-            ) : null}
-          </View>
-        ) : (
-          <View style={styles.flex} />
-        )}
-        <MandiStatusChip {...status} size="sm" />
-      </View>
+      {/* Which request, and how long it has been sitting there. Both are
+          reference rather than headline, so they share one quiet line above the
+          party — the same pair the order card carries, in one row because a
+          request has a clock below competing for attention. */}
+      {(reference != null || occurredAt != null) && (
+        <View style={styles.topRow}>
+          <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
+            {reference}
+          </MandiText>
+          {occurredAt != null && (
+            <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
+              {relative(new Date(occurredAt))}
+            </MandiText>
+          )}
+        </View>
+      )}
 
       <PartyHeading primary={primary || 'Request'} secondary={secondary} trailing={trailing} />
 
-      <View style={styles.columns}>
-        <View style={styles.left}>
-          {reference ? (
-            <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
-              {reference}
-            </MandiText>
-          ) : null}
-        </View>
-
-        <View style={styles.right}>
-          {amount != null ? <MandiText variant="price">{formatMoney(amount)}</MandiText> : null}
-          {/* Same tone and size as the reference opposite it: both are
-              reference, not headline, and a matched pair reads as one band. */}
-          <MandiText variant="caption" color={Colors.textTertiary}>
-            {amountLabel ?? `${count} item${count === 1 ? '' : 's'}`}
-          </MandiText>
-        </View>
+      {/* Left, under the party, because it belongs to them: this is what this
+          supplier's answer is worth, not a figure floating opposite a name. */}
+      <View style={styles.valueRow}>
+        {amount != null ? <MandiText variant="price">{formatMoney(amount)}</MandiText> : null}
+        <MandiText variant="caption" color={Colors.textTertiary}>
+          {amountLabel ?? `${count} item${count === 1 ? '' : 's'}`}
+        </MandiText>
       </View>
 
       {count > 0 ? (
@@ -145,6 +136,30 @@ export function RequestCardBody({
           </MandiText>
         </View>
       ) : null}
+
+      {/* The clock and what this request is, last and together. They are the
+          two facts that change while the card sits on screen, and reading them
+          as a pair is what tells somebody whether to act now. */}
+      <View style={styles.footerRow}>
+        {running ? (
+          <View style={styles.clock}>
+            <MandiCountdown
+              deadlineAt={deadlineAt}
+              slaSeconds={deadlineSeconds ?? undefined}
+              action={deadlineAction}
+              size="sm"
+            />
+            {deadlineAction ? (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                {deadlineAction}
+              </MandiText>
+            ) : null}
+          </View>
+        ) : (
+          <View style={styles.flex} />
+        )}
+        <MandiStatusChip {...status} size="sm" />
+      </View>
 
       {footer}
     </View>
@@ -173,22 +188,29 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   block: { gap: 2 },
   clock: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flex: 1 },
-  clockRow: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.sm,
     marginBottom: Spacing.xs,
   },
-  columns: {
+  valueRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
+    alignItems: 'baseline',
+    gap: Spacing.sm,
     marginTop: Spacing.xs,
   },
-  left: { flex: 1, gap: 2 },
-  right: { alignItems: 'flex-end', gap: 2 },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.borderLight,
+  },
   goods: {
     flexDirection: 'row',
     alignItems: 'center',

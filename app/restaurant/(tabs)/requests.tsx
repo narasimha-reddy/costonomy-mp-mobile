@@ -145,6 +145,7 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
           }
           deadlineAction={awaitingReply ? 'for their reply' : 'to order'}
           reference={request.reference}
+          occurredAt={request.sentAt ?? request.createdAt}
           amount={request.agreedTotal}
           amountLabel={`${request.items.length} item${request.items.length === 1 ? '' : 's'}`}
           items={request.items}

@@ -109,6 +109,7 @@ function SupplierRequestCard({ request, onPress }: { request: Intent; onPress: (
           deadlineSeconds={request.responseWindowSeconds}
           deadlineAction="to accept"
           reference={request.reference}
+          occurredAt={request.sentAt ?? request.createdAt}
           amount={request.acceptance?.offeredTotal ?? request.agreedTotal}
           amountLabel={
             request.acceptance != null

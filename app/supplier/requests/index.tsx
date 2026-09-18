@@ -131,6 +131,7 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
           deadlineSeconds={request.responseWindowSeconds}
           deadlineAction="to accept"
           reference={request.reference}
+          occurredAt={request.sentAt ?? request.createdAt}
           amount={request.acceptance?.offeredTotal ?? request.agreedTotal}
           amountLabel={
             request.acceptance != null

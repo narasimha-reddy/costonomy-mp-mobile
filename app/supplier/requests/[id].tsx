@@ -172,8 +172,12 @@ export default function SupplierRequestScreen() {
       ) : (
         <>
           <MandiCard>
+            {/* Status leads, as it does on the restaurant's screen: it is what
+                the reader is here to find out, and having the two sides put it
+                on opposite edges made the same request look like two things. */}
             <View style={styles.row}>
-              <View style={styles.flex}>
+              <MandiStatusChip {...supplierIntentStatus(request.status, request.fulfilment)} />
+              <View style={styles.countColumn}>
                 <MandiText variant="bodyEmphasis">
                   {request.items.length} item{request.items.length === 1 ? '' : 's'} requested
                 </MandiText>
@@ -183,7 +187,6 @@ export default function SupplierRequestScreen() {
                   </MandiText>
                 )}
               </View>
-              <MandiStatusChip {...supplierIntentStatus(request.status, request.fulfilment)} />
             </View>
 
             <MandiText variant="caption" color={Colors.textTertiary}>
@@ -444,7 +447,13 @@ function Row({ label, value, emphasis }: { label: string; value: string; emphasi
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  countColumn: { alignItems: 'flex-end', gap: 2 },
   note: { marginTop: Spacing.md, fontStyle: 'italic' },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   hint: {

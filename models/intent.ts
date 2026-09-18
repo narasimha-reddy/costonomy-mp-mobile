@@ -131,6 +131,12 @@ export interface Intent {
   /** The instant the server built this response. */
   serverTime: string;
   editable: boolean;
+  /**
+   * Whether a line's quantity may still be changed. True through OPEN, where
+   * `editable` is already false — a sent request is fixed in shape but not in
+   * quantity until the supplier answers. See D-088.
+   */
+  quantityEditable: boolean;
   withinOrderWindow: boolean;
   items: IntentItem[];
   agreedValue: Money | null;

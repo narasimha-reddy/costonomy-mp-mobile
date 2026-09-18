@@ -2685,6 +2685,53 @@ wide is scaffolding with nothing to hold.
 ---
 
 
+## D-088 — A sent request is frozen in shape, not in quantity
+**Raised 2026-09-18 · Settled 2026-09-18**
+
+`IntentStatus.isEditable()` was true only for `DRAFT`, so every change to a sent
+request was refused with "This request has already been sent and can't be
+changed." The reasoning, from `IntentService`'s own javadoc, was sound: a
+supplier pricing a list should not have it change underneath them and end up
+committing stock against something that no longer exists.
+
+It was, however, applied one state too early. A restaurant that realises it needs
+four crates rather than two had no way to say so — only withdraw and start again,
+which loses the request, its reference and the supplier's remaining clock.
+
+**Decision: quantities stay changeable through `OPEN`; everything else does not.**
+A second predicate, `isQuantityEditable()`, covers `DRAFT` and `OPEN`, and only
+`updateItem` consults it. Adding a line, removing one and sending still check
+`isEditable()` and stay `DRAFT`-only, so the shape of a request a supplier is
+reading cannot move. `RESPONSES_RECEIVED` freezes everything, which is where this
+enum always documented the freeze as beginning.
+
+Nothing is committed while a request is open — no answer, no held stock, no
+price. The whole cost of an edit is that a supplier re-reads a number.
+
+### The deadline does not move
+An edit leaves `responseDeadline` exactly as it was. Extending it would let a
+restaurant hold a supplier indefinitely by editing in a loop, and the supplier's
+window is their own promise, frozen at send. The trade is accepted knowingly: a
+supplier may see changed quantities with little time left. If that proves to hurt
+in practice, re-notifying on edit is the smaller fix, not resetting the clock.
+
+### Stepping a line to zero is refused once sent
+Zero means "remove the line" in a basket, which is right there. On a live request
+it would let a restaurant empty a list a supplier is holding open and leave a
+request with nothing in it and a clock still running. Withdrawal is what says
+that properly, and it tells the supplier.
+
+### The race is settled by the database, not by a second read
+A quantity lives on the line, so writing it leaves the intent's `@Version`
+untouched and a supplier answering in the same instant would read a stale list
+and still commit. `updateItem` takes `OPTIMISTIC_FORCE_INCREMENT` on the intent
+when it is `OPEN`, putting both writers on one version: whoever loses gets
+`CONCURRENT_MODIFICATION`. Re-reading the status before saving would have left a
+window between the read and the write, which is exactly the window that matters.
+
+---
+
+
 ## D-017 — The requirement lifecycle includes SOURCING
 **Raised 2026-09-14 · Settled 2026-09-14** (was OPEN-003)
 

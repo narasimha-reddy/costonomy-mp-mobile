@@ -4,7 +4,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
-import { cancelIntent, cloneIntent, createOrderFromIntent, fetchIntent } from '@/services/intent';
+import {
+  cancelIntent,
+  cloneIntent,
+  createOrderFromIntent,
+  fetchIntent,
+  updateIntentItem,
+} from '@/services/intent';
 import { intentKey, orderPaymentKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import {
@@ -14,6 +20,7 @@ import {
   MandiCountdown,
   MandiErrorState,
   MandiHeader,
+  MandiQuantityStepper,
   MandiScreen,
   MandiSkeletonList,
   MandiStatusChip,
@@ -57,6 +64,16 @@ export default function RequestDetailScreen() {
   const { accessToken } = useSession();
   const [confirmCancel, setConfirmCancel] = React.useState(false);
 
+  /**
+   * Quantities being edited, keyed by line id, or null when not editing.
+   *
+   * <p>Held locally until Save rather than written per tap: a stepper on a live
+   * request would otherwise fire a request per press at a supplier who is
+   * reading the list, and there would be no moment the restaurant could decide
+   * the change was wrong and back out of it.
+   */
+  const [edits, setEdits] = React.useState<Record<number, number> | null>(null);
+
   const query = useQuery({
     queryKey: intentKey(intentId),
     queryFn: () => fetchIntent(accessToken as string, intentId),
@@ -99,6 +116,47 @@ export default function RequestDetailScreen() {
       toast.show(caught instanceof ApiError ? caught.message : 'Could not withdraw that.', 'error'),
   });
 
+  /**
+   * Save the edited quantities.
+   *
+   * <p>Sequential rather than parallel, and it stops at the first refusal. The
+   * server takes one line at a time, and the refusal worth stopping for is the
+   * supplier having answered mid-edit — once that is true of one line it is true
+   * of all of them, and firing the rest would produce a row of identical errors.
+   *
+   * <p>Whatever happens the screen is refetched, because some lines may have
+   * been written before the refusal and the totals are the server's to state.
+   */
+  const saveQuantities = useMutation({
+    mutationFn: async (changed: { itemId: number; quantity: number }[]) => {
+      for (const line of changed) {
+        await updateIntentItem(accessToken as string, line.itemId, String(line.quantity));
+      }
+    },
+    onSuccess: (_result, changed) => {
+      track('request_quantities_edited', { screen: SCREEN, entityId: intentId }, { lines: changed.length });
+      setEdits(null);
+      void refresh();
+      toast.show(
+        changed.length === 1 ? 'Quantity updated' : `${changed.length} quantities updated`,
+        'success',
+      );
+    },
+    onError: (caught) => {
+      // Leave edit mode either way: the server has rejected this list, and the
+      // refetch below replaces it with whatever is now true. Keeping the
+      // steppers open over stale numbers would invite the same failing save.
+      setEdits(null);
+      void refresh();
+      toast.show(
+        caught instanceof ApiError
+          ? caught.message
+          : 'Could not save those quantities. Check your connection and try again.',
+        'error',
+      );
+    },
+  });
+
   const repeat = useMutation({
     mutationFn: () => cloneIntent(accessToken as string, intentId),
     onSuccess: () => {
@@ -123,17 +181,19 @@ export default function RequestDetailScreen() {
       ) : (
         <>
           <MandiCard>
-            <View style={styles.row}>
-              <View style={styles.flex}>
-                <MandiText variant="bodyEmphasis">{request.storeName}</MandiText>
-                {request.supplierName != null && request.supplierName !== request.storeName && (
-                  <MandiText variant="caption" color={Colors.textSecondary}>
-                    {request.supplierName}
-                  </MandiText>
-                )}
-              </View>
+            {/* Status first. What a kitchen checks on opening this screen is
+                whether the supplier has answered yet — the store name is
+                already known, since they chose it. Wrapped so the chip keeps
+                its own width instead of stretching the card. */}
+            <View style={styles.statusRow}>
               <MandiStatusChip {...restaurantIntentStatus(request.status, request.fulfilment)} />
             </View>
+            <MandiText variant="bodyEmphasis">{request.storeName}</MandiText>
+            {request.supplierName != null && request.supplierName !== request.storeName && (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                {request.supplierName}
+              </MandiText>
+            )}
 
             {/* Only once answered: before that the status chip above already
                 says "awaiting", and a second chip repeating it is noise. */}
@@ -149,7 +209,7 @@ export default function RequestDetailScreen() {
             {request.status === 'OPEN' && request.responseDeadline != null && (
               <View style={styles.countdown}>
                 <MandiText variant="caption" color={Colors.textSecondary}>
-                  {request.storeName ?? 'This supplier'} usually accepts within
+                  Usually accepts within
                 </MandiText>
                 <MandiCountdown
                   deadlineAt={request.responseDeadline}
@@ -194,9 +254,47 @@ export default function RequestDetailScreen() {
           </MandiCard>
 
           <MandiCard>
-            <MandiText variant="bodyEmphasis">Items</MandiText>
+            <View style={styles.itemsHeader}>
+              <MandiText variant="bodyEmphasis">Items</MandiText>
+              {/* The server decides whether this is offered at all: true through
+                  OPEN, false the moment the supplier answers (D-088). Reading
+                  the flag rather than the status keeps the rule in one place. */}
+              {request.quantityEditable && edits == null && (
+                <MandiButton
+                  label="Edit"
+                  variant="tertiary"
+                  size="sm"
+                  onPress={() => {
+                    setEdits(
+                      Object.fromEntries(
+                        request.items.map((i) => [i.id, Number(i.requestedQuantity)]),
+                      ),
+                    );
+                  }}
+                />
+              )}
+            </View>
+
+            {edits != null && (
+              <MandiText variant="caption" color={Colors.textSecondary} style={styles.editHint}>
+                {request.status === 'OPEN'
+                  ? 'Change what you need and save. The supplier has not answered yet, '
+                    + 'and their time to accept is unchanged.'
+                  : 'Change what you need and save.'}
+              </MandiText>
+            )}
+
             {request.items.map((item) => (
-              <RequestLine key={item.id} item={item} answered={request.acceptance != null} />
+              <RequestLine
+                key={item.id}
+                item={item}
+                answered={request.acceptance != null}
+                editQuantity={edits?.[item.id]}
+                onChangeQuantity={(quantity) =>
+                  setEdits((current) =>
+                    current == null ? current : { ...current, [item.id]: quantity })
+                }
+              />
             ))}
           </MandiCard>
 
@@ -204,12 +302,7 @@ export default function RequestDetailScreen() {
             <MandiCard>
               <Row label="Items" value={formatMoney(request.agreedValue ?? '0')} />
               <Row label="GST" value={formatMoney(request.agreedGst ?? '0')} />
-              <Row
-                label="If they accept it all"
-                value={formatMoney(request.agreedTotal)}
-                hint="This is the price they will confirm. Delivery is quoted separately once a courier is assigned."
-                emphasis
-              />
+              <Row label="Total" value={formatMoney(request.agreedTotal)} emphasis />
             </MandiCard>
           )}
 
@@ -258,6 +351,34 @@ export default function RequestDetailScreen() {
    */
   function renderActions() {
     if (request == null) return undefined;
+
+    // Editing owns the bar while it is open. Offering "Create order" or
+    // "Withdraw" beside unsaved quantities would ask which of the two the
+    // restaurant meant, and one of the answers loses their edit silently.
+    if (edits != null) {
+      const changed = request.items
+        .filter((i) => edits[i.id] != null && edits[i.id] !== Number(i.requestedQuantity))
+        .map((i) => ({ itemId: i.id, quantity: edits[i.id] as number }));
+
+      return (
+        <MandiStickyBar>
+          <MandiButton
+            label={changed.length === 0 ? 'Save' : `Save ${changed.length === 1 ? 'change' : `${changed.length} changes`}`}
+            size="lg"
+            disabled={changed.length === 0}
+            loading={saveQuantities.isPending}
+            onPress={() => saveQuantities.mutate(changed)}
+          />
+          <MandiButton
+            label="Cancel"
+            variant="tertiary"
+            size="md"
+            disabled={saveQuantities.isPending}
+            onPress={() => setEdits(null)}
+          />
+        </MandiStickyBar>
+      );
+    }
 
     const orderable =
       request.status === 'RESPONSES_RECEIVED'
@@ -317,7 +438,19 @@ export default function RequestDetailScreen() {
  * A shortfall is a fact about the request, and showing only the offered figure
  * cannot tell anybody what they asked for.
  */
-function RequestLine({ item, answered }: { item: IntentItem; answered: boolean }) {
+function RequestLine({
+  item,
+  answered,
+  editQuantity,
+  onChangeQuantity,
+}: {
+  item: IntentItem;
+  answered: boolean;
+  /** Set only while editing; the live value for this line's stepper. */
+  editQuantity?: number;
+  onChangeQuantity?: (quantity: number) => void;
+}) {
+  const editing = editQuantity != null && onChangeQuantity != null;
   const short =
     item.offeredQuantity != null
     && Number(item.offeredQuantity) < Number(item.requestedQuantity);
@@ -333,9 +466,23 @@ function RequestLine({ item, answered }: { item: IntentItem; answered: boolean }
         <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>
           {skuSecondaryLine(item.sku, item.agreedUnitPriceInclusiveGst)}
         </MandiText>
-        <MandiText variant="caption" color={Colors.textSecondary}>
-          Asked for {formatQuantity(item.requestedQuantity)} {item.unit}
-        </MandiText>
+        {editing ? (
+          // min 1: a sent request cannot be emptied by stepping to zero, and the
+          // server refuses it — withdrawing is what drops a request (D-088).
+          <MandiQuantityStepper
+            value={editQuantity}
+            onChange={onChangeQuantity}
+            min={1}
+            unit={item.unit}
+            size="sm"
+            itemLabel={skuTitle(item.sku)}
+            testID={`request-qty-${item.id}`}
+          />
+        ) : (
+          <MandiText variant="caption" color={Colors.textSecondary}>
+            Asked for {formatQuantity(item.requestedQuantity)} {item.unit}
+          </MandiText>
+        )}
 
         {declined && (
           <View style={styles.lineNote}>
@@ -408,7 +555,8 @@ function Row({ label, value, emphasis, hint }: {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  // flex-start so the chip sizes to its label rather than filling the card.
+  statusRow: { flexDirection: 'row', alignSelf: 'flex-start', marginBottom: Spacing.sm },
   fulfilmentRow: { flexDirection: 'row', marginTop: Spacing.md },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   noteRow: {
@@ -425,6 +573,13 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.borderLight,
   },
+  itemsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  editHint: { marginTop: Spacing.xs },
   itemText: { flex: 1, gap: Spacing.xs },
   lineNote: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   lineValue: { alignItems: 'flex-end', gap: 2 },

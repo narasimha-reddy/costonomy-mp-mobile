@@ -35,7 +35,7 @@ import { Spacing } from '@/theme';
 export default function SupplierHome() {
   const router = useRouter();
   const { accessToken } = useSession();
-  const { storeId, store } = useStore();
+  const { storeId } = useStore();
 
   const pending = useQuery({
     queryKey: ['store', storeId, 'orders', 'pending'],
@@ -64,12 +64,13 @@ export default function SupplierHome() {
       <RequestCarousel />
 
       <View style={styles.section}>
+        {/* No "respond within" any more: an order reaching this store has
+            already been agreed to when the request behind it was answered, so
+            there is nothing here to respond to and no clock running. The SLA
+            moved to the request, which is where it is now shown. */}
         <MandiSectionHeader
           title="New orders"
           count={(pending.data ?? []).length}
-          subtitle={store?.responseSlaSeconds
-            ? `Respond within ${Math.round(store.responseSlaSeconds / 60)} min`
-            : undefined}
         />
         {pending.isPending ? (
           <MandiSkeletonList count={2} />

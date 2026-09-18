@@ -88,6 +88,16 @@ export interface Intent {
   requestedDeliveryTime: string | null;
   notes: string | null;
   sentAt: string | null;
+  /**
+   * When the supplier's chance to answer runs out — their store's own SLA,
+   * frozen when the request was sent.
+   *
+   * <p>Distinct from `orderCreationDeadline`, and they belong to different
+   * people: this one is the supplier's, that one the restaurant's. Only one is
+   * ever live at a time.
+   */
+  responseDeadline: string | null;
+  responseWindowSeconds: number | null;
   acceptedAt: string | null;
   /**
    * When the chance to order from this answer runs out.

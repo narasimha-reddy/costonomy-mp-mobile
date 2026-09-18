@@ -12,6 +12,7 @@ import {
   MandiButton,
   MandiCard,
   MandiConfirm,
+  MandiCountdown,
   MandiErrorState,
   MandiFormField,
   MandiHeader,
@@ -150,6 +151,22 @@ export default function SupplierRequestScreen() {
               <MandiText variant="caption" color={Colors.textSecondary} style={styles.note}>
                 “{request.notes}”
               </MandiText>
+            )}
+
+            {answerable && request.responseDeadline != null && (
+              <View style={styles.countdown}>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  Reply within
+                </MandiText>
+                {/* The store's own promise, counted down against the server's
+                    clock. Without this a supplier had no idea they were on one. */}
+                <MandiCountdown
+                  deadlineAt={request.responseDeadline}
+                  slaSeconds={request.responseWindowSeconds ?? undefined}
+                  action="to reply"
+                  onExpire={() => void query.refetch()}
+                />
+              </View>
             )}
 
             {answerable && (
@@ -352,6 +369,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   note: { marginTop: Spacing.md, fontStyle: 'italic' },
+  countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   hint: {
     flexDirection: 'row',
     alignItems: 'flex-start',

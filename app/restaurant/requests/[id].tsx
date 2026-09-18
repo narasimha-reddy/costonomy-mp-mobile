@@ -139,6 +139,23 @@ export default function RequestDetailScreen() {
               <MandiStatusChip {...resolveStatus(FulfilmentDisplay, request.fulfilment)} />
             </View>
 
+            {/* The supplier's clock, while it is theirs. Shown so a kitchen can
+                decide whether to keep waiting or go elsewhere, rather than
+                refreshing a screen that says only "waiting". */}
+            {request.status === 'OPEN' && request.responseDeadline != null && (
+              <View style={styles.countdown}>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {request.storeName ?? 'This supplier'} usually replies within
+                </MandiText>
+                <MandiCountdown
+                  deadlineAt={request.responseDeadline}
+                  slaSeconds={request.responseWindowSeconds ?? undefined}
+                  action="to reply"
+                  onExpire={() => void refresh()}
+                />
+              </View>
+            )}
+
             {request.status === 'RESPONSES_RECEIVED' && request.orderCreationDeadline && (
               <View style={styles.countdown}>
                 <MandiText variant="caption" color={Colors.textSecondary}>

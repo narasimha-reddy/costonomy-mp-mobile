@@ -34,6 +34,7 @@ import type { IntentItem } from '@/models/intent';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
@@ -214,6 +215,13 @@ export default function RequestDetailScreen() {
             <View style={styles.statusRow}>
               <MandiStatusChip {...restaurantIntentStatus(request.status, request.fulfilment)} />
             </View>
+
+            {/* When it was actually asked for. sentAt, not createdAt: a draft
+                may have sat in the basket for a day, and what both sides date
+                this request from is the moment it went out. */}
+            <MandiText variant="caption" color={Colors.textTertiary}>
+              Requested {formatMomentWithRecency(request.sentAt ?? request.createdAt)}
+            </MandiText>
             <MandiText variant="bodyEmphasis">{request.storeName}</MandiText>
             {request.supplierName != null && request.supplierName !== request.storeName && (
               <MandiText variant="caption" color={Colors.textSecondary}>

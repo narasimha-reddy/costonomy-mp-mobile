@@ -29,6 +29,7 @@ import type { IntentItem } from '@/models/intent';
 import { supplierIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney, formatQuantity } from '@/utils/money';
+import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
@@ -184,6 +185,10 @@ export default function SupplierRequestScreen() {
               </View>
               <MandiStatusChip {...supplierIntentStatus(request.status, request.fulfilment)} />
             </View>
+
+            <MandiText variant="caption" color={Colors.textTertiary}>
+              Requested {formatMomentWithRecency(request.sentAt ?? request.createdAt)}
+            </MandiText>
 
             {request.notes != null && request.notes !== '' && (
               <MandiText variant="caption" color={Colors.textSecondary} style={styles.note}>

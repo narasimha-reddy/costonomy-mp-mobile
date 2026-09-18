@@ -3,6 +3,7 @@ import {
   defaultRange,
   describeRange,
   formatMoment,
+  formatMomentWithRecency,
   rangeFor,
   toQuery,
 } from '@/utils/dateRange';
@@ -119,5 +120,38 @@ describe('formatMoment', () => {
   it('returns a dash rather than "Invalid Date"', () => {
     expect(formatMoment(null)).toBe('—');
     expect(formatMoment('not a date')).toBe('—');
+  });
+});
+
+describe('formatMomentWithRecency', () => {
+  const when = '2026-09-15T19:34:00';
+
+  it('gives the absolute moment in the house format', () => {
+    expect(formatMomentWithRecency(when, new Date('2026-09-15T21:34:00')))
+      .toContain('15th Sep 2026 at 7:34 PM');
+  });
+
+  it('adds how long ago while that still tells you something', () => {
+    expect(formatMomentWithRecency(when, new Date('2026-09-15T21:34:00')))
+      .toBe('15th Sep 2026 at 7:34 PM (2 hrs ago)');
+  });
+
+  // Past a day the date is the useful fact, and "(3 months ago)" on every row
+  // says nothing new about any of them.
+  it('drops it once the date is the more useful half', () => {
+    expect(formatMomentWithRecency(when, new Date('2026-09-17T08:00:00')))
+      .toBe('15th Sep 2026 at 7:34 PM');
+  });
+
+  it('keeps it right up to the day boundary', () => {
+    expect(formatMomentWithRecency(when, new Date('2026-09-16T19:33:00')))
+      .toContain('(');
+    expect(formatMomentWithRecency(when, new Date('2026-09-16T19:35:00')))
+      .not.toContain('(');
+  });
+
+  it('survives a missing or unparseable value', () => {
+    expect(formatMomentWithRecency(null)).toBe('—');
+    expect(formatMomentWithRecency('not a date')).toBe('—');
   });
 });

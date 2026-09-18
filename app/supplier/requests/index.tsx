@@ -17,15 +17,15 @@ import {
   MandiText,
 } from '@/components/common';
 import type { Intent, IntentStatus as IntentStatusCode } from '@/models/intent';
-import { SupplierIntentStatus, resolveStatus } from '@/models/status';
+import { supplierIntentStatus } from '@/models/status';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /** Narrow by what the supplier would actually go looking for. */
 const FILTERS: { key: IntentStatusCode | 'ALL'; label: string }[] = [
   { key: 'ALL', label: 'All' },
-  { key: 'OPEN', label: 'Needs a reply' },
-  { key: 'RESPONSES_RECEIVED', label: 'Replied' },
+  { key: 'OPEN', label: 'Needs acceptance' },
+  { key: 'RESPONSES_RECEIVED', label: 'Accepted' },
   { key: 'ORDERED', label: 'Ordered' },
   { key: 'EXPIRED', label: 'Missed' },
 ];
@@ -94,7 +94,7 @@ export default function SupplierRequestsScreen() {
           title={filter === 'ALL' ? 'No requests yet' : 'Nothing matches that'}
           description={
             filter === 'ALL'
-              ? 'When a restaurant asks what you have, it shows here. Replying quickly is what wins the order.'
+              ? 'When a restaurant asks what you have, it shows here. Accepting quickly is what wins the order.'
               : 'Try a different filter.'
           }
         />
@@ -124,7 +124,7 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
               {request.reference}
             </MandiText>
           </View>
-          <MandiStatusChip {...resolveStatus(SupplierIntentStatus, request.status)} />
+          <MandiStatusChip {...supplierIntentStatus(request.status, request.fulfilment)} />
         </View>
 
         <MandiText
@@ -140,7 +140,7 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
             and it is the figure the restaurant is deciding against. */}
         {request.acceptance != null && (
           <MandiText variant="caption" color={Colors.textTertiary}>
-            You offered {formatMoney(request.acceptance.offeredTotal)}
+            You accepted {formatMoney(request.acceptance.offeredTotal)}
           </MandiText>
         )}
       </MandiCard>

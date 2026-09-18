@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
-import { fetchIntent, respondToIntent } from '@/services/intent';
+import { useDebounced } from '@/hooks/useDebounced';
+import { fetchIntent, previewResponse, respondToIntent } from '@/services/intent';
 import { intentKey, storeIntentsKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import {
@@ -25,7 +26,7 @@ import {
   useToast,
 } from '@/components/common';
 import type { IntentItem } from '@/models/intent';
-import { SupplierIntentStatus, resolveStatus } from '@/models/status';
+import { supplierIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { skuSecondaryLine } from '@/utils/skuLabel';
@@ -85,6 +86,27 @@ export default function SupplierRequestScreen() {
     ));
   }, [request?.id, answerable]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * What this reply comes to, priced by the server.
+   *
+   * <p>Debounced because it fires on every stepper tap, and keyed on the
+   * quantities so a tap that lands mid-flight supersedes the previous answer
+   * rather than racing it. `placeholderData` keeps the last figure on screen
+   * while the next arrives, so the total does not blink to nothing.
+   */
+  const offeredKey = useDebounced(JSON.stringify(offered), 300);
+  const preview = useQuery({
+    queryKey: [...intentKey(intentId), 'respond-preview', offeredKey],
+    queryFn: () =>
+      previewResponse(accessToken as string, intentId,
+        (request?.items ?? []).map((item) => ({
+          intentItemId: item.id,
+          offeredQuantity: String(offered[item.id] ?? 0),
+        }))),
+    enabled: answerable && Object.keys(offered).length > 0 && accessToken != null,
+    placeholderData: (previous) => previous,
+  });
+
   const totals = useMemo(() => {
     if (request == null) return { lines: 0, short: 0, declined: 0 };
     let short = 0;
@@ -113,10 +135,10 @@ export default function SupplierRequestScreen() {
       track('intent_answered', { screen: SCREEN, entityId: intentId });
       void queryClient.invalidateQueries({ queryKey: intentKey(intentId) });
       void queryClient.invalidateQueries({ queryKey: storeIntentsKey(storeId) });
-      toast.show('Reply sent', 'success');
+      toast.show('Accepted', 'success');
     },
     onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not send that reply.', 'error'),
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not send that.', 'error'),
   });
 
   return (
@@ -144,7 +166,7 @@ export default function SupplierRequestScreen() {
                   </MandiText>
                 )}
               </View>
-              <MandiStatusChip {...resolveStatus(SupplierIntentStatus, request.status)} />
+              <MandiStatusChip {...supplierIntentStatus(request.status, request.fulfilment)} />
             </View>
 
             {request.notes != null && request.notes !== '' && (
@@ -156,14 +178,14 @@ export default function SupplierRequestScreen() {
             {answerable && request.responseDeadline != null && (
               <View style={styles.countdown}>
                 <MandiText variant="caption" color={Colors.textSecondary}>
-                  Reply within
+                  Accept within
                 </MandiText>
                 {/* The store's own promise, counted down against the server's
                     clock. Without this a supplier had no idea they were on one. */}
                 <MandiCountdown
                   deadlineAt={request.responseDeadline}
                   slaSeconds={request.responseWindowSeconds ?? undefined}
-                  action="to reply"
+                  action="to accept"
                   onExpire={() => void query.refetch()}
                 />
               </View>
@@ -173,8 +195,8 @@ export default function SupplierRequestScreen() {
               <View style={styles.hint}>
                 <Ionicons name="pricetag-outline" size={15} color={Colors.textTertiary} />
                 <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
-                  Prices come from your catalogue — you only say how much you have.
-                  Set a line to zero if you can&apos;t supply it.
+                  These are the prices this request was sent at, so you only say how
+                  much you have. Set a line to zero if you can&apos;t supply it.
                 </MandiText>
               </View>
             )}
@@ -182,7 +204,7 @@ export default function SupplierRequestScreen() {
 
           <MandiCard>
             <MandiText variant="bodyEmphasis">
-              {answerable ? 'What can you supply?' : 'What you offered'}
+              {answerable ? 'What can you supply?' : 'What you accepted'}
             </MandiText>
             {request.items.map((item) => (
               <LineRow
@@ -190,6 +212,8 @@ export default function SupplierRequestScreen() {
                 item={item}
                 editable={answerable}
                 value={offered[item.id] ?? 0}
+                lineTotal={preview.data?.lines
+                  .find((line) => line.intentItemId === item.id)?.lineTotal ?? null}
                 onChange={(next) => setOffered((current) => ({ ...current, [item.id]: next }))}
               />
             ))}
@@ -217,13 +241,13 @@ export default function SupplierRequestScreen() {
               <Row label="Item value" value={formatMoney(request.acceptance.offeredValue)} />
               <Row label="GST" value={formatMoney(request.acceptance.offeredGst)} />
               <Row
-                label="You offered"
+                label="You accepted"
                 value={formatMoney(request.acceptance.offeredTotal)}
                 emphasis
               />
               {request.status === 'RESPONSES_RECEIVED' && (
                 <MandiText variant="caption" color={Colors.textSecondary} style={styles.note}>
-                  Waiting for the restaurant to order. Hold this stock until they do.
+  You&apos;ve accepted this. Waiting for the restaurant to order — hold this stock until they do.
                 </MandiText>
               )}
               {request.status === 'ORDER_CREATION_EXPIRED' && (
@@ -263,8 +287,24 @@ export default function SupplierRequestScreen() {
             </MandiText>
           </View>
         )}
+        {!everythingDeclined && preview.data != null && (
+          <View style={styles.footerTotal}>
+            <View style={styles.flex}>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                You&apos;re accepting
+              </MandiText>
+              <MandiText variant="caption" color={Colors.textTertiary}>
+                Items {formatMoney(preview.data.offeredValue)} · GST{' '}
+                {formatMoney(preview.data.offeredGst)}
+              </MandiText>
+            </View>
+            <MandiText variant="priceLarge">
+              {formatMoney(preview.data.offeredTotal)}
+            </MandiText>
+          </View>
+        )}
         <MandiButton
-          label={everythingDeclined ? 'Decline request' : 'Send reply'}
+          label={everythingDeclined ? 'Decline request' : 'Accept and send'}
           size="lg"
           variant={everythingDeclined ? 'destructive' : 'primary'}
           loading={reply.isPending}
@@ -286,13 +326,17 @@ function LineRow({
   item,
   editable,
   value,
+  lineTotal,
   onChange,
 }: {
   item: IntentItem;
   editable: boolean;
   value: number;
+  /** The server's figure for the quantity currently set. */
+  lineTotal: string | null;
   onChange: (next: number) => void;
 }) {
+  const unitPrice = item.agreedUnitPrice;
   const requested = Number(item.requestedQuantity);
   const declined = editable ? value === 0 : Number(item.offeredQuantity ?? 0) === 0;
   const short = editable
@@ -313,6 +357,12 @@ function LineRow({
         <MandiText variant="caption" color={Colors.textSecondary}>
           They asked for {formatQuantity(item.requestedQuantity)} {item.unit}
         </MandiText>
+
+        {editable && unitPrice != null && (
+          <MandiText variant="caption" color={Colors.textTertiary}>
+            {formatMoney(unitPrice)} each — the price this was sent at
+          </MandiText>
+        )}
 
         {editable ? (
           <>
@@ -347,8 +397,12 @@ function LineRow({
         )}
       </View>
 
-      {!editable && !declined && item.lineTotal != null && (
-        <MandiText variant="bodyEmphasis">{formatMoney(item.lineTotal)}</MandiText>
+      {/* Answered: what was committed to. Still answering: what the quantity
+          on screen comes to, as the server priced it. */}
+      {!declined && (editable ? lineTotal : item.lineTotal) != null && (
+        <MandiText variant="bodyEmphasis">
+          {formatMoney((editable ? lineTotal : item.lineTotal) as string)}
+        </MandiText>
       )}
     </View>
   );
@@ -385,6 +439,13 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.borderLight,
   },
   itemText: { flex: 1, gap: Spacing.xs },
+  footerTotal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
   summary: {
     flexDirection: 'row',
     alignItems: 'center',

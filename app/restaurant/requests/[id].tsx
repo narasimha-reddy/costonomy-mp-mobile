@@ -22,7 +22,7 @@ import {
   useToast,
 } from '@/components/common';
 import type { IntentItem } from '@/models/intent';
-import { IntentStatus, IntentFulfilment as FulfilmentDisplay, resolveStatus } from '@/models/status';
+import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { skuSecondaryLine } from '@/utils/skuLabel';
@@ -132,12 +132,16 @@ export default function RequestDetailScreen() {
                   </MandiText>
                 )}
               </View>
-              <MandiStatusChip {...resolveStatus(IntentStatus, request.status)} />
+              <MandiStatusChip {...restaurantIntentStatus(request.status, request.fulfilment)} />
             </View>
 
-            <View style={styles.fulfilmentRow}>
-              <MandiStatusChip {...resolveStatus(FulfilmentDisplay, request.fulfilment)} />
-            </View>
+            {/* Only once answered: before that the status chip above already
+                says "awaiting", and a second chip repeating it is noise. */}
+            {request.fulfilment !== 'AWAITING' && (
+              <View style={styles.fulfilmentRow}>
+                <MandiStatusChip {...resolveStatus(FulfilmentDisplay, request.fulfilment)} />
+              </View>
+            )}
 
             {/* The supplier's clock, while it is theirs. Shown so a kitchen can
                 decide whether to keep waiting or go elsewhere, rather than
@@ -145,12 +149,12 @@ export default function RequestDetailScreen() {
             {request.status === 'OPEN' && request.responseDeadline != null && (
               <View style={styles.countdown}>
                 <MandiText variant="caption" color={Colors.textSecondary}>
-                  {request.storeName ?? 'This supplier'} usually replies within
+                  {request.storeName ?? 'This supplier'} usually accepts within
                 </MandiText>
                 <MandiCountdown
                   deadlineAt={request.responseDeadline}
                   slaSeconds={request.responseWindowSeconds ?? undefined}
-                  action="to reply"
+                  action="to accept"
                   onExpire={() => void refresh()}
                 />
               </View>
@@ -184,7 +188,7 @@ export default function RequestDetailScreen() {
               <Note
                 icon="alert-circle-outline"
                 tone={Colors.danger}
-                text="The supplier didn't reply in time. Try another supplier for these items."
+                text="The supplier didn't accept in time. Try another supplier for these items."
               />
             )}
           </MandiCard>
@@ -195,6 +199,19 @@ export default function RequestDetailScreen() {
               <RequestLine key={item.id} item={item} answered={request.acceptance != null} />
             ))}
           </MandiCard>
+
+          {request.acceptance == null && request.agreedTotal != null && (
+            <MandiCard>
+              <Row label="Items" value={formatMoney(request.agreedValue ?? '0')} />
+              <Row label="GST" value={formatMoney(request.agreedGst ?? '0')} />
+              <Row
+                label="If they accept it all"
+                value={formatMoney(request.agreedTotal)}
+                hint="This is the price they will confirm. Delivery is quoted separately once a courier is assigned."
+                emphasis
+              />
+            </MandiCard>
+          )}
 
           {request.acceptance != null && (
             <MandiCard>
@@ -338,12 +355,17 @@ function RequestLine({ item, answered }: { item: IntentItem; answered: boolean }
         )}
       </View>
 
-      {answered && !declined && item.lineTotal != null && (
+      {/* Once answered, what the supplier committed to. Before that, what the
+          request was sent at — the same price they will confirm, so there is no
+          reason to leave the column blank while waiting. */}
+      {!declined && (answered ? item.lineTotal : item.agreedLineTotal) != null && (
         <View style={styles.lineValue}>
-          <MandiText variant="bodyEmphasis">{formatMoney(item.lineTotal)}</MandiText>
-          {item.gstRate != null && (
+          <MandiText variant="bodyEmphasis">
+            {formatMoney((answered ? item.lineTotal : item.agreedLineTotal) as string)}
+          </MandiText>
+          {(answered ? item.gstRate : item.agreedGstRate) != null && (
             <MandiText variant="caption" color={Colors.textTertiary}>
-              Inc. {formatGstRate(item.gstRate)} GST
+              Inc. {formatGstRate((answered ? item.gstRate : item.agreedGstRate) as string)} GST
             </MandiText>
           )}
         </View>

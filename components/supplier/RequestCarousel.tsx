@@ -16,7 +16,7 @@ import {
   MandiText,
 } from '@/components/common';
 import type { Intent } from '@/models/intent';
-import { SupplierIntentStatus, resolveStatus } from '@/models/status';
+import { supplierIntentStatus } from '@/models/status';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
@@ -71,8 +71,8 @@ export function RequestCarousel() {
         count={unanswered.length}
         subtitle={
           unanswered.length > 0
-            ? 'Restaurants waiting to hear what you have'
-            : 'Answered — waiting for them to order'
+            ? 'Restaurants waiting on your acceptance'
+            : 'Accepted — waiting for them to order'
         }
         actionLabel="See all"
         onAction={() => router.push('/supplier/requests')}
@@ -105,7 +105,7 @@ function RequestTile({ request, onPress }: { request: Intent; onPress: () => voi
             {request.items.length} item{request.items.length === 1 ? '' : 's'}
           </MandiText>
           <MandiStatusChip
-            {...resolveStatus(SupplierIntentStatus, request.status)}
+            {...supplierIntentStatus(request.status, request.fulfilment)}
             size="sm"
           />
         </View>
@@ -126,18 +126,18 @@ function RequestTile({ request, onPress }: { request: Intent; onPress: () => voi
         {needsAnswer && (
           request.responseDeadline != null ? (
             // The time left is the reason to open this rather than scroll past
-            // it, so it replaces the word "Reply" rather than sitting next to it.
+            // it, so it replaces the word "Accept" rather than sitting beside it.
             <MandiCountdown
               deadlineAt={request.responseDeadline}
               slaSeconds={request.responseWindowSeconds ?? undefined}
-              action="to reply"
+              action="to accept"
               size="sm"
               style={styles.cta}
             />
           ) : (
             <View style={styles.cta}>
               <Ionicons name="arrow-forward" size={14} color={Colors.primary} />
-              <MandiText variant="caption" color={Colors.primary}>Reply</MandiText>
+              <MandiText variant="caption" color={Colors.primary}>Accept</MandiText>
             </View>
           )
         )}

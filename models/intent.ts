@@ -191,6 +191,33 @@ export interface SendBasketResult {
   held: HeldRequest[];
 }
 
+/**
+ * What a supplier's reply would come to, priced by the server.
+ *
+ * <p>The app cannot work this out itself — multiplying a price by a quantity is
+ * money arithmetic — so the stepper's effect on the total is a round trip.
+ */
+export interface RespondPreview {
+  intentId: number;
+  lines: RespondPreviewLine[];
+  offeredValue: Money;
+  offeredGst: Money;
+  offeredTotal: Money;
+}
+
+export interface RespondPreviewLine {
+  intentItemId: number;
+  productName: string | null;
+  requestedQuantity: Money;
+  offeredQuantity: Money;
+  unit: string;
+  unitPrice: Money | null;
+  gstRate: Money | null;
+  lineValue: Money | null;
+  lineGst: Money | null;
+  lineTotal: Money | null;
+}
+
 /** What creating the order right now would cost. */
 export interface OrderPreview {
   intentId: number;

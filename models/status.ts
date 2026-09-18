@@ -185,8 +185,8 @@ export function resolveStatus(
  */
 export const IntentStatus = widen({
   DRAFT: { label: 'Not sent', tone: 'neutral' },
-  OPEN: { label: 'Waiting for a reply', tone: 'pending' },
-  RESPONSES_RECEIVED: { label: 'Supplier replied', tone: 'info' },
+  OPEN: { label: 'Awaiting acceptance', tone: 'pending' },
+  RESPONSES_RECEIVED: { label: 'Supplier accepted', tone: 'info' },
   ORDERED: { label: 'Ordered', tone: 'success' },
   CANCELLED: { label: 'Cancelled', tone: 'neutral' },
   // Two different endings, and they must not read the same. EXPIRED is the
@@ -207,13 +207,39 @@ export const IntentStatus = widen({
  */
 export const SupplierIntentStatus = widen({
   DRAFT: { label: 'Not sent', tone: 'neutral' },
-  OPEN: { label: 'Needs your reply', tone: 'pending' },
-  RESPONSES_RECEIVED: { label: 'You replied', tone: 'info' },
+  // "Accept", not "reply": the supplier is committing to supply these
+  // quantities at these prices, and the order is then created on exactly what
+  // they accepted. "Reply" understates what the tap does.
+  OPEN: { label: 'Needs your acceptance', tone: 'pending' },
+  RESPONSES_RECEIVED: { label: 'You accepted', tone: 'info' },
   ORDERED: { label: 'Ordered', tone: 'success' },
   CANCELLED: { label: 'Cancelled by restaurant', tone: 'neutral' },
-  EXPIRED: { label: 'Not answered in time', tone: 'danger' },
+  EXPIRED: { label: 'Not accepted in time', tone: 'danger' },
   ORDER_CREATION_EXPIRED: { label: 'Not ordered in time', tone: 'neutral' },
 } satisfies Record<IntentStatusCode, StatusDisplay>);
+
+/**
+ * The supplier's own status, corrected for what they actually said.
+ *
+ * <p>`RESPONSES_RECEIVED` covers both "I can supply this" and "I can supply
+ * none of it", and the plain status map can only pick one word for both.
+ * Telling a supplier they "accepted" a request they turned down is worse than
+ * the extra branch here.
+ */
+export function supplierIntentStatus(
+  status: string,
+  fulfilment: IntentFulfilmentCode,
+): StatusDisplay {
+  if (status === 'RESPONSES_RECEIVED') {
+    if (fulfilment === 'NOT_FULFILLED') {
+      return { label: 'You declined', tone: 'danger' };
+    }
+    if (fulfilment === 'PARTIALLY_FULFILLED') {
+      return { label: 'Accepted in part', tone: 'warning' };
+    }
+  }
+  return resolveStatus(SupplierIntentStatus, status);
+}
 
 /**
  * How much of a request was available — the axis the restaurant filters on.
@@ -221,10 +247,26 @@ export const SupplierIntentStatus = widen({
  * <p>Deliberately not a status. A request can be ORDERED and only a third
  * filled, and "what didn't I get?" is the question being asked.
  */
+/** The restaurant's view, corrected the same way as the supplier's. */
+export function restaurantIntentStatus(
+  status: string,
+  fulfilment: IntentFulfilmentCode,
+): StatusDisplay {
+  if (status === 'RESPONSES_RECEIVED') {
+    if (fulfilment === 'NOT_FULFILLED') {
+      return { label: 'Supplier declined', tone: 'danger' };
+    }
+    if (fulfilment === 'PARTIALLY_FULFILLED') {
+      return { label: 'Accepted in part', tone: 'warning' };
+    }
+  }
+  return resolveStatus(IntentStatus, status);
+}
+
 export const IntentFulfilment = widen({
   // Not zero. Nobody has answered yet, and showing this as "none available"
   // would have a restaurant re-sourcing against a reply that is still coming.
-  AWAITING: { label: 'Awaiting reply', tone: 'pending' },
+  AWAITING: { label: 'Awaiting acceptance', tone: 'pending' },
   FULFILLED: { label: 'All available', tone: 'success' },
   PARTIALLY_FULFILLED: { label: 'Partly available', tone: 'warning' },
   NOT_FULFILLED: { label: 'None available', tone: 'danger' },

@@ -6,6 +6,7 @@ import type {
   IntentFulfilment,
   IntentStatus,
   OrderPreview,
+  RespondPreview,
   SendBasketResult,
 } from '@/models/intent';
 
@@ -177,6 +178,24 @@ export function fetchStoreIntents(
  * each line is priced from this store's live catalogue offer, so a price changes
  * by editing the listing rather than by answering differently.
  */
+/**
+ * What a reply would come to. Writes nothing.
+ *
+ * <p>Round-trips because the app must not multiply a price by a quantity
+ * itself, so a supplier moving a stepper needs the server to do the sum.
+ */
+export function previewResponse(
+  token: string,
+  intentId: number,
+  lines: { intentItemId: number; offeredQuantity: string }[],
+): Promise<RespondPreview> {
+  return apiRequest<RespondPreview>(`/api/v1/intents/${intentId}/respond/preview`, {
+    method: 'POST',
+    token,
+    body: { lines },
+  });
+}
+
 export function respondToIntent(
   token: string,
   intentId: number,

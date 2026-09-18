@@ -18,7 +18,7 @@ import {
   MandiText,
 } from '@/components/common';
 import type { Intent, IntentFulfilment } from '@/models/intent';
-import { IntentStatus, IntentFulfilment as FulfilmentDisplay, resolveStatus } from '@/models/status';
+import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'REST-REQ-01';
@@ -26,7 +26,7 @@ const SCREEN = 'REST-REQ-01';
 /** The filters, in the order a kitchen cares about them. */
 const FILTERS: { key: IntentFulfilment | 'ALL'; label: string }[] = [
   { key: 'ALL', label: 'All' },
-  { key: 'AWAITING', label: 'Waiting' },
+  { key: 'AWAITING', label: 'Awaiting' },
   { key: 'FULFILLED', label: 'All available' },
   { key: 'PARTIALLY_FULFILLED', label: 'Partly' },
   { key: 'NOT_FULFILLED', label: 'None' },
@@ -125,7 +125,7 @@ export default function RequestsScreen() {
 }
 
 function RequestRow({ request, onPress }: { request: Intent; onPress: () => void }) {
-  const lifecycle = resolveStatus(IntentStatus, request.status);
+  const lifecycle = restaurantIntentStatus(request.status, request.fulfilment);
   const fulfilment = resolveStatus(FulfilmentDisplay, request.fulfilment);
 
   // A request the supplier answered and that can still be ordered from is the

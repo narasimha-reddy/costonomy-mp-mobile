@@ -6,6 +6,7 @@ import type {
   IntentFulfilment,
   IntentStatus,
   OrderPreview,
+  SendBasketResult,
 } from '@/models/intent';
 
 // ── The basket ────────────────────────────────────────────────────────
@@ -57,6 +58,28 @@ export function removeIntentItem(token: string, itemId: number): Promise<Intent>
 }
 
 // ── Sending and following ─────────────────────────────────────────────
+
+/**
+ * Send the whole basket — one request per supplier, in one call.
+ *
+ * <p>Repriced requests come back in `held` rather than going out. Re-send with
+ * `acceptPriceChanges` once the user has seen them.
+ */
+export function sendBasket(
+  token: string,
+  outletId: number,
+  body: {
+    acceptPriceChanges?: boolean;
+    requestedDeliveryTime?: string;
+    notes?: string;
+  } = {},
+): Promise<SendBasketResult> {
+  return apiRequest<SendBasketResult>(`/api/v1/outlets/${outletId}/intent-drafts/send`, {
+    method: 'POST',
+    token,
+    body,
+  });
+}
 
 export function sendIntent(
   token: string,

@@ -1,14 +1,15 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useRequestBasket, useInvalidateBasket } from '@/hooks/useRequestBasket';
-import { removeIntentItem, sendIntent, updateIntentItem } from '@/services/intent';
+import { removeIntentItem, sendBasket, updateIntentItem } from '@/services/intent';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import {
+  MandiBottomSheet,
   MandiButton,
   MandiCard,
   MandiEmptyState,
@@ -22,7 +23,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
-import type { Intent } from '@/models/intent';
+import type { HeldRequest, Intent } from '@/models/intent';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
 import { skuSecondaryLine } from '@/utils/skuLabel';
@@ -32,18 +33,22 @@ import { Colors, Radius, Spacing } from '@/theme';
 const SCREEN = 'REST-CART-01';
 
 /**
- * The basket — one request per supplier. D-088.
+ * The basket — one request per supplier, sent in one action. D-088, D-090.
  *
- * <p><b>There are no prices on this screen, and that is the point.</b> A request
- * says what this kitchen wants; what it costs is the supplier's answer. The old
- * cart showed a total and took payment against it, then let the supplier reduce
- * the order afterwards — so the total was a guess, and the order paid for was not
- * the order received. Showing a figure here would be the app inventing one
- * (guardrail 3), and it would be wrong as often as stock is short.
+ * <p><b>The prices here are real.</b> They are the supplier's current price, and
+ * sending locks them: the supplier's reply confirms that figure or declines the
+ * line, and the order is created on the same number. So nothing here is hedged
+ * with a tilde — a figure somebody is about to commit to should not be labelled
+ * "approximately".
  *
- * <p>Each supplier is sent separately, because each is a separate conversation.
- * There is no combined "checkout": the money step happens later, once per
- * request, on the screen where the supplier's actual prices are shown.
+ * <p>What makes that honest is the check before sending. If a supplier has
+ * repriced since an item was added, that request is <b>held</b> and the change
+ * shown, old and new, to be accepted — §23A.16, and the reason the number can be
+ * trusted the rest of the time.
+ *
+ * <p><b>It is a basket, so it persists.</b> Leaving without sending changes
+ * nothing: the drafts live on the server, and reopening reloads them at whatever
+ * the prices are then.
  */
 export default function BasketScreen() {
   const router = useRouter();
@@ -52,6 +57,8 @@ export default function BasketScreen() {
   const { outletId } = useOutlet();
   const { basket, drafts, loading, error, refetch } = useRequestBasket();
   const invalidate = useInvalidateBasket();
+
+  const [held, setHeld] = useState<HeldRequest[] | null>(null);
 
   const update = useMutation({
     mutationFn: ({ itemId, quantity }: { itemId: number; quantity: string }) =>
@@ -69,12 +76,29 @@ export default function BasketScreen() {
   });
 
   const send = useMutation({
-    mutationFn: (intentId: number) => sendIntent(accessToken as string, intentId),
-    onSuccess: (intent) => {
-      track('intent_sent', { screen: SCREEN, outletId, entityId: intent.id });
+    mutationFn: (acceptPriceChanges: boolean) =>
+      sendBasket(accessToken as string, outletId as number, { acceptPriceChanges }),
+    onSuccess: (result) => {
+      track('basket_sent', { screen: SCREEN, outletId }, { sent: result.sent.length });
       void invalidate();
-      toast.show('Request sent', 'success');
-      router.push(`/restaurant/requests/${intent.id}`);
+
+      if (result.held.length > 0) {
+        // Shown rather than sent. The unaffected requests have already gone,
+        // which is why this is a sheet over a still-useful screen rather than an
+        // error that loses the whole action.
+        setHeld(result.held);
+        return;
+      }
+
+      setHeld(null);
+      const only = result.sent.length === 1 ? result.sent[0] : undefined;
+      if (only != null) {
+        // Straight to the one request, since there is nothing to choose between.
+        router.replace(`/restaurant/requests/${only.id}`);
+      } else {
+        toast.show(`${result.sent.length} requests sent`, 'success');
+        router.replace('/restaurant/(tabs)/requests');
+      }
     },
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not send that.', 'error'),
@@ -95,19 +119,28 @@ export default function BasketScreen() {
                   {basket.itemCount} item{basket.itemCount === 1 ? '' : 's'} ·{' '}
                   {basket.supplierCount} supplier{basket.supplierCount === 1 ? '' : 's'}
                 </MandiText>
-                {/* "About", always. This is the sum of today's listed prices,
-                    and what a supplier actually quotes may differ -- calling it
-                    a total would make it a promise the app cannot keep. */}
-                <MandiText variant="caption" color={Colors.textTertiary}>
-                  {basket.indicativeComplete
-                    ? 'Estimate at current prices'
-                    : 'Estimate — some items have no price'}
-                </MandiText>
+                {!basket.pricedComplete && (
+                  <MandiText variant="caption" color={Colors.warning}>
+                    Some items have no price
+                  </MandiText>
+                )}
               </View>
-              <MandiText variant="priceLarge">
-                ~{formatMoney(basket.indicativeTotal)}
-              </MandiText>
+              <MandiText variant="priceLarge">{formatMoney(basket.agreedTotal)}</MandiText>
             </View>
+            {/* One button for the lot, which still creates a separate request
+                per supplier — each is its own conversation and becomes its own
+                order, so the label counts them rather than pretending it is one
+                thing. */}
+            <MandiButton
+              label={
+                basket.supplierCount === 1
+                  ? 'Send request'
+                  : `Send ${basket.supplierCount} requests`
+              }
+              size="lg"
+              loading={send.isPending}
+              onPress={() => send.mutate(false)}
+            />
           </MandiStickyBar>
         )
       }
@@ -129,45 +162,53 @@ export default function BasketScreen() {
           <View style={styles.intro}>
             <Ionicons name="information-circle-outline" size={16} color={Colors.textTertiary} />
             <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
-              You&apos;re asking, not buying. Each supplier replies with what they have and
-              what it costs — you pay only after that, and only for what you order.
+              These are the prices your suppliers will confirm. Nothing is charged until
+              they reply and you place the order.
             </MandiText>
           </View>
 
-          {drafts.map((draft) => (
+          {drafts.map((draft, index) => (
             <SupplierRequest
               key={draft.id}
               draft={draft}
+              sequence={index + 1}
               onChangeQuantity={(itemId, quantity) => update.mutate({ itemId, quantity })}
               onRemove={(itemId) => remove.mutate(itemId)}
-              onSend={() => send.mutate(draft.id)}
-              sending={send.isPending && send.variables === draft.id}
             />
           ))}
         </>
       )}
+
+      <PriceChangeSheet
+        held={held}
+        accepting={send.isPending}
+        onAccept={() => send.mutate(true)}
+        onDismiss={() => setHeld(null)}
+      />
     </MandiScreen>
   );
 }
 
-/** One supplier's request: their branch, their lines, and one Send. */
+/** One supplier's request: its number, their branch, its lines and its total. */
 function SupplierRequest({
   draft,
+  sequence,
   onChangeQuantity,
   onRemove,
-  onSend,
-  sending,
 }: {
   draft: Intent;
+  sequence: number;
   onChangeQuantity: (itemId: number, quantity: string) => void;
   onRemove: (itemId: number) => void;
-  onSend: () => void;
-  sending: boolean;
 }) {
   return (
     <MandiCard>
-      {/* The branch leads and the business follows, as everywhere else. */}
       <View style={styles.supplierRow}>
+        {/* Numbered because one action sends several, and "the second one was
+            held" needs something to point at. */}
+        <View style={styles.sequence}>
+          <MandiText variant="caption" color={Colors.surface}>{sequence}</MandiText>
+        </View>
         <View style={styles.flex}>
           <MandiText variant="bodyEmphasis" numberOfLines={1}>
             {draft.storeName ?? 'Supplier'}
@@ -203,27 +244,33 @@ function SupplierRequest({
           </View>
 
           <View style={styles.lineAmount}>
-            {item.indicativeLineTotal != null ? (
+            {item.agreedLineTotal != null ? (
               <>
                 <MandiText variant="bodyEmphasis">
-                  ~{formatMoney(item.indicativeLineTotal)}
+                  {formatMoney(item.agreedLineTotal)}
                 </MandiText>
-                {item.indicativeUnitPrice != null && (
+                {item.agreedUnitPrice != null && (
                   <MandiText variant="caption" color={Colors.textTertiary}>
-                    {formatMoney(item.indicativeUnitPrice)} each
+                    {formatMoney(item.agreedUnitPrice)} each
+                  </MandiText>
+                )}
+                {/* Flagged here as well as at send: somebody scanning the basket
+                    should see which line moved without having to ask. */}
+                {item.priceChanged && item.previousUnitPrice != null && (
+                  <MandiText variant="caption" color={Colors.warning}>
+                    was {formatMoney(item.previousUnitPrice)}
                   </MandiText>
                 )}
               </>
             ) : (
-              // No live offer behind this line. Said plainly rather than shown
-              // as zero, which would read as free.
+              // No live offer behind this line. Said plainly rather than shown as
+              // zero, which would read as free.
               <MandiText variant="caption" color={Colors.warning}>
                 No price
               </MandiText>
             )}
           </View>
-          {/* A sibling of the row rather than inside it: a button nested in a
-              pressable is invalid on web and swallows its own taps. */}
+
           <MandiIconButton
             icon="close"
             accessibilityLabel={`Remove ${item.productName ?? 'item'}`}
@@ -232,38 +279,81 @@ function SupplierRequest({
         </View>
       ))}
 
-      {/* This supplier's own estimate. Per card because each card is sent
-          separately and becomes its own order -- a kitchen deciding whether to
-          send this one needs this one's figure, not the basket's. */}
-      {draft.indicativeTotal != null && (
+      {draft.agreedTotal != null && (
         <View style={styles.cardTotals}>
-          <Row label="Items" value={`~${formatMoney(draft.indicativeValue ?? '0')}`} />
-          <Row label="GST" value={`~${formatMoney(draft.indicativeGst ?? '0')}`} />
-          <Row
-            label="Estimated total"
-            value={`~${formatMoney(draft.indicativeTotal)}`}
-            emphasis
-          />
-          {!draft.indicativeComplete && (
+          <Row label="Items" value={formatMoney(draft.agreedValue ?? '0')} />
+          <Row label="GST" value={formatMoney(draft.agreedGst ?? '0')} />
+          <Row label="Total" value={formatMoney(draft.agreedTotal)} emphasis />
+          {!draft.pricedComplete && (
             <MandiText variant="caption" color={Colors.warning}>
               One or more items have no current price, so this is less than the whole.
             </MandiText>
           )}
         </View>
       )}
-
-      <View style={styles.sendRow}>
-        <MandiText variant="caption" color={Colors.textTertiary} style={styles.flex}>
-          Nothing is charged until they reply and you order.
-        </MandiText>
-        <MandiButton
-          label="Send request"
-          size="md"
-          loading={sending}
-          onPress={onSend}
-        />
-      </View>
     </MandiCard>
+  );
+}
+
+/**
+ * The prices that moved, and the decision about them.
+ *
+ * <p>Old and new for every line, because §23A.16 asks for the change to be
+ * shown rather than described. Requests that were not affected have already gone
+ * by the time this appears, and the copy says so — discovering afterwards that
+ * two of three went out is worse than either outcome on its own.
+ */
+function PriceChangeSheet({
+  held,
+  accepting,
+  onAccept,
+  onDismiss,
+}: {
+  held: HeldRequest[] | null;
+  accepting: boolean;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  if (held == null || held.length === 0) {
+    return null;
+  }
+
+  return (
+    <MandiBottomSheet visible title="Prices have changed" onClose={onDismiss}>
+      <MandiText variant="caption" color={Colors.textSecondary}>
+        {held.length === 1 ? 'This supplier has' : 'These suppliers have'} repriced since
+        you added the items, so nothing has been sent to{' '}
+        {held.length === 1 ? 'them' : 'any of them'} yet.
+      </MandiText>
+
+      <ScrollView style={styles.sheetScroll}>
+        {held.map((request) => (
+          <View key={request.intentId} style={styles.heldBlock}>
+            <MandiText variant="bodyEmphasis" numberOfLines={1}>
+              {request.storeName ?? request.reference}
+            </MandiText>
+            {request.changes.map((change) => (
+              <View key={change.intentItemId} style={styles.changeRow}>
+                <MandiText variant="body" style={styles.flex} numberOfLines={1}>
+                  {change.productName ?? 'Item'}
+                </MandiText>
+                <View style={styles.changeAmounts}>
+                  <MandiText variant="caption" color={Colors.textTertiary} struck>
+                    {formatMoney(change.previousUnitPrice)}
+                  </MandiText>
+                  <MandiText variant="bodyEmphasis">
+                    {formatMoney(change.currentUnitPrice)}
+                  </MandiText>
+                </View>
+              </View>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+
+      <MandiButton label="Accept and send" size="lg" loading={accepting} onPress={onAccept} />
+      <MandiButton label="Keep in basket" variant="tertiary" size="md" onPress={onDismiss} />
+    </MandiBottomSheet>
   );
 }
 
@@ -300,6 +390,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.borderLight,
   },
+  sequence: {
+    width: 22,
+    height: 22,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   item: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -310,13 +408,7 @@ const styles = StyleSheet.create({
   },
   itemText: { flex: 1, gap: Spacing.xs },
   lineAmount: { alignItems: 'flex-end', gap: 2, minWidth: 84 },
-  cardTotals: {
-    gap: Spacing.xs,
-    paddingTop: Spacing.md,
-    marginTop: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.borderLight,
-  },
+  cardTotals: { gap: Spacing.xs, paddingTop: Spacing.md, marginTop: Spacing.md },
   totalsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -328,11 +420,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
+    marginBottom: Spacing.sm,
   },
-  sendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingTop: Spacing.md,
-  },
+  sheetScroll: { maxHeight: 280 },
+  heldBlock: { gap: Spacing.xs, marginTop: Spacing.md },
+  changeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  changeAmounts: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
 });

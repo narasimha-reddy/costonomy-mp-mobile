@@ -58,14 +58,21 @@ export interface IntentItem {
   gstRate: Money | null;
   supplierNotes: string | null;
   /**
-   * What this line would cost at the supplier's current listed price.
+   * The price this line is asked at, and what it comes to.
    *
-   * <p>Draft-only, and a commitment by nobody — the supplier's reply decides
-   * both quantity and price. Null when the SKU has no live offer, which is
-   * absent rather than zero because a missing price is not a free product.
+   * <p>Real, not an estimate. A draft carries the supplier's current price;
+   * sending locks it, and the reply confirms that price or declines the line.
+   * Null when the SKU has no live offer — absent rather than zero, because a
+   * missing price is not a free product.
    */
-  indicativeUnitPrice: Money | null;
-  indicativeLineTotal: Money | null;
+  agreedUnitPrice: Money | null;
+  agreedGstRate: Money | null;
+  agreedLineValue: Money | null;
+  agreedLineGst: Money | null;
+  agreedLineTotal: Money | null;
+  /** The supplier repriced since this was added. Draft-only. */
+  priceChanged: boolean;
+  previousUnitPrice: Money | null;
 }
 
 /** The supplier's commercial statement. A quote, not a transaction. */
@@ -125,11 +132,13 @@ export interface Intent {
   editable: boolean;
   withinOrderWindow: boolean;
   items: IntentItem[];
-  /** Draft-only. `indicativeComplete` false means a line could not be priced. */
-  indicativeValue: Money | null;
-  indicativeGst: Money | null;
-  indicativeTotal: Money | null;
-  indicativeComplete: boolean;
+  agreedValue: Money | null;
+  agreedGst: Money | null;
+  agreedTotal: Money | null;
+  /** False when a line has no price, so the total is short of the whole. */
+  pricedComplete: boolean;
+  /** True when a line has been repriced since it was added. */
+  priceChanged: boolean;
   acceptance: IntentAcceptance | null;
   supplierOrderId: number | null;
   supplierOrderNumber: string | null;
@@ -146,10 +155,40 @@ export interface Basket {
   requests: Intent[];
   supplierCount: number;
   itemCount: number;
-  indicativeValue: Money;
-  indicativeGst: Money;
-  indicativeTotal: Money;
-  indicativeComplete: boolean;
+  agreedValue: Money;
+  agreedGst: Money;
+  agreedTotal: Money;
+  pricedComplete: boolean;
+  priceChanged: boolean;
+}
+
+/** One line's repricing, old and new, as the send flow reports it. */
+export interface RequestPriceChange {
+  intentItemId: number;
+  productName: string | null;
+  previousUnitPrice: Money;
+  currentUnitPrice: Money;
+  previousLineTotal: Money | null;
+  currentLineTotal: Money | null;
+}
+
+/** A request held back because its prices moved. */
+export interface HeldRequest {
+  intentId: number;
+  reference: string;
+  storeName: string | null;
+  changes: RequestPriceChange[];
+}
+
+/**
+ * What went and what is waiting.
+ *
+ * <p>Requests whose prices have not moved are sent immediately; repriced ones
+ * are held, so one supplier's overnight rise does not stall the others.
+ */
+export interface SendBasketResult {
+  sent: Intent[];
+  held: HeldRequest[];
 }
 
 /** What creating the order right now would cost. */

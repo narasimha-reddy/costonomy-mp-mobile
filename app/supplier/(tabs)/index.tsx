@@ -15,6 +15,7 @@ import {
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
+  toneColors,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatDistance, orderValue } from '@/utils/orders';
@@ -69,6 +70,8 @@ export default function SupplierHome() {
             moved to the request, which is where it is now shown. */}
         <MandiSectionHeader
           title="New orders"
+          icon="notifications"
+          tone="warning"
           count={(pending.data ?? []).length}
         />
         {pending.isPending ? (
@@ -96,6 +99,8 @@ export default function SupplierHome() {
       <View style={styles.section}>
         <MandiSectionHeader
           title="In progress"
+          icon="cube"
+          tone="info"
           count={(active.data ?? []).length}
           actionLabel={(active.data ?? []).length ? 'See all' : undefined}
           onAction={() => router.push('/supplier/(tabs)/orders')}
@@ -113,7 +118,11 @@ export default function SupplierHome() {
           />
         ) : (
           (active.data ?? []).slice(0, 5).map((order) => (
-            <MandiCard key={order.id} onPress={() => router.push(`/supplier/orders/${order.id}`)}>
+            <MandiCard
+              key={order.id}
+              onPress={() => router.push(`/supplier/orders/${order.id}`)}
+              accentColor={toneColors(resolveStatus(SupplierOrderStatus, order.status).tone).fg}
+            >
               <OrderCardBody
                 primary={order.outletName}
                 secondary={[

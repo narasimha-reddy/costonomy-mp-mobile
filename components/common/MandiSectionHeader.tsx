@@ -3,9 +3,21 @@ import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, IconSize, Spacing } from '@/theme';
 import { MandiText } from './MandiText';
+import { toneColors, type StatusTone } from './MandiStatusChip';
 
 interface MandiSectionHeaderProps {
   title: string;
+  /**
+   * A glyph for the section, in a tinted disc before the title.
+   *
+   * <p>Colour is the point, but not on its own: the icon is what a colour-blind
+   * reader gets instead, which is the same bargain §23A.48 makes for status
+   * chips. A tinted disc rather than a bare glyph so the colour has enough area
+   * to register at this size.
+   */
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Which tone tints it. Defaults to neutral, which reads as no tint at all. */
+  tone?: StatusTone;
   /**
    * How many things are in the section.
    *
@@ -38,6 +50,8 @@ interface MandiSectionHeaderProps {
  */
 export function MandiSectionHeader({
   title,
+  icon,
+  tone = 'neutral',
   count,
   subtitle,
   actionLabel,
@@ -46,8 +60,15 @@ export function MandiSectionHeader({
   style,
   testID,
 }: MandiSectionHeaderProps) {
+  const palette = toneColors(tone);
+
   return (
     <View style={[styles.row, style]} testID={testID}>
+      {icon != null && (
+        <View style={[styles.glyph, { backgroundColor: palette.bg }]}>
+          <Ionicons name={icon} size={IconSize.sm} color={palette.fg} />
+        </View>
+      )}
       <View style={styles.titles}>
         {/* Primary, not secondary: it is the heading for everything below it,
             and a grey heading over black cards reads as a caption for them. */}
@@ -87,6 +108,13 @@ export function MandiSectionHeader({
 }
 
 const styles = StyleSheet.create({
+  glyph: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

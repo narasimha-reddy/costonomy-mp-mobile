@@ -13,6 +13,7 @@ import {
   MandiScreen,
   MandiSkeletonList,
   MandiText,
+  toneColors,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
@@ -88,7 +89,10 @@ export default function OrdersScreen() {
 
 function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => void }) {
   return (
-    <MandiCard onPress={onPress}>
+    <MandiCard
+      onPress={onPress}
+      accentColor={toneColors(resolveStatus(SupplierOrderStatus, order.status).tone).fg}
+    >
       {/* The supplier leads here, not the outlet: on this side of the trade the
           restaurant already knows whose order it is, and the counterparty is
           what identifies it. The outlet still comes before the order number —

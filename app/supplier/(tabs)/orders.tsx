@@ -16,6 +16,7 @@ import {
   MandiScreen,
   MandiSkeletonList,
   MandiText,
+  toneColors,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatDistance, orderValue } from '@/utils/orders';
@@ -120,7 +121,11 @@ export default function SupplierOrdersScreen() {
         ))
       ) : (
         orders.map((order) => (
-          <MandiCard key={order.id} onPress={() => router.push(`/supplier/orders/${order.id}`)}>
+          <MandiCard
+            key={order.id}
+            onPress={() => router.push(`/supplier/orders/${order.id}`)}
+            accentColor={toneColors(resolveStatus(SupplierOrderStatus, order.status).tone).fg}
+          >
             {/* The amount is what the store committed to, not what was asked
                 for. After a partial acceptance those differ, and only the
                 first is theirs. */}

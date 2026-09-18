@@ -15,6 +15,7 @@ import {
   MandiScreen,
   MandiSkeletonList,
   MandiText,
+  toneColors,
 } from '@/components/common';
 import type { Intent, IntentStatus as IntentStatusCode } from '@/models/intent';
 import { supplierIntentStatus } from '@/models/status';
@@ -123,7 +124,9 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
 
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
-      <MandiCard>
+      <MandiCard
+        accentColor={toneColors(supplierIntentStatus(request.status, request.fulfilment).tone).fg}
+      >
         <RequestCardBody
           primary={request.outletName ?? request.restaurantName}
           secondary={[

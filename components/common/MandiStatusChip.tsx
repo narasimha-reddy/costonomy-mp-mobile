@@ -32,7 +32,7 @@ interface MandiStatusChipProps {
  * forbids conveying information by colour alone, and an order's state is exactly
  * the kind of information a colour-blind user must not lose.
  */
-const TONES: Record<
+export const TONES: Record<
   StatusTone,
   { bg: string; fg: string; icon: keyof typeof Ionicons.glyphMap }
 > = {
@@ -46,6 +46,19 @@ const TONES: Record<
   live: { bg: Colors.deliveryLiveLight, fg: Colors.deliveryLive, icon: 'navigate' },
   stale: { bg: Colors.staleBg, fg: Colors.stale, icon: 'cloud-offline' },
 };
+
+/**
+ * A tone's colours, for the surfaces that carry the same meaning as a chip.
+ *
+ * <p>A card's accent stripe and a section's icon read as part of the same
+ * system as the chip inside them only if they come from the same table. Two
+ * tables would drift, and the drift would be a card edged in one colour above a
+ * chip in another, both claiming to describe the same state.
+ */
+export function toneColors(tone: StatusTone): { bg: string; fg: string } {
+  const { bg, fg } = TONES[tone];
+  return { bg, fg };
+}
 
 /** A compact state pill. PRD §23A.3. Domain mappings live in `models/status.ts`. */
 export function MandiStatusChip({

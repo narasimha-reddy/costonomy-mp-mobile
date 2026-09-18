@@ -11,6 +11,7 @@ import {
   MandiCard,
   MandiSectionHeader,
   MandiSkeletonList,
+  toneColors,
 } from '@/components/common';
 import type { Intent } from '@/models/intent';
 import { supplierIntentStatus } from '@/models/status';
@@ -54,7 +55,7 @@ export function RequestCarousel() {
   if (query.isPending) {
     return (
       <View style={styles.section}>
-        <MandiSectionHeader title="Requests" />
+        <MandiSectionHeader title="Requests" icon="document-text" tone="pending" />
         <MandiSkeletonList count={1} />
       </View>
     );
@@ -68,6 +69,8 @@ export function RequestCarousel() {
     <View style={styles.section}>
       <MandiSectionHeader
         title="Requests"
+        icon="document-text"
+        tone="pending"
         count={unanswered.length}
         subtitle={
           unanswered.length > 0
@@ -94,7 +97,9 @@ function SupplierRequestCard({ request, onPress }: { request: Intent; onPress: (
 
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
-      <MandiCard>
+      <MandiCard
+        accentColor={toneColors(supplierIntentStatus(request.status, request.fulfilment).tone).fg}
+      >
         <RequestCardBody
           primary={request.outletName ?? request.restaurantName}
           secondary={[

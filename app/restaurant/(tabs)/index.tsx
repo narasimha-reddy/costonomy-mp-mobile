@@ -20,8 +20,14 @@ import {
   MandiSkeletonList,
   MandiStatusChip,
   MandiText,
+  toneColors,
 } from '@/components/common';
-import { IntentStatus, resolveStatus, SupplierOrderStatus } from '@/models/status';
+import {
+  IntentStatus,
+  resolveStatus,
+  restaurantIntentStatus,
+  SupplierOrderStatus,
+} from '@/models/status';
 import { OrderCardBody } from '@/components/order';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { track } from '@/analytics';
@@ -151,6 +157,8 @@ function RequestsSection({ outletId }: { outletId: number | null }) {
     <View style={styles.section}>
       <MandiSectionHeader
         title="Open requests"
+        icon="document-text"
+        tone="pending"
         actionLabel={live.length ? 'See all' : undefined}
         onAction={() => router.push('/restaurant/(tabs)/requests')}
       />
@@ -170,6 +178,7 @@ function RequestsSection({ outletId }: { outletId: number | null }) {
           <MandiCard
             key={intent.id}
             onPress={() => router.push(`/restaurant/requests/${intent.id}`)}
+            accentColor={toneColors(restaurantIntentStatus(intent.status, intent.fulfilment).tone).fg}
           >
             <View style={styles.row}>
               <MandiText variant="bodyEmphasis" numberOfLines={1}>
@@ -214,6 +223,8 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
     <View style={styles.section}>
       <MandiSectionHeader
         title="Active orders"
+        icon="receipt"
+        tone="info"
         actionLabel={active.length ? 'See all' : undefined}
         onAction={() => router.push('/restaurant/(tabs)/orders')}
       />
@@ -233,6 +244,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
           <MandiCard
             key={order.id}
             onPress={() => router.push(`/restaurant/orders/${order.id}`)}
+            accentColor={toneColors(resolveStatus(SupplierOrderStatus, order.status).tone).fg}
           >
             <OrderCardBody
               primary={order.supplierName}
@@ -271,7 +283,7 @@ function CategoriesSection({ outletId }: { outletId: number | null }) {
 
   return (
     <View style={styles.section}>
-      <MandiSectionHeader title="Browse by category" />
+      <MandiSectionHeader title="Browse by category" icon="grid" tone="credit" />
       <View style={styles.grid}>
         {query.data.map((category) => (
           <CategoryTile

@@ -7,6 +7,7 @@ import { useSession } from '@/contexts/SessionProvider';
 import {
   cancelIntent,
   cloneIntent,
+  removeIntentItem,
   createOrderFromIntent,
   fetchIntent,
   updateIntentItem,
@@ -20,6 +21,7 @@ import {
   MandiCountdown,
   MandiErrorState,
   MandiHeader,
+  MandiIconButton,
   MandiQuantityStepper,
   MandiScreen,
   MandiSkeletonList,
@@ -127,6 +129,30 @@ export default function RequestDetailScreen() {
    * <p>Whatever happens the screen is refetched, because some lines may have
    * been written before the refusal and the totals are the server's to state.
    */
+  /**
+   * Remove one line while the request is still unanswered.
+   *
+   * <p>Applied straight away rather than held until Save: a removal is not a
+   * number being adjusted, it is a decision, and leaving it pending would mean
+   * Cancel silently restoring something the person had visibly deleted.
+   *
+   * <p>The server refuses the last line — a request may shrink while a supplier
+   * reads it, but an empty one is a clock running against nothing.
+   */
+  const removeLine = useMutation({
+    mutationFn: (itemId: number) => removeIntentItem(accessToken as string, itemId),
+    onSuccess: (updated) => {
+      void refresh();
+      // Re-seed the edits from what came back, so the steppers match the lines
+      // that are actually left.
+      setEdits(Object.fromEntries(
+        updated.items.map((line) => [line.id, Number(line.requestedQuantity)]),
+      ));
+    },
+    onError: (caught) =>
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not remove that.', 'error'),
+  });
+
   const saveQuantities = useMutation({
     mutationFn: async (changed: { itemId: number; quantity: number }[]) => {
       for (const line of changed) {
@@ -294,6 +320,11 @@ export default function RequestDetailScreen() {
                   setEdits((current) =>
                     current == null ? current : { ...current, [item.id]: quantity })
                 }
+                // No delete on the last line: the server refuses it, and an
+                // action that always fails should not be offered.
+                onDelete={request.items.length > 1
+                  ? () => removeLine.mutate(item.id)
+                  : undefined}
               />
             ))}
           </MandiCard>
@@ -443,12 +474,15 @@ function RequestLine({
   answered,
   editQuantity,
   onChangeQuantity,
+  onDelete,
 }: {
   item: IntentItem;
   answered: boolean;
   /** Set only while editing; the live value for this line's stepper. */
   editQuantity?: number;
   onChangeQuantity?: (quantity: number) => void;
+  /** Absent when this is the last line: a sent request may shrink, not empty. */
+  onDelete?: () => void;
 }) {
   const editing = editQuantity != null && onChangeQuantity != null;
   const short =
@@ -466,23 +500,32 @@ function RequestLine({
         <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>
           {skuSecondaryLine(item.sku, item.agreedUnitPriceInclusiveGst)}
         </MandiText>
-        {editing ? (
-          // min 1: a sent request cannot be emptied by stepping to zero, and the
-          // server refuses it — withdrawing is what drops a request (D-088).
+        {/* The same frame in both states, with the controls only when they do
+            something. A quantity that changes shape when Edit is pressed makes
+            the eye re-find the number it was already looking at. */}
+        <View style={styles.quantityRow}>
           <MandiQuantityStepper
-            value={editQuantity}
-            onChange={onChangeQuantity}
+            value={editing ? editQuantity : Number(item.requestedQuantity)}
+            onChange={onChangeQuantity ?? (() => undefined)}
+            // min 1: a sent request cannot be emptied by stepping to zero, and
+            // the server refuses it — deleting a line or withdrawing the request
+            // is what removes things (D-088).
             min={1}
             unit={item.unit}
             size="sm"
+            readOnly={!editing}
             itemLabel={skuTitle(item.sku)}
             testID={`request-qty-${item.id}`}
           />
-        ) : (
-          <MandiText variant="caption" color={Colors.textSecondary}>
-            Asked for {formatQuantity(item.requestedQuantity)} {item.unit}
-          </MandiText>
-        )}
+          {editing && onDelete != null && (
+            <MandiIconButton
+              icon="trash-outline"
+              color={Colors.danger}
+              accessibilityLabel={`Remove ${skuTitle(item.sku)}`}
+              onPress={onDelete}
+            />
+          )}
+        </View>
 
         {declined && (
           <View style={styles.lineNote}>
@@ -582,6 +625,7 @@ const styles = StyleSheet.create({
   editHint: { marginTop: Spacing.xs },
   itemText: { flex: 1, gap: Spacing.xs },
   lineNote: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  quantityRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   lineValue: { alignItems: 'flex-end', gap: 2 },
   note: { marginTop: Spacing.md, fontStyle: 'italic' },
   totalsRow: {

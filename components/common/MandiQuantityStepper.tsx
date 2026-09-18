@@ -28,6 +28,15 @@ interface MandiQuantityStepperProps {
   /** Allows typing a quantity directly. Off for compact card-level steppers. */
   editable?: boolean;
   disabled?: boolean;
+  /**
+   * Show the quantity in the same frame, with no controls.
+   *
+   * <p>Not the same as `disabled`, which greys out controls that are still
+   * there. This removes them, so a quantity reads identically whether or not it
+   * happens to be editable right now — the row does not reflow when an Edit
+   * button is pressed, and the eye does not have to re-find the number.
+   */
+  readOnly?: boolean;
   size?: 'sm' | 'md';
   style?: ViewStyle;
   testID?: string;
@@ -45,13 +54,14 @@ export function MandiQuantityStepper({
   unit,
   editable = false,
   disabled = false,
+  readOnly = false,
   size = 'md',
   style,
   testID,
   itemLabel,
 }: MandiQuantityStepperProps) {
-  const canDecrease = !disabled && value > min;
-  const canIncrease = !disabled && (max == null || value < max);
+  const canDecrease = !disabled && !readOnly && value > min;
+  const canIncrease = !disabled && !readOnly && (max == null || value < max);
   const height = size === 'sm' ? ControlHeight.sm : ControlHeight.md;
   const glyph = size === 'sm' ? IconSize.sm : IconSize.md;
   const suffix = itemLabel ? ` ${itemLabel}` : '';
@@ -64,6 +74,7 @@ export function MandiQuantityStepper({
 
   return (
     <View style={[styles.container, { height }, style]} testID={testID}>
+      {!readOnly && (
       <Pressable
         onPress={canDecrease ? () => onChange(clamp(value - step)) : undefined}
         disabled={!canDecrease}
@@ -79,8 +90,9 @@ export function MandiQuantityStepper({
           color={canDecrease ? Colors.primary : Colors.textDisabled}
         />
       </Pressable>
+      )}
 
-      {editable ? (
+      {editable && !readOnly ? (
         <TextInput
           value={String(value)}
           onChangeText={(text) => {
@@ -111,6 +123,7 @@ export function MandiQuantityStepper({
         </MandiText>
       )}
 
+      {!readOnly && (
       <Pressable
         onPress={canIncrease ? () => onChange(clamp(value + step)) : undefined}
         disabled={!canIncrease}
@@ -126,6 +139,7 @@ export function MandiQuantityStepper({
           color={canIncrease ? Colors.primary : Colors.textDisabled}
         />
       </Pressable>
+      )}
     </View>
   );
 }

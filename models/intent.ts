@@ -131,6 +131,8 @@ export interface Intent {
   /** The instant the server built this response. */
   serverTime: string;
   editable: boolean;
+  /** Which revision of this request you are looking at. */
+  revision: number;
   /**
    * Whether a line's quantity may still be changed. True through OPEN, where
    * `editable` is already false — a sent request is fixed in shape but not in

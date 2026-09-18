@@ -128,6 +128,10 @@ export default function SupplierRequestScreen() {
           intentItemId: item.id,
           offeredQuantity: String(offered[item.id] ?? 0),
         })),
+        // What this supplier was actually looking at. A restaurant may change
+        // quantities while a request is open, so accepting without saying which
+        // version you read is accepting whatever it happens to be now.
+        expectedRevision: request?.revision,
         etaMinutes: eta.trim() === '' ? undefined : Number(eta),
         notes: notes.trim() === '' ? undefined : notes.trim(),
       }),
@@ -137,8 +141,20 @@ export default function SupplierRequestScreen() {
       void queryClient.invalidateQueries({ queryKey: storeIntentsKey(storeId) });
       toast.show('Accepted', 'success');
     },
-    onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not send that.', 'error'),
+    onError: (caught) => {
+      // The request moved while they were deciding. Reload it and say so,
+      // rather than leaving a stale list on screen with an error over it.
+      if (caught instanceof ApiError && caught.code === 'INTENT_CHANGED') {
+        void query.refetch();
+        setOffered({});
+        toast.show(
+          'The restaurant changed this request. Please review it and accept again.',
+          'error',
+        );
+        return;
+      }
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not send that.', 'error');
+    },
   });
 
   return (
@@ -304,7 +320,16 @@ export default function SupplierRequestScreen() {
           </View>
         )}
         <MandiButton
-          label={everythingDeclined ? 'Decline request' : 'Accept and send'}
+          label={
+            everythingDeclined
+              ? 'Decline request'
+              // "With changes" when they are giving less than was asked for:
+              // the restaurant is about to be told something they did not ask
+              // for, and the button should say so before it is pressed.
+              : totals.short > 0 || totals.declined > 0
+                ? 'Accept with changes'
+                : 'Accept request'
+          }
           size="lg"
           variant={everythingDeclined ? 'destructive' : 'primary'}
           loading={reply.isPending}

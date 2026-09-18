@@ -201,6 +201,8 @@ export function respondToIntent(
   intentId: number,
   body: {
     lines: { intentItemId: number; offeredQuantity: string; notes?: string }[];
+    /** The revision the supplier was reading. The server refuses a stale one. */
+    expectedRevision?: number;
     etaMinutes?: number;
     deliveryMode?: string;
     notes?: string;

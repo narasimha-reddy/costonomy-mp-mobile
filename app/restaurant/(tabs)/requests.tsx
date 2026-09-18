@@ -128,6 +128,8 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
   const lifecycle = restaurantIntentStatus(request.status, request.fulfilment);
   const fulfilment = resolveStatus(FulfilmentDisplay, request.fulfilment);
 
+  const showFulfilment = request.fulfilment !== 'AWAITING';
+
   // A request the supplier answered and that can still be ordered from is the
   // one thing on this screen with a deadline attached, so it says so.
   const actionable = request.status === 'RESPONSES_RECEIVED' && request.withinOrderWindow;
@@ -148,8 +150,15 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
           <MandiStatusChip {...lifecycle} />
         </View>
 
+        {/* Skipped entirely when there is nothing in it, or the row keeps a
+            margin for an empty line. */}
+        {(showFulfilment || actionable) && (
         <View style={styles.metaRow}>
-          <MandiStatusChip {...fulfilment} />
+          {/* Only once there is an answer to describe. While a request is
+              awaiting, the chip above already says so — and on an expired one
+              "Awaiting acceptance" beside "No reply in time" reads as a
+              contradiction rather than as two facts. */}
+          {showFulfilment && <MandiStatusChip {...fulfilment} />}
           {actionable && (
             <View style={styles.actionHint}>
               <Ionicons name="time-outline" size={14} color={Colors.primary} />
@@ -159,6 +168,7 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
             </View>
           )}
         </View>
+        )}
       </MandiCard>
     </Pressable>
   );
@@ -166,7 +176,13 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  filters: { gap: Spacing.sm, paddingVertical: Spacing.xs },
+  filters: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    // Without this the chips stretch to the rail's height, and a pill radius
+    // on a tall box draws an oval.
+    alignItems: 'center',
+  },
   chip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,

@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tabBarOptions, tabLabel } from '@/components/common/tabBarOptions';
 
 /**
- * `Home | Discover | Requirements | Orders | Account` — doc 05 §1, exactly.
+ * `Home | Discover | Requests | Orders | Account` — doc 05 §1, with
+ * Requirements replaced by Requests (D-088).
  *
  * <p>Five destinations is the spec's number and also the practical ceiling for a
  * bar a cook taps one-handed. Anything else is a push from one of these.
@@ -37,7 +38,7 @@ export default function RestaurantTabs() {
         name="requests"
         options={{
           title: 'Requests',
-          tabBarLabel: tabLabel('Requirements'),
+          tabBarLabel: tabLabel('Requests'),
           tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" color={color} size={size} />,
         }}
       />

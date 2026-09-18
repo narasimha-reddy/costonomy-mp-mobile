@@ -151,7 +151,13 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  filters: { gap: Spacing.sm, paddingVertical: Spacing.xs },
+  filters: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    // Without this the chips stretch to the rail's height, and a pill radius
+    // on a tall box draws an oval.
+    alignItems: 'center',
+  },
   chip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,

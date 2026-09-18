@@ -220,7 +220,7 @@ export default function RequestDetailScreen() {
                 may have sat in the basket for a day, and what both sides date
                 this request from is the moment it went out. */}
             <MandiText variant="caption" color={Colors.textTertiary}>
-              Requested {formatMomentWithRecency(request.sentAt ?? request.createdAt)}
+              {formatMomentWithRecency(request.sentAt ?? request.createdAt)}
             </MandiText>
             <MandiText variant="bodyEmphasis">{request.storeName}</MandiText>
             {request.supplierName != null && request.supplierName !== request.storeName && (

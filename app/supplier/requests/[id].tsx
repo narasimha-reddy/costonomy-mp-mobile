@@ -187,7 +187,7 @@ export default function SupplierRequestScreen() {
             </View>
 
             <MandiText variant="caption" color={Colors.textTertiary}>
-              Requested {formatMomentWithRecency(request.sentAt ?? request.createdAt)}
+              {formatMomentWithRecency(request.sentAt ?? request.createdAt)}
             </MandiText>
 
             {request.notes != null && request.notes !== '' && (

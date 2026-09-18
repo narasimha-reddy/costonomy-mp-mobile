@@ -147,11 +147,16 @@ export function RequestCardBody({
         <MandiStatusChip {...status} size="sm" />
         {running ? (
           <View style={styles.clock}>
+            {/* Matched to the status chip beside it: the small countdown is a
+                12px-rounded box with more vertical padding, and next to a pill
+                the two read as two different kinds of object on one line rather
+                than as a pair. */}
             <MandiCountdown
               deadlineAt={deadlineAt}
               slaSeconds={deadlineSeconds ?? undefined}
               action={deadlineAction}
               size="sm"
+              style={styles.clockPill}
             />
             {deadlineAction ? (
               <MandiText variant="caption" color={Colors.textSecondary}>
@@ -189,6 +194,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   block: { gap: 2 },
   clock: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  // The status chip's own metrics, so the two sit as a matched pair.
+  clockPill: { paddingVertical: 2, paddingHorizontal: Spacing.sm, borderRadius: Radius.full },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',

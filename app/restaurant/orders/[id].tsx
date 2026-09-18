@@ -19,6 +19,7 @@ import {
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, Spacing } from '@/theme';
 
 /**
@@ -107,9 +108,15 @@ export default function OrderDetailScreen() {
                 <View key={item.id} style={styles.item}>
                   <View style={styles.itemText}>
                     <MandiText variant="body">{item.productName}</MandiText>
+                    {/* The pack, as every other screen describes it. The
+                        quantity goes below: it belongs to this order, not to
+                        the pack. */}
                     <MandiText variant="caption" color={Colors.textSecondary}>
-                      {formatQuantity(item.requestedQuantity)} {item.unit} ·{' '}
-                      {formatMoney(item.unitPrice)} · GST {formatGstRate(item.gstRate)}
+                      {skuSecondaryLine(item.sku, item.unitPriceInclusiveGst)}
+                    </MandiText>
+                    <MandiText variant="caption" color={Colors.textTertiary}>
+                      {formatQuantity(item.requestedQuantity)} {item.unit} ordered ·
+                      Inc. {formatGstRate(item.gstRate)} GST
                     </MandiText>
                     {short && (
                       <View style={styles.shortRow}>

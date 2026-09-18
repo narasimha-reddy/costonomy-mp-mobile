@@ -336,7 +336,6 @@ function LineRow({
   lineTotal: string | null;
   onChange: (next: number) => void;
 }) {
-  const unitPrice = item.agreedUnitPrice;
   const requested = Number(item.requestedQuantity);
   const declined = editable ? value === 0 : Number(item.offeredQuantity ?? 0) === 0;
   const short = editable
@@ -351,18 +350,12 @@ function LineRow({
         <MandiText variant="body" numberOfLines={1}>
           {skuTitle(item.sku)}
         </MandiText>
-        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {skuSecondaryLine(item.sku)}
+        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>
+          {skuSecondaryLine(item.sku, item.agreedUnitPriceInclusiveGst)}
         </MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>
           They asked for {formatQuantity(item.requestedQuantity)} {item.unit}
         </MandiText>
-
-        {editable && unitPrice != null && (
-          <MandiText variant="caption" color={Colors.textTertiary}>
-            {formatMoney(unitPrice)} each — the price this was sent at
-          </MandiText>
-        )}
 
         {editable ? (
           <>

@@ -1,4 +1,4 @@
-import type { Money } from '@/utils/money';
+import { formatMoney, type Money } from '@/utils/money';
 
 /**
  * How a supplier's pack is described. Mirrors `SkuDirectory.SkuDescriptor`.
@@ -36,23 +36,38 @@ function trimQuantity(value: Money | null): string | null {
 /**
  * The line under a SKU's name, everywhere a SKU is shown.
  *
- * <p>`brandName · packSize packUnit (measureValue measureUnit)`, with each part
- * dropped when it is absent. The measure is shown **only when both** its value
- * and unit are present: "500" and "(ML)" are each meaningless alone, and a
- * half-stated measure is worse than none because it reads as a pack size.
+ * <p>`packSize packUnit (measureValue measureUnit) · price · brandName`, with
+ * each part dropped when it is absent. The pack leads because it is what differs
+ * between two suppliers' versions of the same product; the price is what the
+ * reader is comparing; the brand qualifies both.
+ *
+ * <p><b>The price is inclusive of GST and comes from the server.</b> It is what a
+ * unit actually costs, which is the only per-unit figure worth putting in front
+ * of somebody comparing suppliers — one quoting exclusive against another
+ * quoting inclusive is the classic way to make the dearer offer look cheaper.
+ * The app never derives it: multiplying by `1 + rate/100` here would be money
+ * arithmetic and would land a paisa off the line totals.
+ *
+ * <p>The measure shows **only when both** its value and unit are present: "500"
+ * alone reads as a pack size and "(ML)" says nothing, so half a measure is worse
+ * than none because it actively misinforms.
  *
  * <p>The SKU's own name is not repeated here. Suppliers very often name a SKU
  * after the product it maps to, so including it produced "Paneer / Paneer · 1 KG"
- * — a line that repeats itself and buries the pack, which is the part that
- * actually differs between suppliers.
+ * — a line repeating itself and burying the pack.
+ *
+ * @param priceInclusiveGst the line's own price with GST, already computed by the
+ *                          server. Omitted where there is none — a pack with no
+ *                          live offer shows its size and brand and no figure,
+ *                          rather than a zero that reads as free.
  */
-export function skuSecondaryLine(sku: SkuDescriptor | null | undefined): string {
+export function skuSecondaryLine(
+  sku: SkuDescriptor | null | undefined,
+  priceInclusiveGst?: Money | null,
+): string {
   if (sku == null) return '';
 
   const parts: string[] = [];
-  if (sku.brandName != null && sku.brandName !== '') {
-    parts.push(sku.brandName);
-  }
 
   const size = trimQuantity(sku.packSize);
   const pack = [size, sku.packUnit].filter((piece) => piece != null && piece !== '').join(' ');
@@ -66,6 +81,14 @@ export function skuSecondaryLine(sku: SkuDescriptor | null | undefined): string 
   } else if (hasMeasure) {
     // No pack stated but a measure is: better than showing nothing.
     parts.push(`${measure} ${measureUnit}`);
+  }
+
+  if (priceInclusiveGst != null && priceInclusiveGst !== '') {
+    parts.push(formatMoney(priceInclusiveGst));
+  }
+
+  if (sku.brandName != null && sku.brandName !== '') {
+    parts.push(sku.brandName);
   }
 
   return parts.join(' · ');

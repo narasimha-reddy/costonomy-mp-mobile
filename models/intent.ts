@@ -65,6 +65,8 @@ export interface IntentItem {
    * missing price is not a free product.
    */
   agreedUnitPrice: Money | null;
+  /** The same price with GST added, computed by the server. */
+  agreedUnitPriceInclusiveGst: Money | null;
   agreedGstRate: Money | null;
   agreedLineValue: Money | null;
   agreedLineGst: Money | null;

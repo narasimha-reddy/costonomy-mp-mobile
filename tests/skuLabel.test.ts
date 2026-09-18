@@ -14,11 +14,20 @@ const base: SkuDescriptor = {
 };
 
 describe('skuSecondaryLine', () => {
-  it('reads brand, then pack, then the measure in brackets', () => {
+  it('reads pack, then price, then brand', () => {
     expect(skuSecondaryLine({
       ...base, brandName: 'Amul', packSize: '12', packUnit: 'PACK',
       measureValue: '500', measureUnit: 'ML',
-    })).toBe('Amul · 12 PACK (500 ML)');
+    }, '120.30')).toBe('12 PACK (500 ML) · ₹120.30 · Amul');
+  });
+
+  // A pack with no live offer has no price. Omitted rather than shown as zero,
+  // which would read as free.
+  it('omits the price when there is none', () => {
+    expect(skuSecondaryLine({ ...base, brandName: 'Amul', packSize: '1', packUnit: 'KG' }))
+      .toBe('1 KG · Amul');
+    expect(skuSecondaryLine({ ...base, brandName: 'Amul', packSize: '1', packUnit: 'KG' }, null))
+      .toBe('1 KG · Amul');
   });
 
   // A measure needs both halves. "500" alone reads as a pack size and "(ML)"

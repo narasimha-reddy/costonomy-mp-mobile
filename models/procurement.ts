@@ -29,6 +29,8 @@ export interface ProcurementItem {
   quantity: Money;
   unit: string;
   unitPrice: Money;
+  /** The same price with GST added, computed by the server. */
+  unitPriceInclusiveGst: Money | null;
   gstRate: Money;
   lineItemValue: Money;
   lineGst: Money;
@@ -194,6 +196,8 @@ export interface SupplierOrderItem {
   acceptedQuantity: Money | null;
   unit: string;
   unitPrice: Money;
+  /** The same price with GST added, computed by the server. */
+  unitPriceInclusiveGst: Money | null;
   gstRate: Money;
   /** What was asked for. After a partial acceptance, not what anyone pays. */
   lineTotal: Money;

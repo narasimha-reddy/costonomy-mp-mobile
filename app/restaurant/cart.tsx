@@ -231,8 +231,8 @@ function SupplierRequest({
             <MandiText variant="body" numberOfLines={1}>
               {skuTitle(item.sku)}
             </MandiText>
-            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-              {skuSecondaryLine(item.sku)}
+            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>
+              {skuSecondaryLine(item.sku, item.agreedUnitPriceInclusiveGst)}
             </MandiText>
             <MandiQuantityStepper
               value={Number(item.requestedQuantity)}
@@ -249,11 +249,6 @@ function SupplierRequest({
                 <MandiText variant="bodyEmphasis">
                   {formatMoney(item.agreedLineTotal)}
                 </MandiText>
-                {item.agreedUnitPrice != null && (
-                  <MandiText variant="caption" color={Colors.textTertiary}>
-                    {formatMoney(item.agreedUnitPrice)} each
-                  </MandiText>
-                )}
                 {/* Flagged here as well as at send: somebody scanning the basket
                     should see which line moved without having to ask. */}
                 {item.priceChanged && item.previousUnitPrice != null && (

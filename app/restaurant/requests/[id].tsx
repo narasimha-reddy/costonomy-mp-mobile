@@ -330,8 +330,8 @@ function RequestLine({ item, answered }: { item: IntentItem; answered: boolean }
         <MandiText variant="body" numberOfLines={1}>
           {skuTitle(item.sku)}
         </MandiText>
-        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {skuSecondaryLine(item.sku)}
+        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>
+          {skuSecondaryLine(item.sku, item.agreedUnitPriceInclusiveGst)}
         </MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>
           Asked for {formatQuantity(item.requestedQuantity)} {item.unit}

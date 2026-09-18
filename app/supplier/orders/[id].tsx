@@ -333,8 +333,10 @@ export default function SupplierOrderScreen() {
                       <View style={styles.itemText}>
                         <MandiText variant="body">{item.productName}</MandiText>
                         <MandiText variant="caption" color={Colors.textSecondary}>
-                          {skuSecondaryLine(item.sku)} · {formatMoney(item.unitPrice)} per {item.unit} · GST{' '}
-                          {formatGstRate(item.gstRate)}
+                          {skuSecondaryLine(item.sku, item.unitPriceInclusiveGst)}
+                        </MandiText>
+                        <MandiText variant="caption" color={Colors.textTertiary}>
+                          Inc. {formatGstRate(item.gstRate)} GST
                         </MandiText>
                       </View>
                       {/* What this line is worth now. In partial mode that is

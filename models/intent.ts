@@ -95,6 +95,13 @@ export interface Intent {
   id: number;
   reference: string;
   outletId: number;
+  /** Who is asking — for the supplier's view of a request. */
+  outletName: string | null;
+  restaurantName: string | null;
+  outletLocality: string | null;
+  outletCity: string | null;
+  /** Store to outlet, straight line. Null without coordinates. */
+  distanceKm: Money | null;
   supplierStoreId: number;
   storeName: string | null;
   supplierName: string | null;

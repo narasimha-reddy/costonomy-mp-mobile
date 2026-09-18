@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchStoreIntents } from '@/services/intent';
 import { storeIntentsKey } from '@/lib/queryKeys';
+import { RequestCardBody } from '@/components/request/RequestCardBody';
 import {
   MandiCard,
   MandiEmptyState,
@@ -13,13 +14,10 @@ import {
   MandiHeader,
   MandiScreen,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
 } from '@/components/common';
 import type { Intent, IntentStatus as IntentStatusCode } from '@/models/intent';
 import { supplierIntentStatus } from '@/models/status';
-import { formatMoney } from '@/utils/money';
-import { skuTitle } from '@/utils/skuLabel';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /** Narrow by what the supplier would actually go looking for. */
@@ -113,37 +111,34 @@ export default function SupplierRequestsScreen() {
 }
 
 function RequestRow({ request, onPress }: { request: Intent; onPress: () => void }) {
+  // Only the supplier's own clock. Once they have answered, the time that is
+  // running is the restaurant's to order — counting it down on the supplier's
+  // list would show them a deadline they cannot act on.
+  const needsAcceptance = request.status === 'OPEN';
+
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
       <MandiCard>
-        <View style={styles.row}>
-          <View style={styles.flex}>
-            <MandiText variant="bodyEmphasis">
-              {request.items.length} item{request.items.length === 1 ? '' : 's'}
-            </MandiText>
-            <MandiText variant="caption" color={Colors.textSecondary}>
-              {request.reference}
-            </MandiText>
-          </View>
-          <MandiStatusChip {...supplierIntentStatus(request.status, request.fulfilment)} />
-        </View>
-
-        <MandiText
-          variant="caption"
-          color={Colors.textSecondary}
-          numberOfLines={2}
-          style={styles.items}
-        >
-          {request.items.map((item) => skuTitle(item.sku)).filter(Boolean).join(', ')}
-        </MandiText>
-
-        {/* What this store said it would supply. Only meaningful once answered,
-            and it is the figure the restaurant is deciding against. */}
-        {request.acceptance != null && (
-          <MandiText variant="caption" color={Colors.textTertiary}>
-            You accepted {formatMoney(request.acceptance.offeredTotal)}
-          </MandiText>
-        )}
+        <RequestCardBody
+          primary={request.outletName ?? request.restaurantName}
+          secondary={[
+            request.outletName != null ? request.restaurantName : null,
+            request.outletLocality ?? request.outletCity,
+            request.distanceKm != null ? `${request.distanceKm} km away` : null,
+          ]}
+          status={supplierIntentStatus(request.status, request.fulfilment)}
+          deadlineAt={needsAcceptance ? request.responseDeadline : null}
+          deadlineSeconds={request.responseWindowSeconds}
+          deadlineAction="to accept"
+          reference={request.reference}
+          amount={request.acceptance?.offeredTotal ?? request.agreedTotal}
+          amountLabel={
+            request.acceptance != null
+              ? 'you accepted'
+              : `${request.items.length} item${request.items.length === 1 ? '' : 's'}`
+          }
+          items={request.items}
+        />
       </MandiCard>
     </Pressable>
   );

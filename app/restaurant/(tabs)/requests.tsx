@@ -1,24 +1,23 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { fetchIntents } from '@/services/intent';
 import { intentsKey } from '@/lib/queryKeys';
+import { RequestCardBody } from '@/components/request/RequestCardBody';
 import {
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
   MandiScreen,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
 } from '@/components/common';
 import type { Intent, IntentFulfilment } from '@/models/intent';
-import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
+import { restaurantIntentStatus } from '@/models/status';
 import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'REST-REQ-01';
@@ -125,50 +124,31 @@ export default function RequestsScreen() {
 }
 
 function RequestRow({ request, onPress }: { request: Intent; onPress: () => void }) {
-  const lifecycle = restaurantIntentStatus(request.status, request.fulfilment);
-  const fulfilment = resolveStatus(FulfilmentDisplay, request.fulfilment);
-
-  const showFulfilment = request.fulfilment !== 'AWAITING';
-
-  // A request the supplier answered and that can still be ordered from is the
-  // one thing on this screen with a deadline attached, so it says so.
-  const actionable = request.status === 'RESPONSES_RECEIVED' && request.withinOrderWindow;
+  // Whichever clock is running belongs to somebody different: while a request
+  // is open the supplier is on the hook, and once answered the restaurant is.
+  const awaitingReply = request.status === 'OPEN';
+  const readyToOrder = request.status === 'RESPONSES_RECEIVED' && request.withinOrderWindow;
 
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
       <MandiCard>
-        <View style={styles.row}>
-          <View style={styles.flex}>
-            <MandiText variant="bodyEmphasis" numberOfLines={1}>
-              {request.storeName ?? 'Supplier'}
-            </MandiText>
-            <MandiText variant="caption" color={Colors.textSecondary}>
-              {request.reference} · {request.items.length} item
-              {request.items.length === 1 ? '' : 's'}
-            </MandiText>
-          </View>
-          <MandiStatusChip {...lifecycle} />
-        </View>
-
-        {/* Skipped entirely when there is nothing in it, or the row keeps a
-            margin for an empty line. */}
-        {(showFulfilment || actionable) && (
-        <View style={styles.metaRow}>
-          {/* Only once there is an answer to describe. While a request is
-              awaiting, the chip above already says so — and on an expired one
-              "Awaiting acceptance" beside "No reply in time" reads as a
-              contradiction rather than as two facts. */}
-          {showFulfilment && <MandiStatusChip {...fulfilment} />}
-          {actionable && (
-            <View style={styles.actionHint}>
-              <Ionicons name="time-outline" size={14} color={Colors.primary} />
-              <MandiText variant="caption" color={Colors.primary}>
-                Ready to order
-              </MandiText>
-            </View>
-          )}
-        </View>
-        )}
+        <RequestCardBody
+          primary={request.storeName}
+          secondary={[request.supplierName !== request.storeName ? request.supplierName : null]}
+          status={restaurantIntentStatus(request.status, request.fulfilment)}
+          deadlineAt={
+            awaitingReply ? request.responseDeadline
+              : readyToOrder ? request.orderCreationDeadline : null
+          }
+          deadlineSeconds={
+            awaitingReply ? request.responseWindowSeconds : request.orderCreationWindowSeconds
+          }
+          deadlineAction={awaitingReply ? 'for their reply' : 'to order'}
+          reference={request.reference}
+          amount={request.agreedTotal}
+          amountLabel={`${request.items.length} item${request.items.length === 1 ? '' : 's'}`}
+          items={request.items}
+        />
       </MandiCard>
     </Pressable>
   );

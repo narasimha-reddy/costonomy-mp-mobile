@@ -18,18 +18,16 @@ import {
   MandiSearchBar,
   MandiSectionHeader,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
   toneColors,
 } from '@/components/common';
 import {
-  IntentStatus,
   resolveStatus,
-  restaurantIntentStatus,
   SupplierOrderStatus,
 } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
+import { RestaurantRequestCard } from '@/components/request/RestaurantRequestCard';
 import { track } from '@/analytics';
 import { Colors, Elevation, Radius, Spacing } from '@/theme';
 
@@ -175,24 +173,7 @@ function RequestsSection({ outletId }: { outletId: number | null }) {
         />
       ) : (
         live.slice(0, 3).map((intent) => (
-          <MandiCard
-            key={intent.id}
-            onPress={() => router.push(`/restaurant/requests/${intent.id}`)}
-            accentColor={toneColors(restaurantIntentStatus(intent.status, intent.fulfilment).tone).fg}
-          >
-            <View style={styles.row}>
-              <MandiText variant="bodyEmphasis" numberOfLines={1}>
-                {intent.storeName ?? 'Supplier'}
-              </MandiText>
-              <MandiStatusChip {...resolveStatus(IntentStatus, intent.status)} size="sm" />
-            </View>
-            <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-              {intent.items.length} item{intent.items.length === 1 ? '' : 's'}
-              {intent.status === 'RESPONSES_RECEIVED' && intent.withinOrderWindow
-                ? ' · ready to order'
-                : ''}
-            </MandiText>
-          </MandiCard>
+          <RestaurantRequestCard key={intent.id} request={intent} />
         ))
       )}
     </View>

@@ -5,20 +5,17 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
+import { RestaurantRequestCard } from '@/components/request/RestaurantRequestCard';
 import { fetchIntents } from '@/services/intent';
 import { intentsKey } from '@/lib/queryKeys';
-import { RequestCardBody } from '@/components/request/RequestCardBody';
 import {
-  MandiCard,
   MandiEmptyState,
   MandiErrorState,
   MandiScreen,
   MandiSkeletonList,
   MandiText,
-  toneColors,
 } from '@/components/common';
-import type { Intent, IntentFulfilment } from '@/models/intent';
-import { restaurantIntentStatus } from '@/models/status';
+import type { IntentFulfilment } from '@/models/intent';
 import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'REST-REQ-01';
@@ -118,48 +115,10 @@ export default function RequestsScreen() {
         />
       ) : (
         requests.map((request) => (
-          <RequestRow
-            key={request.id}
-            request={request}
-            onPress={() => router.push(`/restaurant/requests/${request.id}`)}
-          />
+          <RestaurantRequestCard key={request.id} request={request} />
         ))
       )}
     </MandiScreen>
-  );
-}
-
-function RequestRow({ request, onPress }: { request: Intent; onPress: () => void }) {
-  // Whichever clock is running belongs to somebody different: while a request
-  // is open the supplier is on the hook, and once answered the restaurant is.
-  const awaitingReply = request.status === 'OPEN';
-  const readyToOrder = request.status === 'RESPONSES_RECEIVED' && request.withinOrderWindow;
-
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button">
-      <MandiCard
-        accentColor={toneColors(restaurantIntentStatus(request.status, request.fulfilment).tone).fg}
-      >
-        <RequestCardBody
-          primary={request.storeName}
-          secondary={[request.supplierName !== request.storeName ? request.supplierName : null]}
-          status={restaurantIntentStatus(request.status, request.fulfilment)}
-          deadlineAt={
-            awaitingReply ? request.responseDeadline
-              : readyToOrder ? request.orderCreationDeadline : null
-          }
-          deadlineSeconds={
-            awaitingReply ? request.responseWindowSeconds : request.orderCreationWindowSeconds
-          }
-          deadlineAction={awaitingReply ? 'for their reply' : 'to order'}
-          reference={request.reference}
-          occurredAt={request.sentAt ?? request.createdAt}
-          amount={request.agreedTotal}
-          amountLabel={`${request.items.length} item${request.items.length === 1 ? '' : 's'}`}
-          items={request.items}
-        />
-      </MandiCard>
-    </Pressable>
   );
 }
 

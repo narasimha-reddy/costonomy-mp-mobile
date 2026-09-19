@@ -3,6 +3,7 @@ import type {
   ProcurementStatus as ProcurementStatusCode,
   RequirementStatus as RequirementStatusCode,
   SupplierOrderStatus as SupplierOrderStatusCode,
+  DeliveryMode as DeliveryModeCode,
 } from './procurement';
 import type {
   IntentFulfilment as IntentFulfilmentCode,
@@ -54,20 +55,41 @@ export const SupplierOrderStatus = widen({
   // supplier (guardrail 16, D-020). "Draft" describes the row; it tells the
   // restaurant nothing about why nobody is acting on their order.
   DRAFT: { label: 'Payment incomplete', tone: 'warning' },
-  PENDING_ACCEPTANCE: { label: 'Awaiting supplier', tone: 'pending' },
+  // Confirmed on funding, never "awaiting supplier": D-091 removed the second
+  // acceptance, because the supplier agreed on the request and was paid against
+  // that answer.
   CONFIRMED: { label: 'Confirmed', tone: 'success' },
-  PARTIALLY_ACCEPTED: { label: 'Partially accepted', tone: 'warning' },
   PREPARING: { label: 'Preparing', tone: 'info' },
   READY_FOR_PICKUP: { label: 'Ready for pickup', tone: 'info' },
   OUT_FOR_DELIVERY: { label: 'Out for delivery', tone: 'live' },
   DELIVERED: { label: 'Delivered', tone: 'success' },
   COMPLETED: { label: 'Completed', tone: 'success' },
-  REJECTED: { label: 'Rejected', tone: 'danger' },
-  // Expired and rejected are distinct business outcomes (doc 01 §12, rule 11)
-  // and must never be collapsed into one chip.
-  EXPIRED: { label: 'No response', tone: 'danger' },
   CANCELLED: { label: 'Cancelled', tone: 'neutral' },
 } satisfies Record<SupplierOrderStatusCode, StatusDisplay>);
+
+/**
+ * What "ready" means, which depends on who is carrying the order. D-091.
+ *
+ * <p>The same status reads differently to the same person: crates waiting on a
+ * counter for somebody to fetch, or a van about to leave. One label for both
+ * would make the kitchen guess which.
+ */
+export function orderStatusFor(
+  status: string,
+  mode: DeliveryModeCode | null | undefined,
+): StatusDisplay {
+  if (status === 'READY_FOR_PICKUP' && mode === 'PICKUP') {
+    return { label: 'Ready to collect', tone: 'info' };
+  }
+  return resolveStatus(SupplierOrderStatus, status);
+}
+
+/** How the goods travel, named for the person reading it. D-091. */
+export const DeliveryMode = widen({
+  PICKUP: { label: 'You collect', tone: 'neutral' },
+  SUPPLIER_DELIVERY: { label: 'Supplier delivers', tone: 'info' },
+  COSTONOMY_DELIVERY: { label: 'We deliver', tone: 'info' },
+} satisfies Record<DeliveryModeCode, StatusDisplay>);
 
 /** Procurement — doc 03 §4. */
 export const ProcurementStatus = widen({

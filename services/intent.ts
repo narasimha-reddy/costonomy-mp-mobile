@@ -1,7 +1,9 @@
 import { apiRequest, newIdempotencyKey } from '@/lib/api/client';
+import type { DeliveryMode } from '@/models/procurement';
 import type {
   Basket,
   CreatedOrder,
+  DeliveryQuote,
   Intent,
   IntentFulfilment,
   IntentStatus,
@@ -120,6 +122,23 @@ export function cloneIntent(token: string, intentId: number): Promise<Intent> {
 // ── Ordering ──────────────────────────────────────────────────────────
 
 /** What ordering this would cost. Changes nothing. */
+/**
+ * What our delivery would cost for this request. D-091.
+ *
+ * <p>No idempotency key: quoting is a read with a receipt. The reference comes
+ * back and is spent when the order is created, so the restaurant is charged the
+ * figure they were shown rather than one recomputed a minute later (§23A.16).
+ */
+export function quoteDelivery(
+  token: string,
+  intentId: number,
+): Promise<DeliveryQuote> {
+  return apiRequest<DeliveryQuote>(`/api/v1/intents/${intentId}/delivery-quote`, {
+    method: 'POST',
+    token,
+  });
+}
+
 export function previewOrder(
   token: string,
   intentId: number,
@@ -145,7 +164,16 @@ export function createOrderFromIntent(
   body: {
     lines?: { intentItemId: number; quantity: string }[];
     paymentMethod?: string;
-  } = {},
+    /**
+     * How the goods travel. Required — D-091.
+     *
+     * <p>The fee is part of what is charged, so the mode has to be settled
+     * before the payment intent exists rather than added afterwards.
+     */
+    deliveryMode: DeliveryMode;
+    /** The quote being spent, for `COSTONOMY_DELIVERY`. */
+    deliveryQuoteReference?: string;
+  },
 ): Promise<CreatedOrder> {
   return apiRequest<CreatedOrder>(`/api/v1/intents/${intentId}/orders`, {
     method: 'POST',

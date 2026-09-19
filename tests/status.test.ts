@@ -1,15 +1,17 @@
 import {
+  DeliveryMode,
   DeliveryStatus,
   SupplierOrderStatus,
+  orderStatusFor,
   resolveStatus,
   unknownStatus,
 } from '@/models/status';
 
 describe('status registry', () => {
   it('resolves a known status', () => {
-    expect(resolveStatus(SupplierOrderStatus, 'PENDING_ACCEPTANCE')).toEqual({
-      label: 'Awaiting supplier',
-      tone: 'pending',
+    expect(resolveStatus(SupplierOrderStatus, 'CONFIRMED')).toEqual({
+      label: 'Confirmed',
+      tone: 'success',
     });
   });
 
@@ -50,15 +52,34 @@ describe('status spellings match the server', () => {
   // unreachable. The `satisfies` guard in models/status.ts now makes a wrong
   // key a compile error; these assert the right ones are actually present.
   it.each([
-    ['DRAFT'], ['PENDING_ACCEPTANCE'], ['CONFIRMED'], ['PARTIALLY_ACCEPTED'],
-    ['PREPARING'], ['READY_FOR_PICKUP'], ['OUT_FOR_DELIVERY'], ['DELIVERED'],
-    ['COMPLETED'], ['REJECTED'], ['EXPIRED'], ['CANCELLED'],
+    ['DRAFT'], ['CONFIRMED'], ['PREPARING'], ['READY_FOR_PICKUP'],
+    ['OUT_FOR_DELIVERY'], ['DELIVERED'], ['COMPLETED'], ['CANCELLED'],
   ])('knows %s', (code) => {
     expect(SupplierOrderStatus[code]).toBeDefined();
   });
 
-  it.each([['ACCEPTED'], ['RECEIVED']])('has no entry for the invented %s', (code) => {
+  // ACCEPTED and RECEIVED were never sent. PENDING_ACCEPTANCE, PARTIALLY_ACCEPTED,
+  // REJECTED and EXPIRED were, until D-091 removed the order acceptance that
+  // produced them -- a chip for a state the server can no longer send is a label
+  // waiting to be rendered for a status nobody will ever be in.
+  it.each([
+    ['ACCEPTED'], ['RECEIVED'],
+    ['PENDING_ACCEPTANCE'], ['PARTIALLY_ACCEPTED'], ['REJECTED'], ['EXPIRED'],
+  ])('has no entry for %s', (code) => {
     expect(SupplierOrderStatus[code]).toBeUndefined();
+  });
+
+  it.each([['PICKUP'], ['SUPPLIER_DELIVERY'], ['COSTONOMY_DELIVERY']])(
+    'knows the delivery mode %s', (code) => {
+      expect(DeliveryMode[code]).toBeDefined();
+    });
+
+  it('reads ready differently when the restaurant is collecting', () => {
+    // The same status, two meanings: crates on a counter, or a van about to
+    // leave. One label for both would make the kitchen guess which.
+    expect(orderStatusFor('READY_FOR_PICKUP', 'PICKUP').label).toBe('Ready to collect');
+    expect(orderStatusFor('READY_FOR_PICKUP', 'COSTONOMY_DELIVERY').label)
+      .toBe('Ready for pickup');
   });
 
   it('degrades an unheard-of status rather than rendering an empty chip', () => {

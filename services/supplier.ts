@@ -85,13 +85,6 @@ export function fetchOrderHistory(
  * Any change of quantity is a partial acceptance, which is a different decision
  * with different consequences for the restaurant (doc 04 §11).
  */
-export function acceptOrder(token: string, orderId: number, idempotencyKey: string) {
-  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/accept`, {
-    method: 'POST',
-    token,
-    idempotencyKey,
-  });
-}
 
 export interface PartialAcceptItem {
   supplierOrderItemId: number;
@@ -132,32 +125,7 @@ export interface PartialAcceptPreview {
   anyAccepted: boolean;
 }
 
-export function previewPartialAccept(
-  token: string,
-  orderId: number,
-  items: PartialAcceptItem[],
-  signal?: AbortSignal,
-): Promise<PartialAcceptPreview> {
-  return apiRequest<PartialAcceptPreview>(
-    `/api/v1/supplier-orders/${orderId}/partial-accept/preview`,
-    { method: 'POST', token, body: { items }, signal },
-  );
-}
 
-export function partialAcceptOrder(
-  token: string,
-  orderId: number,
-  items: PartialAcceptItem[],
-  note: string | undefined,
-  idempotencyKey: string,
-) {
-  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/partial-accept`, {
-    method: 'POST',
-    token,
-    idempotencyKey,
-    body: { items, note },
-  });
-}
 
 export type RejectionReason =
   | 'OUT_OF_STOCK'
@@ -167,20 +135,6 @@ export type RejectionReason =
   | 'BELOW_MINIMUM_ORDER'
   | 'OTHER';
 
-export function rejectOrder(
-  token: string,
-  orderId: number,
-  reason: RejectionReason,
-  note: string | undefined,
-  idempotencyKey: string,
-) {
-  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/reject`, {
-    method: 'POST',
-    token,
-    idempotencyKey,
-    body: { reason, note },
-  });
-}
 
 /**
  * Advance an accepted order.
@@ -197,12 +151,60 @@ export function markPreparing(token: string, orderId: number, idempotencyKey: st
   });
 }
 
-/** Ready for pickup. This is what starts the delivery flow (doc 05 §28). */
+/**
+ * Ready. What that means depends on the mode: a courier is called, the supplier's
+ * own van loads, or there are crates waiting for the kitchen to collect.
+ */
 export function markReady(token: string, orderId: number, idempotencyKey: string) {
   return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/ready`, {
     method: 'POST',
     token,
     idempotencyKey,
+  });
+}
+
+/**
+ * Out for delivery, when the supplier is the one carrying it.
+ *
+ * <p>Refused under `COSTONOMY_DELIVERY`: the courier's events move the order and
+ * a supplier cannot claim movement on their behalf (§23A.38). The screen only
+ * offers this for `SUPPLIER_DELIVERY`, and the server enforces it regardless.
+ */
+export function markOutForDelivery(token: string, orderId: number, idempotencyKey: string) {
+  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/out-for-delivery`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+  });
+}
+
+/** Delivered, by the supplier who carried it. The restaurant still confirms. */
+export function markDelivered(token: string, orderId: number, idempotencyKey: string) {
+  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/delivered`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+  });
+}
+
+/**
+ * The supplier's way out of an order they cannot fulfil. D-091.
+ *
+ * <p>This replaced rejection. The money has already moved — they agreed on the
+ * request and the restaurant paid against that answer — so backing out refunds,
+ * and the order records `cancelledBy: SUPPLIER`.
+ */
+export function supplierCancelOrder(
+  token: string,
+  orderId: number,
+  reason: string,
+  idempotencyKey: string,
+) {
+  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/supplier-cancel`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    body: { reason },
   });
 }
 

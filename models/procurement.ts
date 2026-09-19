@@ -165,9 +165,29 @@ export interface Requirement {
  * behind that comparison and simply never appeared.
  */
 export type SupplierOrderStatus =
-  | 'DRAFT' | 'PENDING_ACCEPTANCE' | 'CONFIRMED' | 'PARTIALLY_ACCEPTED'
-  | 'REJECTED' | 'EXPIRED' | 'PREPARING' | 'READY_FOR_PICKUP'
+  | 'DRAFT' | 'CONFIRMED' | 'PREPARING' | 'READY_FOR_PICKUP'
   | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
+
+/**
+ * How the goods travel. D-091.
+ *
+ * <p>The restaurant chooses at order creation, because the restaurant pays the
+ * delivery fee — and because the fee is part of what is charged, the choice has
+ * to be made before payment rather than after.
+ *
+ * <p>It also decides what happens after `READY_FOR_PICKUP`: a collected order
+ * completes there, a delivered one goes out first.
+ */
+export type DeliveryMode = 'PICKUP' | 'SUPPLIER_DELIVERY' | 'COSTONOMY_DELIVERY';
+
+/**
+ * Who cancelled. D-091.
+ *
+ * <p>An attribute rather than a status per actor: one thing happened — the order
+ * ended and the money went back — and only the actor differs. This is what the
+ * old `REJECTED` became on the supplier's side.
+ */
+export type CancelledBy = 'RESTAURANT' | 'SUPPLIER' | 'SYSTEM';
 
 /**
  * A line on a supplier order.
@@ -243,6 +263,12 @@ export interface SupplierOrder {
   acceptedGst: Money;
   paymentMethod: PaymentMethod | null;
   paymentStatus: string | null;
+  /** How the goods travel, and what the carriage cost. D-091. */
+  deliveryMode: DeliveryMode | null;
+  deliveryFee: Money | null;
+  /** Set only on a cancelled order, and the reason it is not three statuses. */
+  cancelledBy: CancelledBy | null;
+  cancellationReason: string | null;
   items: SupplierOrderItem[];
 }
 

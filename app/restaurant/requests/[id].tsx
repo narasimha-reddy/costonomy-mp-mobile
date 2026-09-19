@@ -31,9 +31,11 @@ import {
   useToast,
 } from '@/components/common';
 import type { IntentItem } from '@/models/intent';
+import type { DeliveryMode } from '@/models/procurement';
+import { DeliveryModePicker } from '@/components/request/DeliveryModePicker';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
-import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { formatGstRate, formatMoney, formatQuantity, type Money } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
@@ -86,10 +88,26 @@ export default function RequestDetailScreen() {
   });
 
   const request = query.data;
+
+  /**
+   * The chosen mode, its fee, and the quote that fee came from. D-091.
+   *
+   * <p>Held here rather than in the picker because the bar below has to show
+   * what the restaurant will actually pay, and creating the order has to spend
+   * the same quote the fee was read from.
+   */
+  const [delivery, setDelivery] = React.useState<{
+    mode: DeliveryMode;
+    fee: Money;
+    quoteReference?: string;
+  } | null>(null);
   const refresh = () => queryClient.invalidateQueries({ queryKey: intentKey(intentId) });
 
   const order = useMutation({
-    mutationFn: () => createOrderFromIntent(accessToken as string, intentId),
+    mutationFn: () => createOrderFromIntent(accessToken as string, intentId, {
+      deliveryMode: (delivery?.mode ?? 'PICKUP') as DeliveryMode,
+      deliveryQuoteReference: delivery?.quoteReference,
+    }),
     onSuccess: (created) => {
       track('intent_ordered', { screen: SCREEN, entityId: intentId });
       void refresh();
@@ -287,6 +305,20 @@ export default function RequestDetailScreen() {
             )}
           </MandiCard>
 
+          {/* Only once there is something to order. Asking how it should travel
+              while the supplier has not answered would be asking about goods
+              nobody has agreed to supply. */}
+          {request.status === 'RESPONSES_RECEIVED'
+            && request.withinOrderWindow
+            && request.fulfilment !== 'NOT_FULFILLED' && (
+            <DeliveryModePicker
+              request={request}
+              selected={delivery?.mode ?? null}
+              onSelect={(mode, fee, quoteReference) =>
+                setDelivery({ mode, fee, quoteReference })}
+            />
+          )}
+
           <MandiCard>
             <View style={styles.itemsHeader}>
               <MandiText variant="bodyEmphasis">Items</MandiText>
@@ -434,13 +466,24 @@ export default function RequestDetailScreen() {
               <MandiText variant="caption" color={Colors.textSecondary}>
                 You pay
               </MandiText>
+              {/* Goods plus carriage. The server adds the fee to the order's
+                  total, so a bar showing only the goods would name a figure
+                  nobody is charged. Server-computed either side: this adds two
+                  already-rounded figures for display only, and the order's own
+                  total is what is paid. */}
               <MandiText variant="priceLarge">
                 {formatMoney(request.acceptance?.offeredTotal ?? '0')}
+                {delivery != null && Number(delivery.fee) > 0
+                  ? ` + ${formatMoney(delivery.fee)}`
+                  : ''}
               </MandiText>
             </View>
             <MandiButton
               label="Create order"
               size="lg"
+              // Until a mode is chosen there is no fee, and an order cannot be
+              // priced without one.
+              disabled={delivery == null}
               loading={order.isPending}
               onPress={() => order.mutate()}
             />

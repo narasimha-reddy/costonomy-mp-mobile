@@ -8,7 +8,6 @@ import { fetchSupplierOrder } from '@/services/procurement';
 import {
   MandiButton,
   MandiCard,
-  MandiCountdown,
   MandiErrorState,
   MandiHeader,
   MandiScreen,
@@ -17,7 +16,7 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
-import { resolveStatus, SupplierOrderStatus } from '@/models/status';
+import { DeliveryMode, resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine } from '@/utils/skuLabel';
@@ -49,9 +48,14 @@ export default function OrderDetailScreen() {
     queryKey: ['supplier-order', orderId],
     queryFn: () => fetchSupplierOrder(accessToken as string, orderId),
     enabled: Number.isFinite(orderId) && accessToken != null,
-    // A pending order is changing under us; a settled one is not.
-    refetchInterval: (q) =>
-      q.state.data?.status === 'PENDING_ACCEPTANCE' ? 10_000 : false,
+    // An order still moving is changing under us; a settled one is not. After
+    // D-091 nothing is waiting on an acceptance, so what is worth polling is the
+    // work itself — being prepared, or on its way.
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      return status === 'CONFIRMED' || status === 'PREPARING'
+        || status === 'OUT_FOR_DELIVERY' ? 30_000 : false;
+    },
   });
 
   const order = query.data;
@@ -99,15 +103,21 @@ export default function OrderDetailScreen() {
               {order.storeName}
             </MandiText>
 
-            {order.status === 'PENDING_ACCEPTANCE' && order.acceptanceDeadline && (
+            {/* No acceptance countdown. The supplier answered on the request,
+                and this order exists because they said yes — a clock here would
+                count down to nothing. The request's own clock is on the request.
+                D-091. */}
+            {order.deliveryMode != null && (
               <View style={styles.countdown}>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  Supplier must respond within
-                </MandiText>
-                <MandiCountdown
-                  deadlineAt={order.acceptanceDeadline}
-                  slaSeconds={order.responseSlaSeconds ?? undefined}
+                <MandiStatusChip
+                  {...resolveStatus(DeliveryMode, order.deliveryMode)}
+                  size="sm"
                 />
+                {order.deliveryFee != null && Number(order.deliveryFee) > 0 ? (
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    {formatMoney(order.deliveryFee)} delivery
+                  </MandiText>
+                ) : null}
               </View>
             )}
           </MandiCard>

@@ -24,21 +24,22 @@ import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 type Tab = 'pending' | 'active' | 'completed' | 'cancelled';
 
 const TABS: { key: Tab; label: string; statuses: Status[] }[] = [
-  // DRAFT sits here rather than under Active: its payment never completed, so no
-  // supplier has seen it. It must still be visible somewhere — an order the
-  // restaurant tried to place and that silently vanished is worse than one
-  // labelled honestly.
-  { key: 'pending', label: 'Pending', statuses: ['PENDING_ACCEPTANCE', 'DRAFT'] },
+  // Only DRAFT now. Its payment never completed, so no supplier has seen it —
+  // and after D-091 that is the one reason an order can be sitting unactioned,
+  // because a funded order is confirmed outright. It must still be visible
+  // somewhere: an order the restaurant tried to place and that silently
+  // vanished is worse than one labelled honestly.
+  { key: 'pending', label: 'Pending', statuses: ['DRAFT'] },
   {
     key: 'active',
     label: 'Active',
-    statuses: ['CONFIRMED', 'PARTIALLY_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'],
+    statuses: ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'],
   },
   { key: 'completed', label: 'Completed', statuses: ['DELIVERED', 'COMPLETED'] },
-  // Rejection, expiry and cancellation are separate business outcomes and keep
-  // their own labels on the card (rule 11); they share a tab only because a
-  // restaurant looks for all three in the same place.
-  { key: 'cancelled', label: 'Cancelled', statuses: ['REJECTED', 'EXPIRED', 'CANCELLED'] },
+  // One ending now. D-091 replaced rejection and expiry with a cancellation
+  // that records who decided it — the distinction lives on `cancelledBy`, which
+  // the card reads, rather than in three tabs that all mean "it did not happen".
+  { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED'] },
 ];
 
 export default function OrdersScreen() {

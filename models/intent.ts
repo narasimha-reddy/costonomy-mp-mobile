@@ -83,9 +83,17 @@ export interface IntentAcceptance {
   offeredValue: Money;
   offeredGst: Money;
   offeredTotal: Money;
+  /** What this store charges to carry it themselves, when they will. */
   deliveryFee: Money | null;
   etaMinutes: number | null;
-  deliveryMode: string | null;
+  /**
+   * Which modes this store can serve, comma separated. D-091.
+   *
+   * <p>The supplier says what is possible; the restaurant picks, because the
+   * restaurant pays the fee. Null means nothing was declared and the choice
+   * falls back to what the store's policy allows.
+   */
+  deliveryModes: string | null;
   notes: string | null;
   submittedAt: string | null;
   expiresAt: string | null;
@@ -302,3 +310,20 @@ export const FULFILMENT_LABELS: Record<IntentFulfilment, string> = {
   PARTIALLY_FULFILLED: 'Partly available',
   NOT_FULFILLED: 'Not available',
 };
+
+/**
+ * What our delivery would cost for one request. D-091.
+ *
+ * <p>One fee and an ETA, and nothing about how they were arrived at: provider
+ * bidding is internal (doc 06 §10), so the restaurant sees a number, never a
+ * list of quotes.
+ */
+export interface DeliveryQuote {
+  quoteReference: string;
+  fee: Money;
+  currency: string;
+  etaMinutes: number | null;
+  distanceKm: number | null;
+  /** After this the figure must be taken again, shown as a price change. */
+  expiresAt: string;
+}

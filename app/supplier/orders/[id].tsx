@@ -1,32 +1,24 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchSupplierOrder, newIdempotencyKey } from '@/services/procurement';
 import {
-  acceptOrder,
+  markDelivered,
+  markOutForDelivery,
   markPreparing,
   markReady,
-  partialAcceptOrder,
-  previewPartialAccept,
-  type PartialAcceptPreview,
-  rejectOrder,
-  type PartialAcceptItem,
-  type RejectionReason,
+  supplierCancelOrder,
 } from '@/services/supplier';
 import {
   MandiButton,
   MandiCard,
-  MandiCountdown,
+  MandiConfirm,
   MandiErrorState,
   MandiFormField,
-  MandiConfirm,
   MandiHeader,
-  MandiHeaderAction,
-  MandiQuantityStepper,
   MandiScreen,
   MandiSkeletonList,
   MandiStatusChip,
@@ -34,7 +26,8 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
-import { resolveStatus, SupplierOrderStatus } from '@/models/status';
+import { DeliveryMode, orderStatusFor, resolveStatus } from '@/models/status';
+import type { SupplierOrder, SupplierOrderStatus } from '@/models/procurement';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatDistance, orderValue } from '@/utils/orders';
@@ -47,7 +40,11 @@ import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'SUP-ORD-01';
 
-const REASONS: { key: RejectionReason; label: string }[] = [
+/**
+ * Why a supplier is backing out. D-091 turned these from rejection reasons into
+ * cancellation reasons; the words a supplier would use have not changed.
+ */
+const REASONS: { key: string; label: string }[] = [
   { key: 'OUT_OF_STOCK', label: 'Out of stock' },
   { key: 'UNABLE_TO_DELIVER', label: 'Unable to deliver' },
   { key: 'STORE_CLOSED', label: 'Store closed' },
@@ -56,37 +53,40 @@ const REASONS: { key: RejectionReason; label: string }[] = [
   { key: 'OTHER', label: 'Something else' },
 ];
 
-type Mode = 'view' | 'partial' | 'reject';
-
 /**
- * SUP-ORD-01 through SUP-ORD-05. Doc 05 §25–§28.
+ * SUP-ORD-01 — one order, as the store that has to fulfil it sees it.
  *
- * <p>One screen, because they are one decision followed by its consequences: the
- * supplier looks at an order and either takes it, takes part of it, or declines
- * it — and then moves it along. Splitting that across five screens would put a
- * navigation step inside a sixty-second window.
+ * <p><b>Nothing here accepts an order.</b> D-088 moved the supplier's commitment
+ * to the request and D-091 removed the second acceptance entirely: an order
+ * exists because this store already said yes, and because the restaurant paid
+ * against that answer. So the screen that used to carry accept, accept-in-part
+ * and decline now carries the work — prepare it, mark it ready, and move it if
+ * this store is the one carrying it.
  *
- * <p><b>The deadline is the server's.</b> §25: "deadline is authoritative from
- * backend".
+ * <p><b>The mode decides the buttons.</b> Under `SUPPLIER_DELIVERY` this store is
+ * the courier and may report the van leaving and arriving. Under
+ * `COSTONOMY_DELIVERY` it may not (§23A.38) — those states come from the
+ * provider's events, and the screen says so rather than offering a button the
+ * server would refuse. Under `PICKUP` there is no delivery leg at all: the
+ * kitchen collects, and confirming what they collected is what completes it.
  *
- * <p><b>Accept and partial-accept carry idempotency keys.</b> One tap on a flaky
- * connection must not become two answers to the same order.
+ * <p>Cancelling is the one way out of an order this store cannot fulfil, and it
+ * refunds. That is the difference from the rejection it replaced, and it is why
+ * it is confirmed rather than being one tap.
  */
 export default function SupplierOrderScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const orderId = Number(id);
-  const router = useRouter();
-  const toast = useToast();
-  const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { storeId } = useStore();
+  const { show } = useToast();
+  const queryClient = useQueryClient();
 
-  const [mode, setMode] = useState<Mode>('view');
-  const [accepted, setAccepted] = useState<Record<number, number>>({});
-  const [confirmingReset, setConfirmingReset] = useState(false);
-  const [reason, setReason] = useState<RejectionReason | null>(null);
+  const params = useLocalSearchParams<{ id: string }>();
+  const orderId = Number(params.id);
+
+  const [cancelling, setCancelling] = useState(false);
+  const [reason, setReason] = useState<string>('OUT_OF_STOCK');
   const [note, setNote] = useState('');
-  const [idempotencyKey] = useState(() => newIdempotencyKey());
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   const query = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -97,119 +97,63 @@ export default function SupplierOrderScreen() {
   const order = query.data;
 
   function invalidate() {
-    void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId] });
-    void queryClient.invalidateQueries({ queryKey: ['store', storeId, 'orders', 'pending'] });
-    void queryClient.invalidateQueries({ queryKey: ['store', storeId, 'orders', 'active'] });
+    queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId] });
+    queryClient.invalidateQueries({ queryKey: ['supplier-orders', storeId] });
   }
 
+  /**
+   * Report what the server said, not what the tap meant.
+   *
+   * <p>A refusal here is usually the order having moved underneath the screen —
+   * the restaurant cancelled, or a courier's event landed first. Guardrail 4:
+   * the state comes back from the server, so the screen reloads rather than
+   * assuming the action took.
+   */
   function onRefusal(caught: unknown, fallback: string) {
-    // The server's message says which of the several real reasons this is —
-    // expired, already answered, no longer yours. Replacing it with "failed"
-    // would leave the supplier tapping at an order that is already gone.
-    toast.show(caught instanceof ApiError ? caught.message : fallback, 'error');
-    void query.refetch();
+    const message = caught instanceof ApiError ? caught.message : fallback;
+    show(message, 'error');
+    invalidate();
   }
-
-  const accept = useMutation({
-    mutationFn: () => acceptOrder(accessToken as string, orderId, idempotencyKey),
-    onSuccess: () => {
-      track('order_accepted', { screen: SCREEN, entityId: orderId });
-      invalidate();
-      toast.show('Order accepted', 'success');
-    },
-    onError: (caught) => onRefusal(caught, 'Could not accept this order.'),
-  });
-
-  const partial = useMutation({
-    mutationFn: (items: PartialAcceptItem[]) =>
-      partialAcceptOrder(accessToken as string, orderId, items, note || undefined, idempotencyKey),
-    onSuccess: () => {
-      track('order_partially_accepted', { screen: SCREEN, entityId: orderId });
-      invalidate();
-      setMode('view');
-      toast.show('Partial acceptance sent', 'success');
-    },
-    onError: (caught) => onRefusal(caught, 'Could not send that.'),
-  });
-
-  const reject = useMutation({
-    mutationFn: () =>
-      rejectOrder(accessToken as string, orderId, reason as RejectionReason,
-        note || undefined, idempotencyKey),
-    onSuccess: () => {
-      track('order_rejected', { screen: SCREEN, entityId: orderId }, { reason });
-      invalidate();
-      setMode('view');
-      toast.show('Order declined', 'info');
-      router.replace('/supplier/orders');
-    },
-    onError: (caught) => onRefusal(caught, 'Could not decline this order.'),
-  });
 
   const advance = useMutation({
-    // A fresh key per transition, not the screen's: `preparing` and `ready` are
-    // two different operations, and reusing one key would make the second look
-    // like a replay of the first.
-    mutationFn: (to: 'preparing' | 'ready') =>
-      to === 'preparing'
-        ? markPreparing(accessToken as string, orderId, newIdempotencyKey())
-        : markReady(accessToken as string, orderId, newIdempotencyKey()),
-    onSuccess: (_data, to) => {
-      track(to === 'ready' ? 'order_ready' : 'order_preparing', { screen: SCREEN, entityId: orderId });
+    mutationFn: ({ to }: { to: SupplierOrderStatus }) => {
+      const key = newIdempotencyKey();
+      const token = accessToken as string;
+      if (to === 'PREPARING') return markPreparing(token, orderId, key);
+      if (to === 'READY_FOR_PICKUP') return markReady(token, orderId, key);
+      if (to === 'OUT_FOR_DELIVERY') return markOutForDelivery(token, orderId, key);
+      return markDelivered(token, orderId, key);
+    },
+    onSuccess: (updated, variables) => {
+      track('supplier_order_advanced', { screen: SCREEN, entityId: orderId },
+        { to: variables.to });
+      queryClient.setQueryData(['supplier-order', orderId], updated);
       invalidate();
     },
-    onError: (caught) => onRefusal(caught, 'Could not update this order.'),
+    onError: (caught) => onRefusal(caught, "Couldn't update this order."),
   });
 
-  // Every line must be answered — an omitted line is unanswered, not declined
-  // (doc 04 §11). So the map is seeded with the full requested quantity and the
-  // supplier reduces what they cannot supply.
-  const partialItems = useMemo<PartialAcceptItem[]>(() => {
-    if (!order) return [];
-    return order.items.map((item) => ({
-      supplierOrderItemId: item.id,
-      acceptedQuantity: String(accepted[item.id] ?? Number(item.requestedQuantity)),
-    }));
-  }, [order, accepted]);
-
-  /**
-   * What the order comes to at the quantities currently on screen.
-   *
-   * <p>Asked of the server rather than worked out here: it is money, and
-   * guardrail 3 puts every rupee of arithmetic on the far side of the wire. The
-   * endpoint prices it with the same code the acceptance runs, so what is shown
-   * and what happens cannot drift apart.
-   *
-   * <p>Only while the partial screen is open, and keyed by the quantities, so
-   * moving a stepper re-asks and moving it back is served from cache.
-   */
-  const preview = useQuery({
-    queryKey: ['supplier-order', orderId, 'partial-preview', partialItems],
-    queryFn: ({ signal }) =>
-      previewPartialAccept(accessToken as string, orderId, partialItems, signal),
-    enabled: mode === 'partial' && partialItems.length > 0 && accessToken != null,
-    // The previous figures stay on screen while the next ones are in flight,
-    // so the totals do not blink to nothing between taps.
-    placeholderData: (previous) => previous,
-  });
-
-  /**
-   * Answered, and for less than was asked. Only then do two sets of figures
-   * exist; before an answer `acceptedAmount` is zero and means "not yet".
-   */
-  const settled = order != null
-    && order.acceptedAmount != null
-    && order.items.some((item) => item.acceptedQuantity != null)
-    && Number(order.acceptedAmount) !== Number(order.totalAmount);
-
-  const anyReduced = useMemo(
-    () => order != null && order.items.some(
-      (item) => (accepted[item.id] ?? Number(item.requestedQuantity)) < Number(item.requestedQuantity),
+  const cancel = useMutation({
+    mutationFn: () => supplierCancelOrder(
+      accessToken as string, orderId,
+      note.trim() ? `${reason}: ${note.trim()}` : reason,
+      newIdempotencyKey(),
     ),
-    [order, accepted],
-  );
+    onSuccess: (updated) => {
+      track('supplier_order_cancelled', { screen: SCREEN, entityId: orderId },
+        { reason });
+      queryClient.setQueryData(['supplier-order', orderId], updated);
+      invalidate();
+      setCancelling(false);
+      // Navigating rather than toasting: the authoritative state is the order,
+      // and a toast is not a confirmation.
+      show('Order cancelled. The restaurant has been refunded.');
+    },
+    onError: (caught) => onRefusal(caught, "Couldn't cancel this order."),
+  });
 
-  const pending = order?.status === 'PENDING_ACCEPTANCE';
+  const mode = order?.deliveryMode ?? null;
+  const busy = advance.isPending || cancel.isPending;
 
   return (
     <MandiScreen
@@ -218,34 +162,24 @@ export default function SupplierOrderScreen() {
           title={order?.outletName ?? 'Order'}
           subtitle={order?.restaurantName ?? undefined}
           back
-          right={
-            // Only while quantities have been changed: a reset that resets
-            // nothing is a button that does nothing.
-            mode === 'partial' && Object.keys(accepted).length > 0 ? (
-              <MandiHeaderAction
-                icon="refresh-outline"
-                label="Reset quantities"
-                onPress={() => setConfirmingReset(true)}
-              />
-            ) : undefined
-          }
         />
       }
       footer={renderFooter()}
+      onRefresh={() => query.refetch()}
+      refreshing={query.isRefetching}
     >
-      {/* Worth confirming: the quantities are typed one line at a time and
-          there is no way back to them once they are gone. */}
       <MandiConfirm
-        visible={confirmingReset}
-        title="Start again?"
-        message="Every line goes back to the quantity the restaurant asked for."
-        confirmLabel="Reset quantities"
-        cancelLabel="Keep what I entered"
+        visible={confirmingCancel}
+        title="Cancel this order?"
+        message="The restaurant has already paid, so this refunds them. It cannot be undone."
+        confirmLabel="Cancel order"
+        cancelLabel="Keep it"
+        destructive
         onConfirm={() => {
-          setAccepted({});
-          setConfirmingReset(false);
+          setConfirmingCancel(false);
+          cancel.mutate();
         }}
-        onCancel={() => setConfirmingReset(false)}
+        onCancel={() => setConfirmingCancel(false)}
       />
 
       {query.isPending ? (
@@ -255,11 +189,11 @@ export default function SupplierOrderScreen() {
       ) : (
         <>
           <MandiCard>
-            {/* Status leads and the reference follows, as on a request: the
-                two screens describe stages of one thing, and a reader should
-                not have to re-learn where to look. */}
+            {/* Status leads and the reference follows, as on a request: the two
+                screens describe stages of one thing, and a reader should not
+                have to re-learn where to look. */}
             <View style={styles.row}>
-              <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} />
+              <MandiStatusChip {...orderStatusFor(order.status, mode)} />
               <MandiText variant="caption" color={Colors.textTertiary}>
                 {order.orderNumber}
               </MandiText>
@@ -268,8 +202,6 @@ export default function SupplierOrderScreen() {
               {formatMomentWithRecency(order.createdAt)}
             </MandiText>
 
-            {/* Where it is going. The supplier is deciding inside a window, and
-                this is the fact they cannot look up later. */}
             <View style={styles.row}>
               <View style={styles.where}>
                 <MandiText variant="bodyEmphasis" numberOfLines={2}>
@@ -284,8 +216,6 @@ export default function SupplierOrderScreen() {
               </View>
             </View>
 
-            {/* Value, count and how it is paid — one line under the party, the
-                same order the card uses. */}
             <View style={styles.valueRow}>
               <MandiText variant="price">{formatMoney(orderValue(order))}</MandiText>
               <MandiText variant="caption" color={Colors.textTertiary}>
@@ -293,22 +223,32 @@ export default function SupplierOrderScreen() {
               </MandiText>
               <PaymentMethodPill method={order.paymentMethod} />
             </View>
-            {pending && order.acceptanceDeadline && (
-              <View style={styles.deadline}>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  Respond within
-                </MandiText>
-                <MandiCountdown
-                  deadlineAt={order.acceptanceDeadline}
-                  slaSeconds={order.responseSlaSeconds ?? undefined}
-                  size="lg"
-                />
+
+            {/* How it travels, which is what the buttons below depend on. Shown
+                rather than inferred from which actions appear, because a
+                supplier deciding whether to load a van should not have to work
+                that out from an absent button. */}
+            {mode != null && (
+              <View style={styles.valueRow}>
+                <MandiStatusChip {...resolveStatus(DeliveryMode, mode)} size="sm" />
+                {mode === 'PICKUP' ? (
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    The restaurant collects from your store
+                  </MandiText>
+                ) : null}
               </View>
             )}
+
+            {order.status === 'CANCELLED' && order.cancellationReason ? (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                {order.cancelledBy === 'SUPPLIER' ? 'You cancelled' : 'Cancelled'}
+                {' — '}{order.cancellationReason}
+              </MandiText>
+            ) : null}
           </MandiCard>
 
-          {mode === 'reject' ? (
-            <RejectPanel
+          {cancelling ? (
+            <CancelPanel
               reason={reason}
               onReason={setReason}
               note={note}
@@ -316,277 +256,158 @@ export default function SupplierOrderScreen() {
             />
           ) : (
             <MandiCard>
-              <MandiText variant="bodyEmphasis">
-                {mode === 'partial' ? 'What can you supply?' : 'Items'}
-              </MandiText>
-              {order.items.map((item) => {
-                const requested = Number(item.requestedQuantity);
-                const value = accepted[item.id] ?? requested;
-                return (
-                  <View key={item.id} style={styles.item}>
-                    <View style={styles.itemHead}>
-                      {/* 44pt, not the card's 26: on the detail screen the
-                          supplier is checking they have the right thing, and a
-                          picture too small to recognise is decoration. */}
-                      <ProductThumb uri={item.productImageUrl} size={44} />
-                      <View style={styles.itemText}>
-                        <MandiText variant="body">{item.productName}</MandiText>
-                        <MandiText variant="caption" color={Colors.textSecondary}>
-                          {skuSecondaryLine(item.sku, item.unitPriceInclusiveGst)}
-                        </MandiText>
-                        <MandiText variant="caption" color={Colors.textTertiary}>
-                          Inc. {formatGstRate(item.gstRate)} GST
-                        </MandiText>
-                      </View>
-                      {/* What this line is worth now. In partial mode that is
-                          the quantity being chosen; afterwards it is what was
-                          committed to. The ordered figure stays, struck, because
-                          the difference is the point. */}
-                      <LineValue
-                        ordered={item.lineTotal}
-                        settled={
-                          mode === 'partial'
-                            ? previewLine(preview.data, item.id)
-                            : item.acceptedLineTotal
-                        }
-                      />
+              <MandiText variant="bodyEmphasis">Items</MandiText>
+              {order.items.map((item) => (
+                <View key={item.id} style={styles.item}>
+                  <View style={styles.itemHead}>
+                    {/* 44pt, not the card's 26: here the supplier is checking
+                        they have the right thing, and a picture too small to
+                        recognise is decoration. */}
+                    <ProductThumb uri={item.productImageUrl} size={44} radius={Radius.sm} />
+                    <View style={styles.flex}>
+                      <MandiText variant="body" numberOfLines={2}>
+                        {item.productName}
+                      </MandiText>
+                      <MandiText variant="caption" color={Colors.textSecondary}>
+                        {skuSecondaryLine(item.sku, item.unitPriceInclusiveGst)}
+                      </MandiText>
                     </View>
-
-                    {mode === 'partial' ? (
-                      <View style={styles.itemFoot}>
-                        <MandiText variant="caption" color={Colors.textSecondary}>
-                          Asked for {formatQuantity(item.requestedQuantity)} {item.unit}
-                        </MandiText>
-                        <MandiQuantityStepper
-                          value={value}
-                          onChange={(next) =>
-                            setAccepted((current) => ({ ...current, [item.id]: next }))
-                          }
-                          min={0}
-                          max={requested}
-                          unit={item.unit}
-                        />
-                      </View>
-                    ) : (
-                      <View style={styles.quantities}>
-                        <MandiText variant="caption" color={Colors.textSecondary}>
-                          {formatQuantity(item.requestedQuantity)} {item.unit} asked for
-                        </MandiText>
-                        {/* What was committed to, when it is not what was asked.
-                            It was a clause on the end of the requested quantity in
-                            the same grey — the one line on the screen that says
-                            this order is not what it looks like, set as an aside.
-                            It is what the packer has to read. */}
-                        {item.acceptedQuantity != null
-                          && Number(item.acceptedQuantity) !== requested && (
-                            <View style={styles.shortRow}>
-                              <Ionicons
-                                name="alert-circle-outline"
-                                size={14}
-                                color={Colors.warning}
-                              />
-                              <MandiText variant="captionEmphasis" color={Colors.warning}>
-                                {Number(item.acceptedQuantity) === 0
-                                  ? 'You declined this line'
-                                  : `You accepted ${formatQuantity(item.acceptedQuantity)} ${item.unit}`}
-                              </MandiText>
-                            </View>
-                          )}
-                      </View>
-                    )}
                   </View>
-                );
-              })}
+                  <View style={styles.itemFoot}>
+                    <MandiText variant="caption" color={Colors.textSecondary}>
+                      {formatQuantity(item.requestedQuantity)} {item.unit}
+                      {item.gstRate != null ? ` · GST ${formatGstRate(item.gstRate)}` : ''}
+                    </MandiText>
+                    <MandiText variant="bodyEmphasis">
+                      {formatMoney(item.lineTotal)}
+                    </MandiText>
+                  </View>
+                </View>
+              ))}
             </MandiCard>
           )}
-
-          {mode === 'partial' && anyReduced && (
-            <MandiCard>
-              <MandiFormField
-                label="Note (optional)"
-                value={note}
-                onChangeText={setNote}
-                placeholder="Anything they should know"
-              />
-            </MandiCard>
-          )}
-
-          <MandiCard>
-            {mode === 'partial' && preview.data != null ? (
-              <>
-                <Row label="Subtotal" value={formatMoney(preview.data.acceptedValue)} />
-                <Row label="GST" value={formatMoney(preview.data.acceptedGst)} />
-                <Row
-                  label="You would supply"
-                  value={formatMoney(preview.data.acceptedTotal)}
-                  emphasis
-                />
-                {anyReduced && preview.data.anyAccepted && (
-                  <MandiText variant="caption" color={Colors.textTertiary}>
-                    Ordered {formatMoney(order.totalAmount)}. You are only charged for what you
-                    accept.
-                  </MandiText>
-                )}
-              </>
-            ) : settled ? (
-              // One figure per row: what the supplier committed to. What was
-              // asked for is struck on the lines above, where it belongs to a
-              // particular item — a summary carrying two numbers per row stops
-              // summarising anything.
-              <>
-                <Row label="Subtotal" value={formatMoney(order.acceptedSubtotal)} />
-                <Row label="GST" value={formatMoney(order.acceptedGst)} />
-                <Row label="You supply" value={formatMoney(order.acceptedAmount)} emphasis />
-              </>
-            ) : (
-              <>
-                <Row label="Subtotal" value={formatMoney(order.subtotal)} />
-                <Row label="GST" value={formatMoney(order.gstAmount)} />
-                <Row label="Order value" value={formatMoney(order.totalAmount)} emphasis />
-              </>
-            )}
-          </MandiCard>
         </>
       )}
     </MandiScreen>
   );
 
+  /**
+   * The one action this store can take right now, plus the way out.
+   *
+   * <p>One primary button, never a row of them: at any point in an order's life
+   * there is exactly one next step, and offering the others greyed out asks the
+   * supplier to work out which applies.
+   */
   function renderFooter() {
-    if (order == null) return undefined;
+    if (order == null) return null;
 
-    if (mode === 'reject') {
+    if (cancelling) {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Decline this order"
-            size="lg"
+            label="Cancel order"
             variant="destructive"
-            disabled={reason == null}
-            loading={reject.isPending}
-            onPress={() => reject.mutate()}
+            size="md"
+            loading={cancel.isPending}
+            onPress={() => setConfirmingCancel(true)}
           />
-          <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
-        </MandiStickyBar>
-      );
-    }
-
-    if (mode === 'partial') {
-      return (
-        <MandiStickyBar>
-          {/* Nothing left to supply is a decline, and the server records it as
-              one. Rather than disabling the button and explaining why, the button
-              becomes the thing it would actually do — and goes to the screen that
-              asks for a reason, which a decline needs and this one would lose. */}
-          {preview.data != null && !preview.data.anyAccepted ? (
-            <MandiButton
-              label="Decline this order"
-              size="lg"
-              variant="destructive"
-              onPress={() => setMode('reject')}
-            />
-          ) : (
-            <MandiButton
-              label="Send partial acceptance"
-              size="lg"
-              loading={partial.isPending}
-              onPress={() => partial.mutate(partialItems)}
-            />
-          )}
-          <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
-        </MandiStickyBar>
-      );
-    }
-
-    if (pending) {
-      return (
-        <MandiStickyBar>
-          {/* One answer leads and two are available, and the colours say so.
-              All three were brand-coloured, which is what `neutral` exists to
-              stop: "a row of orange buttons reads as a row of warnings", and on
-              a screen with a countdown on it that is the wrong thing to say
-              three times. Accept in full is the answer most orders get; taking
-              part of it is still accepting, so it keeps the outline; declining
-              is the way out and is weighted like one. */}
           <MandiButton
-            label="Accept in full"
-            size="lg"
-            icon="checkmark-circle-outline"
-            loading={accept.isPending}
-            onPress={() => accept.mutate()}
+            label="Back"
+            variant="neutral"
+            size="md"
+            onPress={() => setCancelling(false)}
           />
-          <View style={styles.secondaryRow}>
-            <MandiButton
-              label="Accept part"
-              variant="secondary"
-              size="md"
-              onPress={() => setMode('partial')}
-              style={styles.flex}
-            />
-            {/* Neutral rather than destructive: this opens the decline screen,
-                where a reason is required. Nothing is refused by this tap. */}
-            <MandiButton
-              label="Decline"
-              variant="neutral"
-              size="md"
-              onPress={() => setMode('reject')}
-              style={styles.flex}
-            />
-          </View>
         </MandiStickyBar>
       );
     }
 
-    if (order.status === 'CONFIRMED' || order.status === 'PARTIALLY_ACCEPTED') {
-      return (
-        <MandiStickyBar>
+    const next = nextStep(order);
+
+    if (next == null) {
+      // Delivered, completed or cancelled. Nothing to do, and no bar rather than
+      // a bar with nothing in it.
+      return null;
+    }
+
+    return (
+      <MandiStickyBar>
+        <MandiButton
+          label={next.label}
+          variant="primary"
+          size="md"
+          loading={busy}
+          onPress={() => advance.mutate({ to: next.to })}
+        />
+        {/* Only while the goods are still in the store. Doc 01 §13: once they
+            have left, the path is return or dispute. */}
+        {(order.status === 'CONFIRMED' || order.status === 'PREPARING') && (
           <MandiButton
-            label="Start preparing"
-            size="lg"
-            loading={advance.isPending}
-            onPress={() => advance.mutate('preparing')}
+            label="Cannot fulfil"
+            variant="neutral"
+            size="md"
+            onPress={() => setCancelling(true)}
           />
-        </MandiStickyBar>
-      );
-    }
-
-    if (order.status === 'PREPARING') {
-      return (
-        <MandiStickyBar>
-          <MandiButton
-            label="Ready for pickup"
-            size="lg"
-            loading={advance.isPending}
-            onPress={() => advance.mutate('ready')}
-          />
-        </MandiStickyBar>
-      );
-    }
-
-    return undefined;
+        )}
+      </MandiStickyBar>
+    );
   }
 }
 
-function RejectPanel({
+/**
+ * The single next transition, given where the order is and who carries it.
+ *
+ * <p>Returns null where this store has nothing to do — including the whole
+ * delivery leg of a Costonomy order, which moves on the courier's events.
+ */
+function nextStep(
+  order: SupplierOrder,
+): { to: SupplierOrderStatus; label: string } | null {
+  const mode = order.deliveryMode;
+
+  switch (order.status) {
+    case 'CONFIRMED':
+      return { to: 'PREPARING', label: 'Start preparing' };
+    case 'PREPARING':
+      return {
+        to: 'READY_FOR_PICKUP',
+        label: mode === 'PICKUP' ? 'Ready to collect' : 'Mark ready',
+      };
+    case 'READY_FOR_PICKUP':
+      // Only the supplier's own van. A pickup waits on the kitchen, and a
+      // courier reports itself.
+      return mode === 'SUPPLIER_DELIVERY'
+        ? { to: 'OUT_FOR_DELIVERY', label: 'Out for delivery' }
+        : null;
+    case 'OUT_FOR_DELIVERY':
+      return mode === 'SUPPLIER_DELIVERY'
+        ? { to: 'DELIVERED', label: 'Mark delivered' }
+        : null;
+    default:
+      return null;
+  }
+}
+
+/** Why the order cannot be fulfilled, in the supplier's own words. */
+function CancelPanel({
   reason,
   onReason,
   note,
   onNote,
 }: {
-  reason: RejectionReason | null;
-  onReason: (reason: RejectionReason) => void;
+  reason: string;
+  onReason: (value: string) => void;
   note: string;
-  onNote: (note: string) => void;
+  onNote: (value: string) => void;
 }) {
   return (
     <MandiCard>
-      <MandiText variant="bodyEmphasis">Why are you declining?</MandiText>
+      <MandiText variant="bodyEmphasis">Why can&apos;t you fulfil this?</MandiText>
       <MandiText variant="caption" color={Colors.textSecondary}>
-        This is required. It goes to the restaurant so they can source elsewhere, and it is
-        counted — &ldquo;out of stock&rdquo; and &ldquo;store closed&rdquo; are different problems.
+        The restaurant is refunded in full, and they are told the reason.
       </MandiText>
       <View style={styles.reasons}>
         {REASONS.map((option) => {
-          const active = option.key === reason;
+          const active = reason === option.key;
           return (
             <Pressable
               key={option.key}
@@ -595,10 +416,9 @@ function RejectPanel({
               accessibilityState={{ selected: active }}
               style={[styles.reason, active && styles.reasonActive]}
             >
-              {active && <Ionicons name="checkmark-circle" size={14} color={Colors.primary} />}
               <MandiText
                 variant="caption"
-                color={active ? Colors.primary : Colors.textSecondary}
+                color={active ? Colors.surface : Colors.textSecondary}
               >
                 {option.label}
               </MandiText>
@@ -607,55 +427,24 @@ function RejectPanel({
         })}
       </View>
       <MandiFormField
-        label="Note (optional)"
+        label="Anything to add?"
         value={note}
         onChangeText={onNote}
-        placeholder="Anything that helps them understand"
+        placeholder="Optional"
+        multiline
       />
     </MandiCard>
   );
 }
 
-function Row({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
-  return (
-    <View style={styles.totalsRow}>
-      <MandiText variant={emphasis ? 'bodyEmphasis' : 'body'} color={Colors.textSecondary}>
-        {label}
-      </MandiText>
-      <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
-    </View>
-  );
-}
-
-/**
- * A line's value, with the ordered figure struck when it no longer applies.
- *
- * <p>Both figures, never one: the new number alone leaves a supplier wondering
- * whether they misread the order, and the old one alone is a lie.
- */
-function LineValue({ ordered, settled }: { ordered: string; settled?: string | null }) {
-  const changed = settled != null && settled !== ordered;
-  return (
-    <View style={styles.lineValue}>
-      {changed && (
-        <MandiText variant="caption" color={Colors.textTertiary} struck>
-          {formatMoney(ordered)}
-        </MandiText>
-      )}
-      <MandiText variant="bodyEmphasis">{formatMoney(settled ?? ordered)}</MandiText>
-    </View>
-  );
-}
-
-/** This line's value at the quantity being offered, when the server has priced it. */
-function previewLine(
-  preview: PartialAcceptPreview | undefined,
-  itemId: number,
-): string | undefined {
-  return preview?.lines.find((line) => line.supplierOrderItemId === itemId)?.lineTotal;
-}
-
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
   where: { flex: 1, gap: 2 },
   valueRow: {
     flexDirection: 'row',
@@ -663,54 +452,33 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginTop: Spacing.xs,
   },
-  columns: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
-  },
-  left: { flex: 1, gap: 2, alignItems: 'flex-start' },
-  right: { gap: 2, alignItems: 'flex-end' },
-  flex: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  deadline: { marginTop: Spacing.md, gap: Spacing.xs },
   item: {
-    gap: Spacing.sm,
-    paddingTop: Spacing.md,
-    marginTop: Spacing.md,
+    gap: Spacing.xs,
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.borderLight,
   },
-  itemHead: { flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start' },
-  itemText: { flex: 1, gap: Spacing.xs },
+  itemHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   itemFoot: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
-  quantities: { gap: Spacing.xs, alignItems: 'flex-start' },
-  shortRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  lineValue: { alignItems: 'flex-end' },
-  totalsRow: {
+  reasons: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Spacing.xs,
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
   },
-  secondaryRow: { flexDirection: 'row', gap: Spacing.sm },
-  reasons: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginVertical: Spacing.sm },
   reason: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radius.full,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },
-  reasonActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  reasonActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
 });

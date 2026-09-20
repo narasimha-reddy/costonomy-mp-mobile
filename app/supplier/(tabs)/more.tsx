@@ -96,7 +96,7 @@ export default function SupplierMoreScreen() {
             <MandiText variant="caption" color={Colors.textSecondary}>{me.user.phone}</MandiText>
           )}
         </MandiCard>
-        <MandiButton label="Sign out" variant="secondary" onPress={signOut} />
+        <MandiButton label="Sign Out" variant="secondary" onPress={signOut} />
       </View>
     </MandiScreen>
   );

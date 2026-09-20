@@ -1,8 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchCategories } from '@/services/catalog';
@@ -18,7 +17,6 @@ import {
   MandiSearchBar,
   MandiSectionHeader,
   MandiSkeletonList,
-  MandiText,
   toneColors,
 } from '@/components/common';
 import {
@@ -28,8 +26,11 @@ import {
 import { OrderCardBody } from '@/components/order';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { RestaurantRequestCard } from '@/components/request/RestaurantRequestCard';
+import { PopularSuppliersCarousel } from '@/components/restaurant/PopularSuppliersCarousel';
+import type { Intent } from '@/models/intent';
+import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
-import { Colors, Elevation, Radius, Spacing } from '@/theme';
+import { Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
 
@@ -46,17 +47,12 @@ const SCREEN = 'REST-HOME-01';
  */
 export default function RestaurantHome() {
   const router = useRouter();
-  const { me } = useSession();
-  const { outletId, outlet } = useOutlet();
+  const { outletId } = useOutlet();
 
   return (
     <MandiScreen
       header={<RestaurantHeader screen={SCREEN} />}
     >
-      <MandiText variant="subtitle">
-        {greeting()}{me?.user.name ? `, ${me.user.name.split(' ')[0]}` : ''}
-      </MandiText>
-
       <MandiSearchBar
         value=""
         onChangeText={() => {}}
@@ -68,66 +64,57 @@ export default function RestaurantHome() {
         placeholder="Search paneer, rice, oil…"
       />
 
-      <QuickActions outletId={outletId} outletName={outlet?.name} />
       <RequestsSection outletId={outletId} />
+      {/* Below requests, above orders: a request is somebody already waiting on
+          this kitchen's behalf, and an order is work in hand. Browsing sits
+          between them — worth offering, not worth leading with. */}
+      <PopularSuppliersCarousel outletId={outletId} />
       <OrdersSection outletId={outletId} />
       <CategoriesSection outletId={outletId} />
     </MandiScreen>
   );
 }
 
-/** "Good morning" is worth more than a generic label: it tells you the app is live. */
-function greeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+
+/**
+ * The one thing about the open requests worth a line.
+ *
+ * <p><b>Answered first, and only that.</b> A reply you have not ordered against
+ * has your own deadline running on it; a request nobody has answered is the
+ * supplier's clock, not yours. So when both exist the answered ones are what a
+ * kitchen needs to see, and "3 requests" on its own tells them nothing about
+ * which needs them now.
+ *
+ * <p>One clause rather than both, because two wrap onto a second line at phone
+ * width — and a subtitle that wraps drags the icon and the action out of line
+ * with the title they belong to.
+ */
+function requestsSubtitle(live: Intent[]): string | undefined {
+  if (live.length === 0) return undefined;
+
+  const replied = live.filter((intent) => intent.status === 'RESPONSES_RECEIVED').length;
+  if (replied > 0) {
+    return `${replied} ready to order`;
+  }
+  return `${live.length} awaiting a reply`;
 }
 
-function QuickActions({ outletId, outletName }: { outletId: number | null; outletName?: string }) {
-  const router = useRouter();
+/**
+ * Where the active orders have got to.
+ *
+ * <p>Counted by what a kitchen is actually waiting for — somebody to start, or
+ * somebody to arrive — rather than listing every status, which would put the
+ * whole state machine in a subtitle.
+ */
+function ordersSubtitle(active: SupplierOrder[]): string | undefined {
+  if (active.length === 0) return undefined;
 
-  const actions = [
-    {
-      key: 'browse',
-      icon: 'grid-outline' as const,
-      label: 'Browse catalog',
-      hint: 'Every supplier, compared',
-      onPress: () => router.push('/restaurant/(tabs)/discover'),
-    },
-    {
-      key: 'requests',
-      icon: 'document-text-outline' as const,
-      label: 'Requests',
-      hint: outletName ? `For ${outletName}` : 'What you asked for',
-      onPress: () => router.push('/restaurant/(tabs)/requests'),
-    },
-  ];
+  const onTheWay = active.filter((order) => order.status === 'OUT_FOR_DELIVERY').length;
+  const ready = active.filter((order) => order.status === 'READY_FOR_PICKUP').length;
 
-  return (
-    <View style={styles.quickRow}>
-      {actions.map((action) => (
-        <Pressable
-          key={action.key}
-          onPress={() => {
-            track('quick_action', { screen: SCREEN, outletId }, { action: action.key });
-            action.onPress();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={action.label}
-          style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}
-        >
-          <View style={styles.quickIcon}>
-            <Ionicons name={action.icon} size={20} color={Colors.primary} />
-          </View>
-          <MandiText variant="captionEmphasis">{action.label}</MandiText>
-          <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
-            {action.hint}
-          </MandiText>
-        </Pressable>
-      ))}
-    </View>
-  );
+  if (onTheWay > 0) return `${onTheWay} on the way`;
+  if (ready > 0) return `${ready} ready to collect`;
+  return 'Being prepared';
 }
 
 /**
@@ -136,6 +123,13 @@ function QuickActions({ outletId, outletName }: { outletId: number | null; outle
  * <p>Open ones first, then replies that can still be ordered from — the second
  * group has a deadline attached, which makes it the more urgent of the two even
  * though it looks like progress.
+ */
+/**
+ * <p><b>The header action is "New request", not "See all".</b> The Requests tab
+ * is already one tap away in the bar below, while starting a request had no
+ * route from this screen at all. A header slot spent on a second door to the
+ * same room buys nothing; spent on the thing this section exists to produce, it
+ * does. It goes to Discover, because a request starts by finding a pack.
  */
 function RequestsSection({ outletId }: { outletId: number | null }) {
   const router = useRouter();
@@ -154,11 +148,14 @@ function RequestsSection({ outletId }: { outletId: number | null }) {
   return (
     <View style={styles.section}>
       <MandiSectionHeader
-        title="Open requests"
-        icon="document-text"
-        tone="pending"
-        actionLabel={live.length ? 'See all' : undefined}
-        onAction={() => router.push('/restaurant/(tabs)/requests')}
+        title="Open Requests"
+        count={live.length}
+        subtitle={requestsSubtitle(live)}
+        actionLabel="New request"
+        onAction={() => {
+          track('start_request', { screen: SCREEN, outletId });
+          router.push('/restaurant/(tabs)/discover');
+        }}
       />
       {query.isPending ? (
         <MandiSkeletonList count={2} />
@@ -203,10 +200,10 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
   return (
     <View style={styles.section}>
       <MandiSectionHeader
-        title="Active orders"
-        icon="receipt"
-        tone="info"
-        actionLabel={active.length ? 'See all' : undefined}
+        title="Active Orders"
+        count={active.length}
+        subtitle={ordersSubtitle(active)}
+        actionLabel={active.length > 3 ? 'See all' : undefined}
         onAction={() => router.push('/restaurant/(tabs)/orders')}
       />
       {query.isPending ? (
@@ -264,7 +261,7 @@ function CategoriesSection({ outletId }: { outletId: number | null }) {
 
   return (
     <View style={styles.section}>
-      <MandiSectionHeader title="Browse by category" icon="grid" tone="credit" />
+      <MandiSectionHeader title="Browse by category" />
       <View style={styles.grid}>
         {query.data.map((category) => (
           <CategoryTile
@@ -290,23 +287,4 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  quickRow: { flexDirection: 'row', gap: Spacing.sm },
-  quickCard: {
-    flex: 1,
-    gap: Spacing.xs,
-    padding: Spacing.cardPadding,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
-    ...Elevation.card,
-  },
-  quickIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.primaryLight,
-    marginBottom: Spacing.xs,
-  },
-  pressed: { opacity: 0.75 },
 });

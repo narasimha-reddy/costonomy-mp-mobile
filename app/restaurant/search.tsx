@@ -103,12 +103,6 @@ export default function SearchScreen() {
     router.push(`/restaurant/supplier/${storeId}`);
   }
 
-  // Tapping a pack asks "who else sells this, and for how much" — so it lands on
-  // the canonical comparison, the same place a product row goes.
-  function openSkuComparison(canonicalProductId: number) {
-    openProduct(canonicalProductId);
-  }
-
   // Below two characters there is nothing to search and nothing to slice three
   // ways, so the screen is its zero state: the tabs are not yet a question.
   const idle = !searching;
@@ -154,7 +148,10 @@ export default function SearchScreen() {
               <SkuRow
                 key={sku.offerId}
                 sku={sku}
-                onPress={() => openSkuComparison(sku.canonicalProductId)}
+                // A SKU result is one supplier's pack, so it opens that pack.
+                // It used to open the canonical comparison, which answered a
+                // question the row had already narrowed past.
+                onPress={() => router.push(`/restaurant/sku/${sku.supplierSkuId}`)}
                 onAdd={() => addToRequest.mutate(sku.supplierSkuId)}
                 adding={addToRequest.isPending && addToRequest.variables === sku.offerId}
               />

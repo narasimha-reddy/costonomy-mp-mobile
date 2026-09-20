@@ -113,6 +113,13 @@ export interface Intent {
   supplierStoreId: number;
   storeName: string | null;
   supplierName: string | null;
+  /**
+   * This store takes orders without being asked first. D-094.
+   *
+   * <p>On the request rather than fetched per supplier: the cart is a list of
+   * drafts, and the buttons under each one depend on it.
+   */
+  directOrdersEnabled: boolean;
   status: IntentStatus;
   fulfilment: IntentFulfilment;
   source: string;
@@ -251,7 +258,19 @@ export interface OrderPreview {
   lines: OrderPreviewLine[];
   subtotal: Money;
   gstAmount: Money;
+  /** The goods, with GST. Carriage is separate. */
   total: Money;
+  /** Carriage for the mode asked about. Zero for a pickup. */
+  deliveryFee: Money;
+  /**
+   * Goods plus carriage — what will actually be charged.
+   *
+   * <p>Server-computed. The screen shows this rather than adding the two
+   * figures above: guardrail 3 keeps money arithmetic off the client, and a
+   * client sum of two already-rounded figures is the one that lands a paisa
+   * away from the order it was previewing.
+   */
+  grandTotal: Money;
   /**
    * Only things that make the order impossible.
    *
@@ -326,4 +345,15 @@ export interface DeliveryQuote {
   distanceKm: number | null;
   /** After this the figure must be taken again, shown as a price change. */
   expiresAt: string;
+}
+
+/**
+ * The answer to "make this orderable now". D-094.
+ *
+ * <p>Exactly one side is populated: an intent means it is ready to order from,
+ * a held entry means a price moved and nothing has changed yet.
+ */
+export interface DirectOrderResult {
+  intent: Intent | null;
+  held: HeldRequest[];
 }

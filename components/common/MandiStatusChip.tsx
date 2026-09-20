@@ -8,6 +8,7 @@ export type StatusTone =
   | 'neutral'
   | 'info'
   | 'success'
+  | 'ready'
   | 'warning'
   | 'danger'
   | 'pending'
@@ -39,6 +40,22 @@ export const TONES: Record<
   neutral: { bg: Colors.surfaceSunken, fg: Colors.textSecondary, icon: 'ellipse-outline' },
   info: { bg: Colors.infoLight, fg: Colors.info, icon: 'information-circle' },
   success: { bg: Colors.successLight, fg: Colors.success, icon: 'checkmark-circle' },
+  /**
+   * Somebody said yes and it is now your move. D-091's request flow.
+   *
+   * <p><b>Not `success`, though it is good news.</b> Green means settled here —
+   * a confirmed order, a request already ordered from — and this state is the
+   * opposite: a clock is running and nothing happens until the restaurant acts.
+   *
+   * <p><b>And not `info`.</b> That blue sits on the order cards directly below
+   * these on the home screen, so a request and an order were edged in the same
+   * colour while meaning different things.
+   *
+   * <p>It borrows credit's violet because the palette has one. If credit's ever
+   * moves, this either moves with it or earns a token of its own — what it must
+   * not do is quietly become a second meaning for the same swatch.
+   */
+  ready: { bg: Colors.creditLight, fg: Colors.credit, icon: 'checkmark-circle' },
   warning: { bg: Colors.warningLight, fg: Colors.warning, icon: 'alert-circle' },
   danger: { bg: Colors.dangerLight, fg: Colors.danger, icon: 'close-circle' },
   pending: { bg: Colors.warningLight, fg: Colors.warning, icon: 'time' },

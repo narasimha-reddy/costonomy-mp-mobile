@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, IconSize, Spacing } from '@/theme';
+import { Colors, IconSize, Radius, Spacing } from '@/theme';
 import { MandiText } from './MandiText';
 import { toneColors, type StatusTone } from './MandiStatusChip';
 
@@ -78,7 +78,7 @@ export function MandiSectionHeader({
           accessibilityRole="header"
         >
           {title}
-          {count != null && count > 0 ? `  ${count}` : ''}
+          {count != null && count > 0 ? ` (${count})` : ''}
         </MandiText>
         {subtitle != null && (
           <MandiText variant="caption" muted>
@@ -120,8 +120,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingBottom: Spacing.md,
+    // A band rather than bare text on the page. The cards below each carry
+    // their own surface, so an unbacked heading floated between them and read
+    // as a gap; giving it ground of its own makes it the lid on the group.
+    //
+    // Sunken rather than raised: it sits behind the cards in the stack, not
+    // alongside them, and a white heading over white cards states nothing.
+    backgroundColor: Colors.surfaceSunken,
+    borderRadius: Radius.md,
+    // No horizontal margin: the screen already insets its content to the
+    // gutter, and adding it again here set the band inside the cards it heads —
+    // a lid narrower than the box it sits on.
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   titles: { flex: 1, gap: 2 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 2 },

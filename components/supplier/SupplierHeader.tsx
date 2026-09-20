@@ -5,7 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@/contexts/StoreProvider';
 import { placeLabel } from '@/utils/placeName';
 import { useNotifications } from '@/hooks/useNotifications';
-import { MandiBottomSheet, MandiHeaderAction, MandiText } from '@/components/common';
+import { useChatThreads } from '@/hooks/useChat';
+import {
+  MandiBottomSheet,
+  MandiHeaderAction,
+  MandiText,
+  useToast,
+} from '@/components/common';
 import { Colors, Spacing, TouchTarget } from '@/theme';
 
 /**
@@ -36,6 +42,8 @@ export function SupplierHeader({
   const router = useRouter();
   const { supplier, store, stores, select } = useStore();
   const { unreadCount } = useNotifications();
+  const { unreadCount: chatUnread, enabled: chatEnabled } = useChatThreads('SUPPLIER', store?.id ?? null);
+  const toast = useToast();
   const [open, setOpen] = useState(false);
 
   // The store leads, the business follows.
@@ -62,7 +70,14 @@ export function SupplierHeader({
           accessibilityLabel={multiStore ? `${title}. Change store` : title}
           style={styles.titleRow}
         >
-          <MandiText variant="title" numberOfLines={1} style={styles.titleText}>{title}</MandiText>
+          {/* A step down from `title`. At 22px a name like "Sri Suppliers -
+              Gachibowli" ran the width of the header and sat against the
+              action icons with nothing between them. `sectionTitle` is the
+              same weight one size smaller, so the heading still reads as the
+              heading without crowding the controls beside it. */}
+          <MandiText variant="sectionTitle" numberOfLines={1} style={styles.titleText}>
+            {title}
+          </MandiText>
           {multiStore && (
             <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
           )}
@@ -77,6 +92,26 @@ export function SupplierHeader({
 
       <View style={styles.actions}>
         {trailing}
+        {/* Chat sits before the bell: a message is somebody waiting on an
+            answer, and notifications are mostly the system telling you what it
+            did. Disabled rather than hidden when chat is off for this account —
+            a control that vanishes is a bug, one that explains itself is a
+            decision (D-095). */}
+        <MandiHeaderAction
+          icon="chatbubble-ellipses-outline"
+          label="Messages"
+          badge={chatUnread}
+          onPress={() => {
+            if (!chatEnabled) {
+              toast.show(
+                'Chat is turned off for this account. Contact Costonomy support if you need it.',
+                'info',
+              );
+              return;
+            }
+            router.push(`/chat?storeId=${store?.id ?? ''}`);
+          }}
+        />
         <MandiHeaderAction
           icon="notifications-outline"
           label="Notifications"

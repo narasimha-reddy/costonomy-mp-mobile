@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import {
   createOrderFromIntent,
   fetchIntent,
   updateIntentItem,
+  previewOrder,
 } from '@/services/intent';
 import { intentKey, orderPaymentKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
@@ -20,6 +21,7 @@ import {
   MandiConfirm,
   MandiCountdown,
   MandiErrorState,
+  MandiChatAction,
   MandiHeader,
   MandiIconButton,
   MandiQuantityStepper,
@@ -33,6 +35,7 @@ import {
 import type { IntentItem } from '@/models/intent';
 import type { DeliveryMode } from '@/models/procurement';
 import { DeliveryModePicker } from '@/components/request/DeliveryModePicker';
+import { PaymentMethodPicker, type PaymentMethod } from '@/components/request/PaymentMethodPicker';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity, type Money } from '@/utils/money';
@@ -101,12 +104,41 @@ export default function RequestDetailScreen() {
     fee: Money;
     quoteReference?: string;
   } | null>(null);
+
+  /**
+   * How this will be paid for. Chosen here, like the delivery mode, because
+   * both decide what happens the moment the order exists — a card sends the
+   * kitchen to a checkout, a wallet and a line of credit settle on the spot.
+   */
+  const [method, setMethod] = React.useState<PaymentMethod | null>(null);
   const refresh = () => queryClient.invalidateQueries({ queryKey: intentKey(intentId) });
+
+  /**
+   * What this order comes to, carriage included, computed by the server.
+   *
+   * <p>Re-asked whenever the chosen mode changes, because the mode is what the
+   * fee depends on. The alternative — adding the delivery fee to the acceptance
+   * total here — is arithmetic on money, which guardrail 3 puts on the server
+   * precisely so two already-rounded figures cannot drift from the order they
+   * describe.
+   */
+  const preview = useQuery({
+    queryKey: [...intentKey(intentId), 'preview', delivery?.mode ?? null,
+      delivery?.quoteReference ?? null],
+    queryFn: () => previewOrder(accessToken as string, intentId, {
+      deliveryMode: delivery?.mode,
+      deliveryQuoteReference: delivery?.quoteReference,
+    }),
+    enabled: accessToken != null
+      && request?.status === 'RESPONSES_RECEIVED'
+      && request.withinOrderWindow,
+  });
 
   const order = useMutation({
     mutationFn: () => createOrderFromIntent(accessToken as string, intentId, {
       deliveryMode: (delivery?.mode ?? 'PICKUP') as DeliveryMode,
       deliveryQuoteReference: delivery?.quoteReference,
+      paymentMethod: method ?? 'PREPAID',
     }),
     onSuccess: (created) => {
       track('intent_ordered', { screen: SCREEN, entityId: intentId });
@@ -214,7 +246,26 @@ export default function RequestDetailScreen() {
 
   return (
     <MandiScreen
-      header={<MandiHeader title={request?.reference ?? 'Request'} back />}
+      header={
+        <MandiHeader
+          // The kind leads and the number identifies. "RQ-260919-000022" as a
+          // title made every request screen look the same at a glance and told
+          // a reader nothing they could not get from the card they tapped.
+          title="Request"
+          subtitle={request?.reference ?? undefined}
+          back
+          right={
+            <MandiChatAction
+              outletId={request?.outletId}
+              supplierStoreId={request?.supplierStoreId}
+              side="RESTAURANT"
+              // What this conversation is about, offered for sharing once the
+              // thread opens rather than assumed.
+              suggest={request == null ? undefined : { type: 'REQUEST', id: request.id }}
+            />
+          }
+        />
+      }
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
       footer={renderActions()}
@@ -230,8 +281,14 @@ export default function RequestDetailScreen() {
                 whether the supplier has answered yet — the store name is
                 already known, since they chose it. Wrapped so the chip keeps
                 its own width instead of stretching the card. */}
+            {/* Both chips on one line. They answer two different questions —
+                where the request is, and how much of it was available — and
+                stacked they read as one thing restated rather than two facts. */}
             <View style={styles.statusRow}>
               <MandiStatusChip {...restaurantIntentStatus(request.status, request.fulfilment)} />
+              {request.fulfilment !== 'AWAITING' && (
+                <MandiStatusChip {...resolveStatus(FulfilmentDisplay, request.fulfilment)} />
+              )}
             </View>
 
             {/* When it was actually asked for. sentAt, not createdAt: a draft
@@ -240,20 +297,24 @@ export default function RequestDetailScreen() {
             <MandiText variant="caption" color={Colors.textTertiary}>
               {formatMomentWithRecency(request.sentAt ?? request.createdAt)}
             </MandiText>
-            <MandiText variant="bodyEmphasis">{request.storeName}</MandiText>
-            {request.supplierName != null && request.supplierName !== request.storeName && (
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                {request.supplierName}
-              </MandiText>
-            )}
-
-            {/* Only once answered: before that the status chip above already
-                says "awaiting", and a second chip repeating it is noise. */}
-            {request.fulfilment !== 'AWAITING' && (
-              <View style={styles.fulfilmentRow}>
-                <MandiStatusChip {...resolveStatus(FulfilmentDisplay, request.fulfilment)} />
+            {/* Through to the supplier's shelf, as on an order. */}
+            <Pressable
+              onPress={() => router.push(`/restaurant/supplier/${request.supplierStoreId}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`See everything ${request.storeName} sells`}
+              style={({ pressed }) => [styles.partyRow, pressed && styles.pressed]}
+            >
+              <View style={styles.flex}>
+                <MandiText variant="bodyEmphasis">{request.storeName}</MandiText>
+                {request.supplierName != null
+                  && request.supplierName !== request.storeName && (
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    {request.supplierName}
+                  </MandiText>
+                )}
               </View>
-            )}
+              <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+            </Pressable>
 
             {/* The supplier's clock, while it is theirs. Shown so a kitchen can
                 decide whether to keep waiting or go elsewhere, rather than
@@ -278,6 +339,7 @@ export default function RequestDetailScreen() {
                   Order from this reply within
                 </MandiText>
                 <MandiCountdown
+                  tone="ready"
                   deadlineAt={request.orderCreationDeadline}
                   slaSeconds={request.orderCreationWindowSeconds ?? undefined}
                   action="to order"
@@ -311,12 +373,24 @@ export default function RequestDetailScreen() {
           {request.status === 'RESPONSES_RECEIVED'
             && request.withinOrderWindow
             && request.fulfilment !== 'NOT_FULFILLED' && (
-            <DeliveryModePicker
-              request={request}
-              selected={delivery?.mode ?? null}
-              onSelect={(mode, fee, quoteReference) =>
-                setDelivery({ mode, fee, quoteReference })}
-            />
+            <>
+              <DeliveryModePicker
+                request={request}
+                selected={delivery?.mode ?? null}
+                onSelect={(mode, fee, quoteReference) =>
+                  setDelivery({ mode, fee, quoteReference })}
+              />
+              {/* Below delivery, because the amount it has to cover depends on
+                  the mode: a wallet that covers a collected order may not cover
+                  the same order with a courier on it. */}
+              <PaymentMethodPicker
+                outletId={request.outletId}
+                supplierStoreId={request.supplierStoreId}
+                amount={preview.data?.grandTotal ?? request.acceptance?.offeredTotal}
+                selected={method}
+                onSelect={setMethod}
+              />
+            </>
           )}
 
           <MandiCard>
@@ -360,6 +434,7 @@ export default function RequestDetailScreen() {
                   setEdits((current) =>
                     current == null ? current : { ...current, [item.id]: quantity })
                 }
+                onOpenSku={() => router.push(`/restaurant/sku/${item.supplierSkuId}`)}
                 // No delete on the last line: the server refuses it, and an
                 // action that always fails should not be offered.
                 onDelete={request.items.length > 1
@@ -383,10 +458,15 @@ export default function RequestDetailScreen() {
                   no price on this request at all. */}
               <Row label="Item value" value={formatMoney(request.acceptance.offeredValue)} />
               <Row label="GST" value={formatMoney(request.acceptance.offeredGst)} />
+              {/* Only when it costs something. A "Delivery  Free" line on a
+                  pickup states the obvious twice — the picker above already
+                  says Free against the option that was chosen. */}
+              {preview.data != null && Number(preview.data.deliveryFee) > 0 && (
+                <Row label="Delivery" value={formatMoney(preview.data.deliveryFee)} />
+              )}
               <Row
-                label="If you order everything"
-                value={formatMoney(request.acceptance.offeredTotal)}
-                hint="Delivery is quoted once a courier is assigned, and is not in this total."
+                label="Total"
+                value={formatMoney(preview.data?.grandTotal ?? request.acceptance.offeredTotal)}
                 emphasis
               />
               {request.acceptance.notes != null && (
@@ -466,45 +546,53 @@ export default function RequestDetailScreen() {
               <MandiText variant="caption" color={Colors.textSecondary}>
                 You pay
               </MandiText>
-              {/* Goods plus carriage. The server adds the fee to the order's
-                  total, so a bar showing only the goods would name a figure
-                  nobody is charged. Server-computed either side: this adds two
-                  already-rounded figures for display only, and the order's own
-                  total is what is paid. */}
+              {/* One figure, from the server. It read "₹1,642.70 + ₹65.94",
+                  which asked the reader to do the sum and named no number the
+                  order would actually be for. */}
               <MandiText variant="priceLarge">
-                {formatMoney(request.acceptance?.offeredTotal ?? '0')}
-                {delivery != null && Number(delivery.fee) > 0
-                  ? ` + ${formatMoney(delivery.fee)}`
-                  : ''}
+                {formatMoney(preview.data?.grandTotal ?? request.acceptance?.offeredTotal ?? '0')}
               </MandiText>
             </View>
+          </>
+        )}
+        {/* Side by side: the two things a kitchen can do with an answered
+            request are opposites, and stacking them put the destructive one
+            directly under the thumb that had just reached for the other. */}
+        <View style={styles.barActions}>
+          {withdrawable && (
             <MandiButton
-              label="Create order"
+              label="Withdraw Request"
+              variant="tertiary"
               size="lg"
-              // Until a mode is chosen there is no fee, and an order cannot be
-              // priced without one.
-              disabled={delivery == null}
+              style={styles.barAction}
+              onPress={() => setConfirmCancel(true)}
+            />
+          )}
+          {orderable && (
+            <MandiButton
+              label="Create Order"
+              size="lg"
+              // The card, its chip and this button are the same violet: the
+              // state and the act on it belong together.
+              tone="ready"
+              style={styles.barAction}
+              // Until both are chosen there is no fee and no funding, and an
+              // order cannot be created without either.
+              disabled={delivery == null || method == null}
               loading={order.isPending}
               onPress={() => order.mutate()}
             />
-          </>
-        )}
-        {!orderable && repeatable && (
-          <MandiButton
-            label="Ask again"
-            size="lg"
-            loading={repeat.isPending}
-            onPress={() => repeat.mutate()}
-          />
-        )}
-        {withdrawable && (
-          <MandiButton
-            label="Withdraw request"
-            variant="tertiary"
-            size="md"
-            onPress={() => setConfirmCancel(true)}
-          />
-        )}
+          )}
+          {!orderable && repeatable && (
+            <MandiButton
+              label="Ask Again"
+              size="lg"
+              style={styles.barAction}
+              loading={repeat.isPending}
+              onPress={() => repeat.mutate()}
+            />
+          )}
+        </View>
       </MandiStickyBar>
     );
   }
@@ -523,6 +611,7 @@ function RequestLine({
   editQuantity,
   onChangeQuantity,
   onDelete,
+  onOpenSku,
 }: {
   item: IntentItem;
   answered: boolean;
@@ -531,6 +620,8 @@ function RequestLine({
   onChangeQuantity?: (quantity: number) => void;
   /** Absent when this is the last line: a sent request may shrink, not empty. */
   onDelete?: () => void;
+  /** Open the pack's own page. D-096. */
+  onOpenSku: () => void;
 }) {
   const editing = editQuantity != null && onChangeQuantity != null;
   const short =
@@ -540,14 +631,29 @@ function RequestLine({
 
   return (
     <View style={styles.item}>
-      <ProductThumb uri={item.sku?.imageUrl} size={44} />
+      {/* The picture and the name open the pack (D-096); the stepper below
+          stays the row's control, so the two never compete for a tap. */}
+      <Pressable
+        onPress={onOpenSku}
+        accessibilityRole="button"
+        accessibilityLabel={`About ${skuTitle(item.sku)}`}
+        hitSlop={4}
+      >
+        <ProductThumb uri={item.sku?.imageUrl} size={44} />
+      </Pressable>
       <View style={styles.itemText}>
-        <MandiText variant="body" numberOfLines={1}>
-          {skuTitle(item.sku)}
-        </MandiText>
-        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>
-          {skuSecondaryLine(item.sku, item.agreedUnitPriceInclusiveGst)}
-        </MandiText>
+        <Pressable
+          onPress={onOpenSku}
+          accessibilityRole="button"
+          accessibilityLabel={`About ${skuTitle(item.sku)}`}
+        >
+          <MandiText variant="body" numberOfLines={1}>
+            {skuTitle(item.sku)}
+          </MandiText>
+          <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>
+            {skuSecondaryLine(item.sku, item.agreedUnitPriceInclusiveGst)}
+          </MandiText>
+        </Pressable>
         {/* The same frame in both states, with the controls only when they do
             something. A quantity that changes shape when Edit is pressed makes
             the eye re-find the number it was already looking at. */}
@@ -645,10 +751,18 @@ function Row({ label, value, emphasis, hint }: {
 }
 
 const styles = StyleSheet.create({
+  partyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  pressed: { opacity: 0.7 },
   flex: { flex: 1 },
   // flex-start so the chip sizes to its label rather than filling the card.
-  statusRow: { flexDirection: 'row', alignSelf: 'flex-start', marginBottom: Spacing.sm },
-  fulfilmentRow: { flexDirection: 'row', marginTop: Spacing.md },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   noteRow: {
     flexDirection: 'row',
@@ -683,6 +797,8 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginTop: Spacing.xs,
   },
+  barActions: { flexDirection: 'row', gap: Spacing.sm },
+  barAction: { flex: 1 },
   barRow: {
     flexDirection: 'row',
     alignItems: 'center',

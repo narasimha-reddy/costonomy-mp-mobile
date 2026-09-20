@@ -68,6 +68,13 @@ export interface RecommendedOffer {
    * a price "per PKT" against a product sold by the kilo says nothing.
    */
   pricePerBaseUnit: Money | null;
+  /**
+   * How many other packs of this product the same store lists. D-096.
+   *
+   * <p>The comparison ranks one card per supplier, so this is what says the
+   * rest exist.
+   */
+  otherPackCount: number;
 }
 
 export interface ProductRecommendation {
@@ -145,4 +152,104 @@ export interface StorefrontSku {
   preparationMinutes: number | null;
   averageRating: Money | null;
   ratingCount: number;
+  /**
+   * The aisle this belongs in, from the canonical product.
+   *
+   * <p>Not from the supplier's listing: two suppliers' paneer has to land in
+   * the same tab, or the tabs sort by whoever typed what.
+   */
+  categoryId: number | null;
+  categoryName: string | null;
+  /** The amount inside one pack, where a pack has one. */
+  measureValue: Money | null;
+  measureUnit: string | null;
+}
+
+/**
+ * A supplier worth putting in front of a kitchen, and what they stock.
+ *
+ * <p>The categories are the point. "Metro Fresh Supplies, 5 km away" says
+ * nothing about whether they are worth opening; "Dairy, Vegetables, Staples"
+ * is the whole decision — and it is a fact about their catalogue rather than
+ * anything they wrote about themselves.
+ */
+export interface PopularSupplier {
+  supplierStoreId: number;
+  supplierName: string;
+  storeName: string;
+  locality: string | null;
+  city: string | null;
+  distanceKm: Money | null;
+  averageRating: Money | null;
+  ratingCount: number;
+  /** How much they list, purchasable today. */
+  skuCount: number;
+  openNow: boolean;
+  /** Orders can be placed here without sending a request first. D-094. */
+  directOrdersEnabled: boolean;
+  categories: SupplierCategory[];
+}
+
+export interface SupplierCategory {
+  categoryId: number;
+  name: string;
+  skuCount: number;
+}
+
+/**
+ * The head of one supplier's shelf, for the kitchen standing in front of it.
+ *
+ * <p>One request rather than four, because "should I shop here" is one
+ * question: which branch this is, how far and how long, what other kitchens
+ * thought, and whether this supplier has given them terms.
+ */
+export interface StorefrontHeader {
+  supplierStoreId: number;
+  /** The branch. The title — it is where the goods come from. */
+  storeName: string;
+  /** The organisation behind it, shown beneath the branch. */
+  supplierName: string;
+  city: string | null;
+  distanceKm: Money | null;
+  openNow: boolean;
+  opensAt: string | null;
+  /** Preparation plus travel. Null when either end has no coordinates. */
+  etaMinutes: number | null;
+  /** Null when nobody has rated this store. Never zero standing in for that. */
+  averageRating: Money | null;
+  ratingCount: number;
+  skuCount: number;
+  /** Orders can be placed here without sending a request first. D-094. */
+  directOrdersEnabled: boolean;
+  /** Null when this supplier has extended this outlet nothing. */
+  credit: StoreCredit | null;
+  otherStores: SiblingStore[];
+}
+
+/**
+ * What this supplier has extended this outlet.
+ *
+ * <p>`available` is the server's and is never recomputed here — what is left to
+ * spend nets off reservations against orders already in flight, which this app
+ * cannot see (§23A.24).
+ */
+export interface StoreCredit {
+  agreementId: number;
+  status: string;
+  approvedLimit: Money;
+  utilized: Money;
+  reserved: Money;
+  available: Money;
+  creditPeriodDays: number | null;
+  /** Whether an order can actually draw on it right now. Stated, not inferred. */
+  canFund: boolean;
+}
+
+/** Another branch of the same supplier. */
+export interface SiblingStore {
+  supplierStoreId: number;
+  storeName: string;
+  city: string | null;
+  distanceKm: Money | null;
+  openNow: boolean;
 }

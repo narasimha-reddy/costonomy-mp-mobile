@@ -60,7 +60,7 @@ export default function ChooseSideScreen() {
         <MandiText variant="caption" color={Colors.textTertiary} center>
           Been invited by someone already? Ask them to add this number, then sign in again.
         </MandiText>
-        <MandiButton label="Sign out" variant="tertiary" size="md" onPress={signOut} />
+        <MandiButton label="Sign Out" variant="tertiary" size="md" onPress={signOut} />
       </View>
     </MandiScreen>
   );

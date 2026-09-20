@@ -11,14 +11,15 @@ import { addIntentItem, removeIntentItem, updateIntentItem } from '@/services/in
 import type { IntentItem } from '@/models/intent';
 import { draftsKey } from '@/lib/queryKeys';
 import { OfferCard } from '@/components/supplier/OfferCard';
+import { CartBar } from '@/components/restaurant/CartBar';
 import {
-  MandiButton,
   MandiEmptyState,
   MandiErrorState,
   MandiScreen,
   MandiSkeletonList,
   MandiText,
   useToast,
+  MandiSectionHeader,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
 import { Colors, Spacing, TouchTarget } from '@/theme';
@@ -51,7 +52,7 @@ export default function ProductScreen() {
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
-  const { drafts } = useRequestBasket();
+  const { basket, drafts } = useRequestBasket();
 
   const product = useQuery({
     // The outlet is in the key because it changes the answer: "3 suppliers" is
@@ -172,22 +173,21 @@ export default function ProductScreen() {
       footer={
         <CartBar
           count={cartCount}
+          total={basket?.agreedTotal}
           supplierCount={drafts.length}
           onPress={() => router.push('/restaurant/cart')}
         />
       }
     >
-      <View style={styles.intro}>
-        <MandiText variant="sectionTitle" color={Colors.textSecondary} accessibilityRole="header">
-          COMPARE SUPPLIERS{offers.length ? `  ${offers.length}` : ''}
-        </MandiText>
-        <View style={styles.note}>
-          <Ionicons name="information-circle-outline" size={14} color={Colors.textTertiary} />
-          <MandiText variant="caption" color={Colors.textTertiary} style={styles.flex}>
-            Prices exclude delivery, quoted once a courier is assigned.
-          </MandiText>
-        </View>
-      </View>
+      {/* The shared header, rather than a hand-rolled one. It was the last
+          uppercase heading in the app, and it sat outside the treatment every
+          other section got — same words, different shape, on a screen a kitchen
+          reaches from those sections. */}
+      <MandiSectionHeader
+        title="Compare Suppliers"
+        count={offers.length}
+        subtitle="Prices exclude delivery, which is quoted when you order."
+      />
 
       {recommendations.isPending ? (
         <MandiSkeletonList count={3} />
@@ -220,10 +220,21 @@ export default function ProductScreen() {
               // ranking for the one doc 07 specifies and tests.
               recommended={index === 0}
               quantity={desired[offer.supplierSkuId] ?? (line ? Number(line.requestedQuantity) : 0)}
-              lineTotal={line?.lineTotal}
+              // `agreedLineTotal`, not `lineTotal`: the second is the
+              // supplier's answer and is null on a draft, so the figure never
+              // appeared. Both are the server's — nothing here multiplies.
+              lineTotal={line?.agreedLineTotal}
               busy={change.isPending && change.variables?.offerId === offer.offerId}
               onQuantity={(packs) =>
                 queueChange(offer.offerId, offer.supplierSkuId, packs)}
+              // Comparing suppliers often ends in wanting to see one properly —
+              // what else they carry, how far off they are, whether there is
+              // credit. The seller panel is the way through.
+              onOpenSupplier={() =>
+                router.push(`/restaurant/supplier/${offer.supplierStoreId}`)}
+              onOpenSku={() => router.push(`/restaurant/sku/${offer.supplierSkuId}`)}
+              onOpenPack={(supplierSkuId) =>
+                router.push(`/restaurant/sku/${supplierSkuId}`)}
             />
           );
         })
@@ -248,38 +259,6 @@ export default function ProductScreen() {
  * be asked, which is the thing that actually surprises people — three items can
  * be three separate conversations.
  */
-function CartBar({
-  count,
-  supplierCount,
-  onPress,
-}: {
-  count: number;
-  supplierCount: number;
-  onPress: () => void;
-}) {
-  return (
-    <View style={styles.cartBar}>
-      <View style={styles.cartTotals}>
-        <MandiText variant="caption" color={Colors.textSecondary}>
-          {count === 0
-            ? 'Nothing added yet'
-            : `${count} item${count === 1 ? '' : 's'} · ${supplierCount} supplier${supplierCount === 1 ? '' : 's'}`}
-        </MandiText>
-        {count > 0 && (
-          <MandiText variant="caption" color={Colors.textTertiary}>
-            Prices come with their reply
-          </MandiText>
-        )}
-      </View>
-      <MandiButton
-        label="Review requests"
-        variant={count > 0 ? 'primary' : 'secondary'}
-        onPress={onPress}
-        fullWidth={false}
-      />
-    </View>
-  );
-}
 
 function Header({ title, subtitle }: { title?: string; subtitle?: string | null }) {
   const router = useRouter();
@@ -320,19 +299,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: { flex: 1, gap: 1 },
-  intro: { gap: Spacing.xs },
-  note: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   flex: { flex: 1 },
-  cartBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingVertical: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
-  cartTotals: { flex: 1, gap: 1 },
 });

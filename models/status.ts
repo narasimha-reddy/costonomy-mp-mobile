@@ -208,7 +208,7 @@ export function resolveStatus(
 export const IntentStatus = widen({
   DRAFT: { label: 'Not sent', tone: 'neutral' },
   OPEN: { label: 'Awaiting acceptance', tone: 'pending' },
-  RESPONSES_RECEIVED: { label: 'Supplier accepted', tone: 'info' },
+  RESPONSES_RECEIVED: { label: 'Supplier accepted', tone: 'ready' },
   ORDERED: { label: 'Ordered', tone: 'success' },
   CANCELLED: { label: 'Cancelled', tone: 'neutral' },
   // Two different endings, and they must not read the same. EXPIRED is the

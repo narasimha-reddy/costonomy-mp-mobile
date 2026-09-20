@@ -66,3 +66,75 @@ export interface Suggestion {
   canonicalProductId: number | null;
   categoryName: string | null;
 }
+
+/**
+ * One pack, in full — the page a kitchen decides on. D-096.
+ *
+ * <p>Price, GST and availability are the live offer, the same figures the shelf
+ * row shows. A detail page that priced a SKU differently from the row that led
+ * to it would be the worst possible place in the app to disagree.
+ */
+export interface SkuDetail {
+  supplierSkuId: number;
+  offerId: number | null;
+  skuName: string;
+  brandName: string | null;
+  packSize: Money;
+  packUnit: string;
+  measureValue: Money | null;
+  measureUnit: string | null;
+  sellingPrice: Money | null;
+  gstRate: Money | null;
+  /** One pack with GST, computed by the server (guardrail 3). */
+  unitPriceInclusiveGst: Money | null;
+  availability: string | null;
+  availableQuantity: Money | null;
+  /** The thumbnail, then the gallery. */
+  imageUrl: string | null;
+  images: string[];
+  youtubeUrl: string | null;
+  description: string | null;
+  lengthCm: Money | null;
+  widthCm: Money | null;
+  heightCm: Money | null;
+  weightGrams: Money | null;
+  canonicalProductId: number;
+  canonicalProductName: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  supplierStoreId: number;
+  storeName: string | null;
+  supplierName: string | null;
+  distanceKm: Money | null;
+  openNow: boolean;
+  opensAt: string | null;
+  etaMinutes: number | null;
+  /** The store's rating — about the store, not this pack. */
+  storeRating: Money | null;
+  storeRatingCount: number;
+  /** This pack's own rating. Null when nobody has reviewed it. */
+  averageRating: Money | null;
+  reviewCount: number;
+  reviews: SkuReview[];
+  /** Other packs of the same product from the same store. */
+  otherPacks: SkuSibling[];
+}
+
+export interface SkuReview {
+  id: number;
+  rating: number;
+  comment: string | null;
+  /** Who, at outlet granularity. A person's name is not the point. */
+  outletName: string | null;
+  createdAt: string;
+}
+
+export interface SkuSibling {
+  supplierSkuId: number;
+  skuName: string;
+  packSize: Money;
+  packUnit: string;
+  sellingPrice: Money | null;
+  imageUrl: string | null;
+  availability: string | null;
+}

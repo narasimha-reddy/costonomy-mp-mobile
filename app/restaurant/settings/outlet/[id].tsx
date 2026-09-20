@@ -122,7 +122,7 @@ export default function OutletSettingsScreen() {
         editable && dirty ? (
           <MandiStickyBar>
             <MandiButton
-              label="Save changes"
+              label="Save Changes"
               size="lg"
               disabled={!outletIsComplete(draft)}
               loading={save.isPending}

@@ -16,6 +16,7 @@ import {
   MandiCountdown,
   MandiErrorState,
   MandiFormField,
+  MandiChatAction,
   MandiHeader,
   MandiQuantityStepper,
   MandiScreen,
@@ -158,7 +159,23 @@ export default function SupplierRequestScreen() {
 
   return (
     <MandiScreen
-      header={<MandiHeader title={request?.reference ?? 'Request'} back />}
+      header={
+        <MandiHeader
+          title="Request"
+          subtitle={request?.reference ?? undefined}
+          back
+          right={
+            <MandiChatAction
+              outletId={request?.outletId}
+              supplierStoreId={request?.supplierStoreId}
+              side="SUPPLIER"
+              // What this conversation is about, offered for sharing once the
+              // thread opens rather than assumed.
+              suggest={request == null ? undefined : { type: 'REQUEST', id: request.id }}
+            />
+          }
+        />
+      }
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
       footer={renderFooter()}

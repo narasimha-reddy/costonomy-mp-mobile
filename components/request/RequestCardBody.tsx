@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
+  MandiCardKind,
   MandiCountdown,
   MandiStatusChip,
   MandiText,
@@ -89,8 +90,9 @@ export function RequestCardBody({
           reference rather than headline, so they share one quiet line above the
           party — the same pair the order card carries, in one row because a
           request has a clock below competing for attention. */}
-      {(reference != null || occurredAt != null) && (
-        <View style={styles.topRow}>
+      <View style={styles.topRow}>
+        <MandiCardKind kind="REQUEST" />
+        <View style={styles.reference}>
           <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
             {reference}
           </MandiText>
@@ -100,7 +102,7 @@ export function RequestCardBody({
             </MandiText>
           )}
         </View>
-      )}
+      </View>
 
       <PartyHeading primary={primary || 'Request'} secondary={secondary} trailing={trailing} />
 
@@ -157,6 +159,11 @@ export function RequestCardBody({
               slaSeconds={deadlineSeconds ?? undefined}
               action={deadlineAction}
               size="sm"
+              // At rest it takes the card's colour, the same way the detail
+              // screen's does; near the deadline it still escalates to amber
+              // and red, which is the only thing this component signals that
+              // nothing else on the card does.
+              tone={status.tone}
               style={styles.clockPill}
             />
             {deadlineAction ? (
@@ -200,9 +207,17 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: Spacing.sm,
     marginBottom: Spacing.xs,
+  },
+  // Takes the slack, so the age stays pinned right whatever the kind label
+  // and the reference come to.
+  reference: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
   },
   valueRow: {
     flexDirection: 'row',

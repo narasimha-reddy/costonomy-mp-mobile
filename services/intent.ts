@@ -4,6 +4,7 @@ import type {
   Basket,
   CreatedOrder,
   DeliveryQuote,
+  DirectOrderResult,
   Intent,
   IntentFulfilment,
   IntentStatus,
@@ -63,10 +64,15 @@ export function removeIntentItem(token: string, itemId: number): Promise<Intent>
 // ── Sending and following ─────────────────────────────────────────────
 
 /**
- * Send the whole basket — one request per supplier, in one call.
+ * Send the basket — one request per supplier, in one call.
  *
  * <p>Repriced requests come back in `held` rather than going out. Re-send with
  * `acceptPriceChanges` once the user has seen them.
+ *
+ * <p>`intentId` narrows it to one supplier's request. It goes through here
+ * rather than through `sendIntent` on purpose: that endpoint neither checks for
+ * repricing nor re-snapshots the price, so one supplier sent that way could be
+ * quoted a figure nobody agreed to.
  */
 export function sendBasket(
   token: string,
@@ -75,12 +81,33 @@ export function sendBasket(
     acceptPriceChanges?: boolean;
     requestedDeliveryTime?: string;
     notes?: string;
+    intentId?: number;
   } = {},
 ): Promise<SendBasketResult> {
   return apiRequest<SendBasketResult>(`/api/v1/outlets/${outletId}/intent-drafts/send`, {
     method: 'POST',
     token,
     body,
+  });
+}
+
+/**
+ * Make a draft orderable without sending a request. D-094.
+ *
+ * <p>For a store that keeps stock. Comes back with the request ready to order
+ * from, or with `held` when a price moved since the line was added — the same
+ * shape the basket returns, so the cart shows the change with the sheet it
+ * already has. Call again with `acceptPriceChanges` to agree and proceed.
+ */
+export function prepareDirectOrder(
+  token: string,
+  intentId: number,
+  acceptPriceChanges = false,
+): Promise<DirectOrderResult> {
+  return apiRequest<DirectOrderResult>(`/api/v1/intents/${intentId}/direct-order`, {
+    method: 'POST',
+    token,
+    body: { acceptPriceChanges },
   });
 }
 
@@ -142,12 +169,17 @@ export function quoteDelivery(
 export function previewOrder(
   token: string,
   intentId: number,
-  lines?: { intentItemId: number; quantity: string }[],
+  body: {
+    lines?: { intentItemId: number; quantity: string }[];
+    /** Asked about, not committed to — the preview never spends a quote. */
+    deliveryMode?: DeliveryMode;
+    deliveryQuoteReference?: string;
+  } = {},
 ): Promise<OrderPreview> {
   return apiRequest<OrderPreview>(`/api/v1/intents/${intentId}/orders/preview`, {
     method: 'POST',
     token,
-    body: lines ? { lines } : {},
+    body,
   });
 }
 

@@ -125,7 +125,7 @@ export default function CreditOverviewScreen() {
           </View>
 
           <MandiButton
-            label="Request credit from another supplier"
+            label="Request Credit From Another Supplier"
             variant="secondary"
             onPress={() => router.push('/restaurant/credit/request')}
           />

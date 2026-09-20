@@ -22,7 +22,7 @@ import { Colors, Spacing } from '@/theme';
 
 const SCREEN = 'REST-PAY-02';
 
-type Phase = 'authorizing' | 'confirming' | 'success' | 'unknown' | 'failed';
+type Phase = 'review' | 'authorizing' | 'confirming' | 'success' | 'unknown' | 'failed';
 
 /**
  * Pay for one order, created from one request. D-088.
@@ -31,6 +31,16 @@ type Phase = 'authorizing' | 'confirming' | 'success' | 'unknown' | 'failed';
  * there is no multi-supplier checkout to orchestrate here. That is the whole
  * reason this is a different screen from the cart's: the old one walks a list of
  * payment intents from a submission that fanned out across suppliers.
+ *
+ * <p><b>Nothing is charged until somebody asks for it.</b> This screen used to
+ * run the whole checkout from a mount effect: the order was created, this
+ * opened, and it went straight to "Payment authorised" without ever showing a
+ * figure or waiting for a tap. That is not a payment step — it is a receipt for
+ * a charge nobody agreed to, and it made the one screen standing between a
+ * request and the restaurant's money a formality it could not decline.
+ *
+ * <p>So it opens on the amount and the method, and the charge starts when the
+ * button is pressed. Everything after that is unchanged.
  *
  * <p><b>This screen never decides a financial outcome.</b> If the confirm call
  * fails we do not know whether authorisation happened, so it says exactly that
@@ -44,7 +54,7 @@ export default function PayForOrderScreen() {
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
 
-  const [phase, setPhase] = useState<Phase>('authorizing');
+  const [phase, setPhase] = useState<Phase>('review');
   const [message, setMessage] = useState<string | null>(null);
   const started = useRef(false);
 
@@ -106,18 +116,17 @@ export default function PayForOrderScreen() {
     started.current = true;
 
     if (intent == null) {
-      // Opened cold — there is nothing here to pay from.
+      // Opened cold — there is nothing here to pay from. Still the only thing
+      // this effect does: paying is the button's job, not the screen's.
       setPhase('unknown');
-      return;
     }
-    void pay(intent);
-  }, [intent, pay]);
+  }, [intent]);
 
   const total = order.data?.totalAmount;
 
   return (
     <MandiScreen header={undefined}>
-      {order.isPending && phase === 'authorizing' ? (
+      {order.isPending && phase === 'review' ? (
         <MandiSkeletonList count={2} />
       ) : (
         <MandiCard>
@@ -126,12 +135,14 @@ export default function PayForOrderScreen() {
               name={
                 phase === 'success' ? 'checkmark-circle'
                   : phase === 'failed' ? 'close-circle'
-                    : phase === 'unknown' ? 'help-circle' : 'time'
+                    : phase === 'unknown' ? 'help-circle'
+                      : phase === 'review' ? 'card-outline' : 'time'
               }
               size={48}
               color={
                 phase === 'success' ? Colors.success
-                  : phase === 'failed' ? Colors.danger : Colors.textTertiary
+                  : phase === 'failed' ? Colors.danger
+                    : phase === 'review' ? Colors.primary : Colors.textTertiary
               }
             />
             <MandiText variant="bodyEmphasis">{title(phase)}</MandiText>
@@ -148,20 +159,32 @@ export default function PayForOrderScreen() {
           </View>
 
           <View style={styles.actions}>
-            {phase === 'failed' && intent != null && (
-              <MandiButton label="Try again" size="lg" onPress={() => void pay(intent)} />
+            {phase === 'review' && intent != null && (
+              <MandiButton
+                label={total != null ? `Pay ${formatMoney(total)}` : 'Pay Now'}
+                size="lg"
+                onPress={() => void pay(intent)}
+              />
             )}
-            <MandiButton
-              label={phase === 'success' ? 'View order' : 'Go to orders'}
-              variant={phase === 'failed' ? 'tertiary' : 'primary'}
-              size="lg"
-              onPress={() =>
-                router.replace(
-                  phase === 'success'
-                    ? `/restaurant/orders/${orderId}`
-                    : '/restaurant/(tabs)/orders',
-                )}
-            />
+            {phase === 'failed' && intent != null && (
+              <MandiButton label="Try Again" size="lg" onPress={() => void pay(intent)} />
+            )}
+            {/* Never while the charge is in flight: leaving mid-authorisation
+                is how somebody ends up paying for an order they think they
+                abandoned. */}
+            {phase !== 'authorizing' && phase !== 'confirming' && (
+              <MandiButton
+                label={phase === 'success' ? 'View Order' : 'Go To Orders'}
+                variant={phase === 'review' || phase === 'failed' ? 'tertiary' : 'primary'}
+                size="lg"
+                onPress={() =>
+                  router.replace(
+                    phase === 'success'
+                      ? `/restaurant/orders/${orderId}`
+                      : '/restaurant/(tabs)/orders',
+                  )}
+              />
+            )}
           </View>
         </MandiCard>
       )}
@@ -171,6 +194,7 @@ export default function PayForOrderScreen() {
 
 function title(phase: Phase): string {
   switch (phase) {
+    case 'review': return 'Pay for this order';
     case 'authorizing': return 'Authorising your payment';
     case 'confirming': return 'Confirming with your bank';
     case 'success': return 'Payment authorised';
@@ -183,6 +207,8 @@ function title(phase: Phase): string {
 
 function body(phase: Phase): string {
   switch (phase) {
+    case 'review':
+      return 'Your supplier sees this order once the payment clears. Nothing is charged until you tap below.';
     case 'authorizing': return 'Hold on — this usually takes a moment.';
     case 'confirming': return 'Almost there.';
     case 'success':

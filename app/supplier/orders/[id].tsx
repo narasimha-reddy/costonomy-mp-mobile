@@ -18,6 +18,7 @@ import {
   MandiConfirm,
   MandiErrorState,
   MandiFormField,
+  MandiChatAction,
   MandiHeader,
   MandiScreen,
   MandiSkeletonList,
@@ -159,9 +160,19 @@ export default function SupplierOrderScreen() {
     <MandiScreen
       header={
         <MandiHeader
-          title={order?.outletName ?? 'Order'}
-          subtitle={order?.restaurantName ?? undefined}
+          title="Order"
+          subtitle={order?.orderNumber ?? undefined}
           back
+          right={
+            <MandiChatAction
+              outletId={order?.outletId}
+              supplierStoreId={order?.supplierStoreId}
+              side="SUPPLIER"
+              // What this conversation is about, offered for sharing once the
+              // thread opens rather than assumed.
+              suggest={order == null ? undefined : { type: 'ORDER', id: order.id }}
+            />
+          }
         />
       }
       footer={renderFooter()}
@@ -189,14 +200,11 @@ export default function SupplierOrderScreen() {
       ) : (
         <>
           <MandiCard>
-            {/* Status leads and the reference follows, as on a request: the two
-                screens describe stages of one thing, and a reader should not
-                have to re-learn where to look. */}
+            {/* Status leads. The reference used to sit beside it and now lives
+                in the header, so repeating it here would be the same string
+                twice in forty points of screen. */}
             <View style={styles.row}>
               <MandiStatusChip {...orderStatusFor(order.status, mode)} />
-              <MandiText variant="caption" color={Colors.textTertiary}>
-                {order.orderNumber}
-              </MandiText>
             </View>
             <MandiText variant="caption" color={Colors.textTertiary}>
               {formatMomentWithRecency(order.createdAt)}
@@ -204,9 +212,15 @@ export default function SupplierOrderScreen() {
 
             <View style={styles.row}>
               <View style={styles.where}>
+                {/* Who the order is from, which the header carried until the
+                    reference took its place there. A supplier reads this before
+                    anything else on the card. */}
                 <MandiText variant="bodyEmphasis" numberOfLines={2}>
-                  {[order.outletLocality, order.outletCity].filter(Boolean).join(', ')
-                    || order.outletName}
+                  {order.outletName}
+                </MandiText>
+                <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+                  {[order.restaurantName, order.outletLocality, order.outletCity]
+                    .filter(Boolean).join(' · ')}
                 </MandiText>
                 {formatDistance(order.distanceKm) ? (
                   <MandiText variant="caption" color={Colors.textSecondary}>
@@ -305,7 +319,7 @@ export default function SupplierOrderScreen() {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Cancel order"
+            label="Cancel Order"
             variant="destructive"
             size="md"
             loading={cancel.isPending}
@@ -342,7 +356,7 @@ export default function SupplierOrderScreen() {
             have left, the path is return or dispute. */}
         {(order.status === 'CONFIRMED' || order.status === 'PREPARING') && (
           <MandiButton
-            label="Cannot fulfil"
+            label="Cannot Fulfil"
             variant="neutral"
             size="md"
             onPress={() => setCancelling(true)}

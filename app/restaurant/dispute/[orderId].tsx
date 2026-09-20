@@ -261,7 +261,7 @@ export default function DisputeScreen() {
     return (
       <MandiStickyBar>
         <MandiButton
-          label="Raise dispute"
+          label="Raise Dispute"
           size="lg"
           disabled={description.trim().length === 0}
           loading={submit.isPending}

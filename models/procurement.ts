@@ -200,6 +200,8 @@ export type CancelledBy = 'RESTAURANT' | 'SUPPLIER' | 'SYSTEM';
 export interface SupplierOrderItem {
   id: number;
   canonicalProductId: number;
+  /** The exact pack that was bought, so the line can open its page. D-096. */
+  supplierSkuId: number;
   productName: string;
   /**
    * The canonical product's picture, or null when it has none.

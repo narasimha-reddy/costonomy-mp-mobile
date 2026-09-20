@@ -9,6 +9,7 @@ import { storeIntentsKey } from '@/lib/queryKeys';
 import { RequestCardBody } from '@/components/request/RequestCardBody';
 import {
   MandiCard,
+  MandiEmptyState,
   MandiSectionHeader,
   MandiSkeletonList,
   toneColors,
@@ -32,9 +33,11 @@ import { Spacing } from '@/theme';
  * read the same way — and a request with a clock on it should not be the thing
  * that scrolls sideways out of view.
  *
- * <p>Renders nothing when there are none. An empty state here would push New
- * orders down the screen to say "nothing to do", which is the opposite of what
- * a home screen is for.
+ * <p><b>It holds its place when empty.</b> It used to render nothing, on the
+ * argument that an empty state saying "nothing to do" pushes real work down the
+ * screen. That was true when this sat above a second orders section; with one
+ * section below it the screen is short, and a heading that vanishes leaves a
+ * supplier unsure whether requests exist at all or simply have not loaded.
  */
 export function RequestCarousel() {
   const router = useRouter();
@@ -55,22 +58,30 @@ export function RequestCarousel() {
   if (query.isPending) {
     return (
       <View style={styles.section}>
-        <MandiSectionHeader title="Requests" icon="document-text" tone="pending" />
+        <MandiSectionHeader title="Requests" />
         <MandiSkeletonList count={1} />
       </View>
     );
   }
 
   if (requests.length === 0) {
-    return null;
+    return (
+      <View style={styles.section}>
+        <MandiSectionHeader title="Requests" />
+        <MandiEmptyState
+          compact
+          icon="document-text-outline"
+          title="No open requests"
+          description="Kitchens asking what you can supply appear here. Answer quickly and the order usually follows."
+        />
+      </View>
+    );
   }
 
   return (
     <View style={styles.section}>
       <MandiSectionHeader
         title="Requests"
-        icon="document-text"
-        tone="pending"
         count={unanswered.length}
         subtitle={
           unanswered.length > 0

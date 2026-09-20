@@ -1,10 +1,16 @@
 import { apiRequest } from '@/lib/api/client';
-import type { Brand, Category, Offer, Product, Suggestion } from '@/models/catalog';
+import type {
+  Brand,
+  Category,
+  Offer,
+  Product,
+  SkuDetail,
+  Suggestion,
+} from '@/models/catalog';
 import type {
   ProductRecommendation,
   StorefrontSku,
-  SupplierSearchPage,
-} from '@/models/discovery';
+  SupplierSearchPage, PopularSupplier, StorefrontHeader } from '@/models/discovery';
 
 export function fetchCategories(token: string): Promise<Category[]> {
   return apiRequest<Category[]>('/api/v1/categories', { token });
@@ -137,6 +143,54 @@ export function searchSkus(
 }
 
 /** Everything one supplier store sells, for the restaurant-facing catalog. */
+/**
+ * The store header: identity, distance, ETA, rating, branches and credit.
+ *
+ * <p>`outletId` is what makes this private — with one, the server checks the
+ * caller is scoped to that outlet before it says a word about credit.
+ */
+export function fetchStorefrontHeader(
+  token: string,
+  storeId: number,
+  outletId?: number,
+): Promise<StorefrontHeader> {
+  return apiRequest<StorefrontHeader>(
+    `/api/v1/supplier-stores/${storeId}/storefront${queryString({ outletId })}`,
+    { token },
+  );
+}
+
+/**
+ * One pack, in full. D-096.
+ *
+ * <p>`outletId` only supplies distance and an ETA — there is nothing private
+ * on this page, and a kitchen comparing before they pick an outlet should still
+ * see it.
+ */
+export function fetchSkuDetail(
+  token: string,
+  skuId: number,
+  outletId?: number,
+): Promise<SkuDetail> {
+  return apiRequest<SkuDetail>(
+    `/api/v1/supplier-skus/${skuId}${queryString({ outletId })}`,
+    { token },
+  );
+}
+
+/** Review a pack you received. Keyed on the order line, which is the proof. */
+export function reviewSku(
+  token: string,
+  orderItemId: number,
+  body: { rating: number; comment?: string },
+): Promise<unknown> {
+  return apiRequest<unknown>(`/api/v1/supplier-order-items/${orderItemId}/review`, {
+    method: 'POST',
+    token,
+    body,
+  });
+}
+
 export function fetchStoreCatalog(
   token: string,
   storeId: number,
@@ -173,4 +227,31 @@ export interface Units {
 
 export function fetchUnits(token: string): Promise<Units> {
   return apiRequest<Units>('/api/v1/units', { token });
+}
+
+/**
+ * Suppliers worth putting in front of this kitchen, with what they stock.
+ *
+ * <p>"Popular" is the server's placeholder — it returns the nearest active
+ * suppliers who list something, until a real ranking exists. The name is what
+ * it is meant to become, so this call does not change when it does.
+ */
+export function fetchPopularSuppliers(
+  token: string,
+  outletId: number,
+  limit = 10,
+  /**
+   * Narrow to one aisle.
+   *
+   * <p>Sent to the server rather than filtered here: each supplier's
+   * `categories` is capped at six for display, so filtering that list would
+   * drop a supplier who stocks the aisle but lists six others more deeply.
+   */
+  categoryId?: number | null,
+): Promise<PopularSupplier[]> {
+  const aisle = categoryId == null ? '' : `&categoryId=${categoryId}`;
+  return apiRequest<PopularSupplier[]>(
+    `/api/v1/outlets/${outletId}/suppliers/popular?limit=${limit}${aisle}`,
+    { token },
+  );
 }

@@ -24,6 +24,8 @@ export interface SupplierStore {
    */
   responseSlaSeconds: number | null;
   preparationMinutes: number | null;
+  /** Restaurants may order from this store without sending a request. D-094. */
+  directOrdersEnabled: boolean;
   status: string;
 }
 
@@ -32,6 +34,10 @@ export interface Supplier {
   legalName: string;
   displayName: string;
   gstin: string | null;
+  /** Who to ring about the business. D-097. */
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
   lifecycleStatus: string;
   verificationStatus: string;
   /** Whether this supplier can currently receive orders. The server's answer. */
@@ -238,6 +244,14 @@ export interface SupplierSku {
    * tell their picture from the platform's.
    */
   canonicalProductImageUrl: string | null;
+  /** The optional detail a kitchen decides on. D-096. */
+  description: string | null;
+  lengthCm: Money | null;
+  widthCm: Money | null;
+  heightCm: Money | null;
+  weightGrams: Money | null;
+  youtubeUrl: string | null;
+  images: string[];
   status: string;
   sellingPrice: Money;
   gstRate: Money;
@@ -267,6 +281,14 @@ export function updateSku(
     measureUnit: string;
     /** Empty string clears it, returning the listing to the catalog picture. */
     imageUrl: string;
+    /** D-096. Blank clears; absent leaves alone. */
+    description: string;
+    lengthCm: string;
+    widthCm: string;
+    heightCm: string;
+    weightGrams: string;
+    youtubeUrl: string;
+    images: string[];
   }>,
 ): Promise<SupplierSku> {
   return apiRequest<SupplierSku>(`/api/v1/supplier-skus/${skuId}`, {
@@ -319,6 +341,13 @@ export interface UpdateStoreInput {
   contactPhone?: string;
   operatingHours?: OperatingHours;
   preparationMinutes?: number;
+  /**
+   * Let restaurants order without sending a request first. D-094.
+   *
+   * <p>A statement about inventory: the request exists to ask whether the goods
+   * are there, and a store that keeps stock has already answered.
+   */
+  directOrdersEnabled?: boolean;
   /** ACTIVE or OFFLINE. Going offline stops new orders without closing the store. */
   status?: 'ACTIVE' | 'OFFLINE';
 }
@@ -359,6 +388,21 @@ export interface CreateSkuInput {
   measureValue?: string;
   measureUnit?: string;
   imageUrl?: string;
+  /**
+   * Optional detail, for the page a kitchen decides on. D-096.
+   *
+   * <p>A listing with none of it behaves exactly as it did before that page
+   * existed. `images` is the gallery and is sent whole — reordering four
+   * pictures is one decision, and four calls for it leave the gallery
+   * half-applied when one fails.
+   */
+  description?: string;
+  lengthCm?: string;
+  widthCm?: string;
+  heightCm?: string;
+  weightGrams?: string;
+  youtubeUrl?: string;
+  images?: string[];
   sellingPrice: string;
   gstRate: string;
   availability?: 'AVAILABLE' | 'OUT_OF_STOCK';

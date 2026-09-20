@@ -108,9 +108,15 @@ export const TextStyles = {
    * shout, and wide tracking at this size reads as a logo.
    */
   sectionTitle: {
-    fontFamily: FontFamily.semibold,
+    // Bold, not semibold: a section title sits above cards whose own headings
+    // are semibold, and matching them made it read as one more card rather than
+    // as the heading for all of them.
+    fontFamily: FontFamily.bold,
     fontSize: FontSize.lg,
     lineHeight: Math.round(FontSize.lg * LineHeight.normal),
+    // Zero, and deliberately. This was 0.8 while the title was 11px uppercase,
+    // where tracking earns its place; at 18px sentence case it only loosens a
+    // heading that should read as one word-group.
     letterSpacing: 0,
   },
   body: {

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { searchSuppliers } from '@/services/catalog';
+import { fetchStorefrontHeader, searchSuppliers } from '@/services/catalog';
 import { useDebounced } from '@/hooks/useDebounced';
 import { requestCredit } from '@/services/credit';
 import {
@@ -43,7 +43,18 @@ export default function CreditRequestScreen() {
   const { accessToken } = useSession();
   const { outletId, outlet } = useOutlet();
 
-  const [storeId, setStoreId] = useState<number | null>(null);
+  /**
+   * Arriving from a supplier's own shelf, the supplier is already decided.
+   *
+   * <p>Asking somebody to search for the store whose page they just tapped
+   * "Request Credit" on is asking them to prove they meant it.
+   */
+  const { storeId: preset } = useLocalSearchParams<{ storeId?: string }>();
+  const presetId = preset != null && preset !== '' ? Number(preset) : null;
+
+  const [storeId, setStoreId] = useState<number | null>(
+    presetId != null && Number.isFinite(presetId) ? presetId : null);
+  const [picking, setPicking] = useState(storeId == null);
   const [supplierTerm, setSupplierTerm] = useState('');
   const [limit, setLimit] = useState('');
   const [days, setDays] = useState(30);
@@ -59,6 +70,16 @@ export default function CreditRequestScreen() {
     queryKey: ['search', 'suppliers', settledTerm.trim(), outletId],
     queryFn: () => searchSuppliers(accessToken as string, settledTerm.trim(), outletId ?? undefined),
     enabled: searching && accessToken != null,
+  });
+
+  // Only to name the preselected store. The shelf header already answers it,
+  // and a second endpoint for "what is this store called" would be a third
+  // place that could disagree.
+  const presetStore = useQuery({
+    queryKey: ['supplier-store', storeId, 'storefront', outletId],
+    queryFn: () => fetchStorefrontHeader(accessToken as string, storeId as number,
+      outletId ?? undefined),
+    enabled: !picking && storeId != null && accessToken != null,
   });
 
   const submit = useMutation({
@@ -88,7 +109,7 @@ export default function CreditRequestScreen() {
       footer={
         <MandiStickyBar>
           <MandiButton
-            label="Send request"
+            label="Send Request"
             size="lg"
             disabled={!valid}
             loading={submit.isPending}
@@ -103,6 +124,30 @@ export default function CreditRequestScreen() {
     >
       <MandiCard>
         <MandiText variant="bodyEmphasis">Which supplier?</MandiText>
+        {!picking ? (
+          <View style={styles.chosen}>
+            <View style={styles.flex}>
+              <MandiText variant="body">
+                {presetStore.data?.storeName ?? 'This supplier'}
+              </MandiText>
+              {presetStore.data?.supplierName != null && (
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {presetStore.data.supplierName}
+                </MandiText>
+              )}
+            </View>
+            <MandiButton
+              label="Change"
+              variant="tertiary"
+              size="sm"
+              onPress={() => {
+                setPicking(true);
+                setStoreId(null);
+              }}
+            />
+          </View>
+        ) : (
+        <>
         <MandiText variant="caption" color={Colors.textSecondary}>
           Search for one you already order from.
         </MandiText>
@@ -146,6 +191,8 @@ export default function CreditRequestScreen() {
               </Pressable>
             );
           })
+        )}
+        </>
         )}
       </MandiCard>
 
@@ -198,6 +245,7 @@ export default function CreditRequestScreen() {
 }
 
 const styles = StyleSheet.create({
+  chosen: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   flex: { flex: 1 },
   search: { marginTop: Spacing.sm },
   option: {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
+  MandiCardKind,
   MandiCountdown,
   MandiStatusChip,
   MandiText,
@@ -81,10 +82,13 @@ export function OrderCardBody({
 
   return (
     <View style={styles.block}>
-      {/* Which order, and how long it has been sitting there. Both are
-          reference rather than headline, so they share one quiet line. */}
-      {(orderNumber != null || createdAt != null) && (
-        <View style={styles.topRow}>
+      {/* What this is, which one, and how long it has been sitting there. All
+          three are reference rather than headline, so they share one quiet
+          line. The kind leads because it is what a reader checks first on a
+          screen carrying both kinds of card. */}
+      <View style={styles.topRow}>
+        <MandiCardKind kind="ORDER" />
+        <View style={styles.reference}>
           <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
             {orderNumber}
           </MandiText>
@@ -94,7 +98,7 @@ export function OrderCardBody({
             </MandiText>
           )}
         </View>
-      )}
+      </View>
 
       {/* Shared with the credit cards: a supplier reads "who and where" the same
           way wherever a restaurant appears. */}
@@ -170,9 +174,17 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: Spacing.sm,
     marginBottom: Spacing.xs,
+  },
+  // Takes the slack, so the age stays pinned right whatever the kind label
+  // and the reference come to.
+  reference: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
   },
   valueRow: {
     flexDirection: 'row',

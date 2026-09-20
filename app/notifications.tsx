@@ -81,7 +81,7 @@ export default function NotificationsScreen() {
         <>
           {unreadCount > 0 && (
             <MandiButton
-              label="Mark all as read"
+              label="Mark All As Read"
               variant="tertiary"
               size="md"
               loading={markingAll}

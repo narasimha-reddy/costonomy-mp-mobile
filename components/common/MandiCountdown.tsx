@@ -11,6 +11,7 @@ import {
 } from '@/theme';
 import { secondsUntil } from '@/lib/server-clock';
 import { MandiText } from './MandiText';
+import { toneColors, type StatusTone } from './MandiStatusChip';
 
 interface MandiCountdownProps {
   /** The order's `responseDeadlineAt`, ISO-8601, straight from the API. */
@@ -34,6 +35,17 @@ interface MandiCountdownProps {
   action?: string;
   /** Called once when the countdown reaches zero — e.g. to refetch the order. */
   onExpire?: () => void;
+  /**
+   * The resting colour, when there is still plenty of time. D-091's request
+   * screens pass their card's tone so the clock belongs to the card it sits in.
+   *
+   * <p><b>Only the calm level.</b> Warn and critical keep the countdown palette
+   * whatever this says: the escalation to amber and red is the one thing the
+   * component signals that nothing else on the screen does, and a clock that
+   * stayed violet at ten seconds would be decoration. §23A.48 also wants the
+   * urgency readable without relying on colour, which the numbers do.
+   */
+  tone?: StatusTone;
   style?: ViewStyle;
   testID?: string;
 }
@@ -69,6 +81,7 @@ export function MandiCountdown({
   size = 'lg',
   action = 'to respond',
   onExpire,
+  tone,
   style,
   testID,
 }: MandiCountdownProps) {
@@ -107,7 +120,10 @@ export function MandiCountdown({
   }, [expired]);
 
   const level = countdownLevel(remaining, slaSeconds);
-  const palette = CountdownPalette[level];
+  const resting = tone != null ? toneColors(tone) : null;
+  const palette = level === 'calm' && resting != null
+    ? { fg: resting.fg, bg: resting.bg }
+    : CountdownPalette[level];
   const text = expired ? 'Expired' : format(remaining);
 
   return (

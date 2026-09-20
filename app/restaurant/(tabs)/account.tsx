@@ -74,7 +74,7 @@ export default function AccountScreen() {
         />
       </View>
 
-      <MandiButton label="Sign out" onPress={signOut} variant="secondary" />
+      <MandiButton label="Sign Out" onPress={signOut} variant="secondary" />
     </MandiScreen>
   );
 }

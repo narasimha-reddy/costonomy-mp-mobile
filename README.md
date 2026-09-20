@@ -23,6 +23,7 @@ npm test
 
 | | |
 |---|---|
+| `docs/ONBOARDING.md` | **start here** — setup, seed accounts, how we work, what is in flight |
 | `CLAUDE.md` | how to work in this repo, and the rules that are not negotiable |
 | `theme/README.md` | the design system |
 | `docs/specs/` | the full specification set |
@@ -32,5 +33,9 @@ Backend: `costonomy-mp-api`.
 
 ## Status
 
-Design system and app shell. No product screens yet — see
-`docs/specs/00-README.md` §8 for the build sequence.
+Both role experiences are built — restaurant and supplier, from onboarding
+through discovery, requests, orders, payment, credit, delivery, receiving and
+disputes. `docs/ONBOARDING.md` §5 has the current state and the open questions.
+
+You need `costonomy-mp-api` running on port 7070 and seeded; this app has no
+mock server.

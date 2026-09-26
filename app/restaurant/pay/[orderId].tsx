@@ -4,7 +4,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
-import { confirmPayment, simulateCheckout } from '@/services/payments';
+import { confirmPayment } from '@/services/payments';
+import { completeCheckout } from '@/lib/payments/checkout';
+import { CheckoutDismissed, CheckoutFailed, CheckoutUnavailable } from '@/lib/payments/types';
 import { fetchSupplierOrder } from '@/services/procurement';
 import { orderPaymentKey } from '@/lib/queryKeys';
 import {
@@ -41,6 +43,12 @@ type Phase = 'review' | 'authorizing' | 'confirming' | 'success' | 'unknown' | '
  *
  * <p>So it opens on the amount and the method, and the charge starts when the
  * button is pressed. Everything after that is unchanged.
+ *
+ * <p><b>The provider's checkout is chosen by the intent</b> — Razorpay's window on
+ * a real provider, the server's simulation on the mock (`lib/payments/checkout`).
+ * Closing Razorpay's window returns here to the review state rather than to a
+ * failure: nothing is known to have failed, and Razorpay refuses a second payment
+ * against an order already paid, so paying again from here cannot charge twice.
  *
  * <p><b>This screen never decides a financial outcome.</b> If the confirm call
  * fails we do not know whether authorisation happened, so it says exactly that
@@ -82,11 +90,22 @@ export default function PayForOrderScreen() {
 
     let providerPaymentId: string;
     try {
-      ({ providerPaymentId } = await simulateCheckout(accessToken, payment.paymentId));
+      ({ providerPaymentId } = await completeCheckout(
+        accessToken, payment, `Order ${order.data?.orderNumber ?? orderId}`));
     } catch (caught) {
+      if (caught instanceof CheckoutDismissed) {
+        setPhase('review');
+        setMessage(
+          'The payment window was closed. If you completed a payment, Orders will show it '
+          + 'shortly; otherwise you can pay below.',
+        );
+        return;
+      }
       setPhase('failed');
       setMessage(
         caught instanceof ApiError
+          || caught instanceof CheckoutUnavailable
+          || caught instanceof CheckoutFailed
           ? caught.message
           : 'We could not start the payment. Nothing has been charged.',
       );
@@ -98,7 +117,7 @@ export default function PayForOrderScreen() {
       const confirmed = await confirmPayment(accessToken, payment.paymentId, providerPaymentId);
       if (confirmed.status === 'FAILED') {
         setPhase('failed');
-        setMessage(confirmed.failureMessage ?? 'The payment was declined by the bank.');
+        setMessage(confirmed.failureReason ?? 'The payment was declined by the bank.');
         return;
       }
     } catch {
@@ -109,7 +128,7 @@ export default function PayForOrderScreen() {
 
     track('payment_confirmed', { screen: SCREEN, entityId: orderId });
     setPhase('success');
-  }, [accessToken, orderId]);
+  }, [accessToken, orderId, order.data?.orderNumber]);
 
   useEffect(() => {
     if (started.current) return;

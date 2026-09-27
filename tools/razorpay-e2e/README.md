@@ -32,7 +32,7 @@ payments and ₹10 refunds in the Razorpay account it runs against.
 ```bash
 cd tools/razorpay-e2e
 npm install
-npm test              # all 30, about ten minutes
+npm test              # all 31, about ten minutes
 node suite.js F       # only cases whose id starts with F
 HEADED=1 node suite.js C1   # watch it in a visible window
 ```
@@ -47,8 +47,8 @@ Razorpay's window → test card → demo bank or OTP.
 
 | Id | Case | Asserts |
 |---|---|---|
-| C1 | Visa, bank Success | order `CONFIRMED`; payment `CAPTURED` by our job; Razorpay agrees on status, order id and paise |
-| C2 | Mastercard, in-checkout OTP (4+ digits) | funded and captured |
+| C1 | Visa, bank Success | payment held (`AUTHORIZED`, Razorpay `authorized`) until the supplier marks it ready; then `CAPTURED` by our job, order `READY_FOR_PICKUP`; Razorpay agrees on status, order id and paise |
+| C2 | Mastercard, in-checkout OTP (4+ digits) | held, then captured at ready |
 | C3 | Netbanking, bank Success | funded; Razorpay records `netbanking` |
 | F1 | Bank Failure, then close checkout | ours untouched (`CREATED`/`DRAFT`); Razorpay has only failed attempts; Pay still offered |
 | F2 | Failure, then retry Success in the same window | funded by the second attempt, and we recorded *that* payment id |
@@ -59,6 +59,7 @@ Razorpay's window → test card → demo bank or OTP.
 | F7 | Mastercard, wrong OTP | refused; order payable |
 | F8 | Netbanking, bank Failure | nothing funded |
 | F9 | Confirm lost, signed webhook arrives | released by the webhook, without waiting for the sweep |
+| F10 | Supplier cancels while the money is held | `RELEASED`, nothing captured, no refund row; Razorpay still `authorized`, never `captured` (D-103) |
 | P1 | Pay from the order screen with nothing cached (as after a refresh) | the pay screen asks the server for the checkout, Razorpay opens, the order is funded (D-102) |
 | P2 | A payment that has ended | no Pay and no Try Again offered |
 | D1 | Create Order tapped twice in the same instant | one order, the pay screen, no refusal (fails on the pre-D-099 app) |

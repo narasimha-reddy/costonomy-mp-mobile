@@ -239,9 +239,15 @@ function markPaid(orderId, paymentId, providerOrderId) {
       await authenticate(page, frame, CARDS.visaDomestic, 'Success');
       await screenText(page, /Payment authorised/);
       await snapshot(page, 'C1-success');
+      // Razorpay's side of "held": authorised, not captured, until ready.
+      const heldAt = await L.rzp(`/v1/payments/${L.paymentRow(paymentId).providerPaymentId}`);
+      expect(heldAt.status === 'authorized', 'razorpay before ready: ' + heldAt.status);
+      // Held, not taken, until the supplier marks it ready (D-103).
+      expect(L.paymentRow(paymentId).status === 'AUTHORIZED', 'not held: ' + L.paymentRow(paymentId).status);
+      await L.dispatch(orderId);
       await L.until(() => L.paymentRow(paymentId).status === 'CAPTURED', { timeout: 40000, what: 'capture job' });
       const row = L.paymentRow(paymentId);
-      expect(L.orderStatus(orderId) === 'CONFIRMED', 'order is ' + L.orderStatus(orderId));
+      expect(L.orderStatus(orderId) === 'READY_FOR_PICKUP', 'order is ' + L.orderStatus(orderId));
       const rp = await L.rzp(`/v1/payments/${row.providerPaymentId}`);
       expect(rp.status === 'captured' && rp.order_id === providerOrderId, `razorpay says ${rp.status} / ${rp.order_id}`);
       expect(rp.amount === Math.round(Number(row.captured) * 100), `amount ${rp.amount} vs ${row.captured}`);
@@ -256,8 +262,11 @@ function markPaid(orderId, paymentId, providerOrderId) {
       const frame = await checkoutFrame(page);
       await authenticate(page, frame, CARDS.mastercardDomestic, 'Success');
       await screenText(page, /Payment authorised/);
+      // Held, not taken, until the supplier marks it ready (D-103).
+      expect(L.paymentRow(paymentId).status === 'AUTHORIZED', 'not held: ' + L.paymentRow(paymentId).status);
+      await L.dispatch(orderId);
       await L.until(() => L.paymentRow(paymentId).status === 'CAPTURED', { timeout: 40000, what: 'capture' });
-      expect(L.orderStatus(orderId) === 'CONFIRMED', 'order ' + L.orderStatus(orderId));
+      expect(L.orderStatus(orderId) === 'READY_FOR_PICKUP', 'order ' + L.orderStatus(orderId));
       markPaid(orderId, paymentId, providerOrderId);
     } finally { await L.adoptSession(page); await page.close(); }
   }, { retries: 1 });
@@ -287,8 +296,11 @@ function markPaid(orderId, paymentId, providerOrderId) {
       const frame = await checkoutFrame(page);
       const bankName = await payNetbanking(page, frame, 'Success');
       await screenText(page, /Payment authorised/);
+      // Held, not taken, until the supplier marks it ready (D-103).
+      expect(L.paymentRow(paymentId).status === 'AUTHORIZED', 'not held: ' + L.paymentRow(paymentId).status);
+      await L.dispatch(orderId);
       await L.until(() => L.paymentRow(paymentId).status === 'CAPTURED', { timeout: 40000, what: 'capture' });
-      expect(L.orderStatus(orderId) === 'CONFIRMED', 'order ' + L.orderStatus(orderId));
+      expect(L.orderStatus(orderId) === 'READY_FOR_PICKUP', 'order ' + L.orderStatus(orderId));
       const rp = await L.rzp(`/v1/payments/${L.paymentRow(paymentId).providerPaymentId}`);
       expect(rp.method === 'netbanking' && rp.status === 'captured' && rp.order_id === providerOrderId,
         `razorpay ${rp.method} ${rp.status}`);
@@ -346,12 +358,15 @@ function markPaid(orderId, paymentId, providerOrderId) {
       await L.sleep(2000);
       await authenticate(page, frame, CARDS.visaDomestic, 'Success');
       await screenText(page, /Payment authorised/);
+      // Held, not taken, until the supplier marks it ready (D-103).
+      expect(L.paymentRow(paymentId).status === 'AUTHORIZED', 'not held: ' + L.paymentRow(paymentId).status);
+      await L.dispatch(orderId);
       await L.until(() => L.paymentRow(paymentId).status === 'CAPTURED', { timeout: 40000, what: 'capture' });
       const attempts = await rzpPaymentsFor(providerOrderId);
       const good = attempts.find((p) => p.status === 'captured');
       expect(attempts.some((p) => p.status === 'failed') && good, 'attempts: ' + attempts.map((p) => p.status).join(','));
       expect(L.paymentRow(paymentId).providerPaymentId === good.id, 'we recorded the wrong attempt');
-      expect(L.orderStatus(orderId) === 'CONFIRMED', 'order ' + L.orderStatus(orderId));
+      expect(L.orderStatus(orderId) === 'READY_FOR_PICKUP', 'order ' + L.orderStatus(orderId));
       markPaid(orderId, paymentId, providerOrderId);
       return `attempts ${attempts.map((p) => p.status).join(' → ')}`;
     } finally { await L.adoptSession(page); await page.close(); }
@@ -437,6 +452,27 @@ function markPaid(orderId, paymentId, providerOrderId) {
     } finally { await L.adoptSession(page); await page.close(); }
   }, { retries: 1 });
 
+  await test('F10', 'paid, then the supplier cancels before ready → hold released, nothing captured at Razorpay', async () => {
+    const { page, orderId, paymentId } = await openCheckout();
+    try {
+      const frame = await checkoutFrame(page);
+      await authenticate(page, frame, CARDS.visaDomestic, 'Success');
+      await screenText(page, /Payment authorised/);
+    } finally { await L.adoptSession(page); await page.close(); }
+    const seller = (await L.session(L.SELLER)).accessToken;
+    const r = await L.api(`/supplier-orders/${orderId}/supplier-cancel`, {
+      body: { reason: 'OUT_OF_STOCK' }, token: seller, headers: { 'Idempotency-Key': crypto.randomUUID() } });
+    expect(r.status === 200, 'cancel ' + r.status + ' ' + (r.error?.code || ''));
+    expect(L.orderStatus(orderId) === 'CANCELLED', 'order ' + L.orderStatus(orderId));
+    const row = L.paymentRow(paymentId);
+    expect(row.status === 'RELEASED' && Number(row.captured) === 0, `payment ${row.status} captured ${row.captured}`);
+    expect(L.db(`select count(*) from refund where payment_id=${paymentId}`) === '0', 'a refund was raised');
+    // At Razorpay: authorised, never captured — the hold lapses back to the card.
+    const at = await L.rzp(`/v1/payments/${row.providerPaymentId}`);
+    expect(at.status === 'authorized' && !at.captured, `razorpay ${at.status} captured=${at.captured}`);
+    return 'released; Razorpay still only authorised';
+  }, { retries: 1 });
+
   await test('F6', "Razorpay's checkout script blocked → clear error, nothing charged", async () => {
     const { page, orderId, paymentId } = await openCheckout({ block: (u) => u.includes('checkout.razorpay.com') });
     try {
@@ -487,8 +523,11 @@ function markPaid(orderId, paymentId, providerOrderId) {
       const frame = await checkoutFrame(page);
       await authenticate(page, frame, CARDS.visaDomestic, 'Success');
       await screenText(page, /Payment authorised/);
+      // Held, not taken, until the supplier marks it ready (D-103).
+      expect(L.paymentRow(o.paymentId).status === 'AUTHORIZED', 'not held: ' + L.paymentRow(o.paymentId).status);
+      await L.dispatch(o.orderId);
       await L.until(() => L.paymentRow(o.paymentId).status === 'CAPTURED', { timeout: 40000, what: 'capture' });
-      expect(L.orderStatus(o.orderId) === 'CONFIRMED', 'order ' + L.orderStatus(o.orderId));
+      expect(L.orderStatus(o.orderId) === 'READY_FOR_PICKUP', 'order ' + L.orderStatus(o.orderId));
       expect(L.paymentRow(o.paymentId).providerPaymentId, 'no payment recorded');
       return 'paid via the order screen, same provider order ' + o.providerOrderId;
     } finally { await L.adoptSession(page); await page.close(); }

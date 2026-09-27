@@ -124,6 +124,19 @@ async function placedOrder(quantity = 2) {
            providerOrderId: r.data.payment.providerOrderId, intentId };
 }
 
+/**
+ * The supplier marks the order preparing, then ready — where its money is taken
+ * since D-103. Until then the payment is only held.
+ */
+async function dispatch(orderId) {
+  const seller = (await session(SELLER)).accessToken;
+  for (const step of ['preparing', 'ready']) {
+    const r = await api(`/supplier-orders/${orderId}/${step}`, {
+      body: {}, token: seller, headers: { 'Idempotency-Key': crypto.randomUUID() } });
+    if (r.status !== 200) throw new Error(`supplier ${step}: ${r.status} ${r.error?.code || ''}`);
+  }
+}
+
 const orderStatus = (id) => db(`select status from supplier_order where id=${id}`);
 const paymentRow = (id) => {
   const [status, providerPaymentId, authorized, captured] =
@@ -229,6 +242,6 @@ async function ftype(frame, selector, text, { timeout = 20000 } = {}) {
 
 module.exports = {
   API, WEB, KEY_ID, BUYER, SELLER, STRANGER, sleep, api, session, db, rzp, signWebhook,
-  acceptedRequest, placedOrder, orderStatus, paymentRow, paymentIdForOrder, until,
+  acceptedRequest, placedOrder, dispatch, orderStatus, paymentRow, paymentIdForOrder, until,
   browser, signedInPage, adoptSession, tap, visibleText, fclick, ftype,
 };

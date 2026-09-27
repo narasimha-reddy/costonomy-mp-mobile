@@ -82,6 +82,41 @@ export interface Dispute {
   items: DisputeItem[];
   messages: DisputeMessage[];
   evidence: DisputeEvidence[];
+  /** The refund asked for on this dispute, if any. API D-104. */
+  refundRequest: DisputeRefund | null;
+}
+
+/**
+ * `REQUESTED → APPROVED | DECLINED` by the supplier; after a decline, or 48 hours
+ * with no answer, Mandi's operations team may decide: `OPS_APPROVED | OPS_DECLINED`.
+ */
+export type DisputeRefundStatus =
+  | 'REQUESTED' | 'APPROVED' | 'DECLINED' | 'OPS_APPROVED' | 'OPS_DECLINED';
+
+/** `TrustDtos.DisputeRefundResponse`. */
+export interface DisputeRefund {
+  id: number;
+  disputeId: number;
+  supplierOrderId: number;
+  outletId: number;
+  supplierStoreId: number;
+  amount: Money;
+  reason: string | null;
+  status: DisputeRefundStatus;
+  requestedAt: string;
+  /** Until when the supplier alone decides. The server's figure — never computed here. */
+  supplierAnswerBy: string | null;
+  supplierNote: string | null;
+  supplierDecidedAt: string | null;
+  opsNote: string | null;
+  opsDecidedAt: string | null;
+  refundId: number | null;
+}
+
+/** How much could be asked for on a dispute, or why nothing can. */
+export interface DisputeRefundLimit {
+  maxAmount: Money;
+  refusal: string | null;
 }
 
 export type RatingModerationStatus = 'PUBLISHED' | 'HIDDEN' | 'PENDING_REVIEW';

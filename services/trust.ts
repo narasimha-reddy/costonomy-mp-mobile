@@ -1,5 +1,7 @@
 import { apiRequest } from '@/lib/api/client';
-import type { Dispute, DisputeCategory, Rating, Receiving } from '@/models/trust';
+import type {
+  Dispute, DisputeCategory, DisputeRefund, DisputeRefundLimit, Rating, Receiving,
+} from '@/models/trust';
 
 // ── Receiving ─────────────────────────────────────────────────────────
 
@@ -79,6 +81,72 @@ export function postDisputeMessage(
     method: 'POST',
     token,
     body: { message },
+  });
+}
+
+/** An outlet's disputes, newest first: the restaurant's Disputes section. */
+export function fetchOutletDisputes(token: string, outletId: number): Promise<Dispute[]> {
+  return apiRequest<Dispute[]>(`/api/v1/outlets/${outletId}/disputes`, { token });
+}
+
+/** A store's disputes, newest first: the supplier's Disputes section. */
+export function fetchStoreDisputes(token: string, storeId: number): Promise<Dispute[]> {
+  return apiRequest<Dispute[]>(`/api/v1/supplier-stores/${storeId}/disputes`, { token });
+}
+
+// ── Refunds on a dispute (API D-104) ──────────────────────────────────
+
+/**
+ * How much could be asked for, or why nothing can — before asking, so the form
+ * says so rather than the server refusing after. The server's figure: the lower
+ * of the order's money and the supplier's payout for it.
+ */
+export function fetchRefundLimit(token: string, disputeId: number): Promise<DisputeRefundLimit> {
+  return apiRequest<DisputeRefundLimit>(`/api/v1/disputes/${disputeId}/refund-limit`, { token });
+}
+
+export function requestDisputeRefund(
+  token: string,
+  disputeId: number,
+  amount: string,
+  reason: string | undefined,
+  idempotencyKey: string,
+): Promise<DisputeRefund> {
+  return apiRequest<DisputeRefund>(`/api/v1/disputes/${disputeId}/refund-request`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    body: { amount, reason },
+  });
+}
+
+/** The supplier agrees: the restaurant's wallet is credited and the payout charged. */
+export function approveDisputeRefund(
+  token: string,
+  requestId: number,
+  note: string | undefined,
+  idempotencyKey: string,
+): Promise<DisputeRefund> {
+  return apiRequest<DisputeRefund>(`/api/v1/dispute-refunds/${requestId}/approve`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    body: { note },
+  });
+}
+
+/** The supplier says no, with a reason. Mandi's operations team then decides. */
+export function declineDisputeRefund(
+  token: string,
+  requestId: number,
+  note: string,
+  idempotencyKey: string,
+): Promise<DisputeRefund> {
+  return apiRequest<DisputeRefund>(`/api/v1/dispute-refunds/${requestId}/decline`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    body: { note },
   });
 }
 

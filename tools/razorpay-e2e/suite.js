@@ -446,6 +446,34 @@ function markPaid(orderId, paymentId, providerOrderId) {
     } finally { await L.adoptSession(page); await page.close(); }
   }, { retries: 1 });
 
+  await test('D1', 'Create Order tapped twice at once → one order, pay screen, no error', async () => {
+    const intentId = await L.acceptedRequest(1);
+    const page = await L.signedInPage(b, `/restaurant/requests/${intentId}`);
+    try {
+      const errors = [];
+      page.on('response', async (r) => {
+        if (/\/intents\/\d+\/orders$/.test(r.url()) && r.request().method() === 'POST' && r.status() >= 400) {
+          errors.push(r.status());
+        }
+      });
+      await page.waitForFunction(() => [...document.querySelectorAll('[role=button]')]
+        .some((e) => e.offsetParent !== null && e.textContent.trim().startsWith('Create Order')), { timeout: 20000 });
+      // Two presses in the same tick — faster than any re-render can disable the button.
+      await page.evaluate(() => {
+        const el = [...document.querySelectorAll('[role=button]')]
+          .filter((e) => e.offsetParent !== null && e.textContent.trim().startsWith('Create Order')).pop();
+        el.click(); el.click();
+      });
+      await page.waitForFunction(() => location.pathname.startsWith('/restaurant/pay/'), { timeout: 20000 });
+      await L.sleep(2500);
+      const orders = L.db(`select count(*) from intent_order_link where intent_id=${intentId}`);
+      expect(orders === '1', 'orders for the request: ' + orders);
+      expect(errors.length === 0, 'order calls refused: ' + errors.join(','));
+      expect(!/already used|different request|could not create/i.test(await L.visibleText(page)), 'error shown to the restaurant');
+      return 'one order, no refusal';
+    } finally { await L.adoptSession(page); await page.close(); }
+  }, { retries: 1 });
+
   // ── Server-side failure cases against Razorpay test mode ──
 
   const buyer = async () => (await L.session(L.BUYER)).accessToken;

@@ -7,6 +7,12 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchSupplierOrder, newIdempotencyKey } from '@/services/procurement';
 import {
+  fetchDelivery,
+  requestDelivery,
+  markDeliveryDispatched,
+  markDeliveryDelivered,
+} from '@/services/delivery';
+import {
   acceptOrder,
   markPreparing,
   markReady,
@@ -34,7 +40,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
-import { resolveStatus, SupplierOrderStatus } from '@/models/status';
+import { resolveStatus, SupplierOrderStatus, DeliveryStatus as DeliveryStatusRegistry } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatDistance, orderValue } from '@/utils/orders';
@@ -158,6 +164,47 @@ export default function SupplierOrderScreen() {
       invalidate();
     },
     onError: (caught) => onRefusal(caught, 'Could not update this order.'),
+  });
+
+  const delivery = useQuery({
+    queryKey: ['supplier-order', orderId, 'delivery'],
+    queryFn: () => fetchDelivery(accessToken as string, orderId),
+    enabled: Number.isFinite(orderId) && accessToken != null && (order?.status === 'READY_FOR_PICKUP' || order?.status === 'OUT_FOR_DELIVERY'),
+    retry: false,
+  });
+
+  const requestPartner = useMutation({
+    mutationFn: () =>
+      requestDelivery(accessToken as string, orderId, newIdempotencyKey(), { mode: 'COSTONOMY' }),
+    onSuccess: () => {
+      track('delivery_partner_requested', { screen: SCREEN, entityId: orderId });
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId, 'delivery'] });
+      toast.show('Delivery partner requested', 'success');
+    },
+    onError: (caught) => onRefusal(caught, 'Could not request delivery partner.'),
+  });
+
+  const dispatchDelivery = useMutation({
+    mutationFn: (deliveryId: number) => markDeliveryDispatched(accessToken as string, deliveryId),
+    onSuccess: () => {
+      track('delivery_dispatched', { screen: SCREEN, entityId: orderId });
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId, 'delivery'] });
+      toast.show('Dispatched for delivery', 'success');
+    },
+    onError: (caught) => onRefusal(caught, 'Could not dispatch delivery.'),
+  });
+
+  const completeDelivery = useMutation({
+    mutationFn: (deliveryId: number) => markDeliveryDelivered(accessToken as string, deliveryId),
+    onSuccess: () => {
+      track('delivery_delivered', { screen: SCREEN, entityId: orderId });
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId, 'delivery'] });
+      toast.show('Order delivered', 'success');
+    },
+    onError: (caught) => onRefusal(caught, 'Could not mark delivered.'),
   });
 
   // Every line must be answered — an omitted line is unanswered, not declined
@@ -306,6 +353,97 @@ export default function SupplierOrderScreen() {
               </View>
             )}
           </MandiCard>
+
+          {order.status === 'READY_FOR_PICKUP' && !delivery.data && (
+            <MandiCard>
+              <View style={styles.deliveryRow}>
+                <MandiText variant="bodyEmphasis">Delivery Partner</MandiText>
+                <MandiText variant="captionEmphasis" color={Colors.warning}>
+                  Not Requested Yet
+                </MandiText>
+              </View>
+              <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.sm }}>
+                Order is packed and ready. Request a delivery partner to dispatch via Pidge Smart Dispatch.
+              </MandiText>
+              <MandiButton
+                label="Request Delivery Partner"
+                size="md"
+                icon="bicycle-outline"
+                loading={requestPartner.isPending}
+                onPress={() => requestPartner.mutate()}
+              />
+            </MandiCard>
+          )}
+
+          {delivery.data && (
+            <MandiCard>
+              <View style={styles.deliveryRow}>
+                <MandiText variant="bodyEmphasis">Delivery</MandiText>
+                <MandiText variant="captionEmphasis" color={Colors.primary}>
+                  {delivery.data.mode === 'SUPPLIER_OWN' ? 'Your own delivery' : 'Delivery Partner'}
+                </MandiText>
+              </View>
+              {delivery.data.mode === 'SUPPLIER_OWN' ? (
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {delivery.data.status === 'DRIVER_ASSIGNED'
+                    ? 'Pack the goods and tap "Dispatch / Set off" once your driver leaves.'
+                    : delivery.data.status === 'PICKED_UP'
+                      ? 'Out for delivery. Tap "Confirm Delivered" when goods arrive at the restaurant.'
+                      : 'Delivery completed.'}
+                </MandiText>
+              ) : (
+                <View style={styles.partnerDeliveryInfo}>
+                  <View style={styles.deliveryStatusRow}>
+                    <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, delivery.data.status)} size="sm" />
+                    {delivery.data.fee != null && (
+                      <MandiText variant="caption" color={Colors.textSecondary}>
+                        Fee: {formatMoney(delivery.data.fee)}
+                      </MandiText>
+                    )}
+                  </View>
+                  <MandiText variant="bodyEmphasis" style={{ marginTop: Spacing.xs }}>
+                    {delivery.data.driverName
+                      ? `Driver: ${delivery.data.driverName}${delivery.data.driverVehicle ? ` (${delivery.data.driverVehicle})` : ''}`
+                      : delivery.data.status === 'PROVIDER_SELECTED'
+                        ? 'Dispatch requested. Assigning nearest driver...'
+                        : delivery.data.status.replace(/_/g, ' ')}
+                  </MandiText>
+                  {delivery.data.driverPhone ? (
+                    <MandiText variant="caption" color={Colors.textSecondary}>
+                      Contact: {delivery.data.driverPhone}
+                    </MandiText>
+                  ) : null}
+                  {delivery.data.etaMinutes != null ? (
+                    <MandiText variant="caption" color={Colors.textTertiary}>
+                      Estimated Arrival: ~{delivery.data.etaMinutes} mins
+                    </MandiText>
+                  ) : null}
+                  <View style={{ marginTop: Spacing.sm, flexDirection: 'row', gap: Spacing.sm }}>
+                    <MandiButton
+                      label="Track Delivery"
+                      icon="navigate-outline"
+                      size="sm"
+                      variant="secondary"
+                      onPress={() => router.push(`/supplier/tracking/${order.id}`)}
+                    />
+                    {delivery.data.trackingUrl ? (
+                      <MandiButton
+                        label="Carrier Map"
+                        icon="open-outline"
+                        size="sm"
+                        variant="neutral"
+                        onPress={() => {
+                          if (typeof window !== 'undefined' && delivery.data?.trackingUrl) {
+                            window.open(delivery.data.trackingUrl, '_blank');
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </View>
+                </View>
+              )}
+            </MandiCard>
+          )}
 
           {mode === 'reject' ? (
             <RejectPanel
@@ -560,6 +698,96 @@ export default function SupplierOrderScreen() {
       );
     }
 
+    if (order.status === 'READY_FOR_PICKUP') {
+      if (delivery.data == null) {
+        return (
+          <MandiStickyBar>
+            <MandiButton
+              label="Request Delivery Partner"
+              size="lg"
+              icon="bicycle-outline"
+              loading={requestPartner.isPending}
+              onPress={() => requestPartner.mutate()}
+            />
+          </MandiStickyBar>
+        );
+      }
+
+      if (delivery.data.mode === 'SUPPLIER_OWN') {
+        return (
+          <MandiStickyBar>
+            <MandiButton
+              label="Dispatch / Set off"
+              size="lg"
+              loading={dispatchDelivery.isPending}
+              onPress={() => delivery.data && dispatchDelivery.mutate(delivery.data.id)}
+            />
+          </MandiStickyBar>
+        );
+      }
+
+      return (
+        <MandiStickyBar>
+          <View style={styles.partnerFooterRow}>
+            <View style={styles.flex}>
+              <MandiText variant="caption" color={Colors.textSecondary}>Delivery Partner</MandiText>
+              <MandiText variant="bodyEmphasis">
+                {delivery.data.driverName
+                  ? `${delivery.data.driverName}${delivery.data.driverVehicle ? ` • ${delivery.data.driverVehicle}` : ''}`
+                  : delivery.data.status === 'PROVIDER_SELECTED'
+                    ? 'Assigning partner...'
+                    : delivery.data.status.replace(/_/g, ' ')}
+              </MandiText>
+            </View>
+            <MandiButton
+              label="Track"
+              size="md"
+              icon="navigate-outline"
+              variant="secondary"
+              onPress={() => router.push(`/supplier/tracking/${order.id}`)}
+            />
+          </View>
+        </MandiStickyBar>
+      );
+    }
+
+    if (order.status === 'OUT_FOR_DELIVERY') {
+      if (delivery.data?.mode === 'SUPPLIER_OWN') {
+        return (
+          <MandiStickyBar>
+            <MandiButton
+              label="Confirm Delivered"
+              size="lg"
+              loading={completeDelivery.isPending}
+              onPress={() => delivery.data && completeDelivery.mutate(delivery.data.id)}
+            />
+          </MandiStickyBar>
+        );
+      }
+
+      return (
+        <MandiStickyBar>
+          <View style={styles.partnerFooterRow}>
+            <View style={styles.flex}>
+              <MandiText variant="caption" color={Colors.textSecondary}>Out for delivery</MandiText>
+              <MandiText variant="bodyEmphasis">
+                {delivery.data?.driverName
+                  ? `${delivery.data.driverName}${delivery.data.driverVehicle ? ` • ${delivery.data.driverVehicle}` : ''}`
+                  : 'Courier on the way to restaurant'}
+              </MandiText>
+            </View>
+            <MandiButton
+              label="Track"
+              size="md"
+              icon="navigate-outline"
+              variant="secondary"
+              onPress={() => router.push(`/supplier/tracking/${order.id}`)}
+            />
+          </View>
+        </MandiStickyBar>
+      );
+    }
+
     return undefined;
   }
 }
@@ -654,6 +882,13 @@ function previewLine(
 }
 
 const styles = StyleSheet.create({
+  deliveryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
   where: { flex: 1, gap: 2 },
   columns: {
     flexDirection: 'row',
@@ -705,4 +940,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
   },
   reasonActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  partnerDeliveryInfo: { gap: Spacing.xs, marginTop: Spacing.xs },
+  deliveryStatusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  trackingLink: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: Spacing.xs },
+  partnerFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
 });

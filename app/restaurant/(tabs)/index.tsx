@@ -96,6 +96,13 @@ function QuickActions({ outletId, outletName }: { outletId: number | null; outle
       hint: outletName ? `For ${outletName}` : 'What you still need',
       onPress: () => router.push('/restaurant/(tabs)/requirements'),
     },
+    {
+      key: 'deliveries',
+      icon: 'car-outline' as const,
+      label: 'Deliveries',
+      hint: 'Live tracking queue',
+      onPress: () => router.push('/restaurant/deliveries'),
+    },
   ];
 
   return (

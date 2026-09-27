@@ -51,6 +51,7 @@ export interface Delivery {
   estimatedArrivalAt: string | null;
   /** False for supplier own delivery, which has no tracking by design (doc 06 §2). */
   trackable: boolean;
+  trackingUrl: string | null;
   location: DeliveryLocation | null;
   /** True when the newest fix is older than the freshness threshold (doc 06 §8). */
   locationStale: boolean;
@@ -62,3 +63,110 @@ export interface Delivery {
   deliveredAt: string | null;
   timeline: DeliveryEvent[];
 }
+
+export type ArrivalStage =
+  | 'AT_KITCHEN_DOOR'
+  | 'APPROACHING'
+  | 'EN_ROUTE'
+  | 'AT_SUPPLIER_PICKUP'
+  | 'DRIVER_DISPATCHED'
+  | 'AWAITING_DRIVER'
+  | 'DELIVERED_UNCHECKED';
+
+export type ScheduleStatus =
+  | 'ON_SCHEDULE'
+  | 'RUNNING_LATE'
+  | 'CRITICALLY_DELAYED';
+
+export type ProblemType =
+  | 'NONE'
+  | 'STALE_TELEMETRY'
+  | 'MISSED_ETA'
+  | 'CARRIER_EXCEPTION'
+  | 'UNASSIGNED_TIMEOUT';
+
+export type KitchenAction =
+  | 'CHECK_IN'
+  | 'MEET_DRIVER'
+  | 'PREPARE_DOCK'
+  | 'CALL_DRIVER'
+  | 'ESCALATE'
+  | 'MONITOR';
+
+export interface DriverInfo {
+  name: string | null;
+  phone: string | null;
+  vehicle: string | null;
+}
+
+export interface SupplierInfo {
+  supplierStoreId: number;
+  supplierStoreName: string | null;
+  supplierOrgName: string | null;
+  contactPhone: string | null;
+}
+
+export interface ProblemDetails {
+  hasProblem: boolean;
+  problemType: ProblemType;
+  problemDescription: string | null;
+  failureCode: string | null;
+  failureReason: string | null;
+}
+
+/**
+ * An item in the outlet delivery situational radar.
+ * Answers kitchen operational questions directly: arrival urgency, driver, problems, action.
+ */
+export interface OutletDeliveryRadarItem {
+  deliveryId: number;
+  supplierOrderId: number;
+  orderNumber: string;
+  outletId: number;
+  status: DeliveryStatus;
+  arrivalStage: ArrivalStage;
+  arrivalRank: number;
+  scheduleStatus: ScheduleStatus;
+  minutesOverdue: number | null;
+  etaMinutes: number | null;
+  estimatedArrivalAt: string | null;
+  supplier: SupplierInfo;
+  driver: DriverInfo;
+  problem: ProblemDetails;
+  recommendedAction: KitchenAction;
+  actionReason: string;
+  isCheckedIn: boolean;
+  location: DeliveryLocation | null;
+  locationStale: boolean;
+  locationAgeSeconds: number | null;
+  requestedAt: string | null;
+  assignedAt: string | null;
+  pickedUpAt: string | null;
+  deliveredAt: string | null;
+}
+
+export interface RadarSummary {
+  totalActive: number;
+  atDoorCount: number;
+  approachingCount: number;
+  enRouteCount: number;
+  delayedCount: number;
+  pendingCheckInCount: number;
+  requiresEscalationCount: number;
+}
+
+export interface OutletDeliveryRadarResponse {
+  outletId: number;
+  summary: RadarSummary;
+  items: OutletDeliveryRadarItem[];
+}
+
+export interface PagedResponse<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasNext: boolean;
+}
+

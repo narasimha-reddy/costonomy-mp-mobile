@@ -32,7 +32,7 @@ payments and ₹10 refunds in the Razorpay account it runs against.
 ```bash
 cd tools/razorpay-e2e
 npm install
-npm test              # all 28, about nine minutes
+npm test              # all 30, about ten minutes
 node suite.js F       # only cases whose id starts with F
 HEADED=1 node suite.js C1   # watch it in a visible window
 ```
@@ -59,6 +59,8 @@ Razorpay's window → test card → demo bank or OTP.
 | F7 | Mastercard, wrong OTP | refused; order payable |
 | F8 | Netbanking, bank Failure | nothing funded |
 | F9 | Confirm lost, signed webhook arrives | released by the webhook, without waiting for the sweep |
+| P1 | Pay from the order screen with nothing cached (as after a refresh) | the pay screen asks the server for the checkout, Razorpay opens, the order is funded (D-102) |
+| P2 | A payment that has ended | no Pay and no Try Again offered |
 | D1 | Create Order tapped twice in the same instant | one order, the pay screen, no refusal (fails on the pre-D-099 app) |
 | S1 | Confirm with another order's real payment id | 400; nothing changes |
 | S2 | Confirm with an id Razorpay does not know | 400; order still payable |

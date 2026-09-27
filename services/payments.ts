@@ -55,3 +55,30 @@ export function simulateCheckout(token: string, paymentId: number): Promise<{ pr
     { method: 'POST', token },
   );
 }
+
+/** `PaymentDtos.PaymentIntentResponse`: an order's payment as the pay screen needs it. */
+export interface OrderPaymentIntent {
+  paymentId: number;
+  supplierOrderId: number;
+  provider: string;
+  providerOrderId: string;
+  amount: Money;
+  currency: string;
+  publicKey: string | null;
+  status: string;
+  fundsSecured: boolean;
+  /** Whether a checkout can still be opened. False once funded or ended. */
+  payable: boolean;
+  failureReason: string | null;
+}
+
+/**
+ * The order's checkout, from the server (D-102).
+ *
+ * <p>A read: the server never creates a provider order for it, so asking again —
+ * after a refresh, after a long bank flow, from the order screen — cannot charge
+ * twice.
+ */
+export function fetchPaymentIntent(token: string, orderId: number): Promise<OrderPaymentIntent> {
+  return apiRequest<OrderPaymentIntent>(`/api/v1/supplier-orders/${orderId}/payment-intent`, { token });
+}

@@ -38,6 +38,7 @@ import { DeliveryModePicker } from '@/components/request/DeliveryModePicker';
 import { PaymentMethodPicker, type PaymentMethod } from '@/components/request/PaymentMethodPicker';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
+import { newIdempotencyKey } from '@/lib/api/client';
 import { formatGstRate, formatMoney, formatQuantity, type Money } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
@@ -134,12 +135,32 @@ export default function RequestDetailScreen() {
       && request.withinOrderWindow,
   });
 
+  /**
+   * One idempotency key per "order this, this way".
+   *
+   * <p>It used to be minted inside each call, so a double tap — or the client's
+   * own retry — reached the server as a second order. The first had already
+   * spent the delivery quote, and the second was refused with "that delivery
+   * quote belongs to a different request" while the order had in fact been
+   * placed (D-099). The key now lives as long as the choices it was made for:
+   * a change of mode or method is a different order and gets a new one, and so
+   * does a retry after the server refused.
+   */
+  const orderKey = React.useRef<string | null>(null);
+  const ordering = React.useRef(false);
+  React.useEffect(() => {
+    orderKey.current = null;
+  }, [delivery?.mode, delivery?.quoteReference, method]);
+
   const order = useMutation({
-    mutationFn: () => createOrderFromIntent(accessToken as string, intentId, {
+    mutationFn: (key: string) => createOrderFromIntent(accessToken as string, intentId, {
       deliveryMode: (delivery?.mode ?? 'PICKUP') as DeliveryMode,
       deliveryQuoteReference: delivery?.quoteReference,
       paymentMethod: method ?? 'PREPAID',
-    }),
+    }, key),
+    onSettled: () => {
+      ordering.current = false;
+    },
     onSuccess: (created) => {
       track('intent_ordered', { screen: SCREEN, entityId: intentId });
       void refresh();
@@ -157,10 +178,22 @@ export default function RequestDetailScreen() {
         router.replace(`/restaurant/orders/${created.supplierOrderId}`);
       }
     },
-    onError: (caught) =>
+    onError: (caught) => {
+      // A refusal is final for that attempt, so trying again is a new one. A
+      // network failure is not: the order may exist, and the same key finds it.
+      if (caught instanceof ApiError && caught.status < 500) orderKey.current = null;
       toast.show(
-        caught instanceof ApiError ? caught.message : 'Could not create that order.', 'error'),
+        caught instanceof ApiError ? caught.message : 'Could not create that order.', 'error');
+    },
   });
+
+  const placeOrder = () => {
+    // Ignore a second tap in the same moment, before the button shows it is busy.
+    if (ordering.current) return;
+    ordering.current = true;
+    orderKey.current ??= newIdempotencyKey();
+    order.mutate(orderKey.current);
+  };
 
   const cancel = useMutation({
     mutationFn: () => cancelIntent(accessToken as string, intentId),
@@ -580,7 +613,7 @@ export default function RequestDetailScreen() {
               // order cannot be created without either.
               disabled={delivery == null || method == null}
               loading={order.isPending}
-              onPress={() => order.mutate()}
+              onPress={placeOrder}
             />
           )}
           {!orderable && repeatable && (

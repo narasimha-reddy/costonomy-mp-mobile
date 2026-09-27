@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { MandiText } from './MandiText';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
@@ -19,6 +19,7 @@ export function MandiHeader({
   back = false,
   right,
   onBack,
+  fallbackHref,
   leading,
 }: {
   title: string;
@@ -26,6 +27,7 @@ export function MandiHeader({
   back?: boolean;
   right?: React.ReactNode;
   onBack?: () => void;
+  fallbackHref?: string;
   /**
    * A thumbnail beside the titles — the thing this screen is about.
    * <p>It belongs here rather than in a card below, because a card that only
@@ -34,12 +36,54 @@ export function MandiHeader({
   leading?: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (fallbackHref) {
+      router.replace(fallbackHref as any);
+      return;
+    }
+    // Smart fallbacks when no history stack exists (e.g. page refresh or direct URL)
+    if (pathname?.startsWith('/supplier/tracking/')) {
+      router.replace('/supplier/orders' as any);
+    } else if (pathname?.startsWith('/supplier/orders/')) {
+      router.replace('/supplier/orders' as any);
+    } else if (pathname?.startsWith('/supplier/credit/')) {
+      router.replace('/supplier/credit' as any);
+    } else if (pathname?.startsWith('/supplier/settlements/')) {
+      router.replace('/supplier/settlements' as any);
+    } else if (pathname?.startsWith('/supplier/settings/')) {
+      router.replace('/supplier/more' as any);
+    } else if (pathname?.startsWith('/supplier/')) {
+      router.replace('/supplier' as any);
+    } else if (pathname?.startsWith('/restaurant/tracking/')) {
+      router.replace('/restaurant/orders' as any);
+    } else if (pathname?.startsWith('/restaurant/order/') || pathname?.startsWith('/restaurant/orders/')) {
+      router.replace('/restaurant/orders' as any);
+    } else if (pathname?.startsWith('/restaurant/product/')) {
+      router.replace('/restaurant/browse' as any);
+    } else if (pathname?.startsWith('/restaurant/checkout/')) {
+      router.replace('/restaurant/cart' as any);
+    } else if (pathname?.startsWith('/restaurant/')) {
+      router.replace('/restaurant' as any);
+    } else {
+      router.replace('/' as any);
+    }
+  };
 
   return (
     <View style={styles.header}>
       {back && (
         <Pressable
-          onPress={onBack ?? (() => router.back())}
+          onPress={handleBack}
           accessibilityRole="button"
           accessibilityLabel="Back"
           style={styles.back}

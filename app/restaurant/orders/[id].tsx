@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder } from '@/services/procurement';
+import { fetchDelivery } from '@/services/delivery';
 import {
   MandiButton,
   MandiCard,
@@ -18,9 +19,10 @@ import {
   MandiText,
 } from '@/components/common';
 import { PaymentMethodPill } from '@/components/order';
-import { DeliveryMode, orderStatusFor, resolveStatus } from '@/models/status';
+import { isApiError } from '@/lib/api/errors';
+import { DeliveryMode, orderStatusFor, resolveStatus, DeliveryStatus as DeliveryStatusRegistry, SupplierOrderStatus } from '@/models/status';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
-import { formatMomentWithRecency } from '@/utils/dateRange';
+import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, Spacing } from '@/theme';
 
@@ -60,7 +62,16 @@ export default function OrderDetailScreen() {
     },
   });
 
+  const delivery = useQuery({
+    queryKey: ['supplier-order', orderId, 'delivery'],
+    queryFn: () => fetchDelivery(accessToken as string, orderId),
+    enabled: Number.isFinite(orderId) && accessToken != null,
+    retry: (count, error) => !isApiError(error) && count < 2,
+  });
+
   const order = query.data;
+  const deliveryStatus = delivery.data;
+  const deliveryNotYet = delivery.error != null && isApiError(delivery.error);
 
   /**
    * The supplier answered, and for less than was asked.
@@ -203,6 +214,44 @@ export default function OrderDetailScreen() {
                 </View>
               );
             })}
+          </MandiCard>
+
+          <MandiCard>
+            <View style={styles.deliverySummaryHeader}>
+              <MandiText variant="bodyEmphasis">Delivery</MandiText>
+              {deliveryStatus && (
+                <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, deliveryStatus.status)} size="sm" />
+              )}
+            </View>
+
+            {deliveryStatus ? (
+              <View style={styles.deliverySummaryBody}>
+                {deliveryStatus.etaMinutes != null && (
+                  <Row label="ETA" value={`${deliveryStatus.etaMinutes} min`} />
+                )}
+                {deliveryStatus.estimatedArrivalAt && (
+                  <Row label="Arriving" value={formatMoment(deliveryStatus.estimatedArrivalAt)} />
+                )}
+                {deliveryStatus.driverName && (
+                  <Row label="Driver" value={deliveryStatus.driverName} />
+                )}
+                {deliveryStatus.pickupAddress && (
+                  <Row label="Pickup" value={deliveryStatus.pickupAddress} />
+                )}
+                {deliveryStatus.dropAddress && (
+                  <Row label="Destination" value={deliveryStatus.dropAddress} />
+                )}
+                {!deliveryStatus.trackable && deliveryStatus.mode === 'SUPPLIER_OWN' && (
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Supplier own delivery does not show live tracking.
+                  </MandiText>
+                )}
+              </View>
+            ) : !deliveryNotYet ? (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Delivery details will appear once the supplier prepares this order.
+              </MandiText>
+            ) : null}
           </MandiCard>
 
           <MandiCard>
@@ -386,9 +435,18 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
   },
+  countdown: { marginTop: Spacing.md, gap: Spacing.xs },
+  deliverySummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
   barActions: { flexDirection: 'row', gap: Spacing.sm },
   barAction: { flex: 1 },
   party: { marginTop: Spacing.xs },
+  deliverySummaryBody: { gap: Spacing.xs },
   item: {
     flexDirection: 'row',
     gap: Spacing.md,

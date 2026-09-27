@@ -237,7 +237,15 @@ export default function SupplierCreditAgreementScreen() {
             ].filter(Boolean).join(' · ')
           }
           back
-          onBack={() => (mode === 'view' ? router.back() : setMode('view'))}
+          onBack={() => {
+            if (mode !== 'view') {
+              setMode('view');
+            } else if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/supplier/credit' as any);
+            }
+          }}
         />
       }
       footer={renderFooter()}

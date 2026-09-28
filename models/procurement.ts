@@ -15,7 +15,7 @@ export type ProcurementStatus =
 
 export type ApprovalStatus = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
-export type PaymentMethod = 'PREPAID' | 'CREDIT';
+export type PaymentMethod = 'PREPAID' | 'WALLET' | 'CREDIT';
 
 export interface ProcurementItem {
   id: number;

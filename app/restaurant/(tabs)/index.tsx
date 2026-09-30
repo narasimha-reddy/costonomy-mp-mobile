@@ -2,11 +2,13 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchCategories } from '@/services/catalog';
 import { fetchOutletOrders } from '@/services/procurement';
 import { fetchIntents } from '@/services/intent';
+import { fetchQuickScanConfig } from '@/services/quickscan';
 import { intentsKey } from '@/lib/queryKeys';
 import { CategoryTile } from '@/components/product/CategoryTile';
 import {
@@ -17,6 +19,7 @@ import {
   MandiSearchBar,
   MandiSectionHeader,
   MandiSkeletonList,
+  MandiText,
   toneColors,
 } from '@/components/common';
 import {
@@ -30,7 +33,7 @@ import { PopularSuppliersCarousel } from '@/components/restaurant/PopularSupplie
 import type { Intent } from '@/models/intent';
 import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
-import { Spacing } from '@/theme';
+import { Colors, IconSize, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
 
@@ -64,6 +67,8 @@ export default function RestaurantHome() {
         placeholder="Search paneer, rice, oil…"
       />
 
+      <QuickScanEntry outletId={outletId} />
+
       <RequestsSection outletId={outletId} />
       {/* Below requests, above orders: a request is somebody already waiting on
           this kitchen's behalf, and an order is work in hand. Browsing sits
@@ -75,6 +80,53 @@ export default function RestaurantHome() {
   );
 }
 
+
+/**
+ * A door to QuickScan, near the top because it is meant to be the fast path: pay
+ * a shop's UPI QR without going through a request or an order at all.
+ *
+ * <p><b>Hidden rather than broken.</b> Loading and erroring both render nothing
+ * — CLAUDE.md's "sections fail independently" cuts the other way here too: a
+ * feature the outlet cannot use yet, or that this call failed to confirm, is
+ * one the home screen should simply not offer rather than show disabled or
+ * apologise for. `enabled` is the server's word on whether the outlet can use
+ * it at all; the pay screen checks the rest (fee, balance, method) itself.
+ */
+function QuickScanEntry({ outletId }: { outletId: number | null }) {
+  const router = useRouter();
+  const { accessToken } = useSession();
+
+  const config = useQuery({
+    queryKey: ['outlet', outletId, 'quickscan-config'],
+    queryFn: () => fetchQuickScanConfig(accessToken as string, outletId as number),
+    enabled: outletId != null && accessToken != null,
+  });
+
+  if (config.isPending || config.error || !config.data?.enabled) return null;
+
+  return (
+    <MandiCard
+      onPress={() => {
+        track('open_quickscan', { screen: SCREEN, outletId });
+        router.push('/restaurant/quickscan');
+      }}
+      accessibilityLabel="QuickScan. Pay a shop by scanning its QR."
+    >
+      <View style={styles.quickScanRow}>
+        <View style={styles.quickScanIcon}>
+          <Ionicons name="qr-code-outline" size={IconSize.md} color={Colors.primary} />
+        </View>
+        <View style={styles.flex}>
+          <MandiText variant="bodyEmphasis">QuickScan</MandiText>
+          <MandiText variant="caption" color={Colors.textSecondary}>
+            Pay a shop by scanning its QR
+          </MandiText>
+        </View>
+        <Ionicons name="chevron-forward" size={IconSize.sm} color={Colors.textTertiary} />
+      </View>
+    </MandiCard>
+  );
+}
 
 /**
  * The one thing about the open requests worth a line.
@@ -287,4 +339,14 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  flex: { flex: 1 },
+  quickScanRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  quickScanIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryLight,
+  },
 });

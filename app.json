@@ -15,7 +15,7 @@
       "bundleIdentifier": "com.costonomy.mp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Mandi needs camera access to capture photos of received goods and dispute evidence.",
+        "NSCameraUsageDescription": "Mandi needs camera access to capture photos of received goods and dispute evidence, and to scan a shop's QuickScan QR code.",
         "NSPhotoLibraryUsageDescription": "Mandi needs photo library access to attach evidence to receiving records and disputes.",
         "NSLocationWhenInUseUsageDescription": "Mandi uses your location to show delivery tracking relative to your outlet."
       }
@@ -36,6 +36,13 @@
       "expo-router",
       "expo-secure-store",
       "expo-font",
+      [
+        "expo-camera",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
       [
         "expo-location",
         {

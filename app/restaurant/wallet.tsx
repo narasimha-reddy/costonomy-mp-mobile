@@ -23,7 +23,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { isAmount } from '@/lib/disputes/refundCopy';
 import { entryLabel, withdrawalProgress } from '@/lib/wallet/entryCopy';
-import { ApiError } from '@/lib/api/errors';
+import { withdrawFailure, type WithdrawFailure } from '@/lib/wallet/withdrawError';
 import { formatMoney } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { track } from '@/analytics';
@@ -52,6 +52,8 @@ export default function WalletScreen() {
 
   const [amount, setAmount] = useState('');
   const [confirming, setConfirming] = useState(false);
+  /** The server's last answer to a withdrawal, shown in the form until the next attempt. */
+  const [failure, setFailure] = useState<WithdrawFailure | null>(null);
 
   const wallet = useQuery({
     queryKey: ['outlet', outlet?.id, 'wallet'],
@@ -62,20 +64,37 @@ export default function WalletScreen() {
   const withdraw = useMutation({
     mutationFn: () => withdrawFromWallet(accessToken as string, outlet?.id as number,
       amount.trim(), idempotency.key()),
+    onMutate: () => setFailure(null),
     onSuccess: (result) => {
       idempotency.settle();
       setConfirming(false);
       setAmount('');
       track('wallet_withdrawn', { screen: SCREEN, entityId: outlet?.id });
       toast.show(`${formatMoney(result.amount)} is on its way back to your card or bank.`, 'success');
-      void queryClient.invalidateQueries({ queryKey: ['outlet', outlet?.id, 'wallet'] });
     },
     onError: (caught) => {
+      // A 422 is a refusal: the key is dropped, so "instead" and any retry get a
+      // new one. A 503 (paused or not) and a network failure keep it: nothing is
+      // known to have failed, and the paused server released the key on its side.
       idempotency.settle(caught);
       setConfirming(false);
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not send that. Try again.', 'error');
+      const outcome = withdrawFailure(caught);
+      setFailure(outcome);
+      // A refusal is shown in the form, where its button is; the rest as a toast too.
+      if (outcome.kind === 'OTHER') toast.show(outcome.message, 'error');
+    },
+    // Whatever happened, the balance and the statement are the server's to say.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['outlet', outlet?.id, 'wallet'] });
     },
   });
+
+  /** Ask for exactly the amount the server said could go: a new request, so a new key. */
+  const withdrawInstead = (offered: string) => {
+    setAmount(offered);
+    setFailure(null);
+    setConfirming(true);
+  };
 
   const mayWithdraw = canForOutlet('WALLET_WITHDRAW', outlet);
 
@@ -109,11 +128,30 @@ export default function WalletScreen() {
               <MandiFormField
                 label="Amount"
                 value={amount}
-                onChangeText={setAmount}
+                onChangeText={(text) => { setAmount(text); setFailure(null); }}
                 placeholder="0.00"
                 prefix="₹"
                 keyboardType="decimal-pad"
               />
+              {failure != null && failure.kind !== 'OTHER' && (
+                <View accessibilityRole="alert" style={styles.notice}>
+                  <MandiText variant="body">{failure.message}</MandiText>
+                  {failure.kind === 'PAUSED' && (
+                    <MandiText variant="caption" color={Colors.textSecondary}>
+                      Nothing was taken from your wallet. Try again in a little while.
+                    </MandiText>
+                  )}
+                  {failure.kind === 'EXCEEDS_REFUNDABLE' && failure.withdrawableNow != null && (
+                    <MandiButton
+                      label={`Withdraw ${formatMoney(failure.withdrawableNow)} instead`}
+                      variant="secondary"
+                      size="md"
+                      loading={withdraw.isPending}
+                      onPress={() => withdrawInstead(failure.withdrawableNow as string)}
+                    />
+                  )}
+                </View>
+              )}
               <MandiButton
                 label="Withdraw"
                 size="md"
@@ -173,5 +211,6 @@ export default function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
+  notice: { gap: Spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
 });

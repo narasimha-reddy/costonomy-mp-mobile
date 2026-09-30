@@ -707,6 +707,7 @@ function markPaid(orderId, paymentId, providerOrderId) {
     const since = lastRefundId();
     const page = await L.signedInPage(b, '/restaurant/wallet');
     try {
+      await L.tap(page, 'Withdraw'); // the round action opens the form
       await screenText(page, /Send back to your card or bank/);
       await L.typeInto(page, '0.00', '20');
       await L.tap(page, 'Withdraw');

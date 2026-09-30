@@ -49,12 +49,18 @@ export type WalletDirection = 'DEBIT' | 'CREDIT';
  */
 export interface WalletEntry {
   id: number;
+  /**
+   * What tells one history row from another: `L18` for ledger row 18. The history
+   * feed can carry rows from more than one table, so `id` alone may repeat; absent
+   * on the wallet screen's `recent`, where `id` is unique.
+   */
+  key?: string;
   direction: WalletDirection;
   /** Why it moved (API D-104). */
   kind: WalletEntryKind;
   amount: Money;
   /** What the balance became, so a statement reads without arithmetic. */
-  balanceAfter: Money;
+  balanceAfter: Money | null;
   supplierOrderId: number | null;
   reason: string | null;
   /**
@@ -62,8 +68,61 @@ export interface WalletEntry {
    * means it could not finish and Mandi's team has it. Null for other kinds.
    */
   refundStatus: WithdrawalRefundStatus | string | null;
+  /**
+   * Where the movement stands, for the history screen. Absent on an older API,
+   * and then a row is simply a completed one.
+   */
+  status?: WalletEntryStatus;
+  /** What the money was paid with or sent to — "Card •1007", "UPI". Absent when unknown. */
+  instrument?: string | null;
   at: string;
 }
+
+/**
+ * `RETURNED` is money that left the wallet and came back to the bank or card
+ * (a withdrawal the bank bounced); it is neither a spend nor a top-up.
+ */
+export type WalletEntryStatus = 'COMPLETED' | 'IN_PROGRESS' | 'FAILED' | 'RETURNED';
+
+/** One month's totals, from the server: the client never adds up money. */
+export interface WalletMonthTotal {
+  /** `yyyy-MM`, in India time. */
+  month: string;
+  added: Money;
+  spent: Money;
+}
+
+/** One page of the wallet's full history (`GET .../wallet/transactions`). */
+export interface WalletTransactionsPage {
+  items: WalletEntry[];
+  /** Absent on an older API; the screen then shows no month totals. */
+  monthTotals: WalletMonthTotal[];
+  /** Months that have any movement, newest first, for the filter's month list. */
+  availableMonths: string[];
+  nextCursor: string | null;
+}
+
+/** The choices behind the History screen's "Filters", in the server's words where it has them. */
+export type WalletCategory = 'TOP_UP' | 'ORDER_PAYMENT' | 'REFUND' | 'WITHDRAWAL' | 'SHOP_PAYMENT';
+export type WalletInstrument = 'CARD' | 'UPI' | 'NETBANKING' | 'WALLET';
+export type WalletStatusFilter = 'COMPLETED' | 'IN_PROGRESS' | 'RETURNED';
+
+export interface WalletFilters {
+  /** `yyyy-MM`. */
+  months: string[];
+  categories: WalletCategory[];
+  instruments: WalletInstrument[];
+  statuses: WalletStatusFilter[];
+}
+
+export type StatementRange = 'LAST_30' | 'LAST_90' | 'LAST_180' | 'LAST_365' | 'CUSTOM';
+export type StatementFormat = 'PDF' | 'CSV';
+
+/** What "My Statement" asks the server for. Dates are `yyyy-MM-dd`. */
+export type StatementRequest =
+  | { kind: 'range'; range: Exclude<StatementRange, 'CUSTOM'>; format: StatementFormat }
+  | { kind: 'custom'; from: string; to: string; format: StatementFormat }
+  | { kind: 'financialYear'; financialYear: string; format: StatementFormat };
 
 /**
  * The kinds this app knows. A newer API may send others: every reader must cope

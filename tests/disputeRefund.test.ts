@@ -132,8 +132,10 @@ describe('paymentStatusLabel', () => {
     expect(paymentStatusLabel('AUTHORIZED')).toContain('Held');
     expect(paymentStatusLabel('CAPTURED')).toBe('Paid');
     expect(paymentStatusLabel('PAID')).toBe('Paid from wallet');
-    expect(paymentStatusLabel('RELEASED')).toContain('not charged');
+    // Only a card's released hold is "not charged" (D-109); see paymentCopy.test.ts.
+    expect(paymentStatusLabel('RELEASED', 'card')).toContain('not charged');
+    expect(paymentStatusLabel('RELEASED')).toBe('Released');
     expect(paymentStatusLabel('ON_CREDIT')).toBe('On credit');
-    expect(paymentStatusLabel('SOMETHING_NEW')).toBe('Something new');
+    expect(paymentStatusLabel('SOMETHING_NEW')).toBe('Payment status unavailable');
   });
 });

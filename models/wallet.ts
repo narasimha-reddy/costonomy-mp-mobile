@@ -15,6 +15,28 @@ export interface Wallet {
   currency: string;
   status: string;
   recent: WalletEntry[];
+  /**
+   * What the outlet may add, and how much of it is left. Absent on an older API,
+   * and then the screens simply do not show a meter or pre-check an amount — the
+   * server still enforces every one of these.
+   */
+  limits?: WalletLimits;
+}
+
+/**
+ * The server's top-up rules for this outlet, as decimal strings.
+ *
+ * <p>Read for display and for a hint before a tap. They are never the authority:
+ * the server checks every top-up against its own copy, at that moment.
+ */
+export interface WalletLimits {
+  /** The most the wallet may hold. */
+  maxBalance: Money;
+  monthlyTopUpLimit: Money;
+  addedThisMonth: Money;
+  remainingThisMonth: Money;
+  minTopUp: Money;
+  maxTopUp: Money;
 }
 
 export type WalletDirection = 'DEBIT' | 'CREDIT';
@@ -50,7 +72,8 @@ export interface WalletEntry {
 export type WalletEntryKind =
   | 'TOP_UP' | 'ORDER_PAYMENT' | 'ORDER_REFUND' | 'REFUND' | 'WITHDRAWAL' | 'DISPUTE_REFUND'
   /** A withdrawal the provider refused, put back in the wallet (API D-110). A credit. */
-  | 'WITHDRAWAL_REVERSAL';
+  | 'WITHDRAWAL_REVERSAL'
+  | 'QUICKSCAN_PAYMENT' | 'QUICKSCAN_RETURN';
 
 /** Where a withdrawal's refund has got to. `REJECTED`/`REVERSED` need API D-110. */
 export type WithdrawalRefundStatus =
@@ -72,4 +95,31 @@ export interface Withdrawal {
   amount: Money;
   balance: Money;
   parts: WithdrawalPart[];
+}
+
+/**
+ * A top-up the server has opened and is waiting to be paid at the provider's
+ * checkout. Named for what checkout needs; `services/wallet.ts` maps the wire names.
+ */
+export interface WalletTopUp {
+  topUpId: string;
+  providerOrderId: string;
+  /** The provider's publishable key. Never a secret. */
+  publicKey: string;
+  amount: Money;
+  currency: string;
+}
+
+/** Where a top-up has got to. Only `CREDITED` means the money is in the wallet. */
+export type TopUpStatus = 'CREATED' | 'CREDITED' | 'REFUNDED' | 'FAILED' | 'EXPIRED';
+
+/**
+ * The server's answer to "the customer paid".
+ *
+ * <p>`pending` is not a failure: the payment is being verified and the server's
+ * own job will credit it. The wallet is only present once it has been credited.
+ */
+export interface TopUpConfirmation {
+  pending: boolean;
+  wallet: Wallet | null;
 }

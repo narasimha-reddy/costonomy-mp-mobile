@@ -18,6 +18,11 @@ export function procurementKey(procurementId: number) {
   return ['procurement', procurementId] as const;
 }
 
+/** The outlet's wallet: the home tile, the wallet screen and add money share it. */
+export function walletKey(outletId: number | null | undefined) {
+  return ['outlet', outletId, 'wallet'] as const;
+}
+
 // ── Requests ──────────────────────────────────────────────────────────
 
 /**

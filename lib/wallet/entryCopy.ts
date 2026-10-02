@@ -12,6 +12,8 @@ export function entryLabel(entry: WalletEntry): string {
     case 'DISPUTE_REFUND': return 'Refund from a dispute';
     case 'WITHDRAWAL': return 'Sent back to your card or bank';
     case 'WITHDRAWAL_REVERSAL': return 'Withdrawal returned to your wallet';
+    case 'QUICKSCAN_PAYMENT': return 'Paid a shop (QuickScan)';
+    case 'QUICKSCAN_RETURN': return 'QuickScan payment returned';
     // A kind this app does not know (a newer API): say only what the direction shows.
     default:
       if (entry.direction === 'CREDIT') return 'Money in';

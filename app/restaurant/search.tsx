@@ -8,7 +8,7 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import { searchProducts, searchSkus, searchSuppliers } from '@/services/catalog';
 import { useDebounced } from '@/hooks/useDebounced';
 import { useRecentSearches } from '@/hooks/useRecentSearches';
-import { useAddToCart } from '@/hooks/useAddToCart';
+import { useAddToRequest } from '@/hooks/useAddToRequest';
 import { ProductCard } from '@/components/product/ProductCard';
 import { SkuRow } from '@/components/product/SkuRow';
 import { SupplierRow } from '@/components/product/SupplierRow';
@@ -65,7 +65,7 @@ export default function SearchScreen() {
   const [tab, setTab] = useState<Tab>('products');
   const [radiusKm, setRadiusKm] = useState<number | undefined>(NEARBY_KM);
   const { recent, remember, clear } = useRecentSearches();
-  const addToCart = useAddToCart();
+  const addToRequest = useAddToRequest();
 
   const settled = useDebounced(term, 250);
   const query = settled.trim();
@@ -101,12 +101,6 @@ export default function SearchScreen() {
     if (searching) remember(query);
     track('open_supplier', { screen: SCREEN, outletId, entityId: storeId });
     router.push(`/restaurant/supplier/${storeId}`);
-  }
-
-  // Tapping a pack asks "who else sells this, and for how much" — so it lands on
-  // the canonical comparison, the same place a product row goes.
-  function openSkuComparison(canonicalProductId: number) {
-    openProduct(canonicalProductId);
   }
 
   // Below two characters there is nothing to search and nothing to slice three
@@ -154,9 +148,12 @@ export default function SearchScreen() {
               <SkuRow
                 key={sku.offerId}
                 sku={sku}
-                onPress={() => openSkuComparison(sku.canonicalProductId)}
-                onAdd={() => addToCart.mutate(sku.offerId)}
-                adding={addToCart.isPending && addToCart.variables === sku.offerId}
+                // A SKU result is one supplier's pack, so it opens that pack.
+                // It used to open the canonical comparison, which answered a
+                // question the row had already narrowed past.
+                onPress={() => router.push(`/restaurant/sku/${sku.supplierSkuId}`)}
+                onAdd={() => addToRequest.mutate(sku.supplierSkuId)}
+                adding={addToRequest.isPending && addToRequest.variables === sku.offerId}
               />
             ))
           }

@@ -19,12 +19,27 @@ export function MandiScreen({
   header,
   footer,
   floating,
+  stickyIndices,
 }: {
   children: React.ReactNode;
   onRefresh?: () => void;
   refreshing?: boolean;
   scroll?: boolean;
   contentStyle?: ViewStyle;
+  /**
+   * Which children pin to the top as the content scrolls past them.
+   *
+   * <p>Indices into `children`, which is why passing this changes the shape of
+   * the tree: the wrapper `View` the gutter normally lives on would be the one
+   * and only child, so the padding moves onto the scroll view's content
+   * container and the children become its direct descendants. Nothing else
+   * about the screen changes.
+   *
+   * <p>For a list whose groups are long enough to lose their heading — the
+   * cart's suppliers. A group whose heading has scrolled away is a list of
+   * prices with nobody's name on it.
+   */
+  stickyIndices?: number[];
   /** Pinned above the scroll area — a title bar, a search field. */
   header?: React.ReactNode;
   /** Pinned below it — a checkout summary bar. */
@@ -49,7 +64,12 @@ export function MandiScreen({
       {header}
       {scroll ? (
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={
+            stickyIndices != null
+              ? [styles.scroll, styles.content, contentStyle]
+              : styles.scroll
+          }
+          stickyHeaderIndices={stickyIndices}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             onRefresh
@@ -57,7 +77,7 @@ export function MandiScreen({
               : undefined
           }
         >
-          {body}
+          {stickyIndices != null ? children : body}
         </ScrollView>
       ) : (
         body

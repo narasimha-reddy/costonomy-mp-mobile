@@ -101,7 +101,7 @@ export default function NewOutletScreen() {
       footer={
         <MandiStickyBar>
           <MandiButton
-            label="Add outlet"
+            label="Add Outlet"
             size="lg"
             disabled={!outletIsComplete(draft)}
             loading={create.isPending}

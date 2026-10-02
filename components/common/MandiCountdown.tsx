@@ -11,6 +11,7 @@ import {
 } from '@/theme';
 import { secondsUntil } from '@/lib/server-clock';
 import { MandiText } from './MandiText';
+import { toneColors, type StatusTone } from './MandiStatusChip';
 
 interface MandiCountdownProps {
   /** The order's `responseDeadlineAt`, ISO-8601, straight from the API. */
@@ -23,8 +24,28 @@ interface MandiCountdownProps {
    */
   slaSeconds?: number;
   size?: 'sm' | 'lg';
+  /**
+   * What the window is for, as a verb phrase — "to respond", "to order".
+   *
+   * <p>This component was written for the supplier's acceptance SLA and said
+   * "to respond" unconditionally. A restaurant counting down its window to
+   * create an order is not responding to anything, and being told it is makes
+   * the one number they are acting on describe somebody else's job.
+   */
+  action?: string;
   /** Called once when the countdown reaches zero — e.g. to refetch the order. */
   onExpire?: () => void;
+  /**
+   * The resting colour, when there is still plenty of time. D-091's request
+   * screens pass their card's tone so the clock belongs to the card it sits in.
+   *
+   * <p><b>Only the calm level.</b> Warn and critical keep the countdown palette
+   * whatever this says: the escalation to amber and red is the one thing the
+   * component signals that nothing else on the screen does, and a clock that
+   * stayed violet at ten seconds would be decoration. §23A.48 also wants the
+   * urgency readable without relying on colour, which the numbers do.
+   */
+  tone?: StatusTone;
   style?: ViewStyle;
   testID?: string;
 }
@@ -58,7 +79,9 @@ export function MandiCountdown({
   deadlineAt,
   slaSeconds = 60,
   size = 'lg',
+  action = 'to respond',
   onExpire,
+  tone,
   style,
   testID,
 }: MandiCountdownProps) {
@@ -97,7 +120,10 @@ export function MandiCountdown({
   }, [expired]);
 
   const level = countdownLevel(remaining, slaSeconds);
-  const palette = CountdownPalette[level];
+  const resting = tone != null ? toneColors(tone) : null;
+  const palette = level === 'calm' && resting != null
+    ? { fg: resting.fg, bg: resting.bg }
+    : CountdownPalette[level];
   const text = expired ? 'Expired' : format(remaining);
 
   return (
@@ -113,8 +139,8 @@ export function MandiCountdown({
       // Spelled out, because "0:47" is read as "zero colon forty-seven".
       accessibilityLabel={
         expired
-          ? 'Response window expired'
-          : `${Math.floor(remaining / 60)} minutes ${remaining % 60} seconds left to respond`
+          ? 'Window expired'
+          : `${Math.floor(remaining / 60)} minutes ${remaining % 60} seconds left ${action}`
       }
       // Polite, not assertive: an assertive region would interrupt the screen
       // reader every single second.
@@ -133,7 +159,7 @@ export function MandiCountdown({
       </MandiText>
       {size === 'lg' && !expired && (
         <MandiText variant="caption" color={palette.fg}>
-          to respond
+          {action}
         </MandiText>
       )}
     </View>

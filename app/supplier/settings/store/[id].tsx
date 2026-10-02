@@ -34,6 +34,14 @@ import { ApiError } from '@/lib/api/errors';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
+/**
+ * What counts as a contact number, matching the server's rule. D-097.
+ *
+ * <p>Loose on purpose — a warehouse counter answers a landline with an STD
+ * code, and the strict rule belongs on the login phone.
+ */
+const PHONE = /^[+]?[0-9 ()-]{7,20}$/;
+
 const SCREEN = 'SUP-ONB-01';
 
 /**
@@ -89,6 +97,7 @@ export default function StoreDetailScreen() {
   const [contactName, setContactName] = useState<string | null>(null);
   const [contactPhone, setContactPhone] = useState<string | null>(null);
   const [prep, setPrep] = useState<string | null>(null);
+  const [directOrders, setDirectOrders] = useState<boolean | null>(null);
   const [hours, setHours] = useState<OperatingHours | null>(null);
   // The pin the screen is editing. Null means untouched — the store's own.
   const [pin, setPin] = useState<{ latitude: string; longitude: string } | null>(null);
@@ -113,6 +122,7 @@ export default function StoreDetailScreen() {
   const contactNameValue = contactName ?? data?.contactName ?? '';
   const contactPhoneValue = contactPhone ?? data?.contactPhone ?? '';
   const prepValue = prep ?? String(data?.preparationMinutes ?? 60);
+  const directOrdersValue = directOrders ?? data?.directOrdersEnabled ?? false;
   const hoursValue = hours ?? data?.operatingHours
     ?? { days: [], opensAt: '10:00', closesAt: '21:00' };
 
@@ -153,6 +163,13 @@ export default function StoreDetailScreen() {
   const problem = nameValue.trim().length < 2 ? 'Enter a store name.'
     : line1Value.trim() === '' ? 'Enter the street address.'
     : cityValue.trim() === '' ? 'Enter the city.'
+    // D-097. Required here as well as at registration, which is how the stores
+    // that predate the rule acquire a contact: the next person to save one has
+    // to supply it. Nothing was backfilled beyond what the business contact
+    // could answer — inventing a name and a number would put someone
+    // unreachable in front of a restaurant chasing a delivery.
+    : contactNameValue.trim().length < 2 ? 'Enter a contact name for this store.'
+    : !PHONE.test(contactPhoneValue.trim()) ? 'Enter a contact number for this store.'
     : hoursValue.days.length === 0 ? 'Choose at least one day you trade on.'
     : !ownValue && !partnerValue ? 'Choose at least one way to deliver.'
     : null;
@@ -170,6 +187,7 @@ export default function StoreDetailScreen() {
         contactPhone: contactPhoneValue.trim(),
         operatingHours: hoursValue,
         preparationMinutes: Number(prepValue) || 0,
+        directOrdersEnabled: directOrdersValue,
         ...(pinValue && pinValue.latitude !== '' && pinValue.longitude !== ''
           ? { latitude: pinValue.latitude, longitude: pinValue.longitude }
           : {}),
@@ -242,7 +260,7 @@ export default function StoreDetailScreen() {
                 style={styles.flex}
               />
               <MandiButton
-                label="Save changes"
+                label="Save Changes"
                 size="lg"
                 disabled={!touched || problem != null}
                 loading={save.isPending}
@@ -331,6 +349,31 @@ export default function StoreDetailScreen() {
             />
           </Section>
 
+          {/* The branch's own contact. D-097.
+              <p>The values were already being sent and there was nowhere to
+              type them, so every store saved whatever it started with — which
+              for most of them was nothing. A restaurant chasing a delivery
+              rings the counter, not head office, so this is its own answer
+              rather than the business contact repeated. */}
+          <Section title="Who to contact at this store">
+            <MandiFormField
+              label="Contact name"
+              value={contactNameValue}
+              onChangeText={setContactName}
+              placeholder="Ramesh Kumar"
+              required
+            />
+            <MandiFormField
+              label="Contact number"
+              value={contactPhoneValue}
+              onChangeText={setContactPhone}
+              placeholder="+91 98765 43210"
+              keyboardType="phone-pad"
+              required
+              hint="Restaurants and our operations team use this to reach this branch."
+            />
+          </Section>
+
           <Section title="When you trade">
             <OperatingHoursFields
               value={hoursValue}
@@ -348,6 +391,26 @@ export default function StoreDetailScreen() {
               value={`${Math.round((data.responseSlaSeconds ?? 60) / 60)} min`}
               hint="Set by Costonomy operations, so it means the same across every supplier."
             />
+          </Section>
+
+          <Section title="How restaurants order from you">
+            {/* D-094. The request exists to ask whether the goods are there;
+                a store that keeps stock has already answered, and the round
+                trip only costs the kitchen time. Off by default, because not
+                being asked is something a supplier has to opt into. */}
+            <Toggle
+              label="Let restaurants order directly"
+              hint="Skip the request step. They order from your listed prices and you get a paid order straight away — so only turn this on for lines you actually keep in stock."
+              value={directOrdersValue}
+              onValueChange={setDirectOrders}
+            />
+            {directOrdersValue && (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Restaurants can still send you a request instead if they prefer.
+                Orders that arrive this way are already paid for, and you can
+                cancel one if something is wrong.
+              </MandiText>
+            )}
           </Section>
 
           <Section title="How you deliver">

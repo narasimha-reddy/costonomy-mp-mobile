@@ -42,12 +42,17 @@ export default function BusinessSettingsScreen() {
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [legalName, setLegalName] = useState<string | null>(null);
   const [contactName, setContactName] = useState<string | null>(null);
+  const [contactPhone, setContactPhone] = useState<string | null>(null);
   const [contactEmail, setContactEmail] = useState<string | null>(null);
 
   const displayValue = displayName ?? supplier?.displayName ?? '';
   const legalValue = legalName ?? supplier?.legalName ?? '';
-  const contactValue = contactName ?? '';
-  const emailValue = contactEmail ?? '';
+  // Seeded from what is saved, not from blank. The form used to open empty
+  // over a stored contact — and because `dirty` counted any non-empty value as
+  // a change, saving from there wrote the blanks back. D-097.
+  const contactValue = contactName ?? supplier?.contactName ?? '';
+  const phoneValue = contactPhone ?? supplier?.contactPhone ?? '';
+  const emailValue = contactEmail ?? supplier?.contactEmail ?? '';
 
   const save = useMutation({
     mutationFn: () =>
@@ -55,6 +60,7 @@ export default function BusinessSettingsScreen() {
         displayName: displayValue.trim(),
         legalName: legalValue.trim() || undefined,
         contactName: contactValue.trim() || undefined,
+        contactPhone: phoneValue.trim() || undefined,
         contactEmail: emailValue.trim() || undefined,
       }),
     onSuccess: () => {
@@ -69,8 +75,9 @@ export default function BusinessSettingsScreen() {
   const dirty = supplier != null
     && (displayValue.trim() !== supplier.displayName
       || legalValue.trim() !== (supplier.legalName ?? '')
-      || contactValue.trim() !== ''
-      || emailValue.trim() !== '');
+      || contactValue.trim() !== (supplier.contactName ?? '')
+      || phoneValue.trim() !== (supplier.contactPhone ?? '')
+      || emailValue.trim() !== (supplier.contactEmail ?? ''));
 
   const validGstin = supplier?.gstin != null && GSTIN.test(supplier.gstin);
 
@@ -81,7 +88,7 @@ export default function BusinessSettingsScreen() {
         dirty ? (
           <MandiStickyBar>
             <MandiButton
-              label="Save changes"
+              label="Save Changes"
               size="lg"
               disabled={displayValue.trim().length < 2}
               loading={save.isPending}
@@ -116,6 +123,14 @@ export default function BusinessSettingsScreen() {
             value={contactValue}
             onChangeText={setContactName}
             placeholder="Who we call about an order"
+          />
+          <MandiFormField
+            label="Contact number"
+            value={phoneValue}
+            onChangeText={setContactPhone}
+            placeholder="+91 98765 43210"
+            keyboardType="phone-pad"
+            hint="The number our operations team rings about an order."
           />
           <MandiFormField
             label="Contact email"

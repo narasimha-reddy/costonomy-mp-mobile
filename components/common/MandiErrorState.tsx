@@ -53,7 +53,7 @@ export function MandiErrorState({
 
       {onRetry != null && (
         <MandiButton
-          label="Try again"
+          label="Try Again"
           icon="refresh"
           onPress={onRetry}
           loading={retrying}

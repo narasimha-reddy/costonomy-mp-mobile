@@ -6,8 +6,15 @@ import {
   summariseItems,
 } from '@/utils/orders';
 
-const item = (skuName: string | null, productName = 'Canonical') =>
-  ({ skuName, productName }) as { skuName: string; productName: string };
+/**
+ * A summariser fixture.
+ *
+ * <p>The SKU name moved onto the shared descriptor (`utils/skuLabel.ts`), so
+ * every screen describes a pack the same way. Built here rather than written
+ * inline because the shape is now more than two fields.
+ */
+const item = (skuName: string | null, productName: string | null = 'Canonical') =>
+  ({ productName, sku: skuName == null ? null : { skuName } }) as never;
 
 describe('summariseItems', () => {
   it('lists every name when they all fit', () => {
@@ -37,17 +44,11 @@ describe('summariseItems', () => {
 
   it('falls back to a count when nothing is named at all', () => {
     // Better an honest "2 items" than an empty line pretending to be a list.
-    const unnamed = [
-      { skuName: null, productName: null },
-      { skuName: null, productName: null },
-    ] as unknown as { skuName: string; productName: string }[];
-    expect(summariseItems(unnamed)).toBe('2 items');
+    expect(summariseItems([item(null, null), item(null, null)])).toBe('2 items');
   });
 
   it('says "1 item" in the singular', () => {
-    const one = [{ skuName: null, productName: null }] as unknown as
-      { skuName: string; productName: string }[];
-    expect(summariseItems(one)).toBe('1 item');
+    expect(summariseItems([item(null, null)])).toBe('1 item');
   });
 });
 

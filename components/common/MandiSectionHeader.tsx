@@ -1,11 +1,23 @@
 import React from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, IconSize, Spacing } from '@/theme';
+import { Colors, IconSize, Radius, Spacing } from '@/theme';
 import { MandiText } from './MandiText';
+import { toneColors, type StatusTone } from './MandiStatusChip';
 
 interface MandiSectionHeaderProps {
   title: string;
+  /**
+   * A glyph for the section, in a tinted disc before the title.
+   *
+   * <p>Colour is the point, but not on its own: the icon is what a colour-blind
+   * reader gets instead, which is the same bargain §23A.48 makes for status
+   * chips. A tinted disc rather than a bare glyph so the colour has enough area
+   * to register at this size.
+   */
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Which tone tints it. Defaults to neutral, which reads as no tint at all. */
+  tone?: StatusTone;
   /**
    * How many things are in the section.
    *
@@ -38,6 +50,8 @@ interface MandiSectionHeaderProps {
  */
 export function MandiSectionHeader({
   title,
+  icon,
+  tone = 'neutral',
   count,
   subtitle,
   actionLabel,
@@ -46,16 +60,25 @@ export function MandiSectionHeader({
   style,
   testID,
 }: MandiSectionHeaderProps) {
+  const palette = toneColors(tone);
+
   return (
     <View style={[styles.row, style]} testID={testID}>
+      {icon != null && (
+        <View style={[styles.glyph, { backgroundColor: palette.bg }]}>
+          <Ionicons name={icon} size={IconSize.sm} color={palette.fg} />
+        </View>
+      )}
       <View style={styles.titles}>
+        {/* Primary, not secondary: it is the heading for everything below it,
+            and a grey heading over black cards reads as a caption for them. */}
         <MandiText
           variant="sectionTitle"
-          color={Colors.textSecondary}
+          color={Colors.textPrimary}
           accessibilityRole="header"
         >
           {title}
-          {count != null && count > 0 ? `  ${count}` : ''}
+          {count != null && count > 0 ? ` (${count})` : ''}
         </MandiText>
         {subtitle != null && (
           <MandiText variant="caption" muted>
@@ -85,13 +108,32 @@ export function MandiSectionHeader({
 }
 
 const styles = StyleSheet.create({
+  glyph: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingBottom: Spacing.md,
+    // A band rather than bare text on the page. The cards below each carry
+    // their own surface, so an unbacked heading floated between them and read
+    // as a gap; giving it ground of its own makes it the lid on the group.
+    //
+    // Sunken rather than raised: it sits behind the cards in the stack, not
+    // alongside them, and a white heading over white cards states nothing.
+    backgroundColor: Colors.surfaceSunken,
+    borderRadius: Radius.md,
+    // No horizontal margin: the screen already insets its content to the
+    // gutter, and adding it again here set the band inside the cards it heads —
+    // a lid narrower than the box it sits on.
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   titles: { flex: 1, gap: 2 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 2 },

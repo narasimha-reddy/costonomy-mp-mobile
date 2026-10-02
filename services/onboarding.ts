@@ -44,8 +44,9 @@ export interface CreateSupplierInput {
   legalName: string;
   displayName: string;
   gstin?: string;
-  contactName?: string;
-  contactPhone?: string;
+  /** Required. The first store copies both as its own starting point. D-097. */
+  contactName: string;
+  contactPhone: string;
   contactEmail?: string;
   firstStore: {
     name: string;
@@ -55,8 +56,9 @@ export interface CreateSupplierInput {
     pincode?: string;
     latitude?: string;
     longitude?: string;
-    contactName?: string;
-    contactPhone?: string;
+    /** Required, and its own answer: a branch is answered by whoever is on it. */
+    contactName: string;
+    contactPhone: string;
     responseSlaSeconds?: number;
     preparationMinutes?: number;
   };

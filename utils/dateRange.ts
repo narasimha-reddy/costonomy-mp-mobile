@@ -97,10 +97,78 @@ const ORDINALS: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd', 21: 'st', 
  * you wanted to know.
  */
 export function formatMoment(iso: string | null | undefined, now = new Date()): string {
-  if (!iso) return '—';
-  const when = new Date(iso);
-  if (Number.isNaN(when.getTime())) return '—';
+  const when = parseMoment(iso);
+  return when == null ? '—' : `${absolute(when)} (${relative(when, now)})`;
+}
 
+/** A day, in milliseconds. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The same, but the relative half only while it still earns its place.
+ *
+ * <p>"2 hrs ago" answers the question you actually have about something that
+ * happened today. "3 months ago" does not: by then the date itself is the
+ * useful fact, and the parenthetical is noise on every row that carries it.
+ *
+ * <p>So it appears within a day and disappears after — which also stops a list
+ * of old records repeating a phrase that says nothing new about any of them.
+ */
+export function formatMomentWithRecency(
+  iso: string | null | undefined,
+  now = new Date(),
+): string {
+  const when = parseMoment(iso);
+  if (when == null) return '—';
+
+  const elapsed = now.getTime() - when.getTime();
+  // Future timestamps get the relative part too: a clock a few seconds ahead
+  // reads "just now", which is better than silently dropping the phrase.
+  const recent = elapsed < DAY_MS;
+
+  return recent ? `${absolute(when)} (${relative(when, now)})` : absolute(when);
+}
+
+/**
+ * How long ago while that is the useful fact, and the date once it is not.
+ *
+ * <p>The inverse of {@link formatMomentWithRecency}, and the right way round for
+ * a card: on something from this morning "20 mins ago" is what you want and the
+ * date is clutter, while on something from last month the age is vague — "23
+ * days ago" makes you count backwards — and the date is what you would quote.
+ *
+ * <p>The two exist together because a list and a detail screen want opposite
+ * halves first, not because either is a fallback for the other.
+ */
+export function formatAgeOrMoment(
+  iso: string | null | undefined,
+  now = new Date(),
+): string {
+  const when = parseMoment(iso);
+  if (when == null) return '—';
+
+  const elapsed = now.getTime() - when.getTime();
+  return elapsed < DAY_MS ? relative(when, now) : absolute(when);
+}
+
+/**
+ * A moment still to come — a deadline — without a relative part: `relative`
+ * counts backwards and reads anything in the future as "just now", which on a
+ * deadline two days away says the opposite of the truth.
+ */
+export function formatDeadline(iso: string | null | undefined): string {
+  const when = parseMoment(iso);
+  return when == null ? '—' : absolute(when);
+}
+
+function parseMoment(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  const when = new Date(iso);
+  return Number.isNaN(when.getTime()) ? null : when;
+}
+
+/** `15th Sep 2026 at 7:34 PM`. */
+function absolute(when: Date): string {
   const day = when.getDate();
   const month = MONTHS[when.getMonth()];
   const suffix = ORDINALS[day] ?? 'th';
@@ -113,9 +181,8 @@ export function formatMoment(iso: string | null | undefined, now = new Date()): 
   const hour = hours24 % 12 === 0 ? 12 : hours24 % 12;
   const minute = String(when.getMinutes()).padStart(2, '0');
   const meridiem = hours24 < 12 ? 'AM' : 'PM';
-  const time = `${hour}:${minute} ${meridiem}`;
 
-  return `${day}${suffix} ${month} ${when.getFullYear()} at ${time} (${relative(when, now)})`;
+  return `${day}${suffix} ${month} ${when.getFullYear()} at ${hour}:${minute} ${meridiem}`;
 }
 
 /** Just the "(10 mins ago)" part, for places with no room for the rest. */

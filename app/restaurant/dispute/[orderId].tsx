@@ -7,6 +7,7 @@ import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder, newIdempotencyKey } from '@/services/procurement';
 import { createDispute, fetchDisputes } from '@/services/trust';
 import type { DisputeCategory } from '@/models/trust';
+import { DISPUTE_CATEGORIES } from '@/lib/disputes/categories';
 import {
   MandiButton,
   MandiCard,
@@ -28,15 +29,7 @@ import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'REST-DISPUTE-01';
 
-const CATEGORIES: { key: DisputeCategory; label: string }[] = [
-  { key: 'SHORT_QUANTITY', label: 'Short quantity' },
-  { key: 'DAMAGED', label: 'Damaged' },
-  { key: 'WRONG_PRODUCT', label: 'Wrong product' },
-  { key: 'EXPIRED', label: 'Expired stock' },
-  { key: 'QUALITY', label: 'Quality' },
-  { key: 'INCORRECT_INVOICE', label: 'Invoice is wrong' },
-  { key: 'OTHER', label: 'Something else' },
-];
+const CATEGORIES = DISPUTE_CATEGORIES;
 
 type Step = 'category' | 'items' | 'detail';
 
@@ -103,7 +96,8 @@ export default function DisputeScreen() {
       track('dispute_raised', { screen: SCREEN, entityId: orderId }, { category });
       toast.show(`Dispute ${dispute.disputeNumber} raised`, 'success');
       void existing.refetch();
-      router.replace('/restaurant/(tabs)/orders');
+      // To the dispute itself, where it is followed and money can be asked for (D-104).
+      router.replace(`/restaurant/disputes/${dispute.id}`);
     },
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not raise that.', 'error'),
@@ -261,7 +255,7 @@ export default function DisputeScreen() {
     return (
       <MandiStickyBar>
         <MandiButton
-          label="Raise dispute"
+          label="Raise Dispute"
           size="lg"
           disabled={description.trim().length === 0}
           loading={submit.isPending}

@@ -81,6 +81,21 @@ export default function NewSkuScreen() {
   const [measureUnit, setMeasureUnit] = useState('GM');
   const [imageUrl, setImageUrl] = useState('');
 
+  /**
+   * The optional detail. D-096.
+   *
+   * <p>All of it can be left blank. A listing with none of it behaves exactly
+   * as it did before the detail page existed, which is why none of it gates
+   * saving.
+   */
+  const [description, setDescription] = useState('');
+  const [lengthCm, setLengthCm] = useState('');
+  const [widthCm, setWidthCm] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [weightGrams, setWeightGrams] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [gallery, setGallery] = useState<string[]>([]);
+
   const units = useQuery({
     queryKey: ['units'],
     queryFn: () => fetchUnits(accessToken as string),
@@ -109,13 +124,19 @@ export default function NewSkuScreen() {
     enabled: storeId != null && accessToken != null,
   });
 
-  /** canonicalProductId → the SKU this store already has for it. */
-  const alreadyListed = useMemo(() => {
-    const map = new Map<number, number>();
+  /**
+   * canonicalProductId → how many SKUs this store already lists under it.
+   *
+   * <p>A count rather than "the one SKU", because there is no longer one: a
+   * supplier may list the same product in several packs, and the row says how
+   * many they have rather than whether they have any.
+   */
+  const skuCounts = useMemo(() => {
+    const counts = new Map<number, number>();
     (listed.data ?? []).forEach((sku) => {
-      if (!map.has(sku.canonicalProductId)) map.set(sku.canonicalProductId, sku.id);
+      counts.set(sku.canonicalProductId, (counts.get(sku.canonicalProductId) ?? 0) + 1);
     });
-    return map;
+    return counts;
   }, [listed.data]);
 
   const visible = useMemo(() => {
@@ -148,13 +169,16 @@ export default function NewSkuScreen() {
     );
   }, [visible, categoryId, categories.data]);
 
+  /**
+   * Start a listing for this product.
+   *
+   * <p><b>Already listing it is not a reason to stop.</b> This used to bounce
+   * to the existing SKU, which made one listing per product a rule the screen
+   * enforced rather than one anybody decided — and a supplier selling paneer in
+   * a 200 g tub and a 5 kg block has two things to sell. The count on the row
+   * says how many they already have; the rest of the form is the same.
+   */
   function choose(chosen: Product) {
-    const existing = alreadyListed.get(chosen.id);
-    if (existing != null) {
-      track('sku_open_existing', { screen: SCREEN, entityId: existing });
-      router.replace(`/supplier/catalog/${existing}`);
-      return;
-    }
     track('sku_product_chosen', { screen: SCREEN, entityId: chosen.id });
     setProduct(chosen);
     setName(chosen.name);
@@ -184,6 +208,13 @@ export default function NewSkuScreen() {
         sellingPrice: sellingPrice.trim(),
         gstRate,
         imageUrl: imageUrl.trim() || undefined,
+        description: description.trim() || undefined,
+        lengthCm: lengthCm.trim() || undefined,
+        widthCm: widthCm.trim() || undefined,
+        heightCm: heightCm.trim() || undefined,
+        weightGrams: weightGrams.trim() || undefined,
+        youtubeUrl: youtubeUrl.trim() || undefined,
+        images: gallery.length > 0 ? gallery : undefined,
         availability: 'AVAILABLE',
       }),
     onSuccess: (sku) => {
@@ -232,7 +263,7 @@ export default function NewSkuScreen() {
               </MandiText>
             </View>
             <MandiButton
-              label="Add to catalog"
+              label="Add To Catalog"
               size="lg"
               disabled={!canSave}
               loading={create.isPending}
@@ -294,7 +325,7 @@ export default function NewSkuScreen() {
                   <ProductRow
                     key={item.id}
                     product={item}
-                    listed={alreadyListed.has(item.id)}
+                    skuCount={skuCounts.get(item.id) ?? 0}
                     onPress={() => choose(item)}
                   />
                 ))}
@@ -305,7 +336,7 @@ export default function NewSkuScreen() {
               <ProductRow
                 key={item.id}
                 product={item}
-                listed={alreadyListed.has(item.id)}
+                skuCount={skuCounts.get(item.id) ?? 0}
                 onPress={() => choose(item)}
               />
             ))
@@ -437,6 +468,104 @@ export default function NewSkuScreen() {
             }
           />
 
+          {/* Everything below is optional and none of it gates saving. D-096.
+              It is what a kitchen reads on the pack's own page when they are
+              deciding rather than comparing. */}
+          <MandiFormField
+            label="Description (optional)"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="What it is, how it is packed, how to store it"
+            multiline
+            hint="Restaurants see this on the product page."
+          />
+
+          <View style={styles.pair}>
+            <MandiFormField
+              label="Length (cm)"
+              value={lengthCm}
+              onChangeText={(text) => setLengthCm(text.replace(/[^\d.]/g, ''))}
+              keyboardType="decimal-pad"
+              placeholder="40"
+              style={styles.flex}
+            />
+            <MandiFormField
+              label="Width (cm)"
+              value={widthCm}
+              onChangeText={(text) => setWidthCm(text.replace(/[^\d.]/g, ''))}
+              keyboardType="decimal-pad"
+              placeholder="25"
+              style={styles.flex}
+            />
+          </View>
+
+          <View style={styles.pair}>
+            <MandiFormField
+              label="Height (cm)"
+              value={heightCm}
+              onChangeText={(text) => setHeightCm(text.replace(/[^\d.]/g, ''))}
+              keyboardType="decimal-pad"
+              placeholder="15"
+              style={styles.flex}
+            />
+            <MandiFormField
+              label="Weight (g)"
+              value={weightGrams}
+              onChangeText={(text) => setWeightGrams(text.replace(/[^\d.]/g, ''))}
+              keyboardType="decimal-pad"
+              placeholder="25000"
+              style={styles.flex}
+              hint="Used for delivery."
+            />
+          </View>
+
+          <MandiFormField
+            label="YouTube link (optional)"
+            value={youtubeUrl}
+            onChangeText={setYoutubeUrl}
+            placeholder="https://youtube.com/watch?v=..."
+            autoCapitalize="none"
+            hint="Paste a link. Uploading video isn't supported yet."
+          />
+
+          <View style={styles.gallery}>
+            <MandiText variant="bodyEmphasis">More photos (optional)</MandiText>
+            <MandiText variant="caption" color={Colors.textSecondary}>
+              The photo above stays the one restaurants see in lists. These are
+              the rest — angles, the label, what is inside.
+            </MandiText>
+
+            {gallery.map((url, index) => (
+              <View key={`${url}-${index}`} style={styles.galleryRow}>
+                <ProductThumb uri={url} size={44} radius={Radius.sm} />
+                <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+                  Photo {index + 2}
+                </MandiText>
+                <Pressable
+                  onPress={() => setGallery(gallery.filter((_, at) => at !== index))}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove photo ${index + 2}`}
+                  hitSlop={8}
+                >
+                  <Ionicons name="close" size={18} color={Colors.textTertiary} />
+                </Pressable>
+              </View>
+            ))}
+
+            <MandiImagePicker
+              label=""
+              value={null}
+              onChange={() => undefined}
+              onUpload={async (file) => {
+                const uploaded = await uploadSkuImage(
+                  accessToken as string, storeId as number, file);
+                setGallery((current) => [...current, uploaded.url]);
+                return uploaded.url;
+              }}
+              placeholderHint="Add another photo"
+            />
+          </View>
+
         </>
       )}
     </MandiScreen>
@@ -445,11 +574,12 @@ export default function NewSkuScreen() {
 
 function ProductRow({
   product,
-  listed,
+  skuCount,
   onPress,
 }: {
   product: Product;
-  listed: boolean;
+  /** How many SKUs this store already lists under this product. */
+  skuCount: number;
   onPress: () => void;
 }) {
   const face = categoryFace(product.categoryName);
@@ -458,8 +588,8 @@ function ProductRow({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={
-        listed
-          ? `${product.name}, already in your catalog. Edit it.`
+        skuCount > 0
+          ? `List another pack of ${product.name}. You already list ${skuCount}.`
           : `List ${product.name}`
       }
       style={({ pressed }) => [styles.productRow, pressed && styles.pressed]}
@@ -480,16 +610,25 @@ function ProductRow({
       <View style={styles.flex}>
         <MandiText variant="bodyEmphasis">{product.name}</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>
-          {product.baseUnit ? `Sold per ${product.baseUnit}` : ''}
-          {product.offerCount ? ` · ${product.offerCount} listing this` : ''}
+          {/* The unit, and nothing else.
+              <p>"3 listing this" was a count of suppliers across the
+              marketplace, which tells a supplier in a city of hundreds
+              nothing about their own decision. */}
+          {product.baseUnit ?? ''}
         </MandiText>
       </View>
 
       <View style={styles.trailing}>
-        {listed ? (
+        {/* How many of their own listings sit under this product.
+            <p>"In catalog" was a yes/no from when one product meant one
+            listing. Now that a supplier can list a 200 g tub and a 5 kg block
+            under the same product, the useful fact is how many they already
+            have — and zero of them says "new" without a second word for it. */}
+        {skuCount > 0 ? (
           <View style={styles.listedPill}>
-            <Ionicons name="checkmark" size={12} color={Colors.success} />
-            <MandiText variant="caption" color={Colors.success}>In catalog</MandiText>
+            <MandiText variant="caption" color={Colors.success}>
+              {skuCount === 1 ? '1 SKU' : `${skuCount} SKUs`}
+            </MandiText>
           </View>
         ) : product.lowestPrice != null ? (
           <MandiText variant="caption" color={Colors.textTertiary}>
@@ -519,6 +658,9 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  pair: { flexDirection: 'row', gap: Spacing.md },
+  gallery: { gap: Spacing.sm },
+  galleryRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   intro: { gap: Spacing.sm },
   row: { flexDirection: 'row', gap: Spacing.md },
   group: { gap: Spacing.sm },

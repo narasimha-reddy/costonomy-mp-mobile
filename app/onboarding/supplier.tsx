@@ -29,6 +29,16 @@ const STEPS = ['Your business', 'Your first store', 'Verification'];
 const GSTIN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 /**
+ * What counts as a contact number, matching the server's rule. D-097.
+ *
+ * <p>Loose on purpose: digits, spaces, dashes and brackets, seven to fifteen
+ * digits. This is a number somebody dials, not an identity — the strict rule
+ * belongs on the login phone, and applying it here would reject the landline
+ * with an STD code that a warehouse counter actually answers.
+ */
+const PHONE = /^[+]?[0-9 ()-]{7,20}$/;
+
+/**
  * SUP-ONB-01 and SUP-ONB-02. Doc 05 §23.
  *
  * <p><b>Verification is part of registration, not a task for later.</b> A
@@ -62,13 +72,42 @@ export default function SupplierOnboardingScreen() {
   const [pincode, setPincode] = useState('');
   const [gstin, setGstin] = useState('');
 
+  /**
+   * Who to ring, at the business and at the branch. D-097.
+   *
+   * <p>The business contact seeds the store's, and the store's is held
+   * separately from the moment it is touched: a supplier with three branches
+   * has three people on three counters, and copying is a convenience rather
+   * than a claim that they are the same person.
+   *
+   * <p>The signed-in phone is the starting point for both, because it is the
+   * number we already know reaches them. Registration used to use it silently
+   * for both and never ask for a name, which is how every seeded store ended
+   * up with a number and nobody to ask for.
+   */
+  const [contactName, setContactName] = useState('');
+  // Null means untouched, so the signed-in number can arrive late. Seeding
+  // `useState` with it captured whatever `me` was on the first render — which
+  // is null while the session is still loading, leaving the field empty and
+  // the step permanently invalid.
+  const [contactPhone, setContactPhone] = useState<string | null>(null);
+  const [storeContactName, setStoreContactName] = useState<string | null>(null);
+  const [storeContactPhone, setStoreContactPhone] = useState<string | null>(null);
+
+  // Null means "not edited", so the copy keeps following the business contact
+  // until somebody types over it.
+  const contactPhoneValue = contactPhone ?? me?.user.phone ?? '';
+  const storeContactNameValue = storeContactName ?? contactName;
+  const storeContactPhoneValue = storeContactPhone ?? contactPhoneValue;
+
   const register = useMutation({
     mutationFn: async () => {
       const supplier = await createSupplier(accessToken as string, {
         legalName: legalName.trim() || displayName.trim(),
         displayName: displayName.trim(),
         gstin: gstin.trim(),
-        contactPhone: me?.user.phone ?? undefined,
+        contactName: contactName.trim(),
+        contactPhone: contactPhoneValue.trim(),
         firstStore: {
           name: storeName.trim(),
           addressLine1: addressLine1.trim(),
@@ -77,7 +116,8 @@ export default function SupplierOnboardingScreen() {
           pincode: pincode.trim() || undefined,
           latitude: pin?.latitude,
           longitude: pin?.longitude,
-          contactPhone: me?.user.phone ?? undefined,
+          contactName: storeContactNameValue.trim(),
+          contactPhone: storeContactPhoneValue.trim(),
         },
       });
 
@@ -115,15 +155,22 @@ export default function SupplierOnboardingScreen() {
   });
 
   const stepValid = useMemo(() => {
-    if (step === 0) return displayName.trim().length > 1;
+    if (step === 0) {
+      return displayName.trim().length > 1
+        && contactName.trim().length > 1
+        && PHONE.test(contactPhoneValue.trim());
+    }
     if (step === 1) {
       return storeName.trim().length > 1
         && addressLine1.trim().length > 2
         && city.trim().length > 1
-        && state.trim().length > 1;
+        && state.trim().length > 1
+        && storeContactNameValue.trim().length > 1
+        && PHONE.test(storeContactPhoneValue.trim());
     }
     return GSTIN.test(gstin.trim());
-  }, [step, displayName, storeName, addressLine1, city, state, gstin]);
+  }, [step, displayName, contactName, contactPhoneValue, storeName, addressLine1, city, state,
+    storeContactNameValue, storeContactPhoneValue, gstin]);
 
   const gstinTouched = gstin.trim().length > 0;
 
@@ -166,6 +213,23 @@ export default function SupplierOnboardingScreen() {
             onChangeText={setLegalName}
             placeholder="Metro Fresh Supplies Pvt Ltd"
             hint="Used on invoices and for verification. Defaults to the name above."
+          />
+
+          <MandiFormField
+            label="Contact name"
+            value={contactName}
+            onChangeText={setContactName}
+            placeholder="Ramesh Kumar"
+            required
+            hint="Who we and our operations team ask for."
+          />
+          <MandiFormField
+            label="Contact number"
+            value={contactPhoneValue}
+            onChangeText={setContactPhone}
+            placeholder="+91 98765 43210"
+            keyboardType="phone-pad"
+            required
           />
         </>
       )}
@@ -218,6 +282,25 @@ export default function SupplierOnboardingScreen() {
             onChangeText={(text) => setPincode(text.replace(/\D/g, '').slice(0, 6))}
             placeholder="560034"
             keyboardType="number-pad"
+          />
+
+          {/* Copied from the business, and editable. A restaurant chasing a
+              delivery rings the branch, not head office. */}
+          <MandiFormField
+            label="Contact name at this store"
+            value={storeContactNameValue}
+            onChangeText={setStoreContactName}
+            placeholder="Ramesh Kumar"
+            required
+            hint="Copied from your business contact. Change it if someone else runs this store."
+          />
+          <MandiFormField
+            label="Contact number at this store"
+            value={storeContactPhoneValue}
+            onChangeText={setStoreContactPhone}
+            placeholder="+91 98765 43210"
+            keyboardType="phone-pad"
+            required
           />
 
           {/* The map is part of registering: a store pinned wrong here is one

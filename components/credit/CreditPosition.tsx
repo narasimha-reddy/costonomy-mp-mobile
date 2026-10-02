@@ -42,6 +42,18 @@ export function CreditPosition({
 }) {
   const isOverdue = Number(overdue) > 0;
 
+  /**
+   * How much of the limit is spoken for.
+   *
+   * <p>The only derived figure here, and what it derives is a width — every
+   * rupee on this panel is the server's, `available` above all (§23A.24). The
+   * bar repeats what the numbers already say rather than replacing them, so a
+   * reader who cannot judge a length loses nothing (§23A.48).
+   */
+  const limit = Number(approvedLimit);
+  const committed = Number(reserved) + Number(utilized);
+  const fraction = limit > 0 ? Math.min(1, Math.max(0, committed / limit)) : 0;
+
   return (
     <View style={[styles.panel, compact && styles.panelCompact]}>
       <View style={styles.headline}>
@@ -51,6 +63,12 @@ export function CreditPosition({
           of {formatMoney(approvedLimit)} approved
         </MandiText>
       </View>
+
+      {limit > 0 && (
+        <View style={styles.track}>
+          <View style={[styles.fill, { width: `${fraction * 100}%` }]} />
+        </View>
+      )}
 
       <View style={styles.grid}>
         <Cell
@@ -100,6 +118,13 @@ function Cell({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 const styles = StyleSheet.create({
+  track: {
+    height: 6,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceSunken,
+    overflow: 'hidden',
+  },
+  fill: { height: 6, borderRadius: Radius.full, backgroundColor: Colors.credit },
   panel: {
     gap: Spacing.md,
     padding: Spacing.cardPadding,

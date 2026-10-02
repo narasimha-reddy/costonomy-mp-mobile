@@ -5,22 +5,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { useCart } from '@/hooks/useCart';
+import { useRequestBasket } from '@/hooks/useRequestBasket';
 import { fetchProduct, fetchRecommendations } from '@/services/catalog';
-import { addCartItem, removeCartItem, updateCartItem } from '@/services/procurement';
-import type { ProcurementItem } from '@/models/procurement';
+import { addIntentItem, removeIntentItem, updateIntentItem } from '@/services/intent';
+import type { IntentItem } from '@/models/intent';
+import { draftsKey } from '@/lib/queryKeys';
 import { OfferCard } from '@/components/supplier/OfferCard';
+import { CartBar } from '@/components/restaurant/CartBar';
 import {
-  MandiButton,
   MandiEmptyState,
   MandiErrorState,
   MandiScreen,
   MandiSkeletonList,
   MandiText,
   useToast,
+  MandiSectionHeader,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
-import { formatMoney } from '@/utils/money';
 import { Colors, Spacing, TouchTarget } from '@/theme';
 
 /**
@@ -44,19 +45,14 @@ import { Colors, Spacing, TouchTarget } from '@/theme';
  * sides of the wire.
  */
 export default function ProductScreen() {
-  const { id, requirementItemId } = useLocalSearchParams<{
-    id: string;
-    /** Set when this purchase is sourcing a requirement. */
-    requirementItemId?: string;
-  }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const productId = Number(id);
-  const servingRequirement = Number(requirementItemId);
   const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
-  const { cart } = useCart();
+  const { basket, drafts } = useRequestBasket();
 
   const product = useQuery({
     // The outlet is in the key because it changes the answer: "3 suppliers" is
@@ -74,18 +70,18 @@ export default function ProductScreen() {
   });
 
   /**
-   * Cart lines by SKU.
+   * Request lines by SKU.
    *
-   * <p>A line records the SKU it was bought as rather than the offer, so that is
-   * what joins a card to what is already in the basket — and it is the right key
-   * anyway: the same SKU re-priced is still the same thing you are buying.
+   * <p>The SKU is the join, and now it is also what the line stores: a request
+   * carries no offer and no price, because what a thing costs is the supplier's
+   * answer rather than something the basket can know.
    */
   const inCart = useMemo(() => {
-    const map = new Map<number, ProcurementItem>();
-    cart?.supplierGroups.forEach((group) =>
-      group.items.forEach((item) => map.set(item.supplierSkuId, item)));
+    const map = new Map<number, IntentItem>();
+    drafts.forEach((draft) =>
+      draft.items.forEach((item) => map.set(item.supplierSkuId, item)));
     return map;
-  }, [cart]);
+  }, [drafts]);
 
   /**
    * What the stepper shows while the server catches up.
@@ -105,34 +101,29 @@ export default function ProductScreen() {
   }, []);
 
   const change = useMutation({
-    mutationFn: async ({ offerId, skuId, packs }: {
+    mutationFn: async ({ skuId, packs }: {
       offerId: number;
       skuId: number;
       packs: number;
     }) => {
       const line = inCart.get(skuId);
       if (line == null) {
-        return addCartItem(accessToken as string, outletId as number, {
-          supplierOfferId: offerId,
-          // Packs. The server prices `sellingPrice × quantity`, and
-          // `sellingPrice` is the price of one pack.
+        // The SKU decides which supplier, and therefore which request this
+        // lands on. Packs, because that is what is being asked for.
+        return addIntentItem(accessToken as string, outletId as number, {
+          supplierSkuId: skuId,
           quantity: String(packs),
-          // Links the line to the need it serves, so the accepted quantity
-          // credits back to the requirement and a shortfall stays sourceable
-          // (guardrail 14). Absent when someone is just shopping.
-          requirementItemId: Number.isFinite(servingRequirement)
-            ? servingRequirement : undefined,
         });
       }
       // Zero is not a quantity; it is the absence of the line.
       return packs <= 0
-        ? removeCartItem(accessToken as string, line.id)
-        : updateCartItem(accessToken as string, line.id, String(packs));
+        ? removeIntentItem(accessToken as string, line.id)
+        : updateIntentItem(accessToken as string, line.id, String(packs));
     },
     onSuccess: async (_data, variables) => {
       // Awaited, then released: dropping the local value before the cart has
       // refetched would flash the old quantity for a frame.
-      await queryClient.invalidateQueries({ queryKey: ['outlet', outletId, 'cart'] });
+      await queryClient.invalidateQueries({ queryKey: draftsKey(outletId) });
       setDesired((current) => {
         const next = { ...current };
         delete next[variables.skuId];
@@ -174,30 +165,29 @@ export default function ProductScreen() {
 
   const offers = recommendations.data?.offers ?? [];
 
-  const cartCount = cart?.supplierGroups.reduce((n, g) => n + g.items.length, 0) ?? 0;
+  const cartCount = drafts.reduce((n, draft) => n + draft.items.length, 0);
 
   return (
     <MandiScreen
       header={<Header title={product.data?.name} subtitle={product.data?.categoryName} />}
       footer={
         <CartBar
-          total={cart?.totalAmount}
           count={cartCount}
+          total={basket?.agreedTotal}
+          supplierCount={drafts.length}
           onPress={() => router.push('/restaurant/cart')}
         />
       }
     >
-      <View style={styles.intro}>
-        <MandiText variant="sectionTitle" color={Colors.textSecondary} accessibilityRole="header">
-          COMPARE SUPPLIERS{offers.length ? `  ${offers.length}` : ''}
-        </MandiText>
-        <View style={styles.note}>
-          <Ionicons name="information-circle-outline" size={14} color={Colors.textTertiary} />
-          <MandiText variant="caption" color={Colors.textTertiary} style={styles.flex}>
-            Prices exclude delivery, quoted once a courier is assigned.
-          </MandiText>
-        </View>
-      </View>
+      {/* The shared header, rather than a hand-rolled one. It was the last
+          uppercase heading in the app, and it sat outside the treatment every
+          other section got — same words, different shape, on a screen a kitchen
+          reaches from those sections. */}
+      <MandiSectionHeader
+        title="Compare Suppliers"
+        count={offers.length}
+        subtitle="Prices exclude delivery, which is quoted when you order."
+      />
 
       {recommendations.isPending ? (
         <MandiSkeletonList count={3} />
@@ -229,11 +219,22 @@ export default function ProductScreen() {
               // must never re-sort — doing so would quietly substitute its own
               // ranking for the one doc 07 specifies and tests.
               recommended={index === 0}
-              quantity={desired[offer.supplierSkuId] ?? (line ? Number(line.quantity) : 0)}
-              lineTotal={line?.lineTotal}
+              quantity={desired[offer.supplierSkuId] ?? (line ? Number(line.requestedQuantity) : 0)}
+              // `agreedLineTotal`, not `lineTotal`: the second is the
+              // supplier's answer and is null on a draft, so the figure never
+              // appeared. Both are the server's — nothing here multiplies.
+              lineTotal={line?.agreedLineTotal}
               busy={change.isPending && change.variables?.offerId === offer.offerId}
               onQuantity={(packs) =>
                 queueChange(offer.offerId, offer.supplierSkuId, packs)}
+              // Comparing suppliers often ends in wanting to see one properly —
+              // what else they carry, how far off they are, whether there is
+              // credit. The seller panel is the way through.
+              onOpenSupplier={() =>
+                router.push(`/restaurant/supplier/${offer.supplierStoreId}`)}
+              onOpenSku={() => router.push(`/restaurant/sku/${offer.supplierSkuId}`)}
+              onOpenPack={(supplierSkuId) =>
+                router.push(`/restaurant/sku/${supplierSkuId}`)}
             />
           );
         })
@@ -249,34 +250,15 @@ export default function ProductScreen() {
  * the cart holds lines from other products too, and adding up the visible ones
  * would quietly contradict the cart it links to.
  */
-function CartBar({
-  total,
-  count,
-  onPress,
-}: {
-  total?: string;
-  count: number;
-  onPress: () => void;
-}) {
-  return (
-    <View style={styles.cartBar}>
-      <View style={styles.cartTotals}>
-        <MandiText variant="caption" color={Colors.textSecondary}>
-          {count === 0 ? 'Cart is empty' : `${count} item${count === 1 ? '' : 's'} in cart`}
-        </MandiText>
-        {count > 0 && total != null && (
-          <MandiText variant="price">{formatMoney(total)}</MandiText>
-        )}
-      </View>
-      <MandiButton
-        label="Go to cart"
-        variant={count > 0 ? 'primary' : 'secondary'}
-        onPress={onPress}
-        fullWidth={false}
-      />
-    </View>
-  );
-}
+/**
+ * What is waiting to be sent, and the way to it.
+ *
+ * <p><b>No total, deliberately.</b> This bar used to carry the cart's value, and
+ * there is no equivalent here: a request holds no prices, so any figure would be
+ * one the app invented. What it says instead is how many suppliers are about to
+ * be asked, which is the thing that actually surprises people — three items can
+ * be three separate conversations.
+ */
 
 function Header({ title, subtitle }: { title?: string; subtitle?: string | null }) {
   const router = useRouter();
@@ -317,19 +299,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: { flex: 1, gap: 1 },
-  intro: { gap: Spacing.xs },
-  note: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   flex: { flex: 1 },
-  cartBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingVertical: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
-  cartTotals: { flex: 1, gap: 1 },
 });

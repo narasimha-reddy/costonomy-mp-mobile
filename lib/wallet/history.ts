@@ -11,6 +11,7 @@ import type { StatusTone } from '@/components/common/MandiStatusChip';
 import { entryLabel, withdrawalProgress } from '@/lib/wallet/entryCopy';
 import { formatMoney } from '@/utils/money';
 import { relative } from '@/utils/dateRange';
+import { toScaled, scaledToAmount } from '@/lib/wallet/amount';
 
 /** India's offset from UTC. There is no daylight saving to get wrong. */
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
@@ -90,6 +91,53 @@ export function monthSpentLabel(
   if (total == null || total.spent == null || total.spent === '') return null;
   const shown = formatMoney(total.spent, true);
   return shown === '—' ? null : shown;
+}
+
+const RUPEES = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+/** "₹49,000", "₹1,23,456", "₹115.5": Indian grouping, paise only when there are some, trailing zero trimmed. */
+export function formatRupees(amount: string | number | null | undefined): string {
+  if (amount == null || amount === '') return '—';
+  const n = Number(amount);
+  return Number.isFinite(n) ? `₹${RUPEES.format(Math.abs(n))}` : '—';
+}
+
+export interface MonthNet {
+  /** "+ ₹48,876" when the month ended ahead, "₹0" when level, "− ₹73.31" (a real minus sign) when behind. */
+  label: string;
+  /** True only when ahead: the band shows it green. Behind and level are in the normal ink. */
+  credit: boolean;
+  /** The month's money in and money out, formatted ("₹3,594.38"), for the month's detail sheet. */
+  moneyIn: string;
+  moneyOut: string;
+}
+
+/**
+ * What a month bar says on the right: the month's net movement.
+ *
+ * <p>Both figures are the server's month totals and nothing here estimates anything: this
+ * only takes one from the other, in exact ten-thousandths so cents never drift, to say whether
+ * the month put money in or took it out. Null when there is no total to show, or the list is
+ * narrowed by something the server did not apply (`narrowed`: instrument, search) — a figure
+ * would then be for different rows than the ones beneath it.
+ */
+export function monthNet(
+  month: string,
+  totals: WalletMonthTotal[],
+  narrowed = false,
+): MonthNet | null {
+  if (narrowed) return null;
+  const total = totals.find((t) => t.month === month);
+  if (total == null) return null;
+  const added = toScaled(total.added ?? '', 4);
+  const spent = toScaled(total.spent ?? '', 4);
+  if (added == null || spent == null) return null;
+  const net = added - spent;
+  const rupees = formatRupees(scaledToAmount(Math.abs(net)));
+  const figures = { moneyIn: formatRupees(scaledToAmount(added)), moneyOut: formatRupees(scaledToAmount(spent)) };
+  if (net > 0) return { label: `+ ${rupees}`, credit: true, ...figures };
+  if (net < 0) return { label: `\u2212 ${rupees}`, credit: false, ...figures };
+  return { label: rupees, credit: false, ...figures };
 }
 
 /** A row's identity: the server's `key`, else its id. */

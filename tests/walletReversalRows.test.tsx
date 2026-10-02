@@ -23,7 +23,9 @@ describe('history rows and the withdrawal copy', () => {
     expect(view.sign).toBe('+');
     expect(view.tone).toBe('credit');
     render(<TransactionRow entry={entry({ kind: 'WITHDRAWAL_REVERSAL', direction: 'CREDIT' })} now={NOW} />);
-    expect(screen.getByText('+₹500.00')).toBeTruthy();
+    expect(screen.getByText('Received from')).toBeTruthy();
+    expect(screen.getByText('Returned withdrawal')).toBeTruthy();
+    expect(screen.getByText('+ ₹500')).toBeTruthy();
   });
 
   it('each withdrawal refund status reads the same in a history row as in the wallet copy', () => {

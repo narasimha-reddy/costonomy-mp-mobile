@@ -32,6 +32,7 @@ import { PopularSuppliersCarousel } from '@/components/restaurant/PopularSupplie
 import type { Intent } from '@/models/intent';
 import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
+import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
 import { Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
@@ -107,6 +108,7 @@ function QuickActions({ outletId }: { outletId: number | null }) {
       key: 'quickscan',
       label: 'Quick Scan',
       icon: 'qr-code-outline',
+      renderIcon: (size) => <ScanQrIcon size={size} variant="white" />,
       accessibilityLabel: 'Quick Scan. Pay a shop by scanning its QR.',
       visible: config.data?.enabled === true,
       onPress: () => {

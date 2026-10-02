@@ -17,6 +17,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Wallet & QuickScan Payments]
 
+### [feat/scan-screen-and-history-redesign] - Full-page QuickScan camera & History redesign
+#### Changed
+- QuickScan (`app/restaurant/quickscan/index.tsx`) is now a full-page camera: dimmed overlay, rounded window with orange corner brackets, round Upload QR and Torch buttons, help sheet, and an "Or enter a UPI ID" link that opens the typed-ID sheet.
+- Wallet History (`app/restaurant/wallet/history.tsx`) is redesigned: My Statements pill, tinted search box with the filter button, sticky month bands with the month's net, and new rows (avatar, label, title, "4 hours ago", amount, "Debited from wallet").
+- New QuickScan glyph (`components/icons/ScanQrIcon.tsx`) replaces the stock QR icon on Home, the wallet tip and the scan screen.
+#### Added
+- `theme/walletScreen.ts` tokens for the wallet screens, set in the app's Source Sans 3.
+- Tapping a month band on History opens a sheet with that month's money in, money out and net; a month that ended behind shows a minus sign.
+- Client-side History search (`lib/wallet/search.ts`) and relative-time helper (`lib/wallet/relativeTime.ts`).
+
 ### [PR #15] [feat/wallet-2-history-statements] - Wallet History & Statements (D-108)
 #### Added
 - Comprehensive wallet transaction history view in `app/restaurant/wallet.tsx`:

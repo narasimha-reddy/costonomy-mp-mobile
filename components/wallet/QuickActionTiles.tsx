@@ -9,12 +9,18 @@ import { Colors, Elevation, Radius, Spacing, TouchTarget } from '@/theme';
 export const MONEY_TRANSFER_COLUMNS = 4;
 
 const DISC = 64;
-const GLYPH = 32; // half the disc
+// Ionicons glyphs fill about 47 percent of their box at this size, as the QR glyph does.
+const GLYPH = 30;
 
 export interface MoneyAction {
   key: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  /**
+   * A custom glyph (an SVG) drawn instead of the Ionicons `icon`. It is given the DIAMETER of
+   * the circle it sits in and scales its own glyph (ScanQrIcon does).
+   */
+  renderIcon?: (circleDiameter: number) => React.ReactNode;
   onPress: () => void;
   /** False leaves the action out and the rest close up, in order. */
   visible: boolean;
@@ -54,7 +60,9 @@ export function QuickActionTiles({ actions }: QuickActionTilesProps) {
               style={({ pressed }) => [styles.column, pressed && styles.pressed]}
             >
               <View style={styles.disc}>
-                <Ionicons name={action.icon} size={GLYPH} color={Colors.white} />
+                {action.renderIcon != null
+                  ? action.renderIcon(DISC)
+                  : <Ionicons name={action.icon} size={GLYPH} color={Colors.white} />}
               </View>
               <MandiText variant="captionEmphasis" center style={styles.label}>
                 {action.label}

@@ -1,3 +1,4 @@
+/* global Buffer */
 // Minimal CDP driver: loads a page, reports console errors and rendered text,
 // and runs a scripted sequence of taps/typing.
 // Resolved from this file upward, so it finds the repo's own node_modules

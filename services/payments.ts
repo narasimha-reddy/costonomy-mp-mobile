@@ -1,16 +1,24 @@
 import { apiRequest } from '@/lib/api/client';
 import type { Money } from '@/utils/money';
 
+/**
+ * `PaymentDtos.PaymentResponse`. The fields this app reads; the server sends more.
+ *
+ * <p>`failureReason`, not `failureMessage` — the old name matched nothing the
+ * server sends, so a decline always fell back to generic copy.
+ */
 export interface Payment {
   id: number;
   supplierOrderId: number;
-  outletId: number;
   status: string;
-  amount: Money;
-  currency: string;
   provider: string;
+  authorizedAmount: Money;
+  capturedAmount: Money;
+  currency: string;
   failureCode: string | null;
-  failureMessage: string | null;
+  failureReason: string | null;
+  /** Whether the order may reach its supplier. The server's rule — do not infer it from `status`. */
+  fundsSecured: boolean;
 }
 
 export function fetchPayment(token: string, paymentId: number): Promise<Payment> {

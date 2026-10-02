@@ -43,8 +43,16 @@ function loadRazorpay(): Promise<RazorpayConstructor> {
     script.src = SCRIPT_URL;
     script.async = true;
     script.onload = () => {
-      if (window.Razorpay) resolve(window.Razorpay);
-      else reject(new CheckoutUnavailable('The payment window could not be loaded.'));
+      if (window.Razorpay) {
+        resolve(window.Razorpay);
+        return;
+      }
+      // Loaded but did not define Razorpay (a blocker, a bad response). Forget
+      // this attempt, or every later tap would get the same cached failure until
+      // the page was reloaded.
+      loading = null;
+      script.remove();
+      reject(new CheckoutUnavailable('The payment window could not be loaded.'));
     };
     script.onerror = () => {
       // Let the next attempt try again rather than caching the failure.

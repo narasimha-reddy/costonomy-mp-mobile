@@ -325,8 +325,11 @@ export default function OrderDetailScreen() {
     const receivable = order.status === 'DELIVERED'
       || (!carried && order.status === 'READY_FOR_PICKUP');
     const settled = order.status === 'COMPLETED';
+    // Not paid yet, and nothing else leads back to the pay screen: without this an
+    // order whose payment screen was closed or refreshed could not be paid (D-102).
+    const unpaid = order.status === 'DRAFT' && order.paymentMethod === 'PREPAID';
 
-    if (!trackable && !receivable && !settled) return undefined;
+    if (!trackable && !receivable && !settled && !unpaid) return undefined;
 
     return (
       <MandiStickyBar>
@@ -335,7 +338,7 @@ export default function OrderDetailScreen() {
             pay": by the time an order exists the money has moved. */}
         <View style={styles.barRow}>
           <MandiText variant="caption" color={Colors.textSecondary}>
-            You paid
+            {unpaid ? 'To pay' : 'You paid'}
           </MandiText>
           <MandiText variant="priceLarge">
             {formatMoney(settled ? order.acceptedAmount : order.totalAmount)}
@@ -343,6 +346,14 @@ export default function OrderDetailScreen() {
         </View>
 
         <View style={styles.barActions}>
+          {unpaid && (
+            <MandiButton
+              label="Pay Now"
+              size="lg"
+              style={styles.barAction}
+              onPress={() => router.push(`/restaurant/pay/${order.id}`)}
+            />
+          )}
           {settled && (
             <MandiButton
               label="Something Was Wrong"

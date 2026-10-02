@@ -169,9 +169,14 @@ export default function RequestDetailScreen() {
       // a toast saying "ordered" would be the app deciding something the backend
       // has not confirmed (guardrail 4).
       if (created.payment != null) {
-        // Handed over rather than re-fetched: the provider order id is minted
-        // once, at creation, and asking for it again would arrange funding twice.
+        // Handed over so the pay screen can open at once; it confirms with the
+        // server either way (D-102).
         queryClient.setQueryData(orderPaymentKey(created.supplierOrderId), created.payment);
+        router.replace(`/restaurant/pay/${created.supplierOrderId}`);
+      } else if (created.paymentMethod === 'PREPAID' && created.paymentStatus === 'PENDING') {
+        // Unpaid with no checkout in the response — an older server's "already
+        // ordered" answer. The pay screen asks for it rather than the order
+        // being left with no way to pay.
         router.replace(`/restaurant/pay/${created.supplierOrderId}`);
       } else {
         // Credit funds inside the creating transaction, so there is nothing to pay.
@@ -181,7 +186,14 @@ export default function RequestDetailScreen() {
     onError: (caught) => {
       // A refusal is final for that attempt, so trying again is a new one. A
       // network failure is not: the order may exist, and the same key finds it.
-      if (caught instanceof ApiError && caught.status < 500) orderKey.current = null;
+      //
+      // Two refusals are not final: "still in progress" means the first request
+      // is being handled under this very key, and a rate limit means try later.
+      // Minting a new key for either made the next tap a second order (D-102).
+      if (caught instanceof ApiError && caught.status < 500
+        && caught.code !== 'IDEMPOTENT_REQUEST_IN_PROGRESS' && caught.status !== 429) {
+        orderKey.current = null;
+      }
       toast.show(
         caught instanceof ApiError ? caught.message : 'Could not create that order.', 'error');
     },

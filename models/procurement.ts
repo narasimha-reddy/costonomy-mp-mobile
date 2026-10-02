@@ -264,7 +264,23 @@ export interface SupplierOrder {
   acceptedSubtotal: Money;
   acceptedGst: Money;
   paymentMethod: PaymentMethod | null;
+  /**
+   * Read live. Beyond the card and wallet statuses it may be RETURNING, RETURNED
+   * or RETURN_DELAYED (D-109), and an unknown value must render neutrally.
+   */
   paymentStatus: string | null;
+  /**
+   * How the money moved: card, upi, netbanking, wallet, emi, paylater. Null before
+   * payment and for wallet or credit orders, and absent from an older API. Wording only.
+   */
+  paymentInstrument?: string | null;
+  /**
+   * The cancellation refund to the source account: its amount from when it is raised,
+   * and when it completed. Both null unless such a refund exists (a released card hold
+   * or an older wallet refund has none); absent from an older API. Number or string.
+   */
+  refundAmount?: Money | number | null;
+  refundedAt?: string | null;
   /** How the goods travel, and what the carriage cost. D-091. */
   deliveryMode: DeliveryMode | null;
   deliveryFee: Money | null;

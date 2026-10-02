@@ -1,3 +1,4 @@
+import { paymentStatusLabel } from '@/lib/payments/statusLabel';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -280,7 +281,7 @@ export default function OrderDetailScreen() {
               emphasis
             />
             {order.paymentStatus && (
-              <Row label="Payment" value={humanise(order.paymentStatus)} />
+              <Row label="Payment" value={paymentStatusLabel(order.paymentStatus)} />
             )}
             {/* How this one is funded — the restaurant is the party who either
                 paid or owes, and until now its own view of the order was the
@@ -418,11 +419,6 @@ function Row({
       <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
     </View>
   );
-}
-
-function humanise(value: string): string {
-  const spaced = value.replace(/_/g, ' ').toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 const styles = StyleSheet.create({

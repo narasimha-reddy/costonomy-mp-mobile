@@ -28,24 +28,36 @@ import { Colors, Radius, Spacing } from '@/theme';
  * on.
  *
  * <p>The icon is not decoration. §23A.48 forbids carrying meaning by colour
- * alone, so the clock and the tick distinguish the two without it.
+ * alone, so the clock, the tick and the wallet distinguish them without it.
  */
 export function PaymentMethodPill({ method }: { method: PaymentMethod | null }) {
   // Absent stays absent. A missing method is not "Prepaid" by default.
   if (method == null) return null;
 
-  const credit = method === 'CREDIT';
-  const fg = credit ? Colors.credit : Colors.success;
+  // Every method named. This read `credit ? 'On credit' : 'Prepaid'`, written
+  // when there were two, so a wallet order was labelled a card payment.
+  const look = LOOKS[method] ?? LOOKS.PREPAID;
+  const fg = look.credit ? Colors.credit : Colors.success;
 
   return (
-    <View style={[styles.pill, { backgroundColor: credit ? Colors.creditLight : Colors.successLight }]}>
-      <Ionicons name={credit ? 'time-outline' : 'checkmark-circle-outline'} size={13} color={fg} />
+    <View style={[styles.pill, { backgroundColor: look.credit ? Colors.creditLight : Colors.successLight }]}>
+      <Ionicons name={look.icon} size={13} color={fg} />
       <MandiText variant="captionEmphasis" color={fg}>
-        {credit ? 'On credit' : 'Prepaid'}
+        {look.label}
       </MandiText>
     </View>
   );
 }
+
+/**
+ * Card and wallet are both money already secured, so both take green and differ
+ * by icon and word; credit keeps its violet.
+ */
+const LOOKS: Record<PaymentMethod, { label: string; icon: keyof typeof Ionicons.glyphMap; credit: boolean }> = {
+  PREPAID: { label: 'Prepaid', icon: 'checkmark-circle-outline', credit: false },
+  WALLET: { label: 'From wallet', icon: 'wallet-outline', credit: false },
+  CREDIT: { label: 'On credit', icon: 'time-outline', credit: true },
+};
 
 const styles = StyleSheet.create({
   pill: {

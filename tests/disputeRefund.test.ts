@@ -125,3 +125,15 @@ describe('formatDeadline and categoryLabel', () => {
     expect(categoryLabel('SOMETHING_NEW')).toBe('Something new');
   });
 });
+
+describe('paymentStatusLabel', () => {
+  it("says where the money is, in the restaurant's words", () => {
+    const { paymentStatusLabel } = jest.requireActual('@/lib/payments/statusLabel');
+    expect(paymentStatusLabel('AUTHORIZED')).toContain('Held');
+    expect(paymentStatusLabel('CAPTURED')).toBe('Paid');
+    expect(paymentStatusLabel('PAID')).toBe('Paid from wallet');
+    expect(paymentStatusLabel('RELEASED')).toContain('not charged');
+    expect(paymentStatusLabel('ON_CREDIT')).toBe('On credit');
+    expect(paymentStatusLabel('SOMETHING_NEW')).toBe('Something new');
+  });
+});

@@ -28,10 +28,35 @@ export type WalletDirection = 'DEBIT' | 'CREDIT';
 export interface WalletEntry {
   id: number;
   direction: WalletDirection;
+  /** Why it moved (API D-104). */
+  kind: WalletEntryKind;
   amount: Money;
   /** What the balance became, so a statement reads without arithmetic. */
   balanceAfter: Money;
   supplierOrderId: number | null;
   reason: string | null;
+  /**
+   * For a withdrawal: where its refund to the card has got to. `NEEDS_REVIEW`
+   * means it could not finish and Mandi's team has it. Null for other kinds.
+   */
+  refundStatus: string | null;
   at: string;
+}
+
+export type WalletEntryKind =
+  | 'TOP_UP' | 'ORDER_PAYMENT' | 'ORDER_REFUND' | 'REFUND' | 'WITHDRAWAL' | 'DISPUTE_REFUND';
+
+/** One payment's share of a withdrawal: a refund to that payment's card. */
+export interface WithdrawalPart {
+  refundId: number;
+  paymentId: number;
+  amount: Money;
+  status: string;
+}
+
+export interface Withdrawal {
+  outletId: number;
+  amount: Money;
+  balance: Money;
+  parts: WithdrawalPart[];
 }

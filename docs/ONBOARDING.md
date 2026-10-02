@@ -5,7 +5,8 @@ then let `CLAUDE.md` do the rest.
 
 Last updated **27 September 2026**, from the Razorpay branches
 (`feat/razorpay-4-checkout` → `-5-order-double-tap` → `-6-e2e-suite` →
-`-9-pay-screen-fixes` → `-10-capture-at-dispatch`), which build
+`-9-pay-screen-fixes` → `-10-capture-at-dispatch` → `-13-disputes-section`), which
+build
 on `feat/edit-open-request-quantities`.
 
 ---
@@ -224,6 +225,18 @@ Four stacked PRs; the server side is in `costonomy-mp-api` (D-098 to D-102).
   so a cancellation drops the hold instead of refunding. The e2e suite now marks
   orders ready itself before expecting a capture, and F10 checks a cancellation
   while held. No app code changed.
+- **Disputes and the wallet have screens** (`feat/razorpay-13-disputes-section`,
+  API D-104). Account → Disputes lists the outlet's disputes; a dispute's page
+  has its conversation and **Ask for money back** (the most that can be asked is
+  the server's `refund-limit`, shown before asking). Supplier → More → Disputes,
+  where a refund request **needs an answer** within 48 hours: Approve (it is
+  taken from the payout for that order — the confirmation says so) or Decline
+  with a reason. Account → Wallet shows the balance, the statement with each
+  withdrawal's progress, and **Withdraw** back to the card. Raising a dispute
+  now lands on its page. `useIdempotencyKey` keeps a key across retries of an
+  attempt whose outcome is unknown, and drops it after a refusal — the rule
+  Create Order already followed, now in one place (`lib/api/idempotency.ts`).
+  Visible product-name strings in new copy come from `lib/brand.ts`.
 
 What you will notice:
 

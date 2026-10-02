@@ -23,6 +23,14 @@ export function walletKey(outletId: number | null | undefined) {
   return ['outlet', outletId, 'wallet'] as const;
 }
 
+/**
+ * A page-run of the wallet's history under one set of filters. Under `walletKey`, so
+ * anything that refreshes the wallet (a top-up, a withdrawal) refreshes this too.
+ */
+export function walletTransactionsKey(outletId: number | null | undefined, filters: unknown = null) {
+  return [...walletKey(outletId), 'transactions', filters] as const;
+}
+
 // ── Requests ──────────────────────────────────────────────────────────
 
 /**

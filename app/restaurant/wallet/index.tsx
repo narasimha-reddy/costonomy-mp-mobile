@@ -25,7 +25,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { isAmount } from '@/lib/disputes/refundCopy';
 import { walletKey } from '@/lib/queryKeys';
-import { EntryRow } from '@/components/wallet/EntryRow';
+import { TransactionRow } from '@/components/wallet/TransactionRow';
 import { RoundAction } from '@/components/wallet/RoundAction';
 import { WalletHero } from '@/components/wallet/WalletHero';
 import { withdrawFailure, type WithdrawFailure } from '@/lib/wallet/withdrawError';
@@ -34,6 +34,9 @@ import { track } from '@/analytics';
 import { Colors, IconSize, Spacing } from '@/theme';
 
 const SCREEN = 'REST-WALLET-01';
+
+/** How many of the latest movements the wallet screen shows; the rest are on History. */
+const RECENT_SHOWN = 3;
 
 /**
  * REST-WALLET-01. The outlet's wallet: what is in it, why, and sending refund
@@ -47,7 +50,8 @@ const SCREEN = 'REST-WALLET-01';
  * <p>Withdrawing needs `WALLET_WITHDRAW` (owner, admin, purchase manager, finance).
  *
  * <p>Laid out as a balance card, three round actions (Withdraw, Add money,
- * History), then the statement. Withdraw opens the same form and confirm as ever;
+ * History), then the latest three movements. History is the one way into the
+ * past; "See all" opens the same screen. Withdraw opens the same form and confirm as ever;
  * nothing about what may be sent, or by whom, moved.
  */
 export default function WalletScreen() {
@@ -156,6 +160,7 @@ export default function WalletScreen() {
 
           {mayWithdraw && withdrawing && (
             <MandiCard>
+              <View style={styles.form}>
               <MandiText variant="bodyEmphasis">Send back to your card or bank</MandiText>
               <MandiText variant="caption" color={Colors.textSecondary}>
                 Only refunds can go back, to the payment they came from. Banks usually show it within
@@ -195,19 +200,15 @@ export default function WalletScreen() {
                 loading={withdraw.isPending}
                 onPress={() => setConfirming(true)}
               />
+              </View>
             </MandiCard>
           )}
 
-          <MandiCard onPress={() => router.push('/restaurant/wallet/history')}
-            accessibilityLabel="View past payments">
-            <View style={styles.linkRow}>
-              <Ionicons name="receipt-outline" size={IconSize.lg} color={Colors.primary} />
-              <MandiText variant="bodyEmphasis" style={styles.flex}>View past payments</MandiText>
-              <Ionicons name="chevron-forward" size={IconSize.sm} color={Colors.textTertiary} />
-            </View>
-          </MandiCard>
-
-          <MandiSectionHeader title="Recent" />
+          <MandiSectionHeader
+            title="Recent"
+            actionLabel={wallet.data.recent.length > 0 ? 'See all' : undefined}
+            onAction={() => router.push('/restaurant/wallet/history')}
+          />
           {wallet.data.recent.length === 0 ? (
             <MandiEmptyState
               icon="wallet-outline"
@@ -215,7 +216,11 @@ export default function WalletScreen() {
               description="Refunds and wallet payments will appear here."
             />
           ) : (
-            wallet.data.recent.map((entry) => <EntryRow key={entry.id} entry={entry} />)
+            <MandiCard>
+              {wallet.data.recent.slice(0, RECENT_SHOWN).map((entry, i, shown) => (
+                <TransactionRow key={entry.id} entry={entry} last={i === shown.length - 1} />
+              ))}
+            </MandiCard>
           )}
 
           <MandiSectionHeader title="Do more with your wallet" />
@@ -261,8 +266,7 @@ export default function WalletScreen() {
 const styles = StyleSheet.create({
   notice: { gap: Spacing.sm },
   actions: { flexDirection: 'row', gap: Spacing.sm },
-  linkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 32 },
-  flex: { flex: 1 },
+  form: { gap: Spacing.md },
   tips: { flexDirection: 'row', gap: Spacing.listGap },
   tip: { gap: Spacing.sm },
 });

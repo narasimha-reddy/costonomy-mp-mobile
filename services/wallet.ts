@@ -1,10 +1,21 @@
 import { apiRequest } from '@/lib/api/client';
+import { API_BASE_URL } from '@/lib/api/config';
+import { ApiError, NetworkError } from '@/lib/api/errors';
+import { renewAccessToken } from '@/lib/api/session-bridge';
+import { buildTransactionsQuery } from '@/lib/wallet/history';
+import { buildStatementQuery, fallbackFileName, fileNameFromDisposition } from '@/lib/wallet/statement';
 import type {
+  StatementRequest,
   TopUpConfirmation,
   TopUpStatus,
   Wallet,
+  WalletEntry,
+  WalletEntryStatus,
+  WalletFilters,
   WalletLimits,
+  WalletMonthTotal,
   WalletTopUp,
+  WalletTransactionsPage,
   Withdrawal,
 } from '@/models/wallet';
 
@@ -161,4 +172,129 @@ export function withdrawFromWallet(
     idempotencyKey,
     body: { amount },
   });
+}
+
+const ENTRY_STATUSES: WalletEntryStatus[] = ['COMPLETED', 'IN_PROGRESS', 'FAILED', 'RETURNED'];
+
+/** Money as the wire sends it, a JSON number or a string, kept as the string the app passes around. */
+function money(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  return Number.isFinite(Number(value)) ? String(value) : null;
+}
+
+/**
+ * One history row as the screens read it.
+ *
+ * <p>`status` and `instrument` are kept only when usable: an older API sends neither
+ * and a row is then a plain completed one, and a status this app does not know is
+ * treated the same rather than guessed at.
+ */
+export function mapEntry(raw: Record<string, unknown>): WalletEntry {
+  const status = ENTRY_STATUSES.find((s) => s === raw.status);
+  const instrument = typeof raw.instrument === 'string' && raw.instrument.trim() !== ''
+    ? raw.instrument.trim() : null;
+  return {
+    id: Number(raw.id),
+    key: typeof raw.key === 'string' && raw.key !== '' ? raw.key : undefined,
+    direction: raw.direction === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+    kind: raw.kind as WalletEntry['kind'],
+    amount: money(raw.amount) ?? '0',
+    balanceAfter: money(raw.balanceAfter),
+    supplierOrderId: raw.supplierOrderId == null ? null : Number(raw.supplierOrderId),
+    reason: typeof raw.reason === 'string' ? raw.reason : null,
+    refundStatus: typeof raw.refundStatus === 'string' ? raw.refundStatus : null,
+    status,
+    instrument,
+    at: String(raw.at ?? ''),
+  };
+}
+
+/** A page of history, tolerant of an older API that sends only some of it. */
+export function mapTransactionsPage(raw: Record<string, unknown> | null | undefined): WalletTransactionsPage {
+  const body = raw ?? {};
+  const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+  const monthTotals: WalletMonthTotal[] = [];
+  for (const total of list(body.monthTotals) as Record<string, unknown>[]) {
+    const spent = money(total?.spent);
+    if (typeof total?.month !== 'string' || spent == null) continue;
+    monthTotals.push({ month: total.month, added: money(total.added) ?? '0', spent });
+  }
+
+  return {
+    items: (list(body.items) as Record<string, unknown>[]).map(mapEntry),
+    monthTotals,
+    availableMonths: list(body.availableMonths).filter((m): m is string => typeof m === 'string'),
+    nextCursor: typeof body.nextCursor === 'string' && body.nextCursor !== '' ? body.nextCursor : null,
+  };
+}
+
+/**
+ * The wallet's full history, a page at a time (`nextCursor` on to the next).
+ *
+ * <p>Months, categories and statuses are the server's to apply; the instrument is
+ * not sent, because the server does not filter by it.
+ */
+export async function fetchWalletTransactions(
+  token: string,
+  outletId: number,
+  params: { filters?: WalletFilters; cursor?: string | null; size?: number } = {},
+): Promise<WalletTransactionsPage> {
+  const query = buildTransactionsQuery(params);
+  return mapTransactionsPage(await apiRequest<Record<string, unknown>>(
+    `/api/v1/outlets/${outletId}/wallet/transactions${query}`, { token }));
+}
+
+export interface StatementFile {
+  blob: Blob;
+  filename: string;
+}
+
+/**
+ * Download a statement as a file.
+ *
+ * <p>Its own fetch, not `apiRequest`, which unwraps a JSON envelope and a PDF is not
+ * one. What it keeps is what matters: the bearer token, one renewal on a 401, and the
+ * server's own words when it refuses (a period too long, too many rows).
+ */
+export async function fetchWalletStatement(
+  token: string,
+  outletId: number,
+  request: StatementRequest,
+): Promise<StatementFile> {
+  const url = `${API_BASE_URL}/api/v1/outlets/${outletId}/wallet/statement${buildStatementQuery(request)}`;
+
+  let bearer = token;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch(url, { headers: { Authorization: `Bearer ${bearer}` } });
+    } catch {
+      throw new NetworkError();
+    }
+
+    if (response.ok) {
+      return {
+        blob: await response.blob(),
+        filename: fileNameFromDisposition(
+          response.headers.get('Content-Disposition'), fallbackFileName(request.format)),
+      };
+    }
+
+    let envelope: { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | null = null;
+    try { envelope = JSON.parse(await response.text()); } catch { envelope = null; }
+    const error = new ApiError({
+      code: envelope?.error?.code ?? 'UNEXPECTED_ERROR',
+      message: envelope?.error?.message ?? 'Something went wrong. Please try again.',
+      status: response.status,
+      details: envelope?.error?.details,
+    });
+
+    if (error.isUnauthenticated && attempt === 0) {
+      const fresh = await renewAccessToken();
+      if (fresh != null) { bearer = fresh; continue; }
+    }
+    throw error;
+  }
+  throw new NetworkError();
 }

@@ -206,12 +206,18 @@ export function createOrderFromIntent(
     /** The quote being spent, for `COSTONOMY_DELIVERY`. */
     deliveryQuoteReference?: string;
   },
+  /**
+   * The caller's key for this attempt. Pass the same one for a repeat of the same
+   * order — a double tap, a retry — so the server answers it once instead of
+   * treating it as a second order and refusing the already-spent delivery quote.
+   */
+  idempotencyKey: string = newIdempotencyKey(),
 ): Promise<CreatedOrder> {
   return apiRequest<CreatedOrder>(`/api/v1/intents/${intentId}/orders`, {
     method: 'POST',
     token,
     body,
-    idempotencyKey: newIdempotencyKey(),
+    idempotencyKey,
   });
 }
 

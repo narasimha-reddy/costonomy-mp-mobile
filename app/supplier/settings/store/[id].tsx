@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
@@ -59,6 +59,7 @@ const SCREEN = 'SUP-ONB-01';
  * compare across suppliers.
  */
 export default function StoreDetailScreen() {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const storeId = Number(id);
   const toast = useToast();
@@ -456,6 +457,15 @@ export default function StoreDetailScreen() {
                 />
               </>
             ) : null}
+            <View style={{ marginTop: Spacing.sm }}>
+              <MandiButton
+                label="Manage Delivery Slots"
+                variant="secondary"
+                size="md"
+                icon="time-outline"
+                onPress={() => router.push(`/supplier/settings/slots?storeId=${storeId}` as any)}
+              />
+            </View>
           </Section>
 
           <Section title="Credit you offer">

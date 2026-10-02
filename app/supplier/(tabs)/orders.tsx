@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchActiveOrders, fetchOrderHistory, fetchPendingOrders } from '@/services/supplier';
@@ -85,6 +86,22 @@ export default function SupplierOrdersScreen() {
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
     >
+      <Pressable
+        style={styles.manifestBanner}
+        onPress={() => router.push(`/supplier/orders/manifest?storeId=${storeId}` as any)}
+      >
+        <View style={styles.manifestBannerLeft}>
+          <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
+          <View>
+            <MandiText variant="bodyEmphasis">Daily Subscriptions Manifest</MandiText>
+            <MandiText variant="caption" color={Colors.textSecondary}>
+              Packing lists & scheduled slot dispatches
+            </MandiText>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+      </Pressable>
+
       {query.isPending ? (
         <MandiSkeletonList count={3} />
       ) : query.error ? (
@@ -223,4 +240,19 @@ const styles = StyleSheet.create({
   },
   tabActive: { backgroundColor: Colors.primary },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  manifestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surfaceSunken,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.sm,
+  },
+  manifestBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    flex: 1,
+  },
 });

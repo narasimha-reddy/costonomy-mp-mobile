@@ -170,3 +170,27 @@ export interface PagedResponse<T> {
   hasNext: boolean;
 }
 
+export interface DeliverySlot {
+  id: number;
+  supplierStoreId: number;
+  slotName: string;
+  startTime: string;
+  endTime: string;
+  orderCutoffTime: string;
+  maxOrdersPerDay: number;
+  active: boolean;
+}
+
+export interface AvailableSlot {
+  id: number;
+  slotName: string;
+  startTime: string;
+  endTime: string;
+  orderCutoffTime: string;
+  maxOrdersPerDay: number;
+  bookedOrders: number;
+  availableCapacity: number;
+  available: boolean;
+  unavailableReason: string | null;
+}
+

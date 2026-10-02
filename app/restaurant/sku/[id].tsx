@@ -12,6 +12,7 @@ import type { SkuDetail } from '@/models/catalog';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { CartBar } from '@/components/restaurant/CartBar';
 import {
+  MandiButton,
   MandiErrorState,
   MandiHeader,
   MandiQuantityStepper,
@@ -19,6 +20,7 @@ import {
   MandiSkeletonList,
   MandiText,
 } from '@/components/common';
+import { SubscribeModal } from '@/components/restaurant/SubscribeModal';
 import { formatAgeOrMoment } from '@/utils/dateRange';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -51,6 +53,7 @@ export default function SkuDetailScreen() {
 
   const sku = query.data;
   const draft = drafts.find((entry) => entry.supplierStoreId === sku?.supplierStoreId);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
 
   return (
     <MandiScreen
@@ -118,6 +121,12 @@ export default function SkuDetailScreen() {
                     {formatMoney(lineTotalFor(sku.supplierSkuId) as string)}
                   </MandiText>
                 )}
+                <MandiButton
+                  label="Subscribe Daily"
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => setSubscribeOpen(true)}
+                />
               </View>
             )}
           </View>
@@ -155,6 +164,15 @@ export default function SkuDetailScreen() {
 
           <OtherPacks sku={sku} />
           <Reviews sku={sku} />
+
+          <SubscribeModal
+            visible={subscribeOpen}
+            onClose={() => setSubscribeOpen(false)}
+            supplierStoreId={sku.supplierStoreId}
+            supplierSkuId={sku.supplierSkuId}
+            productName={sku.skuName}
+            defaultUnit={sku.packUnit}
+          />
         </>
       )}
     </MandiScreen>

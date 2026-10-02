@@ -237,6 +237,16 @@ export default function OrderDetailScreen() {
               )}
             </View>
 
+            {order.scheduledDeliveryDate && (
+              <Row label="Scheduled Date" value={order.scheduledDeliveryDate} />
+            )}
+            {order.deliverySlotName && (
+              <Row label="Delivery Window" value={order.deliverySlotName} />
+            )}
+            {order.isSubscriptionOrder && (
+              <Row label="Order Type" value="Daily Subscription" />
+            )}
+
             {deliveryStatus ? (
               <View style={styles.deliverySummaryBody}>
                 {deliveryStatus.etaMinutes != null && (

@@ -284,6 +284,11 @@ export interface SupplierOrder {
   /** How the goods travel, and what the carriage cost. D-091. */
   deliveryMode: DeliveryMode | null;
   deliveryFee: Money | null;
+  deliverySlotId?: number | null;
+  deliverySlotName?: string | null;
+  scheduledDeliveryDate?: string | null;
+  isSubscriptionOrder?: boolean | null;
+  subscriptionId?: number | null;
   /** Set only on a cancelled order, and the reason it is not three statuses. */
   cancelledBy: CancelledBy | null;
   cancellationReason: string | null;

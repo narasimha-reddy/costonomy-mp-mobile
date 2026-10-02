@@ -35,6 +35,7 @@ import {
 import type { IntentItem } from '@/models/intent';
 import type { DeliveryMode } from '@/models/procurement';
 import { DeliveryModePicker } from '@/components/request/DeliveryModePicker';
+import { DeliverySlotPicker } from '@/components/request/DeliverySlotPicker';
 import { PaymentMethodPicker, type PaymentMethod } from '@/components/request/PaymentMethodPicker';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
@@ -106,6 +107,14 @@ export default function RequestDetailScreen() {
     quoteReference?: string;
   } | null>(null);
 
+  const [slot, setSlot] = React.useState<{
+    slotId: number | null;
+    scheduledDate: string;
+  }>({
+    slotId: null,
+    scheduledDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+  });
+
   /**
    * How this will be paid for. Chosen here, like the delivery mode, because
    * both decide what happens the moment the order exists — a card sends the
@@ -150,12 +159,14 @@ export default function RequestDetailScreen() {
   const ordering = React.useRef(false);
   React.useEffect(() => {
     orderKey.current = null;
-  }, [delivery?.mode, delivery?.quoteReference, method]);
+  }, [delivery?.mode, delivery?.quoteReference, slot.slotId, slot.scheduledDate, method]);
 
   const order = useMutation({
     mutationFn: (key: string) => createOrderFromIntent(accessToken as string, intentId, {
       deliveryMode: (delivery?.mode ?? 'PICKUP') as DeliveryMode,
       deliveryQuoteReference: delivery?.quoteReference,
+      deliverySlotId: slot.slotId ?? undefined,
+      scheduledDeliveryDate: slot.scheduledDate,
       paymentMethod: method ?? 'PREPAID',
     }, key),
     onSettled: () => {
@@ -425,6 +436,14 @@ export default function RequestDetailScreen() {
                 onSelect={(mode, fee, quoteReference) =>
                   setDelivery({ mode, fee, quoteReference })}
               />
+              {delivery?.mode !== 'PICKUP' && (
+                <DeliverySlotPicker
+                  supplierStoreId={request.supplierStoreId}
+                  selectedSlotId={slot.slotId}
+                  selectedDate={slot.scheduledDate}
+                  onSelect={(slotId, scheduledDate) => setSlot({ slotId, scheduledDate })}
+                />
+              )}
               {/* Below delivery, because the amount it has to cover depends on
                   the mode: a wallet that covers a collected order may not cover
                   the same order with a courier on it. */}

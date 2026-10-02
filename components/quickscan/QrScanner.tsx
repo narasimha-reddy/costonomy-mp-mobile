@@ -71,7 +71,7 @@ export function QrScanner({ onScan }: QrScannerProps) {
         style={StyleSheet.absoluteFillObject}
         facing="back"
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        onBarcodeScanned={(result) => handleScanned(result.data)}
+        onBarcodeScanned={(result: { data: string }) => handleScanned(result.data)}
       />
       <View style={styles.reticle} pointerEvents="none" />
     </View>

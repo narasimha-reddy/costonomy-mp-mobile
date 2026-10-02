@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchSupplierOrder, newIdempotencyKey } from '@/services/procurement';
@@ -299,6 +300,18 @@ export default function SupplierOrderScreen() {
                     The restaurant collects from your store
                   </MandiText>
                 ) : null}
+              </View>
+            )}
+
+            {(order.scheduledDeliveryDate || order.deliverySlotName) && (
+              <View style={styles.valueRow}>
+                <Ionicons name="time-outline" size={16} color={Colors.primary} />
+                <MandiText variant="captionEmphasis" color={Colors.primary}>
+                  Slot: {order.scheduledDeliveryDate ?? 'Today'} {order.deliverySlotName ? `(${order.deliverySlotName})` : ''}
+                </MandiText>
+                {order.isSubscriptionOrder && (
+                  <MandiStatusChip tone="info" label="Subscription" size="sm" />
+                )}
               </View>
             )}
 

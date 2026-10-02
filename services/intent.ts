@@ -205,6 +205,8 @@ export function createOrderFromIntent(
     deliveryMode: DeliveryMode;
     /** The quote being spent, for `COSTONOMY_DELIVERY`. */
     deliveryQuoteReference?: string;
+    deliverySlotId?: number;
+    scheduledDeliveryDate?: string;
   },
   /**
    * The caller's key for this attempt. Pass the same one for a repeat of the same

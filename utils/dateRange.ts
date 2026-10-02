@@ -151,6 +151,16 @@ export function formatAgeOrMoment(
   return elapsed < DAY_MS ? relative(when, now) : absolute(when);
 }
 
+/**
+ * A moment still to come — a deadline — without a relative part: `relative`
+ * counts backwards and reads anything in the future as "just now", which on a
+ * deadline two days away says the opposite of the truth.
+ */
+export function formatDeadline(iso: string | null | undefined): string {
+  const when = parseMoment(iso);
+  return when == null ? '—' : absolute(when);
+}
+
 function parseMoment(iso: string | null | undefined): Date | null {
   if (!iso) return null;
   const when = new Date(iso);

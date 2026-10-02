@@ -1,5 +1,5 @@
 import { apiRequest } from '@/lib/api/client';
-import type { Wallet } from '@/models/wallet';
+import type { Wallet, Withdrawal } from '@/models/wallet';
 
 /**
  * The outlet's prepaid balance.
@@ -28,5 +28,27 @@ export function topUpWallet(
     method: 'POST',
     token,
     body: { amount, reason },
+  });
+}
+
+/**
+ * Send refund money back to the card or bank it came from (API D-104).
+ *
+ * <p>Only refund money can go, and only to where it came from — the server splits
+ * it across the payments it was refunded from. The balance drops at once; each
+ * part reaches the card in the bank's usual time, and its progress is on the
+ * statement.
+ */
+export function withdrawFromWallet(
+  token: string,
+  outletId: number,
+  amount: string,
+  idempotencyKey: string,
+): Promise<Withdrawal> {
+  return apiRequest<Withdrawal>(`/api/v1/outlets/${outletId}/wallet/withdraw`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    body: { amount },
   });
 }

@@ -120,10 +120,16 @@ export const PaymentStatus: Record<string, StatusDisplay> = {
   AUTHORIZED: { label: 'Authorised', tone: 'info' },
   CAPTURE_PENDING: { label: 'Confirming payment', tone: 'pending' },
   CAPTURED: { label: 'Paid', tone: 'success' },
+  // Never "not charged": only a released card hold is that (lib/payments/statusLabel).
   RELEASED: { label: 'Released', tone: 'neutral' },
   FAILED: { label: 'Payment failed', tone: 'danger' },
   PARTIALLY_REFUNDED: { label: 'Partially refunded', tone: 'info' },
   FULLY_REFUNDED: { label: 'Refunded', tone: 'info' },
+  // D-109: money taken by a non-card method on an order that then cancelled.
+  CANCEL_PENDING: { label: 'Cancelled · being settled', tone: 'pending' },
+  RETURNING: { label: 'Refund on its way', tone: 'info' },
+  RETURNED: { label: 'Returned by the payment provider', tone: 'neutral' },
+  RETURN_DELAYED: { label: 'Refund delayed', tone: 'warning' },
 };
 
 /** Credit agreement — doc 03 §8. */

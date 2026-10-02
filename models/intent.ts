@@ -319,6 +319,7 @@ export interface CreatedOrder {
   totalAmount: Money;
   paymentMethod: string;
   paymentStatus: string;
+  paymentInstrument?: string | null;
   payment: IntentPaymentIntent | null;
 }
 

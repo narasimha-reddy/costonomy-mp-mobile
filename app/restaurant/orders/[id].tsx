@@ -1,4 +1,4 @@
-import { paymentStatusLabel } from '@/lib/payments/statusLabel';
+import { paymentStatusCopy } from '@/lib/payments/statusLabel';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -85,6 +85,18 @@ export default function OrderDetailScreen() {
     && order.acceptedAmount != null
     && order.items.some((item) => item.acceptedQuantity != null)
     && Number(order.acceptedAmount) !== Number(order.totalAmount);
+
+  const payment = order?.paymentStatus
+    ? paymentStatusCopy({
+      status: order.paymentStatus,
+      instrument: order.paymentInstrument,
+      // The figure the Total row shows: as sent, not worked out here.
+      amount: settled ? order.acceptedAmount : order.totalAmount,
+      cancelled: order.status === 'CANCELLED',
+      refundAmount: order.refundAmount,
+      refundedAt: order.refundedAt,
+    })
+    : undefined;
 
   return (
     <MandiScreen
@@ -281,7 +293,13 @@ export default function OrderDetailScreen() {
               emphasis
             />
             {order.paymentStatus && (
-              <Row label="Payment" value={paymentStatusLabel(order.paymentStatus)} />
+              <Row label="Payment" value={payment?.label ?? ''} />
+            )}
+            {/* Said by the server's status and instrument, never guessed: a
+                UPI order that was cancelled has been debited and is being
+                refunded, which is not "no money was taken". */}
+            {payment?.detail != null && (
+              <MandiText variant="caption" color={Colors.textSecondary}>{payment.detail}</MandiText>
             )}
             {/* How this one is funded — the restaurant is the party who either
                 paid or owes, and until now its own view of the order was the

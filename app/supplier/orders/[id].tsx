@@ -1,3 +1,4 @@
+import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -155,7 +156,7 @@ export default function SupplierOrderScreen() {
       setCancelling(false);
       // Navigating rather than toasting: the authoritative state is the order,
       // and a toast is not a confirmation.
-      show('Order cancelled. The restaurant has been refunded.', 'success');
+      show(SUPPLIER_CANCEL_TOAST);
     },
     onError: (caught) => onRefusal(caught, "Couldn't cancel this order."),
   });
@@ -305,6 +306,11 @@ export default function SupplierOrderScreen() {
               <MandiText variant="caption" color={Colors.textSecondary}>
                 {order.cancelledBy === 'SUPPLIER' ? 'You cancelled' : 'Cancelled'}
                 {' — '}{order.cancellationReason}
+              </MandiText>
+            ) : null}
+            {order.status === 'CANCELLED' ? (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                {SUPPLIER_CANCELLED_LINE}
               </MandiText>
             ) : null}
           </MandiCard>

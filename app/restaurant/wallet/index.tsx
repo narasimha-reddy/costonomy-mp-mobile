@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchWallet, withdrawFromWallet } from '@/services/wallet';
+import { fetchQuickScanConfig } from '@/services/quickscan';
 import {
   MandiButton,
   MandiCard,
@@ -15,19 +18,20 @@ import {
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
   useToast,
 } from '@/components/common';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { isAmount } from '@/lib/disputes/refundCopy';
-import { entryLabel, withdrawalProgress } from '@/lib/wallet/entryCopy';
+import { walletKey } from '@/lib/queryKeys';
+import { EntryRow } from '@/components/wallet/EntryRow';
+import { RoundAction } from '@/components/wallet/RoundAction';
+import { WalletHero } from '@/components/wallet/WalletHero';
 import { withdrawFailure, type WithdrawFailure } from '@/lib/wallet/withdrawError';
 import { formatMoney } from '@/utils/money';
-import { formatMomentWithRecency } from '@/utils/dateRange';
 import { track } from '@/analytics';
-import { Colors, Spacing } from '@/theme';
+import { Colors, IconSize, Spacing } from '@/theme';
 
 const SCREEN = 'REST-WALLET-01';
 
@@ -41,8 +45,13 @@ const SCREEN = 'REST-WALLET-01';
  * return, say — stays spendable, and the server says so if asked for it.
  *
  * <p>Withdrawing needs `WALLET_WITHDRAW` (owner, admin, purchase manager, finance).
+ *
+ * <p>Laid out as a balance card, three round actions (Withdraw, Add money,
+ * History), then the statement. Withdraw opens the same form and confirm as ever;
+ * nothing about what may be sent, or by whom, moved.
  */
 export default function WalletScreen() {
+  const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
@@ -52,12 +61,20 @@ export default function WalletScreen() {
 
   const [amount, setAmount] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   /** The server's last answer to a withdrawal, shown in the form until the next attempt. */
   const [failure, setFailure] = useState<WithdrawFailure | null>(null);
 
   const wallet = useQuery({
-    queryKey: ['outlet', outlet?.id, 'wallet'],
+    queryKey: walletKey(outlet?.id),
     queryFn: () => fetchWallet(accessToken as string, outlet?.id as number),
+    enabled: outlet != null && accessToken != null,
+  });
+
+  // Only to know whether to offer "Pay any shop by scanning"; hidden if it fails.
+  const quickScan = useQuery({
+    queryKey: ['outlet', outlet?.id, 'quickscan-config'],
+    queryFn: () => fetchQuickScanConfig(accessToken as string, outlet?.id as number),
     enabled: outlet != null && accessToken != null,
   });
 
@@ -69,6 +86,7 @@ export default function WalletScreen() {
       idempotency.settle();
       setConfirming(false);
       setAmount('');
+      setWithdrawing(false);
       track('wallet_withdrawn', { screen: SCREEN, entityId: outlet?.id });
       toast.show(`${formatMoney(result.amount)} is on its way back to your card or bank.`, 'success');
     },
@@ -85,7 +103,7 @@ export default function WalletScreen() {
     },
     // Whatever happened, the balance and the statement are the server's to say.
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['outlet', outlet?.id, 'wallet'] });
+      void queryClient.invalidateQueries({ queryKey: walletKey(outlet?.id) });
     },
   });
 
@@ -110,15 +128,33 @@ export default function WalletScreen() {
         <MandiErrorState message="Couldn't load your wallet." onRetry={() => wallet.refetch()} />
       ) : (
         <>
-          <MandiCard>
-            <MandiText variant="caption" color={Colors.textSecondary}>Balance</MandiText>
-            <MandiText variant="title">{formatMoney(wallet.data.balance)}</MandiText>
-            <MandiText variant="caption" color={Colors.textSecondary}>
-              Refunds land here. Spend them on orders, or send them back to the card or bank you paid with.
-            </MandiText>
-          </MandiCard>
+          <WalletHero wallet={wallet.data} />
 
-          {mayWithdraw && (
+          <View style={styles.actions}>
+            {mayWithdraw && (
+              <RoundAction
+                testID="action-withdraw"
+                icon="arrow-undo-outline"
+                label="Withdraw"
+                onPress={() => setWithdrawing((open) => !open)}
+              />
+            )}
+            <RoundAction
+              testID="action-add-money"
+              icon="add"
+              label="Add money"
+              primary
+              onPress={() => router.push('/restaurant/wallet/add-money')}
+            />
+            <RoundAction
+              testID="action-history"
+              icon="time-outline"
+              label="History"
+              onPress={() => router.push('/restaurant/wallet/history')}
+            />
+          </View>
+
+          {mayWithdraw && withdrawing && (
             <MandiCard>
               <MandiText variant="bodyEmphasis">Send back to your card or bank</MandiText>
               <MandiText variant="caption" color={Colors.textSecondary}>
@@ -162,6 +198,15 @@ export default function WalletScreen() {
             </MandiCard>
           )}
 
+          <MandiCard onPress={() => router.push('/restaurant/wallet/history')}
+            accessibilityLabel="View past payments">
+            <View style={styles.linkRow}>
+              <Ionicons name="receipt-outline" size={IconSize.lg} color={Colors.primary} />
+              <MandiText variant="bodyEmphasis" style={styles.flex}>View past payments</MandiText>
+              <Ionicons name="chevron-forward" size={IconSize.sm} color={Colors.textTertiary} />
+            </View>
+          </MandiCard>
+
           <MandiSectionHeader title="Recent" />
           {wallet.data.recent.length === 0 ? (
             <MandiEmptyState
@@ -170,31 +215,34 @@ export default function WalletScreen() {
               description="Refunds and wallet payments will appear here."
             />
           ) : (
-            wallet.data.recent.map((entry) => {
-              const progress = withdrawalProgress(entry);
-              return (
-                <MandiCard key={entry.id}>
-                  <View style={styles.row}>
-                    <MandiText variant="bodyEmphasis">{entryLabel(entry)}</MandiText>
-                    <MandiText
-                      variant="price"
-                      color={entry.direction === 'CREDIT' ? Colors.success : Colors.textPrimary}
-                    >
-                      {entry.direction === 'CREDIT' ? '+' : '−'}{formatMoney(entry.amount)}
-                    </MandiText>
-                  </View>
-                  <View style={styles.row}>
-                    <MandiText variant="caption" color={Colors.textSecondary}>
-                      {formatMomentWithRecency(entry.at)} · balance {formatMoney(entry.balanceAfter)}
-                    </MandiText>
-                    {progress != null && (
-                      <MandiStatusChip label={progress.label} tone={progress.tone} size="sm" />
-                    )}
-                  </View>
-                </MandiCard>
-              );
-            })
+            wallet.data.recent.map((entry) => <EntryRow key={entry.id} entry={entry} />)
           )}
+
+          <MandiSectionHeader title="Do more with your wallet" />
+          <View style={styles.tips}>
+            {quickScan.data?.enabled === true && (
+              <MandiCard
+                style={{ flex: 1 }}
+                onPress={() => router.push('/restaurant/quickscan')}
+                accessibilityLabel="Pay any shop by scanning"
+              >
+                <View style={styles.tip}>
+                  <Ionicons name="qr-code-outline" size={IconSize.lg} color={Colors.primary} />
+                  <MandiText variant="bodyEmphasis">Pay any shop by scanning</MandiText>
+                </View>
+              </MandiCard>
+            )}
+            <MandiCard
+              style={{ flex: 1 }}
+              onPress={() => router.push('/restaurant/(tabs)/discover')}
+              accessibilityLabel="Use it on orders"
+            >
+              <View style={styles.tip}>
+                <Ionicons name="cart-outline" size={IconSize.lg} color={Colors.primary} />
+                <MandiText variant="bodyEmphasis">Use it on orders</MandiText>
+              </View>
+            </MandiCard>
+          </View>
         </>
       )}
 
@@ -212,5 +260,9 @@ export default function WalletScreen() {
 
 const styles = StyleSheet.create({
   notice: { gap: Spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  actions: { flexDirection: 'row', gap: Spacing.sm },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 32 },
+  flex: { flex: 1 },
+  tips: { flexDirection: 'row', gap: Spacing.listGap },
+  tip: { gap: Spacing.sm },
 });

@@ -5,8 +5,8 @@ then let `CLAUDE.md` do the rest.
 
 Last updated **27 September 2026**, from the Razorpay branches
 (`feat/razorpay-4-checkout` → `-5-order-double-tap` → `-6-e2e-suite` →
-`-9-pay-screen-fixes` → `-10-capture-at-dispatch` → `-13-disputes-section`), which
-build
+`-9-pay-screen-fixes` → `-10-capture-at-dispatch` → `-13-disputes-section` →
+`-14-dispute-refund-e2e`), which build
 on `feat/edit-open-request-quantities`.
 
 ---
@@ -218,7 +218,7 @@ Four stacked PRs; the server side is in `costonomy-mp-api` (D-098 to D-102).
   server (D-102), so an order can be paid after a refresh or from the order
   screen's new **Pay Now**. A "still in progress" reply keeps the Create Order key.
 - **`tools/razorpay-e2e`** pays real test-mode orders through this app and
-  Razorpay's checkout — 31 cases, most of them failures — and checks both our
+  Razorpay's checkout — 32 cases, most of them failures — and checks both our
   database and Razorpay's records. Its README says how to run it.
 - **Money is taken when the supplier marks the order ready**, not at payment
   (`feat/razorpay-10-capture-at-dispatch`, API D-103). Until then it is only held,

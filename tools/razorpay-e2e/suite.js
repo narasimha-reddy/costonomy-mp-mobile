@@ -638,58 +638,159 @@ function markPaid(orderId, paymentId, providerOrderId) {
     expect(L.db(`select status from payment_webhook_event where provider_event_id='${id}'`) === 'IGNORED', 'not ignored');
   });
 
-  // Refunds, against the captured payment from C1.
-  const refund = async (amount, key, reason = 'CANCELLATION') => L.api(`/payments/${paid.paymentId}/refund`, {
-    body: { amount, reason }, token: await buyer(), headers: key ? { 'Idempotency-Key': key } : {},
+  // Refunds (D-104): asked for on a dispute, decided by the supplier, paid to the
+  // wallet, and withdrawn back to the card — against the captured payment from C1.
+  const rzpRefunds = async () => (await L.rzp(`/v1/payments/${paid.providerPaymentId}/refunds`)).count;
+  const walletBalance = () => Number(L.db("select coalesce((select balance from wallet where outlet_id=1),0)"));
+  let refundRequest = null;
+
+  await test('R1', 'restaurant asks for a refund on a dispute, in the app → waiting for the supplier, nothing at Razorpay', async () => {
+    expect(paid, 'needs a captured payment from C1, C2, C3 or F2');
+    const before = await rzpRefunds();
+    const disputeId = await L.disputedOrder(paid.orderId);
+    const page = await L.signedInPage(b, `/restaurant/disputes/${disputeId}`);
+    try {
+      await screenText(page, /Ask for money back/);
+      await screenText(page, /Up to ₹/);
+      await L.typeInto(page, '0.00', '50');
+      await L.typeInto(page, 'What the refund is for', 'e2e: two packs sour');
+      await L.tap(page, 'Ask for Refund');
+      await L.tap(page, 'Ask for Refund'); // the confirmation
+      await screenText(page, /Waiting for the supplier/);
+      await snapshot(page, 'R1-requested');
+      const [id, status, amount] = L.db(`select id, status, amount from dispute_refund where dispute_id=${disputeId}`).split('\t');
+      expect(status === 'REQUESTED' && Number(amount) === 50, `request ${status} ${amount}`);
+      expect(await rzpRefunds() === before, 'razorpay refunded on a request');
+      refundRequest = { id: Number(id), disputeId };
+      return `request ${id}`;
+    } finally { await L.adoptSession(page); await page.close(); }
   });
 
-  await test('R1', 'refund without an Idempotency-Key → refused', async () => {
-    expect(paid, 'needs a captured payment from C1, C2, C3 or F2');
-    const r = await refund('1.00', null);
-    expect(r.status === 400, `status ${r.status} ${r.error?.code}`);
+  await test('R2', 'supplier approves it, in the app → wallet credited, payout charged, still nothing at Razorpay', async () => {
+    expect(refundRequest, 'needs R1');
+    const before = await rzpRefunds();
+    const balance = walletBalance();
+    const page = await L.signedInPage(b, `/supplier/disputes/${refundRequest.disputeId}`, L.SELLER);
+    try {
+      await screenText(page, /Needs your answer/);
+      await L.tap(page, 'Approve Refund');
+      await screenText(page, /taken from\s+your payout for order/);
+      await L.tap(page, 'Approve Refund'); // the confirmation
+      await screenText(page, /You approved it/);
+      await snapshot(page, 'R2-approved');
+      expect(L.db(`select status from dispute_refund where id=${refundRequest.id}`) === 'APPROVED', 'not approved');
+      expect(Math.abs(walletBalance() - balance - 50) < 0.001, `wallet ${balance} → ${walletBalance()}`);
+      expect(L.db(`select destination from refund r join dispute_refund d on d.refund_id=r.id where d.id=${refundRequest.id}`) === 'WALLET',
+        'not a wallet refund');
+      expect(L.db(`select count(*) from supplier_deduction where dispute_refund_id=${refundRequest.id}`) === '1', 'supplier not charged');
+      expect(await rzpRefunds() === before, 'razorpay refunded before any withdrawal');
+    } finally { await L.adoptSession(page, L.SELLER); await page.close(); }
   });
 
-  await test('R2', 'refund with an unknown reason → 400', async () => {
-    expect(paid, 'needs a captured payment from C1, C2, C3 or F2');
-    const r = await refund('1.00', crypto.randomUUID(), 'BECAUSE');
-    expect(r.status === 400, `status ${r.status}`);
+  // A withdrawal goes to the payments the wallet's refunds came from, oldest first
+  // (D-104) — so on a wallet with refunds left from an earlier run, not
+  // necessarily C1's. These follow the refunds the withdrawal actually made.
+  const providerPaymentOf = (paymentId) => L.db(`select provider_payment_id from payment where id=${paymentId}`);
+  const rzpRefundsOf = async (paymentId) => L.rzp(`/v1/payments/${providerPaymentOf(paymentId)}/refunds`);
+  const withdrawalParts = (afterId) => L.db(`select r.id, r.payment_id, r.amount from refund r join payment p on p.id=r.payment_id `
+    + `where p.outlet_id=1 and r.reason='WALLET_WITHDRAWAL' and r.id>${afterId} order by r.id`)
+    .split('\n').filter(Boolean).map((row) => { const [id, paymentId, amount] = row.split('\t'); return { id: Number(id), paymentId: Number(paymentId), paise: Math.round(Number(amount) * 100) }; });
+  const settled = (parts) => L.until(() => parts.every((part) =>
+    ['COMPLETED', 'NEEDS_REVIEW'].includes(L.db(`select status from refund where id=${part.id}`))),
+  // Razorpay test mode answers "pending" at first; the job asks again two minutes
+  // after the refund last changed (D-101).
+  { timeout: 240000, every: 5000, what: 'refund job' });
+  const lastRefundId = () => Number(L.db('select coalesce(max(id), 0) from refund'));
+
+  await test('R3', 'restaurant withdraws to the card, in the app → a Razorpay refund on the original payment, counted once', async () => {
+    expect(refundRequest, 'needs R2');
+    const since = lastRefundId();
+    const page = await L.signedInPage(b, '/restaurant/wallet');
+    try {
+      await screenText(page, /Send back to your card or bank/);
+      await L.typeInto(page, '0.00', '20');
+      await L.tap(page, 'Withdraw');
+      await L.tap(page, 'Withdraw'); // the confirmation
+      await screenText(page, /on its way back/);
+      const parts = withdrawalParts(since);
+      expect(parts.length > 0 && parts.reduce((sum, part) => sum + part.paise, 0) === 2000,
+        `parts ${JSON.stringify(parts)}`);
+      const before = {};
+      for (const part of parts) {
+        before[part.id] = { refunded: L.db(`select refunded_amount from payment where id=${part.paymentId}`) };
+      }
+      await settled(parts);
+      for (const part of parts) {
+        expect(L.db(`select status from refund where id=${part.id}`) === 'COMPLETED', `refund ${part.id} not completed`);
+        const at = await rzpRefundsOf(part.paymentId);
+        const mine = at.items.find((item) => item.id === L.db(`select provider_refund_id from refund where id=${part.id}`));
+        expect(mine && mine.amount === part.paise, `razorpay has no ${part.paise} refund for payment ${part.paymentId}`);
+        // Counted as refunded when it reached the wallet, not again now.
+        expect(L.db(`select refunded_amount from payment where id=${part.paymentId}`) === before[part.id].refunded,
+          'refunded twice');
+      }
+      await page.reload({ waitUntil: 'networkidle2' });
+      await screenText(page, /Sent/);
+      await snapshot(page, 'R3-withdrawn');
+      return parts.map((part) => `payment ${part.paymentId} ₹${(part.paise / 100).toFixed(2)}`).join(', ');
+    } finally { await L.adoptSession(page); await page.close(); }
   });
 
-  await test('R3', 'refund more than was captured → refused, nothing at Razorpay', async () => {
-    expect(paid, 'needs a captured payment from C1, C2, C3 or F2');
-    const before = (await L.rzp(`/v1/payments/${paid.providerPaymentId}/refunds`)).count;
-    const r = await refund((Number(paid.amount) + 100).toFixed(2), crypto.randomUUID());
-    expect(r.status >= 400, `status ${r.status}`);
-    expect((await L.rzp(`/v1/payments/${paid.providerPaymentId}/refunds`)).count === before, 'razorpay refunded');
-    return `${r.status} ${r.error?.code}`;
+  const withdraw = async (amount, key) => L.api('/outlets/1/wallet/withdraw', {
+    body: { amount }, token: await buyer(), headers: key ? { 'Idempotency-Key': key } : {},
   });
 
-  await test('R4', 'partial refund, same key sent twice → one refund at Razorpay', async () => {
-    expect(paid, 'needs a captured payment from C1, C2, C3 or F2');
+  await test('R4', 'withdrawal sent twice with one key → one Razorpay refund; more than was refunded → refused', async () => {
+    expect(refundRequest, 'needs R2');
+    const since = lastRefundId();
     const key = crypto.randomUUID();
-    const first = await refund('10.00', key);
-    const second = await refund('10.00', key);
+    const first = await withdraw('5.00', key);
+    const second = await withdraw('5.00', key);
     expect(first.status === 200 && second.status === 200, `status ${first.status}/${second.status}`);
-    expect(first.data.id === second.data.id, 'two refunds created');
-    await L.until(() => ['COMPLETED', 'FAILED'].includes(
-      L.db(`select status from refund where id=${first.data.id}`)),
-    // Razorpay test mode answers "pending" at first; the job asks again two
-    // minutes after the refund last changed (D-101), so allow for that.
-    { timeout: 240000, every: 5000, what: 'refund job' });
-    const status = L.db(`select status from refund where id=${first.data.id}`);
-    const at = await L.rzp(`/v1/payments/${paid.providerPaymentId}/refunds`);
-    expect(status === 'COMPLETED', 'refund ' + status);
-    expect(at.count === 1 && at.items[0].amount === 1000, `razorpay refunds: ${at.count}`);
-    return `refund ${at.items[0].id}, ₹10.00`;
+    expect(JSON.stringify(first.data.parts) === JSON.stringify(second.data.parts), 'two withdrawals made');
+    const tooMuch = await withdraw('100000.00', crypto.randomUUID());
+    expect(tooMuch.status === 400, `too much: ${tooMuch.status}`);
+    const noKey = await withdraw('1.00', null);
+    expect(noKey.status === 400, `no key: ${noKey.status}`);
+    const parts = withdrawalParts(since);
+    expect(parts.reduce((sum, part) => sum + part.paise, 0) === 500, `one withdrawal expected: ${JSON.stringify(parts)}`);
+    await settled(parts);
+    for (const part of parts) {
+      const providerRefund = L.db(`select provider_refund_id from refund where id=${part.id}`);
+      const at = await rzpRefundsOf(part.paymentId);
+      expect(at.items.filter((item) => item.id === providerRefund).length === 1, `payment ${part.paymentId}: not exactly one`);
+    }
   });
 
-  await test('R5', 'refund on a payment never captured → refused', async () => {
-    const o = await L.placedOrder(1);
-    const r = await L.api(`/payments/${o.paymentId}/refund`, {
+  await test('R5', 'a restaurant cannot refund itself: the old endpoint is gone, nothing at Razorpay', async () => {
+    expect(paid, 'needs a captured payment from C1, C2, C3 or F2');
+    const before = await rzpRefunds();
+    const r = await L.api(`/payments/${paid.paymentId}/refund`, {
       body: { amount: '1.00', reason: 'CANCELLATION' }, token: await buyer(),
       headers: { 'Idempotency-Key': crypto.randomUUID() } });
-    expect(r.status === 409 || r.status === 422, `status ${r.status} ${r.error?.code}`);
-    return `${r.status} ${r.error?.code}`;
+    expect(r.status === 404 || r.status === 405, `status ${r.status}`);
+    expect(await rzpRefunds() === before, 'razorpay refunded');
+  });
+
+  await test('R6', 'asking beyond the supplier payout, twice, or before delivery → refused', async () => {
+    expect(paid, 'needs a captured payment from C1, C2, C3 or F2');
+    const ask = async (disputeId, amount) => L.api(`/disputes/${disputeId}/refund-request`, {
+      body: { amount }, token: await buyer(), headers: { 'Idempotency-Key': crypto.randomUUID() } });
+    const disputeId = await L.disputedOrder(paid.orderId);
+    const limit = (await L.api(`/disputes/${disputeId}/refund-limit`, { token: await buyer() })).data;
+    const over = await ask(disputeId, (Number(limit.maxAmount) + 0.01).toFixed(2));
+    expect(over.status === 400, `over the payout: ${over.status}`);
+    expect((await ask(disputeId, '1.00')).status === 200, 'a small refund refused');
+    const again = await ask(disputeId, '1.00');
+    expect(again.status === 409 && again.error?.code === 'REFUND_ALREADY_REQUESTED', `twice: ${again.status}`);
+
+    const o = await L.placedOrder(1);
+    const early = await L.api(`/supplier-orders/${o.orderId}/disputes`, {
+      token: await buyer(), headers: { 'Idempotency-Key': crypto.randomUUID() },
+      body: { category: 'OTHER', description: 'e2e: not here yet' } });
+    const before = await ask(early.data.id, '1.00');
+    expect(before.status === 409, `before delivery: ${before.status}`);
+    return `max ₹${limit.maxAmount}`;
   });
 
   await b.close();

@@ -24,7 +24,8 @@ let b;
  * the first attempt failed — a pass after a retry is not a clean pass.
  */
 async function test(id, name, fn, { retries = 0 } = {}) {
-  if (only && !id.startsWith(only)) return;
+  // `node suite.js C1,R4` runs several; cases that reuse a payment need its maker too.
+  if (only && !only.split(',').some((prefix) => id.startsWith(prefix))) return;
   const started = Date.now();
   process.stdout.write(`${id}  ${name} ... `);
   const failures = [];
@@ -474,6 +475,40 @@ function markPaid(orderId, paymentId, providerOrderId) {
     } finally { await L.adoptSession(page); await page.close(); }
   }, { retries: 1 });
 
+  await test('P1', 'pay from the order screen with nothing cached → Razorpay opens and the order is funded', async () => {
+    // As after a refresh, a long bank flow, or coming back later: the pay screen
+    // has no hand-over from the request screen and must ask the server (D-102).
+    const o = await L.placedOrder(1);
+    const page = await L.signedInPage(b, `/restaurant/orders/${o.orderId}`);
+    try {
+      await L.tap(page, 'Pay Now');
+      await page.waitForFunction(() => location.pathname.startsWith('/restaurant/pay/'), { timeout: 20000 });
+      await L.tap(page, 'Pay ');
+      const frame = await checkoutFrame(page);
+      await authenticate(page, frame, CARDS.visaDomestic, 'Success');
+      await screenText(page, /Payment authorised/);
+      await L.until(() => L.paymentRow(o.paymentId).status === 'CAPTURED', { timeout: 40000, what: 'capture' });
+      expect(L.orderStatus(o.orderId) === 'CONFIRMED', 'order ' + L.orderStatus(o.orderId));
+      expect(L.paymentRow(o.paymentId).providerPaymentId, 'no payment recorded');
+      return 'paid via the order screen, same provider order ' + o.providerOrderId;
+    } finally { await L.adoptSession(page); await page.close(); }
+  }, { retries: 1 });
+
+  await test('P2', 'a payment that has ended offers no Pay and no Try Again', async () => {
+    const o = await L.placedOrder(1);
+    // What the sweep does to an intent nobody completed within a day (D-101).
+    L.db(`update payment set status='FAILED', failure_code='INTENT_EXPIRED' where id=${o.paymentId}`);
+    const page = await L.signedInPage(b, `/restaurant/pay/${o.orderId}`);
+    try {
+      await screenText(page, /can.t be completed/i);
+      const buttons = await page.evaluate(() => [...document.querySelectorAll('[role=button]')]
+        .filter((e) => e.offsetParent !== null).map((e) => e.textContent.trim()));
+      expect(!buttons.some((t) => t.startsWith('Pay ') || t === 'Try Again'),
+        'still offered: ' + buttons.join(', '));
+      return 'offered only: ' + buttons.join(', ');
+    } finally { await L.adoptSession(page); await page.close(); }
+  });
+
   // ── Server-side failure cases against Razorpay test mode ──
 
   const buyer = async () => (await L.session(L.BUYER)).accessToken;
@@ -598,7 +633,10 @@ function markPaid(orderId, paymentId, providerOrderId) {
     expect(first.status === 200 && second.status === 200, `status ${first.status}/${second.status}`);
     expect(first.data.id === second.data.id, 'two refunds created');
     await L.until(() => ['COMPLETED', 'FAILED'].includes(
-      L.db(`select status from refund where id=${first.data.id}`)), { timeout: 90000, every: 3000, what: 'refund job' });
+      L.db(`select status from refund where id=${first.data.id}`)),
+    // Razorpay test mode answers "pending" at first; the job asks again two
+    // minutes after the refund last changed (D-101), so allow for that.
+    { timeout: 240000, every: 5000, what: 'refund job' });
     const status = L.db(`select status from refund where id=${first.data.id}`);
     const at = await L.rzp(`/v1/payments/${paid.providerPaymentId}/refunds`);
     expect(status === 'COMPLETED', 'refund ' + status);

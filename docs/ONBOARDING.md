@@ -199,7 +199,7 @@ disputes.
 
 ### Latest: Razorpay payments
 
-Three stacked PRs; the server side is in `costonomy-mp-api` (D-098, D-099).
+Four stacked PRs; the server side is in `costonomy-mp-api` (D-098 to D-102).
 
 - **The pay screen opens Razorpay's own checkout** when the server runs on
   Razorpay — checkout.js on web, `react-native-razorpay` on iOS and Android — and
@@ -208,8 +208,15 @@ Three stacked PRs; the server side is in `costonomy-mp-api` (D-098, D-099).
 - **A second tap on Create Order is the same order**, not a second one. The key
   used to be minted per call, so a double tap was refused on the spent delivery
   quote while the order had in fact been placed.
+- **The pay screen asks the server what happened** (`feat/razorpay-9-pay-screen-fixes`,
+  from three independent reviews). Every ending — paid, try again, or over — comes
+  from the server's `fundsSecured` and whether the payment is still payable, never
+  from a guess: a closed window or a native error asks first, "Try Again" is shown
+  only while the order can still be paid, and the checkout is fetched from the
+  server (D-102), so an order can be paid after a refresh or from the order
+  screen's new **Pay Now**. A "still in progress" reply keeps the Create Order key.
 - **`tools/razorpay-e2e`** pays real test-mode orders through this app and
-  Razorpay's checkout — 28 cases, most of them failures — and checks both our
+  Razorpay's checkout — 30 cases, most of them failures — and checks both our
   database and Razorpay's records. Its README says how to run it.
 
 What you will notice:

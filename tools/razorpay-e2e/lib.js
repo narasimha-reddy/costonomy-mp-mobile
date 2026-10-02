@@ -72,9 +72,12 @@ const MYSQL = process.env.MYSQL_BIN || (fs.existsSync(LOCAL_MYSQL) ? LOCAL_MYSQL
 function db(sql) {
   return execFileSync(MYSQL,
     ['-h', process.env.MYSQL_HOST || '127.0.0.1', '-P', process.env.MYSQL_PORT || '3306',
-      `-u${prop('spring.datasource.username') || 'root'}`, `-p${prop('spring.datasource.password')}`,
+      `-u${prop('spring.datasource.username') || 'root'}`,
       process.env.MYSQL_DATABASE || 'costonomy_mp', '-N', '-e', sql],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    // The password in the environment, not the command line: a failed command's
+    // error message repeats its arguments, and those reached report.json.
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+      env: { ...process.env, MYSQL_PWD: prop('spring.datasource.password') } }).trim();
 }
 
 /** Read-only calls to Razorpay's TEST API, for asserting what Razorpay itself recorded. */

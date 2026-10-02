@@ -37,6 +37,14 @@ export async function openRazorpayCheckout(request: CheckoutRequest): Promise<Ch
     });
     return { providerPaymentId: result.razorpay_payment_id };
   } catch (caught) {
+    // On Android Expo Go the require succeeds but the native module is absent,
+    // so open() fails with a TypeError rather than a checkout error. That is
+    // "this build cannot take payments", not "your payment failed".
+    if (caught instanceof TypeError) {
+      throw new CheckoutUnavailable(
+        'Payments need the full app. This preview build cannot open the payment window.',
+      );
+    }
     throw toCheckoutError(caught);
   }
 }

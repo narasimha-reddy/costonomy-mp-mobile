@@ -50,7 +50,8 @@ export interface WalletEntry {
 export type WalletEntryKind =
   | 'TOP_UP' | 'ORDER_PAYMENT' | 'ORDER_REFUND' | 'REFUND' | 'WITHDRAWAL' | 'DISPUTE_REFUND'
   /** A withdrawal the provider refused, put back in the wallet (API D-110). A credit. */
-  | 'WITHDRAWAL_REVERSAL';
+  | 'WITHDRAWAL_REVERSAL'
+  | 'QUICKSCAN_PAYMENT' | 'QUICKSCAN_RETURN';
 
 /** Where a withdrawal's refund has got to. `REJECTED`/`REVERSED` need API D-110. */
 export type WithdrawalRefundStatus =

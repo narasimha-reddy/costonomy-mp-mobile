@@ -24,6 +24,8 @@ export interface SupplierStore {
    */
   responseSlaSeconds: number | null;
   preparationMinutes: number | null;
+  /** Restaurants may order from this store without sending a request. D-094. */
+  directOrdersEnabled: boolean;
   status: string;
 }
 
@@ -32,6 +34,10 @@ export interface Supplier {
   legalName: string;
   displayName: string;
   gstin: string | null;
+  /** Who to ring about the business. D-097. */
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
   lifecycleStatus: string;
   verificationStatus: string;
   /** Whether this supplier can currently receive orders. The server's answer. */
@@ -85,13 +91,6 @@ export function fetchOrderHistory(
  * Any change of quantity is a partial acceptance, which is a different decision
  * with different consequences for the restaurant (doc 04 §11).
  */
-export function acceptOrder(token: string, orderId: number, idempotencyKey: string) {
-  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/accept`, {
-    method: 'POST',
-    token,
-    idempotencyKey,
-  });
-}
 
 export interface PartialAcceptItem {
   supplierOrderItemId: number;
@@ -132,32 +131,7 @@ export interface PartialAcceptPreview {
   anyAccepted: boolean;
 }
 
-export function previewPartialAccept(
-  token: string,
-  orderId: number,
-  items: PartialAcceptItem[],
-  signal?: AbortSignal,
-): Promise<PartialAcceptPreview> {
-  return apiRequest<PartialAcceptPreview>(
-    `/api/v1/supplier-orders/${orderId}/partial-accept/preview`,
-    { method: 'POST', token, body: { items }, signal },
-  );
-}
 
-export function partialAcceptOrder(
-  token: string,
-  orderId: number,
-  items: PartialAcceptItem[],
-  note: string | undefined,
-  idempotencyKey: string,
-) {
-  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/partial-accept`, {
-    method: 'POST',
-    token,
-    idempotencyKey,
-    body: { items, note },
-  });
-}
 
 export type RejectionReason =
   | 'OUT_OF_STOCK'
@@ -167,20 +141,6 @@ export type RejectionReason =
   | 'BELOW_MINIMUM_ORDER'
   | 'OTHER';
 
-export function rejectOrder(
-  token: string,
-  orderId: number,
-  reason: RejectionReason,
-  note: string | undefined,
-  idempotencyKey: string,
-) {
-  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/reject`, {
-    method: 'POST',
-    token,
-    idempotencyKey,
-    body: { reason, note },
-  });
-}
 
 /**
  * Advance an accepted order.
@@ -197,12 +157,60 @@ export function markPreparing(token: string, orderId: number, idempotencyKey: st
   });
 }
 
-/** Ready for pickup. This is what starts the delivery flow (doc 05 §28). */
+/**
+ * Ready. What that means depends on the mode: a courier is called, the supplier's
+ * own van loads, or there are crates waiting for the kitchen to collect.
+ */
 export function markReady(token: string, orderId: number, idempotencyKey: string) {
   return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/ready`, {
     method: 'POST',
     token,
     idempotencyKey,
+  });
+}
+
+/**
+ * Out for delivery, when the supplier is the one carrying it.
+ *
+ * <p>Refused under `COSTONOMY_DELIVERY`: the courier's events move the order and
+ * a supplier cannot claim movement on their behalf (§23A.38). The screen only
+ * offers this for `SUPPLIER_DELIVERY`, and the server enforces it regardless.
+ */
+export function markOutForDelivery(token: string, orderId: number, idempotencyKey: string) {
+  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/out-for-delivery`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+  });
+}
+
+/** Delivered, by the supplier who carried it. The restaurant still confirms. */
+export function markDelivered(token: string, orderId: number, idempotencyKey: string) {
+  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/delivered`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+  });
+}
+
+/**
+ * The supplier's way out of an order they cannot fulfil. D-091.
+ *
+ * <p>This replaced rejection. The money has already moved — they agreed on the
+ * request and the restaurant paid against that answer — so backing out refunds,
+ * and the order records `cancelledBy: SUPPLIER`.
+ */
+export function supplierCancelOrder(
+  token: string,
+  orderId: number,
+  reason: string,
+  idempotencyKey: string,
+) {
+  return apiRequest<SupplierOrder>(`/api/v1/supplier-orders/${orderId}/supplier-cancel`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    body: { reason },
   });
 }
 
@@ -236,6 +244,14 @@ export interface SupplierSku {
    * tell their picture from the platform's.
    */
   canonicalProductImageUrl: string | null;
+  /** The optional detail a kitchen decides on. D-096. */
+  description: string | null;
+  lengthCm: Money | null;
+  widthCm: Money | null;
+  heightCm: Money | null;
+  weightGrams: Money | null;
+  youtubeUrl: string | null;
+  images: string[];
   status: string;
   sellingPrice: Money;
   gstRate: Money;
@@ -265,6 +281,14 @@ export function updateSku(
     measureUnit: string;
     /** Empty string clears it, returning the listing to the catalog picture. */
     imageUrl: string;
+    /** D-096. Blank clears; absent leaves alone. */
+    description: string;
+    lengthCm: string;
+    widthCm: string;
+    heightCm: string;
+    weightGrams: string;
+    youtubeUrl: string;
+    images: string[];
   }>,
 ): Promise<SupplierSku> {
   return apiRequest<SupplierSku>(`/api/v1/supplier-skus/${skuId}`, {
@@ -317,6 +341,13 @@ export interface UpdateStoreInput {
   contactPhone?: string;
   operatingHours?: OperatingHours;
   preparationMinutes?: number;
+  /**
+   * Let restaurants order without sending a request first. D-094.
+   *
+   * <p>A statement about inventory: the request exists to ask whether the goods
+   * are there, and a store that keeps stock has already answered.
+   */
+  directOrdersEnabled?: boolean;
   /** ACTIVE or OFFLINE. Going offline stops new orders without closing the store. */
   status?: 'ACTIVE' | 'OFFLINE';
 }
@@ -357,6 +388,21 @@ export interface CreateSkuInput {
   measureValue?: string;
   measureUnit?: string;
   imageUrl?: string;
+  /**
+   * Optional detail, for the page a kitchen decides on. D-096.
+   *
+   * <p>A listing with none of it behaves exactly as it did before that page
+   * existed. `images` is the gallery and is sent whole — reordering four
+   * pictures is one decision, and four calls for it leave the gallery
+   * half-applied when one fails.
+   */
+  description?: string;
+  lengthCm?: string;
+  widthCm?: string;
+  heightCm?: string;
+  weightGrams?: string;
+  youtubeUrl?: string;
+  images?: string[];
   sellingPrice: string;
   gstRate: string;
   availability?: 'AVAILABLE' | 'OUT_OF_STOCK';

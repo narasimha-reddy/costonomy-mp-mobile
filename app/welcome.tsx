@@ -13,9 +13,20 @@ const SCREEN = 'REST-AUTH-01';
 /**
  * The landing screen. The first thing anyone sees, signed out.
  *
- * <p>It has one job: say what Mandi is and get to a phone number. Everything
- * below the hero is there to answer "why would I type my number in" — three
- * claims a restaurant can check against their own week, not feature names.
+ * <p>It has one job: say what Mandi is and get to a phone number.
+ *
+ * <p><b>Two audiences arrive here, and the screen now says so.</b> One app serves
+ * restaurants and suppliers, but every word of this screen used to be addressed
+ * to a kitchen — "your suppliers", "your kitchen" — so a supplier invited to sign
+ * up read a page about somebody else and had to take on trust that it was also
+ * about them. Two blocks, one sentence each, let either reader find their own in
+ * a glance. That is also the whole of the body: three feature claims were more
+ * than a signed-out screen has earned the right to ask anyone to read.
+ *
+ * <p><b>No proof figures.</b> "3 suppliers compared per item" was a constant
+ * typed into a landing page, not anything measured — doc 07 §4 forbids
+ * fabricating a metric, and a made-up number on the first screen is the worst
+ * place to start.
  *
  * <p><b>No stock photography and no illustration.</b> There is no asset pipeline
  * here yet, and a placeholder image on the first screen reads as an unfinished
@@ -59,42 +70,31 @@ export default function WelcomeScreen() {
 
           <View style={styles.heroCopy}>
             <MandiText variant="hero" color={Colors.onGradient}>
-              Every supplier,{'\n'}one price list.
+              One place{'\n'}to buy and sell.
             </MandiText>
             <MandiText variant="bodyRelaxed" color={Colors.onGradientMuted} style={styles.lede}>
-              Compare what your suppliers actually charge, order in one place, and
-              know where it is until it reaches your kitchen.
+              The marketplace between restaurant kitchens and the suppliers who
+              stock them.
             </MandiText>
-          </View>
-
-          <View style={styles.proofRow}>
-            <Proof value="3 suppliers" label="compared per item" />
-            <View style={styles.proofRule} />
-            <Proof value="60 sec" label="to accept or decline" />
           </View>
         </LinearGradient>
 
         <View style={styles.body}>
-          <Claim
-            icon="pricetags-outline"
-            title="See the real price"
-            body="Every supplier stocking an item, side by side, with GST and the total you will actually pay."
+          <Audience
+            icon="restaurant-outline"
+            title="If you run a kitchen"
+            body="Compare what every supplier charges, order in one place, and follow it to your door."
           />
-          <Claim
-            icon="navigate-outline"
-            title="Know where it is"
-            body="Live tracking from the moment it is packed, and a receiving check that records what actually arrived."
-          />
-          <Claim
-            icon="wallet-outline"
-            title="Buy on your terms"
-            body="Pay now, or on credit your suppliers approve — with what you owe and what is left always on one screen."
+          <Audience
+            icon="storefront-outline"
+            title="If you supply one"
+            body="Set your own prices, reach new kitchens, and get orders that are already funded."
           />
         </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Spacing.lg + insets.bottom }]}>
-        <MandiButton label="Get started" size="lg" onPress={start} />
+        <MandiButton label="Get Started" size="lg" onPress={start} />
         <Pressable
           onPress={start}
           accessibilityRole="button"
@@ -111,16 +111,13 @@ export default function WelcomeScreen() {
   );
 }
 
-function Proof({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.proof}>
-      <MandiText variant="subtitle" color={Colors.onGradient}>{value}</MandiText>
-      <MandiText variant="caption" color={Colors.onGradientMuted}>{label}</MandiText>
-    </View>
-  );
-}
-
-function Claim({
+/**
+ * One side of the market, in a sentence.
+ *
+ * <p>A card rather than the old flat row: two of these have to read as a choice
+ * between two things, and a list reads as a sequence of claims about one.
+ */
+function Audience({
   icon,
   title,
   body,
@@ -130,11 +127,11 @@ function Claim({
   body: string;
 }) {
   return (
-    <View style={styles.claim}>
-      <View style={styles.claimIcon}>
+    <View style={styles.audience}>
+      <View style={styles.audienceIcon}>
         <Ionicons name={icon} size={20} color={Colors.primary} />
       </View>
-      <View style={styles.claimText}>
+      <View style={styles.audienceText}>
         <MandiText variant="bodyEmphasis">{title}</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>{body}</MandiText>
       </View>
@@ -147,7 +144,10 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1 },
   hero: {
     paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xxl,
+    // Deeper than the copy needs. With the body down to two blocks the gradient
+    // is what gives the screen its weight, and a shallow band above a lot of
+    // empty grey looked like a header that had lost its page.
+    paddingBottom: Spacing.xxxl,
     borderBottomLeftRadius: Radius.xl,
     borderBottomRightRadius: Radius.xl,
     gap: Spacing.xxl,
@@ -169,12 +169,20 @@ const styles = StyleSheet.create({
   },
   heroCopy: { gap: Spacing.md },
   lede: { maxWidth: 330 },
-  proofRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
-  proof: { gap: 2 },
-  proofRule: { width: StyleSheet.hairlineWidth, height: 32, backgroundColor: Colors.onGradientMuted },
-  body: { padding: Spacing.xl, gap: Spacing.xl },
-  claim: { flexDirection: 'row', gap: Spacing.md },
-  claimIcon: {
+  // Centred in whatever is left between the hero and the footer. With only two
+  // blocks the body no longer fills the screen, and pinned to the top it left a
+  // hole above the button that read as content failing to load.
+  body: { flex: 1, justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
+  audience: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  audienceIcon: {
     width: 40,
     height: 40,
     borderRadius: Radius.md,
@@ -182,7 +190,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.primaryLight,
   },
-  claimText: { flex: 1, gap: Spacing.xs },
+  audienceText: { flex: 1, gap: Spacing.xs },
   footer: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.md,

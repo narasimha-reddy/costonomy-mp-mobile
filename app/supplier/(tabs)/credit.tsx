@@ -169,7 +169,7 @@ function RequestCard({ agreement }: { agreement: CreditAgreement }) {
 
       <View style={styles.actions}>
         <MandiButton
-          label="Approve as asked"
+          label="Approve As Asked"
           size="md"
           loading={approve.isPending}
           onPress={() => approve.mutate()}

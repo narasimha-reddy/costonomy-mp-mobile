@@ -29,8 +29,8 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { CreditAgreementStatus, resolveStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
-import { formatDistance } from '@/utils/orders';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
 import { Colors, Radius, Spacing } from '@/theme';
@@ -225,19 +225,27 @@ export default function SupplierCreditAgreementScreen() {
         <MandiHeader
           title={data?.outletName ?? 'Credit line'}
           subtitle={
-            // Who and where, then the terms — the same order a card states them
-            // in, so tapping through does not rearrange the facts. A request has
-            // no agreed terms yet, so "0 day terms" would describe a line that
-            // does not exist.
+            // Who and where, and nothing else.
+            //
+            // <p>It used to carry the distance and the terms as well, and at
+            // four facts on one line the end of it — the terms — was the part
+            // that truncated. Both are stated in full below: the distance is
+            // not a credit fact at all, and the terms have a row of their own.
             data == null ? undefined : [
               data.restaurantName,
               data.outletLocality,
-              formatDistance(data.distanceKm),
-              data.status === 'REQUESTED' ? 'Credit request' : `${data.creditPeriodDays ?? '—'} day terms`,
             ].filter(Boolean).join(' · ')
           }
           back
-          onBack={() => (mode === 'view' ? router.back() : setMode('view'))}
+          onBack={() => {
+            if (mode !== 'view') {
+              setMode('view');
+            } else if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/supplier/credit' as any);
+            }
+          }}
         />
       }
       footer={renderFooter()}
@@ -265,9 +273,12 @@ export default function SupplierCreditAgreementScreen() {
             <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
               {pending ? 'Waiting on your answer' : 'Credit line'}
             </MandiText>
+            {/* The shared map, not a lowercased enum and a hand-picked tone:
+                "active" read as a stray word, and REJECTED and SUSPENDED both
+                came out amber when one of them is a refusal. */}
             <MandiStatusChip
-              label={data.status.toLowerCase()}
-              tone={data.status === 'ACTIVE' ? 'success' : 'warning'}
+              label={resolveStatus(CreditAgreementStatus, data.status).label}
+              tone={resolveStatus(CreditAgreementStatus, data.status).tone}
               size="sm"
             />
           </View>
@@ -545,7 +556,7 @@ export default function SupplierCreditAgreementScreen() {
               </MandiText>
             </View>
             <MandiButton
-              label="Approve at these terms"
+              label="Approve At These Terms"
               size="lg"
               disabled={Number(limitValue) <= 0}
               loading={approve.isPending}
@@ -565,7 +576,7 @@ export default function SupplierCreditAgreementScreen() {
         return (
           <MandiStickyBar>
             <MandiButton
-              label="Decline this request"
+              label="Decline This Request"
               size="lg"
               variant="destructive"
               disabled={reason.trim().length < 3}
@@ -580,14 +591,14 @@ export default function SupplierCreditAgreementScreen() {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Approve as asked"
+            label="Approve As Asked"
             size="lg"
             loading={approve.isPending}
             onPress={() => approve.mutate(false)}
           />
           <View style={styles.actions}>
             <MandiButton
-              label="Approve on my terms"
+              label="Approve On My Terms"
               variant="secondary"
               size="md"
               onPress={() => setMode('counter')}
@@ -609,7 +620,7 @@ export default function SupplierCreditAgreementScreen() {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Save new terms"
+            label="Save New Terms"
             size="lg"
             disabled={editBlockedBy != null}
             loading={modify.isPending}
@@ -634,7 +645,7 @@ export default function SupplierCreditAgreementScreen() {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Suspend this line"
+            label="Suspend This Line"
             size="lg"
             variant="destructive"
             disabled={reason.trim().length < 3}
@@ -655,7 +666,7 @@ export default function SupplierCreditAgreementScreen() {
       <MandiStickyBar>
         <View style={styles.actions}>
           <MandiButton
-            label="Edit terms"
+            label="Edit Terms"
             variant="secondary"
             size="md"
             icon="create-outline"

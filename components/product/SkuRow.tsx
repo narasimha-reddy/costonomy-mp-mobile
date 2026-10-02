@@ -3,8 +3,9 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { StorefrontSku } from '@/models/discovery';
 import { ProductThumb } from './ProductThumb';
-import { MandiButton, MandiText } from '@/components/common';
-import { formatMoney, formatQuantity } from '@/utils/money';
+import { MandiQuantityStepper, MandiButton, MandiText } from '@/components/common';
+import { formatGstRate, formatMoney, formatQuantity, type Money } from '@/utils/money';
+import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
@@ -34,6 +35,9 @@ export function SkuRow({
   onPress,
   onAdd,
   adding,
+  packs,
+  onChangePacks,
+  lineTotal,
   /** Hides the supplier line, for a list that is already one supplier's shelf. */
   hideSupplier,
 }: {
@@ -41,23 +45,77 @@ export function SkuRow({
   onPress?: () => void;
   onAdd?: () => void;
   adding?: boolean;
+  /**
+   * How many packs are in the basket, when the row should carry a stepper
+   * instead of an Add.
+   *
+   * <p>A shelf is where somebody buys four of something. "Add" puts one in and
+   * gives no way to say four without opening the item — so where a quantity is
+   * passed, the row counts instead.
+   */
+  packs?: number;
+  onChangePacks?: (packs: number) => void;
+  /**
+   * What this line comes to, when there is a line.
+   *
+   * <p>From the basket, never multiplied here: price times quantity is
+   * arithmetic on money and belongs to the server (guardrail 3). With nothing
+   * in the cart there is no line, so the row falls back to what one costs.
+   */
+  lineTotal?: Money | null;
   hideSupplier?: boolean;
 }) {
   const unavailable = sku.availability !== 'AVAILABLE';
 
   const body = (
     <>
-      <ProductThumb uri={sku.imageUrl} size={64} radius={Radius.md} />
+      <ProductThumb uri={sku.imageUrl} size={48} radius={Radius.sm} />
 
       <View style={styles.body}>
         <MandiText variant="bodyEmphasis" numberOfLines={2}>{sku.skuName}</MandiText>
 
-        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {[
-            sku.brandName,
-            `${formatQuantity(sku.packSize)} ${sku.packUnit.toLowerCase()}`,
-          ].filter(Boolean).join(' · ')}
+        {/* The same pack line as the request and order screens, from the same
+            helper — "12 PACK (500 ML) · Mother Dairy". It used to be brand then
+            a bare pack size, which read as a different kind of record for the
+            same goods depending which screen you found them on.
+
+            No price in it: the row already states one, top right, and the same
+            figure twice reads as two figures. */}
+        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>
+          {skuSecondaryLine({
+            supplierSkuId: sku.supplierSkuId,
+            productName: sku.canonicalProductName,
+            skuName: sku.skuName,
+            brandName: sku.brandName,
+            packSize: sku.packSize,
+            packUnit: sku.packUnit,
+            measureValue: sku.measureValue,
+            measureUnit: sku.measureUnit,
+            imageUrl: sku.imageUrl,
+            status: sku.availability,
+          })}
         </MandiText>
+
+        {/* What one pack costs, in the pack line's own register. It was set in
+            the price face, which made a per-unit figure shout louder than the
+            total beside the counter — the opposite of which number is being
+            decided on.
+
+            <b>Excluding GST, and saying so.</b> The rate is stated as something
+            still to be added rather than already in — which is what the figure
+            is, and what makes it reconcile with the total above the counter:
+            that one includes the tax this one is about to attract. */}
+        <View style={styles.unitPrice}>
+          <MandiText variant="caption" color={Colors.textPrimary}>
+            {formatMoney(sku.sellingPrice)}
+          </MandiText>
+          {sku.gstRate != null && Number(sku.gstRate) > 0 && (
+            <MandiText variant="caption" color={Colors.textTertiary}>
+              + {formatGstRate(sku.gstRate)} GST
+            </MandiText>
+          )}
+        </View>
+
 
         {!hideSupplier && (
           <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
@@ -88,6 +146,7 @@ export function SkuRow({
             )}
           </View>
         )}
+
       </View>
     </>
   );
@@ -98,7 +157,13 @@ export function SkuRow({
         <Pressable
           onPress={onPress}
           accessibilityRole="button"
-          accessibilityLabel={`${sku.skuName} from ${sku.supplierName}, ${formatMoney(sku.sellingPrice)}. Compare suppliers`}
+          // The row opens the pack now, not the comparison. A label describing
+          // the old destination is worse than none: a screen reader user hears
+          // where they are going and lands somewhere else.
+          accessibilityLabel={
+            `${sku.skuName} from ${sku.supplierName}, ${formatMoney(sku.sellingPrice)}. `
+            + 'About this pack'
+          }
           style={styles.main}
         >
           {body}
@@ -108,8 +173,34 @@ export function SkuRow({
       )}
 
       <View style={styles.trailing}>
-        <MandiText variant="price">{formatMoney(sku.sellingPrice)}</MandiText>
-        {onAdd && (
+        {/* What this line comes to, over the control that sets it. Only once
+            there is a line: a total of nothing is not a fact about this pack,
+            and the unit price beside the name already says what one costs. */}
+        {onChangePacks != null && lineTotal != null && (packs ?? 0) > 0 && (
+          <MandiText variant="priceSmall">{formatMoney(lineTotal)}</MandiText>
+        )}
+
+        {onChangePacks != null ? (
+          <>
+            <MandiQuantityStepper
+              value={packs ?? 0}
+              disabled={unavailable}
+              onChange={onChangePacks}
+            />
+            {/* The SKU's own unit, which is what the quantity is counted in
+                everywhere else — a request line for this reads "2 KG".
+                
+                In the flow and right-aligned with the control, not floated
+                under it: absolutely positioned it escaped the row's height and
+                struck the divider below, and a caption sitting on a rule reads
+                as belonging to the next row. */}
+            {sku.packUnit != null && (
+              <MandiText variant="caption" color={Colors.textTertiary}>
+                {sku.packUnit.toLowerCase()}
+              </MandiText>
+            )}
+          </>
+        ) : onAdd ? (
           <MandiButton
             label={unavailable ? 'Out of stock' : 'Add'}
             variant="secondary"
@@ -119,7 +210,7 @@ export function SkuRow({
             onPress={onAdd}
             fullWidth={false}
           />
-        )}
+        ) : null}
       </View>
     </View>
   );
@@ -136,7 +227,8 @@ const styles = StyleSheet.create({
   },
   main: { flex: 1, flexDirection: 'row', gap: Spacing.md, alignItems: 'center' },
   body: { flex: 1, gap: 2 },
+  unitPrice: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.xs },
   signals: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  trailing: { alignItems: 'flex-end', gap: Spacing.xs },
+  trailing: { alignItems: 'flex-end', gap: 2 },
 });

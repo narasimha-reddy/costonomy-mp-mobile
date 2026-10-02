@@ -100,7 +100,7 @@ export default function RestaurantSettingsScreen() {
         editable && dirty ? (
           <MandiStickyBar>
             <MandiButton
-              label="Save changes"
+              label="Save Changes"
               size="lg"
               disabled={nameValue.trim().length < 2}
               loading={save.isPending}

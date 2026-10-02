@@ -49,5 +49,15 @@ export function usePermissions() {
     [holds],
   );
 
-  return { canForRestaurant, canForOutlet };
+  /** A store grant, or one on its supplier organisation — the same parent rule. */
+  const canForStore = useCallback(
+    (permission: string, store: { id: number; supplierOrganizationId: number } | null | undefined) =>
+      store != null
+      && holds(permission, (g) =>
+        (g.scopeType === 'SUPPLIER_STORE' && g.scopeId === store.id)
+        || (g.scopeType === 'SUPPLIER' && g.scopeId === store.supplierOrganizationId)),
+    [holds],
+  );
+
+  return { canForRestaurant, canForOutlet, canForStore };
 }

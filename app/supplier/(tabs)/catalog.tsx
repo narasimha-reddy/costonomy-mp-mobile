@@ -342,7 +342,7 @@ function SkuCard({
         // card a whole band to say "there is more".
         <View style={styles.actions}>
           <MandiButton
-            label="Change price"
+            label="Change Price"
             variant="neutral"
             size="sm"
             icon="pricetag-outline"

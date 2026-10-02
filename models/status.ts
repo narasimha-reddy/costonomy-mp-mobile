@@ -3,7 +3,12 @@ import type {
   ProcurementStatus as ProcurementStatusCode,
   RequirementStatus as RequirementStatusCode,
   SupplierOrderStatus as SupplierOrderStatusCode,
+  DeliveryMode as DeliveryModeCode,
 } from './procurement';
+import type {
+  IntentFulfilment as IntentFulfilmentCode,
+  IntentStatus as IntentStatusCode,
+} from './intent';
 
 /**
  * Domain status → display.
@@ -50,20 +55,41 @@ export const SupplierOrderStatus = widen({
   // supplier (guardrail 16, D-020). "Draft" describes the row; it tells the
   // restaurant nothing about why nobody is acting on their order.
   DRAFT: { label: 'Payment incomplete', tone: 'warning' },
-  PENDING_ACCEPTANCE: { label: 'Awaiting supplier', tone: 'pending' },
+  // Confirmed on funding, never "awaiting supplier": D-091 removed the second
+  // acceptance, because the supplier agreed on the request and was paid against
+  // that answer.
   CONFIRMED: { label: 'Confirmed', tone: 'success' },
-  PARTIALLY_ACCEPTED: { label: 'Partially accepted', tone: 'warning' },
   PREPARING: { label: 'Preparing', tone: 'info' },
   READY_FOR_PICKUP: { label: 'Ready for pickup', tone: 'info' },
   OUT_FOR_DELIVERY: { label: 'Out for delivery', tone: 'live' },
   DELIVERED: { label: 'Delivered', tone: 'success' },
   COMPLETED: { label: 'Completed', tone: 'success' },
-  REJECTED: { label: 'Rejected', tone: 'danger' },
-  // Expired and rejected are distinct business outcomes (doc 01 §12, rule 11)
-  // and must never be collapsed into one chip.
-  EXPIRED: { label: 'No response', tone: 'danger' },
   CANCELLED: { label: 'Cancelled', tone: 'neutral' },
 } satisfies Record<SupplierOrderStatusCode, StatusDisplay>);
+
+/**
+ * What "ready" means, which depends on who is carrying the order. D-091.
+ *
+ * <p>The same status reads differently to the same person: crates waiting on a
+ * counter for somebody to fetch, or a van about to leave. One label for both
+ * would make the kitchen guess which.
+ */
+export function orderStatusFor(
+  status: string,
+  mode: DeliveryModeCode | null | undefined,
+): StatusDisplay {
+  if (status === 'READY_FOR_PICKUP' && mode === 'PICKUP') {
+    return { label: 'Ready to collect', tone: 'info' };
+  }
+  return resolveStatus(SupplierOrderStatus, status);
+}
+
+/** How the goods travel, named for the person reading it. D-091. */
+export const DeliveryMode = widen({
+  PICKUP: { label: 'You collect', tone: 'neutral' },
+  SUPPLIER_DELIVERY: { label: 'Supplier delivers', tone: 'info' },
+  COSTONOMY_DELIVERY: { label: 'We deliver', tone: 'info' },
+} satisfies Record<DeliveryModeCode, StatusDisplay>);
 
 /** Procurement — doc 03 §4. */
 export const ProcurementStatus = widen({
@@ -94,10 +120,16 @@ export const PaymentStatus: Record<string, StatusDisplay> = {
   AUTHORIZED: { label: 'Authorised', tone: 'info' },
   CAPTURE_PENDING: { label: 'Confirming payment', tone: 'pending' },
   CAPTURED: { label: 'Paid', tone: 'success' },
+  // Never "not charged": only a released card hold is that (lib/payments/statusLabel).
   RELEASED: { label: 'Released', tone: 'neutral' },
   FAILED: { label: 'Payment failed', tone: 'danger' },
   PARTIALLY_REFUNDED: { label: 'Partially refunded', tone: 'info' },
   FULLY_REFUNDED: { label: 'Refunded', tone: 'info' },
+  // D-109: money taken by a non-card method on an order that then cancelled.
+  CANCEL_PENDING: { label: 'Cancelled · being settled', tone: 'pending' },
+  RETURNING: { label: 'Refund on its way', tone: 'info' },
+  RETURNED: { label: 'Returned by the payment provider', tone: 'neutral' },
+  RETURN_DELAYED: { label: 'Refund delayed', tone: 'warning' },
 };
 
 /** Credit agreement — doc 03 §8. */
@@ -172,3 +204,98 @@ export function resolveStatus(
   if (!status) return { label: 'Unknown', tone: 'neutral' };
   return registry[status] ?? unknownStatus(status);
 }
+
+/**
+ * Request lifecycle — where a request has got to. D-088.
+ *
+ * <p>Written from the restaurant's side, because that is who raised it. The
+ * supplier's list re-labels two of these: see {@link SupplierIntentStatus}.
+ */
+export const IntentStatus = widen({
+  DRAFT: { label: 'Not sent', tone: 'neutral' },
+  OPEN: { label: 'Awaiting acceptance', tone: 'pending' },
+  RESPONSES_RECEIVED: { label: 'Supplier accepted', tone: 'ready' },
+  ORDERED: { label: 'Ordered', tone: 'success' },
+  CANCELLED: { label: 'Cancelled', tone: 'neutral' },
+  // Two different endings, and they must not read the same. EXPIRED is the
+  // supplier never answering; ORDER_CREATION_EXPIRED is them answering and the
+  // restaurant letting the window pass. Calling both "Expired" would blame the
+  // supplier for the restaurant's delay.
+  EXPIRED: { label: 'No reply in time', tone: 'danger' },
+  ORDER_CREATION_EXPIRED: { label: 'Reply expired', tone: 'warning' },
+} satisfies Record<IntentStatusCode, StatusDisplay>);
+
+/**
+ * The same lifecycle, as the supplier sees it.
+ *
+ * <p>"Waiting for a reply" is the restaurant's view of OPEN; from the other side
+ * it is a job to do. And ORDER_CREATION_EXPIRED is the restaurant's lapse, not
+ * the supplier's — telling a supplier their reply "expired" would read as a
+ * reprimand for work they did on time.
+ */
+export const SupplierIntentStatus = widen({
+  DRAFT: { label: 'Not sent', tone: 'neutral' },
+  // "Accept", not "reply": the supplier is committing to supply these
+  // quantities at these prices, and the order is then created on exactly what
+  // they accepted. "Reply" understates what the tap does.
+  OPEN: { label: 'Needs your acceptance', tone: 'pending' },
+  RESPONSES_RECEIVED: { label: 'You accepted', tone: 'info' },
+  ORDERED: { label: 'Ordered', tone: 'success' },
+  CANCELLED: { label: 'Cancelled by restaurant', tone: 'neutral' },
+  EXPIRED: { label: 'Not accepted in time', tone: 'danger' },
+  ORDER_CREATION_EXPIRED: { label: 'Not ordered in time', tone: 'neutral' },
+} satisfies Record<IntentStatusCode, StatusDisplay>);
+
+/**
+ * The supplier's own status, corrected for what they actually said.
+ *
+ * <p>`RESPONSES_RECEIVED` covers both "I can supply this" and "I can supply
+ * none of it", and the plain status map can only pick one word for both.
+ * Telling a supplier they "accepted" a request they turned down is worse than
+ * the extra branch here.
+ */
+export function supplierIntentStatus(
+  status: string,
+  fulfilment: IntentFulfilmentCode,
+): StatusDisplay {
+  if (status === 'RESPONSES_RECEIVED') {
+    if (fulfilment === 'NOT_FULFILLED') {
+      return { label: 'You declined', tone: 'danger' };
+    }
+    if (fulfilment === 'PARTIALLY_FULFILLED') {
+      return { label: 'Accepted in part', tone: 'warning' };
+    }
+  }
+  return resolveStatus(SupplierIntentStatus, status);
+}
+
+/**
+ * How much of a request was available — the axis the restaurant filters on.
+ *
+ * <p>Deliberately not a status. A request can be ORDERED and only a third
+ * filled, and "what didn't I get?" is the question being asked.
+ */
+/** The restaurant's view, corrected the same way as the supplier's. */
+export function restaurantIntentStatus(
+  status: string,
+  fulfilment: IntentFulfilmentCode,
+): StatusDisplay {
+  if (status === 'RESPONSES_RECEIVED') {
+    if (fulfilment === 'NOT_FULFILLED') {
+      return { label: 'Supplier declined', tone: 'danger' };
+    }
+    if (fulfilment === 'PARTIALLY_FULFILLED') {
+      return { label: 'Accepted in part', tone: 'warning' };
+    }
+  }
+  return resolveStatus(IntentStatus, status);
+}
+
+export const IntentFulfilment = widen({
+  // Not zero. Nobody has answered yet, and showing this as "none available"
+  // would have a restaurant re-sourcing against a reply that is still coming.
+  AWAITING: { label: 'Awaiting acceptance', tone: 'pending' },
+  FULFILLED: { label: 'All available', tone: 'success' },
+  PARTIALLY_FULFILLED: { label: 'Partly available', tone: 'warning' },
+  NOT_FULFILLED: { label: 'None available', tone: 'danger' },
+} satisfies Record<IntentFulfilmentCode, StatusDisplay>);

@@ -67,6 +67,18 @@ export default function AccountScreen() {
           onPress={() => router.push('/restaurant/settings/outlets')}
         />
         <Entry
+          icon="wallet-outline"
+          title="Wallet"
+          detail="Refunds, and sending them back to your card"
+          onPress={() => router.push('/restaurant/wallet')}
+        />
+        <Entry
+          icon="chatbubbles-outline"
+          title="Disputes"
+          detail="Problems with deliveries, and refunds asked for"
+          onPress={() => router.push('/restaurant/disputes')}
+        />
+        <Entry
           icon="card-outline"
           title="Credit"
           detail="What each supplier has extended, and what you owe"
@@ -74,7 +86,7 @@ export default function AccountScreen() {
         />
       </View>
 
-      <MandiButton label="Sign out" onPress={signOut} variant="secondary" />
+      <MandiButton label="Sign Out" onPress={signOut} variant="secondary" />
     </MandiScreen>
   );
 }

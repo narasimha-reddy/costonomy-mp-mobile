@@ -17,6 +17,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { CreditAgreementStatus, resolveStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
 import { Colors, Spacing } from '@/theme';
@@ -68,7 +69,35 @@ export default function CreditAgreementScreen() {
   });
 
   const data = agreement.data;
-  const modified = data?.latestRequest?.status === 'MODIFIED';
+  /**
+   * Terms the supplier changed that this restaurant has not agreed to yet.
+   *
+   * <p><b>Two conditions, not one.</b> `latestRequest.status === 'MODIFIED'` is
+   * a permanent fact — the supplier really did approve something other than
+   * what was asked for, and accepting does not un-modify it. On its own it kept
+   * the "Accept These Terms" card on screen forever, over a line that was
+   * already Active with the full limit available to spend.
+   *
+   * <p>Whether anything is still owed is `canFund`, which is the server's
+   * answer: an APPROVED agreement waiting on acceptance cannot fund, and an
+   * ACTIVE one can. The supplier's side of this screen already reasons this way
+   * — D-067, from the other direction.
+   */
+  const modified = data?.latestRequest?.status === 'MODIFIED' && data?.canFund === false;
+  const pending = data?.status === 'REQUESTED';
+  const rejected = data?.status === 'REJECTED';
+  const status = data ? resolveStatus(CreditAgreementStatus, data.status) : null;
+
+  /**
+   * Approved, but nothing can be drawn on it yet.
+   *
+   * <p>Same rule as `modified`, applied to the panel: while `canFund` is false
+   * there is no spendable balance, and "Available to spend ₹25,000.00" sat
+   * directly under a card saying "Credit is not usable until you accept". One
+   * of those two had to be wrong, and it was the number.
+   */
+  const awaitingAcceptance = data != null && !pending && !rejected
+    && data.canFund === false && data.status !== 'SUSPENDED';
 
   return (
     <MandiScreen
@@ -98,7 +127,7 @@ export default function CreditAgreementScreen() {
                 Credit is not usable until you accept.
               </MandiText>
               <MandiButton
-                label="Accept these terms"
+                label="Accept These Terms"
                 size="md"
                 loading={accept.isPending}
                 onPress={() => accept.mutate()}
@@ -115,25 +144,92 @@ export default function CreditAgreementScreen() {
             </MandiCard>
           )}
 
-          <CreditPosition
-            approvedLimit={data.approvedLimit}
-            reserved={data.reserved}
-            utilized={data.utilized}
-            available={data.available}
-            due={data.due}
-            overdue={data.overdue}
-          />
+          {/* What this line is, said once and in the same place whatever the
+              state. The page had no status at all, so a request awaiting an
+              answer and a live line differed only in their numbers. */}
+          <View style={styles.statusRow}>
+            <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+              {pending ? 'Waiting on this supplier'
+                : rejected ? 'This supplier said no'
+                  : awaitingAcceptance ? 'Waiting on you'
+                    : 'Credit line'}
+            </MandiText>
+            <MandiStatusChip
+              label={status?.label ?? ''}
+              tone={status?.tone}
+              size="sm"
+            />
+          </View>
 
-          <MandiCard>
-            <Row label="Payment period" value={`${data.creditPeriodDays ?? '—'} days`} />
-            <Row label="Grace period" value={`${data.gracePeriodDays ?? 0} days`} />
-            {data.maxSingleOrderCredit && (
-              <Row label="Per-order cap" value={formatMoney(data.maxSingleOrderCredit)} />
-            )}
-            {data.termsVersion != null && (
-              <Row label="Terms version" value={`v${data.termsVersion}`} />
-            )}
-          </MandiCard>
+          {/* A request is a question, not a credit line.
+              <p>It had no limit, no period and nothing drawn, and the balance
+              panel rendered all of that as "₹0.00 available of ₹0.00 approved"
+              over "0 days" — which reads as a credit line worth nothing rather
+              than as an answer nobody has given yet. The supplier's side
+              already knew this; this is the same rule from the other end. */}
+          {pending ? (
+            <MandiCard>
+              <MandiText variant="caption" color={Colors.textSecondary}>You asked for</MandiText>
+              <MandiText variant="display">
+                {formatMoney(data.latestRequest?.requestedLimit ?? '0')}
+              </MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                payable in {data.latestRequest?.requestedPeriodDays ?? '—'} days
+              </MandiText>
+              {data.latestRequest?.purpose != null && (
+                <MandiText variant="body" color={Colors.textSecondary} style={styles.spacedTop}>
+                  {data.latestRequest.purpose}
+                </MandiText>
+              )}
+              <MandiText variant="caption" color={Colors.textTertiary} style={styles.spacedTop}>
+                {data.supplierName ?? 'The supplier'} decides the limit and the terms — we run
+                the workflow and the ledger, and do not fund or guarantee credit.
+              </MandiText>
+            </MandiCard>
+          ) : rejected ? (
+            <MandiCard accentColor={Colors.danger}>
+              <MandiText variant="bodyEmphasis">They turned this down</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                {data.latestRequest?.responseNote
+                  ?? 'They did not give a reason. You can ask again once things change.'}
+              </MandiText>
+            </MandiCard>
+          ) : awaitingAcceptance ? (
+            // The terms on offer, not a balance: nothing is spendable until
+            // they are accepted, and the card above says so.
+            <MandiCard>
+              <MandiText variant="caption" color={Colors.textSecondary}>They approved</MandiText>
+              <MandiText variant="display">{formatMoney(data.approvedLimit)}</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                payable in {data.creditPeriodDays ?? '—'} days
+              </MandiText>
+            </MandiCard>
+          ) : (
+            <CreditPosition
+              approvedLimit={data.approvedLimit}
+              reserved={data.reserved}
+              utilized={data.utilized}
+              available={data.available}
+              due={data.due}
+              overdue={data.overdue}
+            />
+          )}
+
+          {/* Terms only once there are any. Zeros in these rows describe a
+              line that does not exist yet. */}
+          {!pending && !rejected && !awaitingAcceptance && (
+            <MandiCard>
+              <Row label="Approved limit" value={formatMoney(data.approvedLimit)} />
+              <Row label="Payment period" value={`${data.creditPeriodDays ?? '—'} days`} />
+              <Row label="Grace period" value={`${data.gracePeriodDays ?? 0} days`} />
+              {data.maxSingleOrderCredit && (
+                <Row label="Per-order cap" value={formatMoney(data.maxSingleOrderCredit)} />
+              )}
+              {data.termsVersion != null && (
+                <Row label="Terms version" value={`v${data.termsVersion}`} />
+              )}
+            </MandiCard>
+          )}
 
           <View style={styles.section}>
             <MandiSectionHeader title="Invoices" />
@@ -214,6 +310,9 @@ function humanise(value: string): string {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  spacedTop: { marginTop: Spacing.xs },
   section: { gap: Spacing.listGap },
   row: {
     flexDirection: 'row',

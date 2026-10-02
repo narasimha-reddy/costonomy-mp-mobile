@@ -8,6 +8,7 @@ export type StatusTone =
   | 'neutral'
   | 'info'
   | 'success'
+  | 'ready'
   | 'warning'
   | 'danger'
   | 'pending'
@@ -32,13 +33,29 @@ interface MandiStatusChipProps {
  * forbids conveying information by colour alone, and an order's state is exactly
  * the kind of information a colour-blind user must not lose.
  */
-const TONES: Record<
+export const TONES: Record<
   StatusTone,
   { bg: string; fg: string; icon: keyof typeof Ionicons.glyphMap }
 > = {
   neutral: { bg: Colors.surfaceSunken, fg: Colors.textSecondary, icon: 'ellipse-outline' },
   info: { bg: Colors.infoLight, fg: Colors.info, icon: 'information-circle' },
   success: { bg: Colors.successLight, fg: Colors.success, icon: 'checkmark-circle' },
+  /**
+   * Somebody said yes and it is now your move. D-091's request flow.
+   *
+   * <p><b>Not `success`, though it is good news.</b> Green means settled here —
+   * a confirmed order, a request already ordered from — and this state is the
+   * opposite: a clock is running and nothing happens until the restaurant acts.
+   *
+   * <p><b>And not `info`.</b> That blue sits on the order cards directly below
+   * these on the home screen, so a request and an order were edged in the same
+   * colour while meaning different things.
+   *
+   * <p>It borrows credit's violet because the palette has one. If credit's ever
+   * moves, this either moves with it or earns a token of its own — what it must
+   * not do is quietly become a second meaning for the same swatch.
+   */
+  ready: { bg: Colors.creditLight, fg: Colors.credit, icon: 'checkmark-circle' },
   warning: { bg: Colors.warningLight, fg: Colors.warning, icon: 'alert-circle' },
   danger: { bg: Colors.dangerLight, fg: Colors.danger, icon: 'close-circle' },
   pending: { bg: Colors.warningLight, fg: Colors.warning, icon: 'time' },
@@ -46,6 +63,19 @@ const TONES: Record<
   live: { bg: Colors.deliveryLiveLight, fg: Colors.deliveryLive, icon: 'navigate' },
   stale: { bg: Colors.staleBg, fg: Colors.stale, icon: 'cloud-offline' },
 };
+
+/**
+ * A tone's colours, for the surfaces that carry the same meaning as a chip.
+ *
+ * <p>A card's accent stripe and a section's icon read as part of the same
+ * system as the chip inside them only if they come from the same table. Two
+ * tables would drift, and the drift would be a card edged in one colour above a
+ * chip in another, both claiming to describe the same state.
+ */
+export function toneColors(tone: StatusTone): { bg: string; fg: string } {
+  const { bg, fg } = TONES[tone];
+  return { bg, fg };
+}
 
 /** A compact state pill. PRD §23A.3. Domain mappings live in `models/status.ts`. */
 export function MandiStatusChip({

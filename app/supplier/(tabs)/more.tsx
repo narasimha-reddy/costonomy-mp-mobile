@@ -80,6 +80,12 @@ export default function SupplierMoreScreen() {
           onPress={() => router.push('/supplier/settlements')}
         />
         <Row
+          icon="chatbubbles-outline"
+          title="Disputes"
+          subtitle="Problems restaurants raised, and refunds waiting for your answer"
+          onPress={() => router.push('/supplier/disputes')}
+        />
+        <Row
           icon="card-outline"
           title="Credit"
           subtitle="Requests from restaurants and what you have extended"
@@ -96,7 +102,7 @@ export default function SupplierMoreScreen() {
             <MandiText variant="caption" color={Colors.textSecondary}>{me.user.phone}</MandiText>
           )}
         </MandiCard>
-        <MandiButton label="Sign out" variant="secondary" onPress={signOut} />
+        <MandiButton label="Sign Out" variant="secondary" onPress={signOut} />
       </View>
     </MandiScreen>
   );

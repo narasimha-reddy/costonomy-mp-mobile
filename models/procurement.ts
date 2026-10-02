@@ -1,4 +1,5 @@
 import type { Money } from '@/utils/money';
+import type { SkuDescriptor } from '@/utils/skuLabel';
 import type { RecommendedOffer } from './discovery';
 
 /**
@@ -14,7 +15,7 @@ export type ProcurementStatus =
 
 export type ApprovalStatus = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
-export type PaymentMethod = 'PREPAID' | 'CREDIT';
+export type PaymentMethod = 'PREPAID' | 'WALLET' | 'CREDIT';
 
 export interface ProcurementItem {
   id: number;
@@ -28,6 +29,8 @@ export interface ProcurementItem {
   quantity: Money;
   unit: string;
   unitPrice: Money;
+  /** The same price with GST added, computed by the server. */
+  unitPriceInclusiveGst: Money | null;
   gstRate: Money;
   lineItemValue: Money;
   lineGst: Money;
@@ -162,9 +165,29 @@ export interface Requirement {
  * behind that comparison and simply never appeared.
  */
 export type SupplierOrderStatus =
-  | 'DRAFT' | 'PENDING_ACCEPTANCE' | 'CONFIRMED' | 'PARTIALLY_ACCEPTED'
-  | 'REJECTED' | 'EXPIRED' | 'PREPARING' | 'READY_FOR_PICKUP'
+  | 'DRAFT' | 'CONFIRMED' | 'PREPARING' | 'READY_FOR_PICKUP'
   | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
+
+/**
+ * How the goods travel. D-091.
+ *
+ * <p>The restaurant chooses at order creation, because the restaurant pays the
+ * delivery fee — and because the fee is part of what is charged, the choice has
+ * to be made before payment rather than after.
+ *
+ * <p>It also decides what happens after `READY_FOR_PICKUP`: a collected order
+ * completes there, a delivered one goes out first.
+ */
+export type DeliveryMode = 'PICKUP' | 'SUPPLIER_DELIVERY' | 'COSTONOMY_DELIVERY';
+
+/**
+ * Who cancelled. D-091.
+ *
+ * <p>An attribute rather than a status per actor: one thing happened — the order
+ * ended and the money went back — and only the actor differs. This is what the
+ * old `REJECTED` became on the supplier's side.
+ */
+export type CancelledBy = 'RESTAURANT' | 'SUPPLIER' | 'SYSTEM';
 
 /**
  * A line on a supplier order.
@@ -177,6 +200,8 @@ export type SupplierOrderStatus =
 export interface SupplierOrderItem {
   id: number;
   canonicalProductId: number;
+  /** The exact pack that was bought, so the line can open its page. D-096. */
+  supplierSkuId: number;
   productName: string;
   /**
    * The canonical product's picture, or null when it has none.
@@ -186,12 +211,15 @@ export interface SupplierOrderItem {
    * paneer. Null is common and normal — render a fallback, never a broken frame.
    */
   productImageUrl: string | null;
-  skuName: string;
+  /** The same pack description the request screens use. */
+  sku: SkuDescriptor | null;
   requestedQuantity: Money;
   /** Null until the supplier answers; zero means they declined this line. */
   acceptedQuantity: Money | null;
   unit: string;
   unitPrice: Money;
+  /** The same price with GST added, computed by the server. */
+  unitPriceInclusiveGst: Money | null;
   gstRate: Money;
   /** What was asked for. After a partial acceptance, not what anyone pays. */
   lineTotal: Money;
@@ -236,7 +264,29 @@ export interface SupplierOrder {
   acceptedSubtotal: Money;
   acceptedGst: Money;
   paymentMethod: PaymentMethod | null;
+  /**
+   * Read live. Beyond the card and wallet statuses it may be RETURNING, RETURNED
+   * or RETURN_DELAYED (D-109), and an unknown value must render neutrally.
+   */
   paymentStatus: string | null;
+  /**
+   * How the money moved: card, upi, netbanking, wallet, emi, paylater. Null before
+   * payment and for wallet or credit orders, and absent from an older API. Wording only.
+   */
+  paymentInstrument?: string | null;
+  /**
+   * The cancellation refund to the source account: its amount from when it is raised,
+   * and when it completed. Both null unless such a refund exists (a released card hold
+   * or an older wallet refund has none); absent from an older API. Number or string.
+   */
+  refundAmount?: Money | number | null;
+  refundedAt?: string | null;
+  /** How the goods travel, and what the carriage cost. D-091. */
+  deliveryMode: DeliveryMode | null;
+  deliveryFee: Money | null;
+  /** Set only on a cancelled order, and the reason it is not three statuses. */
+  cancelledBy: CancelledBy | null;
+  cancellationReason: string | null;
   items: SupplierOrderItem[];
 }
 

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useNotifications } from '@/hooks/useNotifications';
 import type { AppNotification, NotificationCategory } from '@/models/notification';
+import { destinationFor } from '@/lib/notifications/destination';
 import {
   MandiButton,
   MandiCard,
@@ -81,7 +82,7 @@ export default function NotificationsScreen() {
         <>
           {unreadCount > 0 && (
             <MandiButton
-              label="Mark all as read"
+              label="Mark All As Read"
               variant="tertiary"
               size="md"
               loading={markingAll}
@@ -124,51 +125,6 @@ export default function NotificationsScreen() {
       )}
     </MandiScreen>
   );
-}
-
-/**
- * Where a notification leads.
- *
- * <p><b>The notification says which side it was for; the viewer does not.</b>
- * Every destination here used to be a `/restaurant/...` route, so a supplier
- * tapping "New order" was sent to a restaurant URL they hold no grant on, bounced
- * by the route guard, and landed on their home screen — which is what made every
- * notification look like it did nothing. Routing by the *viewer's* role would fix
- * that for most people and still fail for anyone who is both a supplier and a
- * restaurant, because they have no single role to route by. `audience` is what
- * the server decided when it wrote the row.
- *
- * <p>Returns null when this build has no screen for that pair — a notification
- * that cannot be opened still reads, rather than navigating somewhere wrong.
- * Mobile releases lag the API, so an unknown target is expected, not exceptional.
- */
-function destinationFor(notification: AppNotification): string | null {
-  const id = notification.targetId;
-  if (id == null) return null;
-
-  const supplier = notification.audience === 'SUPPLIER_STORE';
-
-  switch (notification.targetType) {
-    case 'SUPPLIER_ORDER':
-      return supplier ? `/supplier/orders/${id}` : `/restaurant/orders/${id}`;
-
-    // The server points these at the order, not the delivery or the dispute:
-    // every screen either side has for them is keyed by the order.
-    case 'DELIVERY':
-      return supplier ? `/supplier/orders/${id}` : `/restaurant/tracking/${id}`;
-    case 'DISPUTE':
-      return supplier ? `/supplier/orders/${id}` : `/restaurant/dispute/${id}`;
-
-    case 'CREDIT_AGREEMENT':
-      return supplier ? `/supplier/credit/${id}` : `/restaurant/credit/${id}`;
-
-    // A procurement is a cart, and only its buyer has one.
-    case 'PROCUREMENT':
-      return supplier ? null : `/restaurant/checkout/${id}`;
-
-    default:
-      return null;
-  }
 }
 
 function relativeTime(iso: string): string {

@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ControlHeight, IconSize, Radius, Spacing, TextStyles } from '@/theme';
 import { MandiText } from './MandiText';
+import { toneColors, type StatusTone } from './MandiStatusChip';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'neutral' | 'destructive';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -17,6 +18,19 @@ interface MandiButtonProps {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
+  /**
+   * Recolours a primary button to a status tone. D-091's request screens use it
+   * so the action carries the same colour as the card it acts on.
+   *
+   * <p>Drawn from the same tone table as the chips and accent stripes rather
+   * than from a colour passed in: one table means a card, its chip and its
+   * button cannot drift apart, and there is no route here for an arbitrary
+   * colour that belongs to nothing.
+   *
+   * <p>Ignored by every other variant — a tertiary button is quiet by
+   * definition, and tinting it would make it a second primary.
+   */
+  tone?: StatusTone;
   size?: ButtonSize;
   icon?: keyof typeof Ionicons.glyphMap;
   iconPosition?: 'leading' | 'trailing';
@@ -87,6 +101,7 @@ export function MandiButton({
   label,
   onPress,
   variant = 'primary',
+  tone,
   size = 'lg',
   icon,
   iconPosition = 'leading',
@@ -98,7 +113,10 @@ export function MandiButton({
   accessibilityLabel,
   accessibilityHint,
 }: MandiButtonProps) {
-  const palette = VARIANTS[variant];
+  const base = VARIANTS[variant];
+  const palette = tone != null && variant === 'primary'
+    ? { ...base, bg: toneColors(tone).fg }
+    : base;
   const inert = disabled || loading;
   const height = size === 'lg' ? ControlHeight.lg
     : size === 'sm' ? ControlHeight.sm

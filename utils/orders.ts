@@ -20,13 +20,13 @@ export const ITEM_NAMES_SHOWN = 3;
  * at a time reads "+3", because the reader can already see the first three.
  */
 export function summariseItems(
-  items: Pick<SupplierOrderItem, 'skuName' | 'productName'>[],
+  items: Pick<SupplierOrderItem, 'sku' | 'productName'>[],
   max: number = ITEM_NAMES_SHOWN,
 ): string {
   // The SKU name is the supplier's own wording and the one they recognise on a
   // shelf; the canonical name is the fallback when a SKU was never named.
   const names = items
-    .map((item) => item.skuName || item.productName)
+    .map((item) => item.sku?.skuName || item.productName)
     .filter((name): name is string => Boolean(name));
 
   if (names.length === 0) {

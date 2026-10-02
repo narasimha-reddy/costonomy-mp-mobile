@@ -4,9 +4,9 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
-import { fetchActiveOrders, fetchPendingOrders } from '@/services/supplier';
+import { RequestCarousel } from '@/components/supplier/RequestCarousel';
+import { fetchActiveOrders } from '@/services/supplier';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
-import { PendingOrderCard } from '@/components/supplier/PendingOrderCard';
 import {
   MandiCard,
   MandiEmptyState,
@@ -14,121 +14,124 @@ import {
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
-  MandiStatusChip,
+  toneColors,
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatDistance, orderValue } from '@/utils/orders';
 import { OrderCardBody } from '@/components/order';
+import type { IncomingOrder } from '@/models/procurement';
 import { Spacing } from '@/theme';
 
 /**
  * SUP-HOME-01. Doc 05 §24.
  *
- * <p>New orders come first and are the only thing on this screen with a running
- * clock — §24 requires urgent acceptance items to be visually prioritised, and
- * for a supplier the sixty-second window is the whole job.
+ * <p>Two sections: what somebody is waiting on an answer for, and what this
+ * store has to work on.
  *
- * <p>Pending orders poll. Everything else here changes on the supplier's own
- * action; an unanswered order is changing because a deadline is passing.
+ * <p><b>Requests lead.</b> An order here has already been agreed to — it needs
+ * work but no decision. A request is the opposite: a kitchen is blocked on an
+ * answer only this store can give, and until it comes nothing else happens.
+ *
+ * <p><b>One orders section, not two.</b> It was split into "New orders" and "In
+ * progress", which made sense while an order arrived needing acceptance inside
+ * a sixty-second window. D-091 removed that: an order arrives confirmed and
+ * paid for, so the split no longer separated two kinds of thing — and because
+ * both lists were served from statuses that overlapped at {@code CONFIRMED},
+ * the same order appeared twice.
+ *
+ * <p>What the split was worth is kept without it: orders nobody has started are
+ * ordered first and outlined, so the one thing needing a supplier's hand still
+ * reads as such.
+ *
+ * <p>Nothing here polls. Every state on this screen changes on this store's own
+ * action or on a courier's event, and the request carousel refreshes itself.
  */
 export default function SupplierHome() {
   const router = useRouter();
   const { accessToken } = useSession();
-  const { storeId, store } = useStore();
+  const { storeId } = useStore();
 
-  const pending = useQuery({
-    queryKey: ['store', storeId, 'orders', 'pending'],
-    queryFn: () => fetchPendingOrders(accessToken as string, storeId as number),
-    enabled: storeId != null && accessToken != null,
-    refetchInterval: 15_000,
-  });
-
-  const active = useQuery({
+  const orders = useQuery({
     queryKey: ['store', storeId, 'orders', 'active'],
     queryFn: () => fetchActiveOrders(accessToken as string, storeId as number),
     enabled: storeId != null && accessToken != null,
   });
 
+  /**
+   * Unstarted first, then by age.
+   *
+   * <p>The priority the two sections used to carry. An order nobody has begun
+   * is the one with a decision attached to it; one already being prepared is a
+   * job in hand.
+   */
+  const sorted = React.useMemo(() => {
+    const unstarted = (order: IncomingOrder) => (order.status === 'CONFIRMED' ? 0 : 1);
+    return [...(orders.data ?? [])].sort((a, b) =>
+      unstarted(a) - unstarted(b) || a.createdAt.localeCompare(b.createdAt));
+  }, [orders.data]);
+
   return (
     <MandiScreen
       header={<SupplierHeader />}
-      onRefresh={() => {
-        void pending.refetch();
-        void active.refetch();
-      }}
-      refreshing={pending.isRefetching || active.isRefetching}
+      onRefresh={() => orders.refetch()}
+      refreshing={orders.isRefetching}
     >
-      <View style={styles.section}>
-        <MandiSectionHeader
-          title="New orders"
-          count={(pending.data ?? []).length}
-          subtitle={store?.responseSlaSeconds
-            ? `Respond within ${Math.round(store.responseSlaSeconds / 60)} min`
-            : undefined}
-        />
-        {pending.isPending ? (
-          <MandiSkeletonList count={2} />
-        ) : pending.error ? (
-          <MandiErrorState message="Couldn't load new orders." onRetry={() => pending.refetch()} />
-        ) : (pending.data ?? []).length === 0 ? (
-          <MandiEmptyState
-            compact
-            icon="notifications-outline"
-            title="No new orders"
-            description="Orders needing your answer appear here the moment they arrive."
-          />
-        ) : (
-          (pending.data ?? []).map((order) => (
-            <PendingOrderCard
-              key={order.id}
-              order={order}
-              onPress={() => router.push(`/supplier/orders/${order.id}`)}
-            />
-          ))
-        )}
-      </View>
+      <RequestCarousel />
 
       <View style={styles.section}>
         <MandiSectionHeader
-          title="In progress"
-          count={(active.data ?? []).length}
-          actionLabel={(active.data ?? []).length ? 'See all' : undefined}
+          title="Orders"
+          count={sorted.length}
+          subtitle={
+            sorted.some((order) => order.status === 'CONFIRMED')
+              ? 'Some are waiting for you to start'
+              : undefined
+          }
+          actionLabel={sorted.length ? 'See all' : undefined}
           onAction={() => router.push('/supplier/(tabs)/orders')}
         />
-        {active.isPending ? (
+        {orders.isPending ? (
           <MandiSkeletonList count={2} />
-        ) : active.error ? (
-          <MandiErrorState message="Couldn't load orders." onRetry={() => active.refetch()} />
-        ) : (active.data ?? []).length === 0 ? (
+        ) : orders.error ? (
+          <MandiErrorState message="Couldn't load orders." onRetry={() => orders.refetch()} />
+        ) : sorted.length === 0 ? (
           <MandiEmptyState
             compact
             icon="cube-outline"
-            title="Nothing in progress"
-            description="Accepted orders show here until they're picked up."
+            title="No orders yet"
+            description="Orders appear here once a kitchen orders against a request you accepted."
           />
         ) : (
-          (active.data ?? []).slice(0, 5).map((order) => (
-            <MandiCard key={order.id} onPress={() => router.push(`/supplier/orders/${order.id}`)}>
-              <OrderCardBody
-                primary={order.outletName}
-                secondary={[
-                  order.restaurantName,
-                  order.outletLocality,
-                  formatDistance(order.distanceKm),
-                ]}
-                items={order.items}
-                orderNumber={order.orderNumber}
-                paymentMethod={order.paymentMethod}
-              createdAt={order.createdAt}
-                amount={orderValue(order)}
-                trailing={
-                  <MandiStatusChip {...resolveStatus(SupplierOrderStatus, order.status)} size="sm" />
-                }
-              />
-            </MandiCard>
-          ))
+          sorted.slice(0, 5).map((order) => {
+            const started = order.status !== 'CONFIRMED';
+            return (
+              <MandiCard
+                key={order.id}
+                onPress={() => router.push(`/supplier/orders/${order.id}`)}
+                outlined={!started}
+                accentColor={toneColors(
+                  resolveStatus(SupplierOrderStatus, order.status).tone).fg}
+              >
+                <OrderCardBody
+                  primary={order.outletName}
+                  secondary={[
+                    order.restaurantName,
+                    order.outletLocality,
+                    formatDistance(order.distanceKm),
+                  ]}
+                  items={order.items}
+                  orderNumber={order.orderNumber}
+                  paymentMethod={order.paymentMethod}
+                  createdAt={order.createdAt}
+                  amount={orderValue(order)}
+                  status={resolveStatus(SupplierOrderStatus, order.status)}
+                />
+              </MandiCard>
+            );
+          })
         )}
       </View>
+
     </MandiScreen>
   );
 }

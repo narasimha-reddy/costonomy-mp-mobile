@@ -92,12 +92,32 @@ export const TextStyles = {
    * competing: a reader's eye skips it on the way to the cards and finds it again
    * when looking for where one group ends.
    */
+  /**
+   * The heading above a section — "New orders", "In progress".
+   *
+   * <p>Was 11px uppercase with wide tracking: an eyebrow label, which
+   * disappeared beside the bold party names on the cards underneath it, so a
+   * screen of sections read as one undifferentiated stack.
+   *
+   * <p>Now a heading that outranks the cards under it. A step above the card
+   * titles rather than level with them, or the section and its contents read as
+   * one flat list — which is the problem, not the size on its own.
+   *
+   * <p>Sentence case rather than uppercase, because the way to make small type
+   * carry is to stop making it small: setting caps larger just makes them
+   * shout, and wide tracking at this size reads as a logo.
+   */
   sectionTitle: {
-    fontFamily: FontFamily.semibold,
-    fontSize: FontSize.xs,
-    lineHeight: Math.round(FontSize.xs * LineHeight.normal),
-    letterSpacing: 0.8,
-    textTransform: 'uppercase' as const,
+    // Bold, not semibold: a section title sits above cards whose own headings
+    // are semibold, and matching them made it read as one more card rather than
+    // as the heading for all of them.
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.lg,
+    lineHeight: Math.round(FontSize.lg * LineHeight.normal),
+    // Zero, and deliberately. This was 0.8 while the title was 11px uppercase,
+    // where tracking earns its place; at 18px sentence case it only loosens a
+    // heading that should read as one word-group.
+    letterSpacing: 0,
   },
   body: {
     fontFamily: FontFamily.regular,

@@ -3,8 +3,9 @@
 For a developer joining Mandi and working through Claude Code. Read this once,
 then let `CLAUDE.md` do the rest.
 
-Last updated **20 September 2026**, from the branch
-`feat/edit-open-request-quantities`.
+Last updated **27 September 2026**, from the Razorpay branches
+(`feat/razorpay-4-checkout` → `-5-order-double-tap` → `-6-e2e-suite`), which build
+on `feat/edit-open-request-quantities`.
 
 ---
 
@@ -190,11 +191,36 @@ asking for the rewrite.
 
 ---
 
-## 5. State of play — 20 September 2026
+## 5. State of play — 27 September 2026
 
 Both role experiences are built: restaurant and supplier, from onboarding
 through discovery, requests, orders, payment, credit, delivery, receiving and
-disputes. Recent work, all on `feat/edit-open-request-quantities`:
+disputes.
+
+### Latest: Razorpay payments
+
+Three stacked PRs; the server side is in `costonomy-mp-api` (D-098, D-099).
+
+- **The pay screen opens Razorpay's own checkout** when the server runs on
+  Razorpay — checkout.js on web, `react-native-razorpay` on iOS and Android — and
+  keeps the simulation on the mock (`lib/payments/checkout.ts`, `docs/RAZORPAY.md`).
+  The app sends no amount; closing the window returns to review, not failure.
+- **A second tap on Create Order is the same order**, not a second one. The key
+  used to be minted per call, so a double tap was refused on the spent delivery
+  quote while the order had in fact been placed.
+- **`tools/razorpay-e2e`** pays real test-mode orders through this app and
+  Razorpay's checkout — 28 cases, most of them failures — and checks both our
+  database and Razorpay's records. Its README says how to run it.
+
+What you will notice:
+
+- Against a server on Razorpay, **Pay** opens a payment window. Against the
+  local mock, nothing changes.
+- **Native needs a development build** (`npx expo prebuild`, then
+  `npx expo run:ios|android`). Expo Go cannot load Razorpay's SDK and says so.
+- `npm run lint` is clean now — `tools/webcheck/cdp.js` declares `Buffer`.
+
+### Earlier, on `feat/edit-open-request-quantities`
 
 - **Cart** grouped by supplier and collapsible, sending per supplier, with
   Create Request and Create Order side by side where the store allows direct
@@ -221,3 +247,9 @@ Do not close one of these silently.
    database, and could not be reproduced across a plain load, expand-all,
    expand-and-scroll or a 50-second idle poll. It is recorded here rather than
    closed, because it happened.
+4. **The Razorpay checkout has not run on a phone.** Web only so far — a
+   development build is needed. **UPI is untested** too: the Razorpay test
+   account's checkout doesn't offer it yet.
+5. **This repo's `docs/DECISIONS.md` stops at D-088**, while
+   `costonomy-mp-api`'s carries D-089 to D-099 as well, and the two `docs/specs/`
+   copies differ. §0 says to report drift rather than pick a side: this is that report.

@@ -1,0 +1,11 @@
+{
+  "name": "razorpay-e2e",
+  "private": true,
+  "description": "Razorpay test-mode end-to-end suite for the local stack. Kept out of the app's own dependencies.",
+  "scripts": {
+    "test": "node suite.js"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.12.0"
+  }
+}

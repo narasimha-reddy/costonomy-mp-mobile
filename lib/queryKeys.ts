@@ -31,6 +31,11 @@ export function walletTransactionsKey(outletId: number | null | undefined, filte
   return [...walletKey(outletId), 'transactions', filters] as const;
 }
 
+/** One wallet movement's detail. Under `walletKey`, so anything that refreshes the wallet refreshes it. */
+export function walletTransactionKey(outletId: number | null | undefined, entryId: string | number | null | undefined) {
+  return [...walletKey(outletId), 'transaction', String(entryId)] as const;
+}
+
 // ── Requests ──────────────────────────────────────────────────────────
 
 /**

@@ -182,3 +182,31 @@ export interface TopUpConfirmation {
   pending: boolean;
   wallet: Wallet | null;
 }
+
+/** One line under "Transfer Details": the label, the value and whether it can be copied. */
+export interface WalletReference {
+  label: string;
+  value: string;
+  copyable: boolean;
+}
+
+/** What the detail screen may offer next. `payeeVpa` comes only with `canPayAgain`. */
+export interface WalletTransactionActions {
+  canPayAgain: boolean;
+  payeeVpa?: string;
+}
+
+/**
+ * One wallet movement in full, for the Transaction details screen
+ * (GET /outlets/{id}/wallet/transactions/{entryId}). The History row's fields plus
+ * who it was with (`counterpartyDetail` is already masked by the server), our own
+ * transaction id and the reference lines.
+ */
+export interface WalletTransactionDetail extends WalletEntry {
+  transactionId: string;
+  status: WalletEntryStatus;
+  counterpartyName: string | null;
+  counterpartyDetail: string | null;
+  references: WalletReference[];
+  actions: WalletTransactionActions;
+}

@@ -9,11 +9,13 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchWalletTransactions } from '@/services/wallet';
 import { MandiButton, MandiHeader, MandiStickyBar, MandiText } from '@/components/common';
 import {
+  BILL_FILTER_OPTIONS,
   CATEGORY_OPTIONS,
   INSTRUMENT_OPTIONS,
   STATUS_OPTIONS,
   canApply,
   filterReducer,
+  EMPTY_FILTER_PARAMS,
   filtersFromParams,
   filtersToParams,
   hasInstruments,
@@ -30,6 +32,7 @@ const RAIL: { section: FilterSection; label: string }[] = [
   { section: 'categories', label: 'Categories' },
   { section: 'instruments', label: 'Instruments' },
   { section: 'statuses', label: 'Payment status' },
+  { section: 'bills', label: 'Bill' },
 ];
 
 /**
@@ -72,14 +75,16 @@ export default function WalletFiltersScreen() {
       ? CATEGORY_OPTIONS.map((o) => ({ value: o.key, label: o.label }))
       : active === 'instruments'
         ? INSTRUMENT_OPTIONS.map((o) => ({ value: o.key, label: o.label }))
-        : STATUS_OPTIONS.map((o) => ({ value: o.key, label: o.label }));
+        : active === 'bills'
+          ? BILL_FILTER_OPTIONS.map((o) => ({ value: o.key, label: o.label }))
+          : STATUS_OPTIONS.map((o) => ({ value: o.key, label: o.label }));
 
   const chosen = state[active] as string[];
 
   function apply() {
     router.navigate({
       pathname: '/restaurant/wallet/history',
-      params: { months: '', categories: '', instruments: '', statuses: '', ...filtersToParams(state) },
+      params: { ...EMPTY_FILTER_PARAMS, ...filtersToParams(state) },
     });
   }
 

@@ -17,6 +17,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack, setParams: jest.fn() }),
   useLocalSearchParams: () => mockParams,
   usePathname: () => '/restaurant/wallet/history',
+  useIsFocused: () => true,
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
 jest.mock('@/contexts/OutletProvider', () => ({ useOutlet: () => ({ outlet: { id: 7, name: 'Test outlet' } }) }));

@@ -3,6 +3,7 @@ import {
   ALLOWED_TYPES, MAX_BILL_PAGES, MAX_FILE_BYTES, POLL_INTERVAL_MS, POLL_LIMIT_MS, STILL_READING, TARGET_FILE_BYTES,
   billErrorMessage, billErrorRetryable, checkBanner, fileProblem, fitPages, gaveUpWaiting, invoiceRowCopy,
   linkExpired, nextShrinkStep, pageFileName, pageRoom, pollInterval, readingStateCopy, resizePlan, shouldPoll,
+  waiverErrorMessage,
 } from '@/lib/wallet/bill';
 
 const api = (status: number, code = 'X') => new ApiError({ code, message: 'server words', status });
@@ -167,5 +168,29 @@ describe('checkBanner note when the review made the bill match (L2)', () => {
     expect(checkBanner({ ...base, matches: true, readingTotal: 3000 })?.note ?? null).toBeNull();
     expect(checkBanner({ ...base, matches: false, difference: 80, matchesReading: false, readingTotal: 3000 })?.note ?? null).toBeNull();
     expect(checkBanner({ ...base, matches: true, matchesReading: false, readingTotal: null })?.note ?? null).toBeNull();
+  });
+});
+
+describe('waiverErrorMessage', () => {
+  it('says offline for a network failure', () => {
+    expect(waiverErrorMessage(new NetworkError(), 'waive')).toMatch(/offline/);
+    expect(waiverErrorMessage(new NetworkError(), 'undo')).toMatch(/offline/);
+  });
+  it('says the payment already has a bill for INVOICE_EXISTS or 409', () => {
+    const words = 'This payment already has a bill, so it cannot be marked as no bill needed.';
+    expect(waiverErrorMessage(api(409, 'INVOICE_EXISTS'), 'waive')).toBe(words);
+    expect(waiverErrorMessage(api(409), 'waive')).toBe(words);
+  });
+  it('words 422 INVOICE_NOT_ALLOWED by the action', () => {
+    expect(waiverErrorMessage(api(422, 'INVOICE_NOT_ALLOWED'), 'waive')).toBe('This payment does not need a bill.');
+    expect(waiverErrorMessage(api(422), 'undo')).toBe('This payment cannot be changed back.');
+  });
+  it('maps the other statuses and falls back to plain words', () => {
+    expect(waiverErrorMessage(api(403), 'waive')).toBe('You do not have permission to change bills for this outlet.');
+    expect(waiverErrorMessage(api(404), 'undo')).toBe('We could not find this transaction.');
+    expect(waiverErrorMessage(api(401), 'waive')).toMatch(/session has ended/);
+    expect(waiverErrorMessage(api(503), 'waive')).toBe('Something went wrong on our side. Please try again in a moment.');
+    expect(waiverErrorMessage(api(400), 'waive')).toBe('Something went wrong. Please try again.');
+    expect(waiverErrorMessage(new Error('x'), 'undo')).toBe('Something went wrong. Please try again.');
   });
 });

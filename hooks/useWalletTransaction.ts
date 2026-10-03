@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { walletTransactionKey } from '@/lib/queryKeys';
-import { usePollWindow } from '@/hooks/useWalletInvoice';
+import { usePollWindow, useRefreshListsWhenReadDone } from '@/hooks/useWalletInvoice';
 import { fetchWalletTransaction } from '@/services/wallet';
 import type { InvoiceStatus } from '@/models/wallet';
 
@@ -22,5 +22,6 @@ export function useWalletTransaction(entryId: string | undefined) {
   });
   const current = query.data?.invoice?.status ?? null;
   useEffect(() => { setStatus(current); }, [current]);
+  useRefreshListsWhenReadDone(current);
   return query;
 }

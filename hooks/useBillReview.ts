@@ -5,7 +5,8 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import { newIdempotencyKey } from '@/lib/api/client';
 import { ApiError, NetworkError, RequestTimeoutError } from '@/lib/api/errors';
 import { isDefinitiveFailure } from '@/lib/api/idempotency';
-import { walletInvoiceKey, walletTransactionKey } from '@/lib/queryKeys';
+import { refreshBillViews } from '@/hooks/useWalletInvoice';
+import { walletInvoiceKey } from '@/lib/queryKeys';
 import { reviewMatchesPayload } from '@/lib/wallet/billReview';
 import type { InvoiceReviewPayload, WalletInvoice } from '@/models/wallet';
 import { fetchWalletInvoice, saveWalletInvoiceReview } from '@/services/wallet';
@@ -86,7 +87,7 @@ export function useSaveInvoiceReview(entryId: string | undefined) {
     onSuccess: async (invoice) => {
       pending.current = null;
       client.setQueryData(walletInvoiceKey(outlet?.id, entryId), invoice);
-      await client.invalidateQueries({ queryKey: walletTransactionKey(outlet?.id, entryId) });
+      await refreshBillViews(client, outlet?.id, entryId);
     },
   });
 }

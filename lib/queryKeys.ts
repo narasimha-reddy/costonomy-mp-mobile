@@ -28,7 +28,12 @@ export function walletKey(outletId: number | null | undefined) {
  * anything that refreshes the wallet (a top-up, a withdrawal) refreshes this too.
  */
 export function walletTransactionsKey(outletId: number | null | undefined, filters: unknown = null) {
-  return [...walletKey(outletId), 'transactions', filters] as const;
+  return [...walletTransactionsRootKey(outletId), filters] as const;
+}
+
+/** Every history list and filter-options query of an outlet: invalidate this to refresh them all. */
+export function walletTransactionsRootKey(outletId: number | null | undefined) {
+  return [...walletKey(outletId), 'transactions'] as const;
 }
 
 /** One wallet movement's detail. Under `walletKey`, so anything that refreshes the wallet refreshes it. */

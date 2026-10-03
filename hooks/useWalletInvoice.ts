@@ -1,11 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { walletInvoiceKey, walletTransactionKey } from '@/lib/queryKeys';
+import { walletInvoiceKey, walletKey, walletTransactionKey, walletTransactionsRootKey } from '@/lib/queryKeys';
 import { POLL_INTERVAL_MS, POLL_LIMIT_MS, shouldPoll } from '@/lib/wallet/bill';
 import type { BillFile, InvoiceStatus } from '@/models/wallet';
-import { deleteWalletInvoice, fetchWalletInvoice, uploadWalletInvoice } from '@/services/wallet';
+import {
+  deleteWalletInvoice, fetchWalletInvoice, undoWalletBillWaiver, uploadWalletInvoice, waiveWalletBill,
+} from '@/services/wallet';
+
+/**
+ * Refresh everything that shows a payment's bill: its details page and every History list (the
+ * row's chip, the banner's count and the month totals). Call after any change to the bill.
+ */
+export async function refreshBillViews(
+  client: QueryClient,
+  outletId: number | null | undefined,
+  entryId: string | number | null | undefined,
+): Promise<void> {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: walletTransactionKey(outletId, entryId) }),
+    refreshBillLists(client, outletId),
+  ]);
+}
+
+/**
+ * Refresh what lists payments with a bill chip: every History list and the wallet screen's Recent.
+ * The wallet is matched exactly, so the bill and the details queries under it are not refetched.
+ */
+export function refreshBillLists(client: QueryClient, outletId: number | null | undefined): Promise<void> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: walletTransactionsRootKey(outletId) }),
+    client.invalidateQueries({ queryKey: walletKey(outletId), exact: true }),
+  ]).then(() => undefined);
+}
+
+/** When the watched bill stops being READ-in-progress, the lists that show its chip are stale. */
+export function useRefreshListsWhenReadDone(status: InvoiceStatus | null | undefined) {
+  const client = useQueryClient();
+  const { outlet } = useOutlet();
+  const previous = useRef<InvoiceStatus | null | undefined>(status);
+  useEffect(() => {
+    if (previous.current === 'READING' && status !== 'READING') void refreshBillLists(client, outlet?.id);
+    previous.current = status;
+  }, [status, client, outlet?.id]);
+}
 
 /**
  * The 90-second window in which a bill that is being read is asked about every 2.5 seconds.
@@ -56,6 +95,7 @@ export function useWalletInvoice(entryId: string | undefined) {
 
   const current = query.data?.status ?? null;
   useEffect(() => { setStatus(current); }, [current]);
+  useRefreshListsWhenReadDone(current);
 
   return { ...query, gaveUp: gaveUp && current === 'READING' };
 }
@@ -70,7 +110,7 @@ export function useUploadWalletInvoice(entryId: string | undefined) {
       uploadWalletInvoice(outlet?.id as number, entryId as string, files, accessToken as string, onProgress),
     onSuccess: async (invoice) => {
       client.setQueryData(walletInvoiceKey(outlet?.id, entryId), invoice);
-      await client.invalidateQueries({ queryKey: walletTransactionKey(outlet?.id, entryId) });
+      await refreshBillViews(client, outlet?.id, entryId);
     },
   });
 }
@@ -84,7 +124,24 @@ export function useDeleteWalletInvoice(entryId: string | undefined) {
     mutationFn: () => deleteWalletInvoice(outlet?.id as number, entryId as string, accessToken as string),
     onSuccess: async () => {
       client.removeQueries({ queryKey: walletInvoiceKey(outlet?.id, entryId) });
-      await client.invalidateQueries({ queryKey: walletTransactionKey(outlet?.id, entryId) });
+      await refreshBillViews(client, outlet?.id, entryId);
     },
   });
+}
+
+/** Mark a payment "no bill needed", or take that back; either way the details page and History refresh. */
+export function useBillWaiver(entryId: string | undefined) {
+  const { accessToken } = useSession();
+  const { outlet } = useOutlet();
+  const client = useQueryClient();
+  const onSuccess = () => refreshBillViews(client, outlet?.id, entryId);
+  const waive = useMutation<void, unknown, void>({
+    mutationFn: () => waiveWalletBill(outlet?.id as number, entryId as string, accessToken as string),
+    onSuccess,
+  });
+  const undo = useMutation<void, unknown, void>({
+    mutationFn: () => undoWalletBillWaiver(outlet?.id as number, entryId as string, accessToken as string),
+    onSuccess,
+  });
+  return { waive, undo };
 }

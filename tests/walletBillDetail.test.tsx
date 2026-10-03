@@ -115,7 +115,8 @@ describe('Transaction detail: bill', () => {
     }));
     setup();
     expect(await screen.findByText('Reading the bill…')).toBeTruthy();
-    expect(screen.getByTestId('reading-dots', { includeHiddenElements: true })).toBeTruthy();
+    // The row's own dots plus the READING chip's.
+    expect(screen.getAllByTestId('reading-dots', { includeHiddenElements: true }).length).toBeGreaterThan(0);
   });
 
   it('shows the unreadable state', async () => {

@@ -625,8 +625,8 @@ export function batchUpdateVariants(
 // ── Catch-weight weighing & Morning rate sheet ─────────────────────────
 
 export interface RecordDispatchWeightItem {
-  skuId: number;
-  actualDispatchedWeight: string;
+  supplierOrderItemId: number;
+  dispatchedWeight: string;
 }
 
 export function recordDispatchWeights(
@@ -639,7 +639,7 @@ export function recordDispatchWeights(
     {
       method: 'POST',
       token,
-      body: { items: weights },
+      body: { weights },
     },
   );
 }

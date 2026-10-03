@@ -728,8 +728,8 @@ export default function SupplierOrderScreen() {
               loading={recordWeightsMutation.isPending}
               onPress={() => {
                 const payload: RecordDispatchWeightItem[] = catchWeightItems.map((i) => ({
-                  skuId: i.supplierSkuId,
-                  actualDispatchedWeight: actualWeights[i.id]?.trim() || String(i.acceptedQuantity ?? i.requestedQuantity),
+                  supplierOrderItemId: i.id,
+                  dispatchedWeight: actualWeights[i.id]?.trim() || String(i.acceptedQuantity ?? i.requestedQuantity),
                 }));
                 recordWeightsMutation.mutate(payload);
               }}

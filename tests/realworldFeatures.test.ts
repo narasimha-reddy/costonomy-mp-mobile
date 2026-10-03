@@ -140,8 +140,8 @@ describe('Catch-Weight Weighing API Service', () => {
     const fn = mockFetch(jsonResponse(mockOrder));
 
     const weights = [
-      { skuId: 101, actualDispatchedWeight: '4.85' },
-      { skuId: 102, actualDispatchedWeight: '2.10' },
+      { supplierOrderItemId: 101, dispatchedWeight: '4.85' },
+      { supplierOrderItemId: 102, dispatchedWeight: '2.10' },
     ];
 
     const result = await recordDispatchWeights('test-token', 55, weights);
@@ -152,7 +152,7 @@ describe('Catch-Weight Weighing API Service', () => {
     const call = lastCall(fn);
     expect(call.url).toContain('/api/v1/supplier-orders/55/weights');
     expect(call.init.method).toBe('POST');
-    expect(call.body).toEqual({ items: weights });
+    expect(call.body).toEqual({ weights });
   });
 });
 

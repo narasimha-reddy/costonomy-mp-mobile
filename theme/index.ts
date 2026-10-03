@@ -33,4 +33,6 @@ export {
 export {
   WalletFont, WalletColors, WalletType, WalletLayout,
   DetailStatusColors, DetailColors, DetailType, DetailLayout,
+  BillColors, BillType, BillLayout,
+  ReviewColors, ReviewLayout,
 } from './walletScreen';

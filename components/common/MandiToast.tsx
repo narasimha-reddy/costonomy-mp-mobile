@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,6 +68,10 @@ export function MandiToastProvider({ children }: { children: React.ReactNode }) 
     },
     [opacity, reducedMotion],
   );
+
+  // A toast still waiting to fade must not fire after the provider is gone (it would animate a
+  // torn-down tree; in tests it is the timer that keeps Jest from exiting).
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const api = useMemo(() => ({ show }), [show]);
 

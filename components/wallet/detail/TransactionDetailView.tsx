@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DetailActions } from '@/components/wallet/detail/DetailActions';
 import { DetailHeader } from '@/components/wallet/detail/DetailHeader';
 import { HelpGlyph } from '@/components/wallet/detail/DetailIcons';
+import { InvoiceRow } from '@/components/wallet/bill/InvoiceRow';
 import { ReceiptCard } from '@/components/wallet/detail/ReceiptCard';
 import { TransactionCard } from '@/components/wallet/detail/TransactionCard';
 import { detailHeader, detailTime, receiptFileName } from '@/lib/wallet/detail';
@@ -20,7 +21,7 @@ import { DetailColors, DetailLayout, DetailType } from '@/theme';
  * route passes the handlers.
  */
 export function TransactionDetailView({
-  entry, onBack, onCopy, onPayAgain, onWallet, onHistory, onSupport, onError,
+  entry, onBack, onCopy, onPayAgain, onWallet, onHistory, onSupport, onError, onAddBill, onInvoice, mayChangeBill = false,
 }: {
   entry: WalletTransactionDetail;
   onBack: () => void;
@@ -30,6 +31,10 @@ export function TransactionDetailView({
   onHistory: () => void;
   onSupport: () => void;
   onError: (message: string) => void;
+  onAddBill?: () => void;
+  onInvoice?: () => void;
+  /** The user holds QUICKSCAN_PAY: without it "Add bill" is not offered. */
+  mayChangeBill?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const header = detailHeader(entry.status);
@@ -67,8 +72,15 @@ export function TransactionDetailView({
           expanded={expanded}
           onToggle={() => setExpanded((v) => !v)}
           onCopy={onCopy}
+          invoiceRow={entry.invoice != null ? (
+            <InvoiceRow invoice={entry.invoice} onPress={() => onInvoice?.()} />
+          ) : null}
           footer={(
             <DetailActions
+              canAddBill={entry.actions.canAddBill === true && mayChangeBill}
+              hasInvoice={entry.invoice != null}
+              onAddBill={onAddBill}
+              onInvoice={onInvoice}
               canPayAgain={entry.actions.canPayAgain}
               sharing={sharing}
               onPayAgain={onPayAgain}

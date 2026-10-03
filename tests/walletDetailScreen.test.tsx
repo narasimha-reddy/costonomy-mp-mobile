@@ -24,6 +24,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
 jest.mock('@/contexts/OutletProvider', () => ({ useOutlet: () => ({ outlet: { id: 7, name: 'Test outlet' } }) }));
+jest.mock('@/hooks/usePermissions', () => ({ usePermissions: () => ({ canForOutlet: () => true }) }));
 jest.mock('@/services/wallet', () => ({ fetchWalletTransaction: jest.fn() }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
@@ -64,7 +65,7 @@ const metrics = {
 };
 
 function setup() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } } });
   return render(
     <SafeAreaProvider initialMetrics={metrics}>
       <QueryClientProvider client={client}>
@@ -195,6 +196,8 @@ describe('Transaction detail screen', () => {
     setup();
     fireEvent.press(await screen.findByLabelText('Back'));
     expect(mockBack).toHaveBeenCalled();
+    // Let the screen's lists finish their batched render inside act (no warning after the test).
+    await act(async () => { await new Promise((r) => { setTimeout(r, 100); }); });
   });
 
   it('collapses and opens Transfer Details', async () => {

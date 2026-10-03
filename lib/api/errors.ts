@@ -85,3 +85,19 @@ export class NetworkError extends Error {
 export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
+
+/** An upload that ran past its time limit: reachable, but too slow to finish. */
+export class UploadTimeoutError extends NetworkError {
+  constructor() {
+    super('The upload took too long.');
+    this.name = 'UploadTimeoutError';
+  }
+}
+
+/** A request that got no answer in time. The server may still have acted, so a retry reuses its key. */
+export class RequestTimeoutError extends NetworkError {
+  constructor() {
+    super('The server took too long to answer.');
+    this.name = 'RequestTimeoutError';
+  }
+}

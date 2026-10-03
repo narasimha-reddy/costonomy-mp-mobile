@@ -287,3 +287,133 @@ export const DetailLayout = {
   receiptPixelWidth: 1080,
   snackbarHeight: 40,
 } as const;
+
+// ── Bill capture and the invoice viewer ───────────────────────────────
+
+export const BillColors = {
+  matchBg: '#E8F5EC',
+  matchText: '#0B7A2D',
+  differBg: '#FFF4DB',
+  differText: '#8A5A00',
+  noneBg: '#EFEFEF',
+  noneText: '#555555',
+  viewerBg: '#111111',
+  viewerChrome: '#FFFFFF',
+  viewerDot: '#6B6B6B',
+  thumbBg: '#F0F0F0',
+  thumbBorder: '#E2E2E2',
+  progressTrack: '#E9E9E9',
+  danger: '#B91C1C',
+  scrim: 'rgba(0, 0, 0, 0.55)',
+} as const;
+
+export const BillType = {
+  title: { fontFamily: WalletFont.semibold, fontSize: 16, lineHeight: 20, letterSpacing: 0 },
+  body: { fontFamily: WalletFont.regular, fontSize: 14, lineHeight: 19, letterSpacing: 0 },
+  bodyStrong: { fontFamily: WalletFont.semibold, fontSize: 14, lineHeight: 19, letterSpacing: 0 },
+  small: { fontFamily: WalletFont.regular, fontSize: 12.5, lineHeight: 16, letterSpacing: 0 },
+  tableHead: { fontFamily: WalletFont.medium, fontSize: 11.5, lineHeight: 14, letterSpacing: 0 },
+} as const;
+
+export const BillLayout = {
+  thumbWidth: 44,
+  thumbHeight: 56,
+  thumbRadius: 6,
+  rowLeft: 15.5,
+  rowRight: 16,
+  rowGap: 15,
+  rowVertical: 10,
+  pageThumb: 88,
+  viewerImageHeight: 380,
+  bannerRadius: 8,
+  progressHeight: 6,
+  dot: 6,
+} as const;
+
+// ── Reviewing a bill ──────────────────────────────────────────────────
+// The cost app's Upload Invoice review, on the app's light palette. Line-card tints follow the
+// web screen: mint for a resolved line, amber for one that needs attention, blue for a new SKU.
+// Contrast (WCAG 2.1 AA, checked by tests/reviewContrast.test.ts): text tokens reach 4.5:1 on every
+// surface they are drawn on; field borders reach 3:1 (non-text contrast). The brand orange #FF6000
+// is 3.0:1 on white, so it is used for fills, rings and icons only; orange words use `orangeText`.
+
+export const ReviewColors = {
+  page: '#F9FAFB',
+  card: '#FFFFFF',
+  cardBorder: '#E5E7EB',
+  field: '#FFFFFF',
+  /** 3.5:1 on white, 3.2:1 on the band: an input's edge must be seen (WCAG 1.4.11). */
+  fieldBorder: '#828A96',
+  fieldFocus: '#FF6000',
+  fieldDisabled: '#F3F4F6',
+  text: '#1F2937',
+  secondary: '#6B7280',
+  /** Helper text, notes and placeholders (4.8:1 on white). */
+  tertiary: '#6B7280',
+  /** Text drawn on the grey band (TOTAL, ITEM PRICE, the unselected segment, neutral chips): 6.9:1 there. */
+  secondaryOnBand: '#4B5563',
+  divider: '#E5E7EB',
+  band: '#F3F4F6',
+  badgeBg: '#E5E7EB',
+  badgeText: '#374151',
+  /** Fills, focus rings and icons. Never words: see `orangeText`. */
+  orange: '#FF6000',
+  /** Orange words (Create SKU, Reset, Open, Try again): 5.2:1 on white. */
+  orangeText: '#C2410C',
+  orangeTint: '#FFF7ED',
+  onOrange: '#FFFFFF',
+  required: '#DC2626',
+  error: '#B91C1C',
+  errorBorder: '#DC2626',
+  resolvedCard: '#F0FDF7',
+  resolvedBorder: '#86EFAC',
+  resolvedChip: '#DCFCE7',
+  resolvedText: '#15803D',
+  attentionCard: '#FFFBEB',
+  attentionBorder: '#FCD34D',
+  attentionChip: '#FEF3C7',
+  attentionText: '#B45309',
+  newCard: '#F5F9FF',
+  newBorder: '#BFDBFE',
+  newChip: '#DBEAFE',
+  newText: '#1D4ED8',
+  deviationBg: '#FEF2F2',
+  deviationBorder: '#FECACA',
+  deviationValue: '#B91C1C',
+  deviationNote: '#B45309',
+  ignoreBg: '#FFFBEB',
+  ignoreBorder: '#D97706',
+  ignoreText: '#B45309',
+  ignoredBg: '#F0FDF4',
+  ignoredBorder: '#16A34A',
+  ignoredText: '#15803D',
+  ready: '#15803D',
+  panelImage: '#F3F4F6',
+  panelDot: '#D1D5DB',
+  panelDotOn: '#4B5563',
+  selected: '#FFF7ED',
+  dayToday: '#FF6000',
+  /** The picked day's fill: white digits on it reach 5.2:1 (brand orange would be 3.0:1). */
+  daySelected: '#C2410C',
+  /** A day that cannot be picked: visibly greyed (inactive controls are outside WCAG's contrast rule). */
+  dayDisabled: '#A7AEB8',
+  skeleton: '#E5E7EB',
+  scrim: 'rgba(17, 24, 39, 0.45)',
+} as const;
+
+export const ReviewLayout = {
+  gutter: 16,
+  cardRadius: 12,
+  cardPad: 16,
+  sectionGap: 16,
+  fieldHeight: 44,
+  fieldRadius: 8,
+  /** Reserved under every input, so an error appearing never moves the form. */
+  helperHeight: 18,
+  badge: 24,
+  panelImageHeight: 260,
+  panelControl: 44,
+  tap: 44,
+  sheetMaxHeight: 560,
+  daySize: 44,
+} as const;

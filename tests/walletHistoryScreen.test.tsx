@@ -43,7 +43,7 @@ const page = {
 
 function setup() {
   (fetchWalletTransactions as jest.Mock).mockResolvedValue(page);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } } });
   render(
     <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 360, height: 805 }, insets: { top: 24, left: 0, right: 0, bottom: 0 } }}>
       <QueryClientProvider client={client}>
@@ -66,7 +66,7 @@ describe('History screen', () => {
           reason: null, refundStatus: null, status: 'COMPLETED', at: iso(8) },
       ],
     });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } } });
     render(
       <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 360, height: 805 }, insets: { top: 24, left: 0, right: 0, bottom: 0 } }}>
         <QueryClientProvider client={client}><HistoryScreen /></QueryClientProvider>
@@ -155,7 +155,7 @@ describe('History screen', () => {
 
   it('says so when the history cannot be loaded', async () => {
     (fetchWalletTransactions as jest.Mock).mockRejectedValue(new Error('down'));
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } } });
     render(
       <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 360, height: 805 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } }}>
         <QueryClientProvider client={client}><HistoryScreen /></QueryClientProvider>

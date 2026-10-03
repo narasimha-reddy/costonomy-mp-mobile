@@ -70,3 +70,18 @@ export function storeIntentsKey(storeId: number | null) {
 export function orderPaymentKey(supplierOrderId: number) {
   return ['supplier-order', supplierOrderId, 'payment-intent'] as const;
 }
+
+/** The bill of one wallet movement. Under `walletKey`, so it follows the wallet's refreshes. */
+export function walletInvoiceKey(outletId: number | null | undefined, entryId: string | number | null | undefined) {
+  return [...walletKey(outletId), 'invoice', String(entryId)] as const;
+}
+
+/** A read-only lookup for the bill review pickers. Not under `walletKey`: a wallet refresh need not refetch it. */
+export function invoiceLookupKey(
+  outletId: number | null | undefined,
+  kind: 'suppliers' | 'skus',
+  q: string,
+  supplierId: number | null = null,
+) {
+  return ['outlet', outletId, 'invoice-lookups', kind, q, supplierId] as const;
+}

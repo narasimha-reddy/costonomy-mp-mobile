@@ -4,17 +4,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { ArrowGlyph } from '@/components/wallet/detail/DetailIcons';
 import { DetailColors, DetailLayout, DetailType, WalletColors } from '@/theme';
 
-/** The four round actions under the card: Pay again (only when offered), Wallet, View History, Share Receipt. */
+/** The round actions under the card, four at most: Pay again (only when offered), Wallet, View History, Add bill or Invoice (wallet payments), Share Receipt. */
 export function DetailActions({
   canPayAgain, sharing, onPayAgain, onWallet, onHistory, onShare,
+  canAddBill = false, hasInvoice = false, onAddBill, onInvoice,
 }: {
   canPayAgain: boolean;
   sharing: boolean;
+  /** Offer "Add bill" (no bill yet). */
+  canAddBill?: boolean;
+  /** A bill exists: "Invoice" takes the place of "Add bill". */
+  hasInvoice?: boolean;
+  onAddBill?: () => void;
+  onInvoice?: () => void;
   onPayAgain: () => void;
   onWallet: () => void;
   onHistory: () => void;
   onShare: () => void;
 }) {
+  const bill: 'add' | 'invoice' | null = hasInvoice ? 'invoice' : canAddBill ? 'add' : null;
+  // Four at most: with Pay again and a bill action both present, Wallet gives way (it is one tap
+  // away from History's header and the back stack).
+  const showWallet = !(canPayAgain && bill != null);
   return (
     <>
       <View style={styles.divider} />
@@ -24,12 +35,24 @@ export function DetailActions({
             <ArrowGlyph size={13} color={WalletColors.orange} stroke={2.2} />
           </Action>
         )}
-        <Action label="Wallet" onPress={onWallet}>
-          <Ionicons name="wallet-outline" size={17} color={WalletColors.orange} />
-        </Action>
+        {showWallet && (
+          <Action label="Wallet" onPress={onWallet}>
+            <Ionicons name="wallet-outline" size={17} color={WalletColors.orange} />
+          </Action>
+        )}
         <Action label="View History" onPress={onHistory}>
           <Ionicons name="time-outline" size={17.5} color={WalletColors.orange} />
         </Action>
+        {bill === 'add' && (
+          <Action label="Add bill" onPress={() => onAddBill?.()}>
+            <Ionicons name="camera-outline" size={18.5} color={WalletColors.orange} />
+          </Action>
+        )}
+        {bill === 'invoice' && (
+          <Action label="Invoice" onPress={() => onInvoice?.()}>
+            <Ionicons name="document-text-outline" size={18} color={WalletColors.orange} />
+          </Action>
+        )}
         <Action label="Share Receipt" onPress={onShare} disabled={sharing}>
           <Ionicons name="share-social-outline" size={17.5} color={WalletColors.orange} />
         </Action>

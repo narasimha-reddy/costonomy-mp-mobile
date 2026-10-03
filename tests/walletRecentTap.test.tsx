@@ -47,7 +47,7 @@ const wallet = {
 describe('wallet screen: Recent', () => {
   it('opens the transaction details when a row is tapped, and See all goes to History', async () => {
     (fetchWallet as jest.Mock).mockResolvedValue(wallet);
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } } });
     render(
       <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 800 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } }}>
         <QueryClientProvider client={client}>

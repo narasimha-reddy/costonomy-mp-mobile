@@ -18,7 +18,7 @@ import { DetailColors, DetailLayout, DetailType, WalletColors } from '@/theme';
  * there is none of that: the section is always open and nothing in it can be pressed.
  */
 export function TransactionCard({
-  entry, variant = 'screen', expanded = true, onToggle, onCopy, footer,
+  entry, variant = 'screen', expanded = true, onToggle, onCopy, footer, invoiceRow,
 }: {
   entry: WalletTransactionDetail;
   variant?: 'screen' | 'receipt';
@@ -26,6 +26,8 @@ export function TransactionCard({
   onToggle?: () => void;
   onCopy?: (value: string, what: string) => void;
   footer?: React.ReactNode;
+  /** The Invoice row, shown under the transfer details (screen only). */
+  invoiceRow?: React.ReactNode;
 }) {
   const screen = variant === 'screen';
   const avatar = detailAvatar(entry.direction);
@@ -128,6 +130,8 @@ export function TransactionCard({
           ))}
         </View>
       )}
+
+      {screen ? invoiceRow : null}
 
       {footer}
     </View>

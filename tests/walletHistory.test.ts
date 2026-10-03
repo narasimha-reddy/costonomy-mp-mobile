@@ -281,15 +281,38 @@ describe('matchesInstruments', () => {
     expect(matchesInstruments(entry(1, { instrument: 'netbanking' }), ['UPI', 'NETBANKING'])).toBe(true);
     expect(matchesInstruments(entry(1, { instrument: 'Debit Card' }), ['CARD'])).toBe(false);
   });
-  it('does not match a row with no instrument once one is chosen', () => {
-    expect(matchesInstruments(entry(1, { instrument: null }), ['WALLET'])).toBe(false);
-    expect(matchesInstruments(entry(1), ['WALLET'])).toBe(false);
+  it('matches payments made from the wallet (no instrument) for Wallet', () => {
+    expect(matchesInstruments(entry(1, { kind: 'ORDER_PAYMENT', instrument: null }), ['WALLET'])).toBe(true);
+    expect(matchesInstruments(entry(1, { kind: 'QUICKSCAN_PAYMENT' }), ['WALLET'])).toBe(true);
+    expect(matchesInstruments(entry(1, { kind: 'ORDER_PAYMENT' }), ['CARD'])).toBe(false);
+  });
+  it('still matches an instrument text starting with wallet', () => {
+    expect(matchesInstruments(entry(1, { kind: 'TOP_UP', instrument: 'Wallet' }), ['WALLET'])).toBe(true);
+  });
+  it('keeps a card top-up under Card and out of Wallet', () => {
+    const topUp = entry(1, { kind: 'TOP_UP', direction: 'CREDIT', instrument: 'Card •1111' });
+    expect(matchesInstruments(topUp, ['CARD'])).toBe(true);
+    expect(matchesInstruments(topUp, ['WALLET'])).toBe(false);
+  });
+  it('does not match refunds back to the wallet or null-instrument non-wallet kinds', () => {
+    for (const kind of ['WITHDRAWAL', 'ORDER_REFUND', 'REFUND', 'DISPUTE_REFUND', 'QUICKSCAN_RETURN'] as const) {
+      expect(matchesInstruments(entry(1, { kind, instrument: null }), ['WALLET'])).toBe(false);
+      expect(matchesInstruments(entry(1, { kind, instrument: null }), ['CARD', 'UPI', 'NETBANKING'])).toBe(false);
+    }
+  });
+  it('combines: Card + Wallet matches both a card top-up and a wallet payment, not a UPI top-up', () => {
+    const chosen: ('CARD' | 'WALLET')[] = ['CARD', 'WALLET'];
+    expect(matchesInstruments(entry(1, { kind: 'TOP_UP', instrument: 'Card •1111' }), chosen)).toBe(true);
+    expect(matchesInstruments(entry(2, { kind: 'QUICKSCAN_PAYMENT' }), chosen)).toBe(true);
+    expect(matchesInstruments(entry(3, { kind: 'TOP_UP', instrument: 'UPI' }), chosen)).toBe(false);
   });
 });
 
 describe('hasInstruments', () => {
-  it('is true only if a row names one', () => {
-    expect(hasInstruments([entry(1), entry(2, { instrument: null })])).toBe(false);
+  it('is true if a row names one, or was paid from the wallet', () => {
+    expect(hasInstruments([entry(1, { kind: 'WITHDRAWAL' }), entry(2, { kind: 'REFUND', instrument: null })])).toBe(false);
+    expect(hasInstruments([entry(1, { kind: 'QUICKSCAN_PAYMENT' })])).toBe(true);
+    expect(hasInstruments([entry(1), entry(2, { instrument: null })])).toBe(true);
     expect(hasInstruments([entry(1), entry(2, { instrument: 'UPI' })])).toBe(true);
     expect(hasInstruments([])).toBe(false);
   });

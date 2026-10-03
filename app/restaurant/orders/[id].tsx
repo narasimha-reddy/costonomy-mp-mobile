@@ -1,6 +1,7 @@
 import { paymentStatusCopy } from '@/lib/payments/statusLabel';
-import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { fetchTaxInvoice, fetchCreditNotes, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -97,6 +98,45 @@ export default function OrderDetailScreen() {
       refundedAt: order.refundedAt,
     })
     : undefined;
+
+  // ── Billing: statutory invoices & credit notes ──────────────────────
+  const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
+  const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+
+  const billingEligible = order != null && [
+    'DELIVERED', 'COMPLETED', 'SETTLED',
+  ].includes(order.status);
+
+  async function handleViewInvoice() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const inv = await fetchTaxInvoice(accessToken, orderId);
+      setInvoice(inv);
+    } catch {
+      Alert.alert('Invoice', 'Tax invoice is not yet available for this order.');
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function handleViewCreditNotes() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const notes = await fetchCreditNotes(accessToken, orderId);
+      if (notes.length === 0) {
+        Alert.alert('Credit Notes', 'No credit notes have been issued for this order.');
+      } else {
+        setCreditNotes(notes);
+      }
+    } catch {
+      Alert.alert('Credit Notes', 'Could not load credit notes for this order.');
+    } finally {
+      setBillingLoading(false);
+    }
+  }
 
   return (
     <MandiScreen
@@ -326,6 +366,66 @@ export default function OrderDetailScreen() {
               </View>
             )}
           </MandiCard>
+
+          {/* ── Statutory Billing Documents ────────────────────────── */}
+          {billingEligible && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">📄 GST Documents</MandiText>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : 'View Invoice'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={handleViewInvoice}
+                  disabled={billingLoading}
+                />
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : 'Credit Notes'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={handleViewCreditNotes}
+                  disabled={billingLoading}
+                />
+              </View>
+
+              {invoice != null && (
+                <View style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.primary}>
+                    {invoice.invoiceNumber} — {formatMoney(invoice.totalAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Issued {formatMoment(invoice.issuedAt)} • {invoice.isInterState ? 'IGST' : 'CGST + SGST'}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Seller: {invoice.supplierName} (GSTIN {invoice.supplierGstin})
+                  </MandiText>
+                  {invoice.items.map((item) => (
+                    <View key={item.id} style={styles.totalsRow}>
+                      <MandiText variant="caption">{item.productName} ({item.hsnCode})</MandiText>
+                      <MandiText variant="caption">{formatMoney(item.totalAmount)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {creditNotes != null && creditNotes.length > 0 && creditNotes.map((cn) => (
+                <View key={cn.id} style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.danger}>
+                    {cn.creditNoteNumber} — Refund {formatMoney(cn.totalRefundAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Reason: {cn.reasonCode} • Issued {formatMoment(cn.issuedAt)}
+                  </MandiText>
+                  {cn.items.map((item) => (
+                    <View key={item.id} style={styles.totalsRow}>
+                      <MandiText variant="caption">{item.productName}: {item.rejectedQuantity} rejected</MandiText>
+                      <MandiText variant="caption" color={Colors.danger}>-{formatMoney(item.totalRefund)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </MandiCard>
+          )}
         </>
       )}
     </MandiScreen>

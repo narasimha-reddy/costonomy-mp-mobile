@@ -1,6 +1,7 @@
 import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { fetchTaxInvoice, fetchCreditNotes, generateTaxInvoice, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -102,6 +103,11 @@ export default function SupplierOrderScreen() {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [weighingModalOpen, setWeighingModalOpen] = useState(false);
   const [actualWeights, setActualWeights] = useState<Record<number, string>>({});
+
+  // ── Billing: statutory invoices & credit notes ──────────────────────
+  const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
+  const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
 
   const query = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -224,6 +230,53 @@ export default function SupplierOrderScreen() {
   const busy = advance.isPending || cancel.isPending;
   const catchWeightItems = (order?.items ?? []).filter((item) => item.isCatchWeight);
   const hasCatchWeight = catchWeightItems.length > 0;
+
+  const billingEligible = order != null && [
+    'DELIVERED', 'COMPLETED', 'SETTLED',
+  ].includes(order.status);
+
+  async function handleViewInvoice() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const inv = await fetchTaxInvoice(accessToken, orderId);
+      setInvoice(inv);
+    } catch {
+      Alert.alert('Invoice', 'Tax invoice is not yet available for this order.');
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function handleGenerateInvoice() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const inv = await generateTaxInvoice(accessToken, orderId);
+      setInvoice(inv);
+    } catch {
+      Alert.alert('Invoice', 'Could not generate tax invoice for this order.');
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function handleViewCreditNotes() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const notes = await fetchCreditNotes(accessToken, orderId);
+      if (notes.length === 0) {
+        Alert.alert('Credit Notes', 'No credit notes have been issued for this order.');
+      } else {
+        setCreditNotes(notes);
+      }
+    } catch {
+      Alert.alert('Credit Notes', 'Could not load credit notes for this order.');
+    } finally {
+      setBillingLoading(false);
+    }
+  }
 
   return (
     <MandiScreen
@@ -373,6 +426,66 @@ export default function SupplierOrderScreen() {
               </MandiText>
             ) : null}
           </MandiCard>
+
+          {/* ── Statutory Billing Documents ────────────────────────── */}
+          {billingEligible && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">📄 GST Documents</MandiText>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : (invoice ? 'View Invoice' : 'Generate Invoice')}
+                  size="sm"
+                  variant="secondary"
+                  onPress={invoice ? handleViewInvoice : handleGenerateInvoice}
+                  disabled={billingLoading}
+                />
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : 'Credit Notes'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={handleViewCreditNotes}
+                  disabled={billingLoading}
+                />
+              </View>
+
+              {invoice != null && (
+                <View style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.primary}>
+                    {invoice.invoiceNumber} — {formatMoney(invoice.totalAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Issued {formatMomentWithRecency(invoice.issuedAt)} • {invoice.isInterState ? 'IGST' : 'CGST + SGST'}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Buyer: {invoice.buyerName} (GSTIN {invoice.buyerGstin ?? 'N/A'})
+                  </MandiText>
+                  {invoice.items.map((item) => (
+                    <View key={item.id} style={styles.valueRow}>
+                      <MandiText variant="caption">{item.productName} ({item.hsnCode})</MandiText>
+                      <MandiText variant="caption">{formatMoney(item.totalAmount)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {creditNotes != null && creditNotes.length > 0 && creditNotes.map((cn) => (
+                <View key={cn.id} style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.danger}>
+                    {cn.creditNoteNumber} — Refund {formatMoney(cn.totalRefundAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Reason: {cn.reasonCode} • Issued {formatMomentWithRecency(cn.issuedAt)}
+                  </MandiText>
+                  {cn.items.map((item) => (
+                    <View key={item.id} style={styles.valueRow}>
+                      <MandiText variant="caption">{item.productName}: {item.rejectedQuantity} rejected</MandiText>
+                      <MandiText variant="caption" color={Colors.danger}>-{formatMoney(item.totalRefund)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </MandiCard>
+          )}
 
           {hasCatchWeight && (order.status === 'PREPARING' || order.status === 'READY_FOR_PICKUP') && (
             <MandiCard>

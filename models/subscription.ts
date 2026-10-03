@@ -24,6 +24,7 @@ export interface Subscription {
   nextDeliveryDate: string | null;
   skipDates: string[];
   notes: string | null;
+  paymentMethod: 'WALLET' | 'CREDIT' | null;
 }
 
 export interface ManifestItemSummary {

@@ -186,8 +186,8 @@ describe('Morning Mandi Rate Sheet API Service', () => {
 
     expect(sheet.supplierStoreId).toBe(12);
     expect(sheet.rows).toHaveLength(1);
-    expect(sheet.rows[0].productName).toBe('Paneer Fresh');
-    expect(sheet.rows[0].isCatchWeight).toBe(true);
+    expect(sheet.rows[0]!.productName).toBe('Paneer Fresh');
+    expect(sheet.rows[0]!.isCatchWeight).toBe(true);
 
     const call = lastCall(fn);
     expect(call.url).toContain('/api/v1/supplier-stores/12/rate-sheet');

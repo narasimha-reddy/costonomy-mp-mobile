@@ -12,9 +12,10 @@ jest.mock('@expo/vector-icons', () => {
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack, setParams: jest.fn() }),
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockParams,
   usePathname: () => '/restaurant/wallet/history',
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
@@ -52,9 +53,34 @@ function setup() {
   );
 }
 
-beforeEach(() => { mockPush.mockClear(); mockBack.mockClear(); });
+beforeEach(() => { mockPush.mockClear(); mockBack.mockClear(); mockParams = {}; });
 
 describe('History screen', () => {
+  it('with Wallet chosen shows the order and QuickScan payments, not the card top-up, and no empty state', async () => {
+    mockParams = { instruments: 'WALLET' };
+    (fetchWalletTransactions as jest.Mock).mockResolvedValue({
+      ...page,
+      items: [
+        ...page.items,
+        { id: 3, direction: 'DEBIT', kind: 'ORDER_PAYMENT', amount: '500.0000', balanceAfter: '0', supplierOrderId: 9,
+          reason: null, refundStatus: null, status: 'COMPLETED', at: iso(8) },
+      ],
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    render(
+      <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 360, height: 805 }, insets: { top: 24, left: 0, right: 0, bottom: 0 } }}>
+        <QueryClientProvider client={client}><HistoryScreen /></QueryClientProvider>
+      </SafeAreaProvider>,
+    );
+    expect(await screen.findByText('Sharma Dairy')).toBeTruthy();
+    expect(screen.getAllByText('Debited from wallet')).toHaveLength(2);
+    expect(screen.queryByText('Card •••• 1007')).toBeNull();
+    expect(screen.queryByText('Nothing matches these filters')).toBeNull();
+    expect(screen.getByLabelText('Remove filter Wallet')).toBeTruthy();
+    // Narrowed by an instrument: no month total.
+    expect(screen.queryByText('+ ₹48,876')).toBeNull();
+  });
+
   it('shows the title, the statements pill, search with filters, a month band with its net, and rows', async () => {
     setup();
     expect(await screen.findByText('Sharma Dairy')).toBeTruthy();

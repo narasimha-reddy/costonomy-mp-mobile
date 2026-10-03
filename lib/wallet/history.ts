@@ -303,11 +303,24 @@ export const STATUS_OPTIONS: { key: WalletStatusFilter; label: string }[] = [
 ];
 
 /**
+ * Kinds that are money paid FROM the wallet itself. The server only names an
+ * `instrument` for top-ups ("Card •1111", "UPI"), so these carry none, yet they are what
+ * the Wallet instrument means. The refund kinds (ORDER_REFUND, REFUND, DISPUTE_REFUND,
+ * QUICKSCAN_RETURN) are money coming back TO the wallet, not paid from it, so they stay out.
+ */
+export const WALLET_PAID_KINDS: readonly WalletEntryKind[] = ['ORDER_PAYMENT', 'QUICKSCAN_PAYMENT'];
+
+const isWalletPaid = (entry: WalletEntry) => WALLET_PAID_KINDS.includes(entry.kind);
+
+/**
  * Whether an entry was paid with one of the chosen instruments. The server does not
  * filter by instrument, so this runs on what has been loaded; nothing chosen matches all.
+ * Wallet matches a wallet-paid kind (see WALLET_PAID_KINDS) or an instrument named "wallet…";
+ * the others match on the instrument text.
  */
 export function matchesInstruments(entry: WalletEntry, chosen: WalletInstrument[]): boolean {
   if (chosen.length === 0) return true;
+  if (chosen.includes('WALLET') && isWalletPaid(entry)) return true;
   const instrument = entry.instrument?.trim().toLowerCase();
   if (!instrument) return false;
   return INSTRUMENT_OPTIONS
@@ -315,9 +328,9 @@ export function matchesInstruments(entry: WalletEntry, chosen: WalletInstrument[
     .some((option) => option.prefixes.some((prefix) => instrument.startsWith(prefix)));
 }
 
-/** Whether any loaded entry says what it was paid with — else there is nothing to filter by. */
+/** Whether any loaded entry has something to filter by: an instrument, or a wallet payment. */
 export function hasInstruments(entries: WalletEntry[]): boolean {
-  return entries.some((entry) => (entry.instrument?.trim() ?? '') !== '');
+  return entries.some((entry) => (entry.instrument?.trim() ?? '') !== '' || isWalletPaid(entry));
 }
 
 /** `?months=…&kinds=…&statuses=…&cursor=…&size=…`, empty parts left out and values escaped. */

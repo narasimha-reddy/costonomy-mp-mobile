@@ -43,7 +43,8 @@ export function FilterChips({
 }
 
 const styles = StyleSheet.create({
-  scroll: { flexGrow: 0 },
+  /** Air above (from the search field) and below; only present when chips are, as the row is not rendered otherwise. */
+  scroll: { flexGrow: 0, marginTop: Spacing.md, marginBottom: Spacing.sm },
   row: { gap: Spacing.sm, paddingHorizontal: Spacing.screenHorizontal },
   chip: {
     flexDirection: 'row',

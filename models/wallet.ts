@@ -75,7 +75,25 @@ export interface WalletEntry {
   status?: WalletEntryStatus;
   /** What the money was paid with or sent to — "Card •1007", "UPI". Absent when unknown. */
   instrument?: string | null;
+  /**
+   * Where this payment's bill stands, or null when it takes no bill. Absent on an older API,
+   * and then a row simply shows no bill chip.
+   */
+  bill?: { status: WalletBillStatus } | null;
   at: string;
+}
+
+/** Where a payment's bill has got to, in the server's words. */
+export type WalletBillStatus = 'PENDING' | 'READING' | 'ADDED' | 'REVIEWED' | 'UNREADABLE';
+
+/** Every bill status, in the order the Bill filter lists them. */
+export const BILL_STATUSES: readonly WalletBillStatus[] = ['PENDING', 'READING', 'ADDED', 'REVIEWED', 'UNREADABLE'];
+
+/** How many bills are waiting on the restaurant, across all months and whatever the filters say. */
+export interface WalletBillSummary {
+  pending: number;
+  reading: number;
+  unreadable: number;
 }
 
 /**
@@ -90,6 +108,8 @@ export interface WalletMonthTotal {
   month: string;
   added: Money;
   spent: Money;
+  /** Payments that month still waiting for a bill. Absent on an older API. */
+  billsPending?: number;
 }
 
 /** One page of the wallet's full history (`GET .../wallet/transactions`). */
@@ -100,6 +120,8 @@ export interface WalletTransactionsPage {
   /** Months that have any movement, newest first, for the filter's month list. */
   availableMonths: string[];
   nextCursor: string | null;
+  /** Absent on an older API; the screen then shows no banner. */
+  billSummary: WalletBillSummary | null;
 }
 
 /** The choices behind the History screen's "Filters", in the server's words where it has them. */
@@ -113,6 +135,7 @@ export interface WalletFilters {
   categories: WalletCategory[];
   instruments: WalletInstrument[];
   statuses: WalletStatusFilter[];
+  bills: WalletBillStatus[];
 }
 
 export type StatementRange = 'LAST_30' | 'LAST_90' | 'LAST_180' | 'LAST_365' | 'CUSTOM';
@@ -196,7 +219,14 @@ export interface WalletTransactionActions {
   payeeVpa?: string;
   /** True only for shop (QuickScan) and order payments made from the wallet. Absent on an older server. */
   canAddBill?: boolean;
+  /** The payment may be marked "no bill needed". Absent on an older server. */
+  canWaiveBill?: boolean;
+  /** A "no bill needed" mark may be taken back. Absent on an older server. */
+  canUndoWaiver?: boolean;
 }
+
+/** A bill's status on the details page, which can also say none is needed. */
+export type DetailBillStatus = WalletBillStatus | 'NOT_REQUIRED';
 
 export type InvoiceStatus = 'READING' | 'READ' | 'UNREADABLE';
 
@@ -399,4 +429,6 @@ export interface WalletTransactionDetail extends WalletEntry {
   actions: WalletTransactionActions;
   /** The bill the restaurant added, or null. Absent on an older server. */
   invoice?: WalletInvoiceSummary | null;
+  /** Where the bill stands; null when the payment takes none. Absent on an older server. */
+  billStatus?: DetailBillStatus | null;
 }

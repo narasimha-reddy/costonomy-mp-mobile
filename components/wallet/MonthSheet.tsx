@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { MandiBottomSheet } from '@/components/common/MandiBottomSheet';
+import { billsPendingLine } from '@/lib/wallet/history';
 import { WalletColors, WalletType } from '@/theme';
 
 /** What the month sheet is about: the figures `monthNet` produced for one month. */
@@ -11,6 +12,8 @@ export interface MonthSheetData {
   /** "+ ₹826.69", "₹0" or "− ₹73.31". */
   net: string;
   credit: boolean;
+  /** Payments that month still waiting for a bill; absent on an older server. */
+  billsPending?: number | null;
 }
 
 export const MONTH_SHEET_NOTE =
@@ -35,6 +38,9 @@ export function MonthSheet({ data, onClose }: { data: MonthSheetData | null; onC
           <Line label="Money in" value={data.moneyIn} />
           <Line label="Money out" value={data.moneyOut} />
           <Line label="Net" value={data.net} credit={data.credit} strong />
+          {billsPendingLine(data.billsPending) != null && (
+            <Line label="Bills pending" value={String(data.billsPending)} />
+          )}
           <Text style={styles.note}>{MONTH_SHEET_NOTE}</Text>
         </View>
       )}

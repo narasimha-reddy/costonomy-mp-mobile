@@ -35,4 +35,5 @@ export {
   DetailStatusColors, DetailColors, DetailType, DetailLayout,
   BillColors, BillType, BillLayout,
   ReviewColors, ReviewLayout,
+  BillStatusColors, BillChipLayout, BillChipType,
 } from './walletScreen';

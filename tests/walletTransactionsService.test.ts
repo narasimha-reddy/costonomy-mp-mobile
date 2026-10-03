@@ -48,7 +48,7 @@ const RAW = {
 
 describe('mapEntry', () => {
   it('keeps a full row', () => {
-    expect(mapEntry(RAW)).toEqual({ ...RAW });
+    expect(mapEntry(RAW)).toEqual({ ...RAW, bill: null });
   });
 
   it('leaves the key off when the server sends none', () => {
@@ -107,7 +107,7 @@ describe('mapTransactionsPage', () => {
   it('treats an empty cursor as the end, and an empty body as an empty page', () => {
     expect(mapTransactionsPage({ items: [], nextCursor: '' }).nextCursor).toBeNull();
     expect(mapTransactionsPage(undefined)).toEqual({
-      items: [], monthTotals: [], availableMonths: [], nextCursor: null,
+      items: [], monthTotals: [], availableMonths: [], nextCursor: null, billSummary: null,
     });
   });
 });
@@ -116,7 +116,7 @@ describe('fetchWalletTransactions', () => {
   it('asks for the page with the filters and cursor in the query', async () => {
     const fn = mockFetch(jsonResponse({ items: [RAW], nextCursor: null }));
     const page = await fetchWalletTransactions('tok', 4, {
-      filters: { months: ['2026-09'], categories: ['TOP_UP'], instruments: ['CARD'], statuses: ['RETURNED'] },
+      filters: { months: ['2026-09'], categories: ['TOP_UP'], instruments: ['CARD'], statuses: ['RETURNED'], bills: [] },
       cursor: 'c1', size: 20,
     });
     const { url, headers } = lastCall(fn);
@@ -182,5 +182,53 @@ describe('fetchWalletStatement', () => {
     global.fetch = jest.fn(async () => { throw new TypeError('offline'); }) as unknown as typeof fetch;
     await expect(fetchWalletStatement('tok', 4, { kind: 'range', range: 'LAST_30', format: 'PDF' }))
       .rejects.toMatchObject({ name: 'NetworkError' });
+  });
+});
+
+describe('bill fields', () => {
+  it('maps a known bill status and tolerates anything else as no bill', () => {
+    expect(mapEntry({ ...RAW, bill: { status: 'PENDING' } }).bill).toEqual({ status: 'PENDING' });
+    expect(mapEntry({ ...RAW, bill: { status: 'UNREADABLE', extra: 1 } }).bill).toEqual({ status: 'UNREADABLE' });
+    expect(mapEntry({ ...RAW, bill: { status: 'SOMETHING_NEW' } }).bill).toBeNull();
+    expect(mapEntry({ ...RAW, bill: { status: null } }).bill).toBeNull();
+    expect(mapEntry({ ...RAW, bill: 'PENDING' }).bill).toBeNull();
+    expect(mapEntry({ ...RAW, bill: null }).bill).toBeNull();
+    expect(mapEntry(RAW).bill).toBeNull();
+  });
+
+  it('keeps billSummary only when all three counts are usable', () => {
+    const page = (billSummary: unknown) => mapTransactionsPage({ items: [], billSummary }).billSummary;
+    expect(page({ pending: 2, reading: 0, unreadable: 1 })).toEqual({ pending: 2, reading: 0, unreadable: 1 });
+    expect(page({ pending: 2, reading: 0 })).toBeNull();
+    expect(page({ pending: -1, reading: 0, unreadable: 0 })).toBeNull();
+    expect(page({ pending: '2', reading: 0, unreadable: 0 })).toBeNull();
+    expect(page({ pending: NaN, reading: 0, unreadable: 0 })).toBeNull();
+    expect(page(null)).toBeNull();
+    expect(page('x')).toBeNull();
+    expect(mapTransactionsPage({ items: [] }).billSummary).toBeNull();
+  });
+
+  it('keeps billsPending on a month only when it is a number of zero or more', () => {
+    const totals = mapTransactionsPage({
+      items: [],
+      monthTotals: [
+        { month: '2026-09', spent: '1', billsPending: 3 },
+        { month: '2026-08', spent: '1', billsPending: 0 },
+        { month: '2026-07', spent: '1', billsPending: -2 },
+        { month: '2026-06', spent: '1', billsPending: 'many' },
+        { month: '2026-05', spent: '1' },
+      ],
+    }).monthTotals;
+    expect(totals.map((t) => t.billsPending)).toEqual([3, 0, undefined, undefined, undefined]);
+    expect('billsPending' in totals[2]!).toBe(false);
+  });
+
+  it('sends bills to the server along with the other filters', async () => {
+    const fn = mockFetch(jsonResponse({ items: [] }));
+    await fetchWalletTransactions('tok', 4, {
+      filters: { months: ['2026-09'], categories: [], instruments: [], statuses: ['COMPLETED'], bills: ['PENDING', 'ADDED'] },
+      cursor: 'c1',
+    });
+    expect(lastCall(fn).url).toContain('?months=2026-09&statuses=COMPLETED&bills=PENDING,ADDED&cursor=c1');
   });
 });

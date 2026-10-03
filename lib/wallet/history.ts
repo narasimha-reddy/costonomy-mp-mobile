@@ -1,4 +1,6 @@
 import type {
+  WalletBillStatus,
+  WalletBillSummary,
   WalletCategory,
   WalletEntry,
   WalletEntryKind,
@@ -9,6 +11,7 @@ import type {
 } from '@/models/wallet';
 import type { StatusTone } from '@/components/common/MandiStatusChip';
 import { entryLabel, withdrawalProgress } from '@/lib/wallet/entryCopy';
+import { BILL_STATUSES } from '@/models/wallet';
 import { formatMoney } from '@/utils/money';
 import { relative } from '@/utils/dateRange';
 import { toScaled, scaledToAmount } from '@/lib/wallet/amount';
@@ -250,7 +253,7 @@ function instrumentLine(entry: WalletEntry): string | null {
 
 // ── Filters ───────────────────────────────────────────────────────────
 
-export const NO_FILTERS: WalletFilters = { months: [], categories: [], instruments: [], statuses: [] };
+export const NO_FILTERS: WalletFilters = { months: [], categories: [], instruments: [], statuses: [], bills: [] };
 
 export type FilterSection = keyof WalletFilters;
 
@@ -270,7 +273,7 @@ export function filterReducer(state: WalletFilters, action: FilterAction): Walle
 
 export function filterCount(filters: WalletFilters): number {
   return filters.months.length + filters.categories.length
-    + filters.instruments.length + filters.statuses.length;
+    + filters.instruments.length + filters.statuses.length + filters.bills.length;
 }
 
 /**
@@ -300,6 +303,18 @@ export const STATUS_OPTIONS: { key: WalletStatusFilter; label: string }[] = [
   { key: 'COMPLETED', label: 'Completed' },
   { key: 'IN_PROGRESS', label: 'In progress' },
   { key: 'RETURNED', label: 'Returned' },
+];
+
+/**
+ * The Bill filter's choices, in the order they are listed and sent. `label` is the choice's own
+ * word; `chipLabel` is what the header chip says once it is applied.
+ */
+export const BILL_FILTER_OPTIONS: { key: WalletBillStatus; label: string; chipLabel: string }[] = [
+  { key: 'PENDING', label: 'Pending', chipLabel: 'Bill: Pending' },
+  { key: 'READING', label: 'Reading', chipLabel: 'Bill: Reading' },
+  { key: 'ADDED', label: 'Added', chipLabel: 'Bill: Added' },
+  { key: 'REVIEWED', label: 'Reviewed', chipLabel: 'Bill: Reviewed' },
+  { key: 'UNREADABLE', label: 'Check bill', chipLabel: 'Bill: Check bill' },
 ];
 
 /**
@@ -333,7 +348,7 @@ export function hasInstruments(entries: WalletEntry[]): boolean {
   return entries.some((entry) => (entry.instrument?.trim() ?? '') !== '' || isWalletPaid(entry));
 }
 
-/** `?months=…&kinds=…&statuses=…&cursor=…&size=…`, empty parts left out and values escaped. */
+/** `?months=…&kinds=…&statuses=…&bills=…&cursor=…&size=…`, empty parts left out and values escaped. */
 export function buildTransactionsQuery(params: {
   filters?: WalletFilters;
   cursor?: string | null;
@@ -351,6 +366,7 @@ export function buildTransactionsQuery(params: {
   list('months', [...filters.months].sort().reverse());
   list('kinds', kinds);
   list('statuses', filters.statuses);
+  list('bills', BILL_FILTER_OPTIONS.filter((o) => filters.bills.includes(o.key)).map((o) => o.key));
   if (params.cursor) parts.push(`cursor=${encodeURIComponent(params.cursor)}`);
   if (params.size != null) parts.push(`size=${params.size}`);
   return parts.length === 0 ? '' : `?${parts.join('&')}`;
@@ -365,8 +381,15 @@ export function filtersToParams(filters: WalletFilters): Record<string, string> 
   if (filters.categories.length > 0) params.categories = filters.categories.join(',');
   if (filters.instruments.length > 0) params.instruments = filters.instruments.join(',');
   if (filters.statuses.length > 0) params.statuses = filters.statuses.join(',');
+  if (filters.bills.length > 0) params.bills = filters.bills.join(',');
   return params;
 }
+
+/**
+ * Every filter param set to empty. Spread under `filtersToParams` when navigating, so a section
+ * that was removed really clears: a param left out would keep its old value in the route.
+ */
+export const EMPTY_FILTER_PARAMS = { months: '', categories: '', instruments: '', statuses: '', bills: '' } as const;
 
 function pick<T extends string>(raw: string | string[] | undefined, allowed: readonly T[]): T[] {
   const text = Array.isArray(raw) ? raw[0] : raw;
@@ -384,7 +407,32 @@ export function filtersFromParams(
     categories: pick(params.categories, CATEGORY_OPTIONS.map((o) => o.key)),
     instruments: pick(params.instruments, INSTRUMENT_OPTIONS.map((o) => o.key)),
     statuses: pick(params.statuses, STATUS_OPTIONS.map((o) => o.key)),
+    bills: pick(params.bills, BILL_STATUSES),
   };
+}
+
+export type BillBannerState = { kind: 'prompt'; text: string } | { kind: 'active' } | null;
+
+/**
+ * What the banner under the search box says about bills still to add.
+ *
+ * <p>Filtered to exactly Pending, it says so (and offers to clear). Any other bill filter shows
+ * nothing: the person is already looking at bills. Otherwise it prompts, when the server counts some.
+ */
+export function billBanner(
+  summary: WalletBillSummary | null | undefined,
+  bills: WalletBillStatus[],
+): BillBannerState {
+  if (bills.length === 1 && bills[0] === 'PENDING') return { kind: 'active' };
+  if (bills.length > 0) return null;
+  const pending = summary?.pending ?? 0;
+  if (!(pending > 0)) return null;
+  return { kind: 'prompt', text: pending === 1 ? '1 payment needs a bill' : `${pending} payments need a bill` };
+}
+
+/** "Bills pending: 3" for a month's detail, or null when none (or the server did not say). */
+export function billsPendingLine(n: number | null | undefined): string | null {
+  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? `Bills pending: ${n}` : null;
 }
 
 export interface MonthChoice {

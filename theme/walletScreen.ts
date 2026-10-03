@@ -417,3 +417,50 @@ export const ReviewLayout = {
   sheetMaxHeight: 560,
   daySize: 44,
 } as const;
+
+// ── Bill status chips and the History banner ──────────────────────────
+// Contrast (checked by tests/billStatusContrast.test.ts): every word reaches 4.5:1 on the fill it
+// is drawn on and every icon 3:1. Status is never colour alone: each chip also carries words and a glyph.
+
+export const BillStatusColors = {
+  pendingBg: '#FEF3C7',
+  pendingText: '#92400E',
+  pendingBorder: '#F3D9A4',
+  readingBg: '#F3F4F6',
+  readingText: '#4B5563',
+  addedBg: '#E6F4EA',
+  addedText: '#0B7A2D',
+  reviewedBg: '#0B7A2D',
+  reviewedText: '#FFFFFF',
+  checkBg: '#FEE2E2',
+  checkText: '#B91C1C',
+  notRequiredText: '#6B7280',
+  bannerBg: '#FFF8E6',
+  bannerBorder: '#F3D9A4',
+  bannerText: '#92400E',
+  bannerAction: '#C2410C',
+  bannerPressed: '#FEF3C7',
+} as const;
+
+/** Chip measures, dp. The chip is a fixed 22 dp high at any font scale (its label stops growing at 1.3x). */
+export const BillChipLayout = {
+  height: 22,
+  radius: 11,
+  padX: 9,
+  icon: 12,
+  gap: 4,
+  dot: 6,
+  readingDot: 3,
+  /** Between the time and the chip on a History row. */
+  timeGap: 6,
+  bannerRadius: 12,
+  bannerMinHeight: 44,
+  bannerPadX: 12,
+  bannerPadY: 10,
+} as const;
+
+export const BillChipType = {
+  label: { fontFamily: WalletFont.semibold, fontSize: 11, lineHeight: 14, letterSpacing: 0 },
+  banner: { fontFamily: WalletFont.regular, fontSize: 13, lineHeight: 18, letterSpacing: 0 },
+  bannerStrong: { fontFamily: WalletFont.semibold, fontSize: 13, lineHeight: 18, letterSpacing: 0 },
+} as const;

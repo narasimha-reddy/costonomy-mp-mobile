@@ -10,6 +10,8 @@ import { DetailHeader } from '@/components/wallet/detail/DetailHeader';
 import { DetailSkeleton } from '@/components/wallet/detail/DetailSkeleton';
 import { TransactionDetailView } from '@/components/wallet/detail/TransactionDetailView';
 import { useWalletTransaction } from '@/hooks/useWalletTransaction';
+import { useBillWaiver } from '@/hooks/useWalletInvoice';
+import { waiverErrorMessage } from '@/lib/wallet/bill';
 import { DetailColors, WalletColors } from '@/theme';
 
 /**
@@ -32,6 +34,25 @@ export default function TransactionDetailScreen() {
   const { outlet } = useOutlet();
   const { canForOutlet } = usePermissions();
   const mayChangeBill = canForOutlet('QUICKSCAN_PAY', outlet);
+  const { waive, undo } = useBillWaiver(id);
+
+  const waiveBill = useCallback(async () => {
+    try {
+      await waive.mutateAsync();
+      toast.show('Marked as no bill needed', 'success');
+    } catch (error) {
+      toast.show(waiverErrorMessage(error, 'waive'), 'error');
+    }
+  }, [waive, toast]);
+
+  const undoWaiver = useCallback(async () => {
+    try {
+      await undo.mutateAsync();
+      toast.show('Bill needed again', 'success');
+    } catch (error) {
+      toast.show(waiverErrorMessage(error, 'undo'), 'error');
+    }
+  }, [undo, toast]);
 
   const back = useCallback(() => {
     if (router.canGoBack?.() === false) router.replace('/restaurant/wallet/history');
@@ -65,6 +86,9 @@ export default function TransactionDetailScreen() {
         onWallet={() => router.push('/restaurant/wallet')}
         onHistory={() => router.push('/restaurant/wallet/history')}
         mayChangeBill={mayChangeBill}
+        onWaiveBill={waiveBill}
+        onUndoWaiver={undoWaiver}
+        billBusy={waive.isPending || undo.isPending}
         onAddBill={() => router.push({ pathname: '/restaurant/wallet/transaction/bill', params: { id } })}
         onInvoice={() => router.push({ pathname: '/restaurant/wallet/transaction/invoice', params: { id } })}
         onSupport={() => toast.show('Support is coming soon', 'info')}

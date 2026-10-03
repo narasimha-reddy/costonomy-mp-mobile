@@ -5,8 +5,10 @@ import { renewAccessToken } from '@/lib/api/session-bridge';
 import { uploadParts } from '@/lib/api/upload';
 import { buildTransactionsQuery } from '@/lib/wallet/history';
 import { buildStatementQuery, fallbackFileName, fileNameFromDisposition } from '@/lib/wallet/statement';
+import { BILL_STATUSES } from '@/models/wallet';
 import type {
   BillFile,
+  DetailBillStatus,
   InvoiceReview,
   InvoiceReviewPayload,
   ReviewLine,
@@ -16,6 +18,8 @@ import type {
   TopUpConfirmation,
   TopUpStatus,
   Wallet,
+  WalletBillStatus,
+  WalletBillSummary,
   WalletEntry,
   WalletEntryStatus,
   WalletFilters,
@@ -45,14 +49,20 @@ const LIMIT_FIELDS: (keyof WalletLimits)[] = [
 
 /**
  * The wallet as the screens read it: limits kept only when all six figures are
- * usable.
+ * usable, and the recent rows mapped like History's (`mapEntry`: bill status, unknown
+ * status or instrument cleaned up).
  *
  * <p>A half-formed limits object is treated as none. A meter or a hint built on a
  * missing figure would show a wrong number, and the server checks every top-up
  * regardless — so unknown limits hide the meter rather than guess it.
  */
 export function mapWallet(raw: Wallet): Wallet {
-  const { limits, ...rest } = raw as Wallet & { limits?: Partial<Record<keyof WalletLimits, unknown>> | null };
+  const { limits, recent: rawRecent, ...others } = raw as Wallet & { limits?: Partial<Record<keyof WalletLimits, unknown>> | null };
+  // The same row mapper as History, so a Recent row's bill is a known status or null.
+  const rest = {
+    ...others,
+    recent: Array.isArray(rawRecent) ? (rawRecent as unknown as Record<string, unknown>[]).map(mapEntry) : [],
+  };
   if (limits == null || typeof limits !== 'object') return rest as Wallet;
 
   const mapped: Partial<WalletLimits> = {};
@@ -191,6 +201,14 @@ function money(value: unknown): string | null {
   return Number.isFinite(Number(value)) ? String(value) : null;
 }
 
+/** A bill status this app knows, else null: an unknown word from a newer API is no status at all. */
+function billStatus(value: unknown): WalletBillStatus | null {
+  return BILL_STATUSES.find((s) => s === value) ?? null;
+}
+
+const count = (value: unknown): number | null =>
+  (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
+
 /**
  * One history row as the screens read it.
  *
@@ -214,8 +232,23 @@ export function mapEntry(raw: Record<string, unknown>): WalletEntry {
     refundStatus: typeof raw.refundStatus === 'string' ? raw.refundStatus : null,
     status,
     instrument,
+    bill: mapBill(raw.bill),
     at: String(raw.at ?? ''),
   };
+}
+
+/** The row's bill: a known status or null (no bill, or one this app cannot name). */
+function mapBill(raw: unknown): WalletEntry['bill'] {
+  const status = billStatus((raw as { status?: unknown } | null | undefined)?.status);
+  return status == null ? null : { status };
+}
+
+/** The bill counts, only when all three are usable: half a summary would show a wrong banner. */
+function mapBillSummary(raw: unknown): WalletBillSummary | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const { pending, reading, unreadable } = raw as Record<string, unknown>;
+  const p = count(pending); const r = count(reading); const u = count(unreadable);
+  return p == null || r == null || u == null ? null : { pending: p, reading: r, unreadable: u };
 }
 
 /** A page of history, tolerant of an older API that sends only some of it. */
@@ -227,7 +260,11 @@ export function mapTransactionsPage(raw: Record<string, unknown> | null | undefi
   for (const total of list(body.monthTotals) as Record<string, unknown>[]) {
     const spent = money(total?.spent);
     if (typeof total?.month !== 'string' || spent == null) continue;
-    monthTotals.push({ month: total.month, added: money(total.added) ?? '0', spent });
+    const billsPending = count(total.billsPending);
+    monthTotals.push({
+      month: total.month, added: money(total.added) ?? '0', spent,
+      ...(billsPending == null ? {} : { billsPending }),
+    });
   }
 
   return {
@@ -235,6 +272,7 @@ export function mapTransactionsPage(raw: Record<string, unknown> | null | undefi
     monthTotals,
     availableMonths: list(body.availableMonths).filter((m): m is string => typeof m === 'string'),
     nextCursor: typeof body.nextCursor === 'string' && body.nextCursor !== '' ? body.nextCursor : null,
+    billSummary: mapBillSummary(body.billSummary),
   };
 }
 
@@ -327,9 +365,19 @@ export async function fetchWalletTransaction(
   return {
     ...detail,
     references: detail.references ?? [],
-    actions: detail.actions ?? { canPayAgain: false },
+    actions: {
+      canWaiveBill: false,
+      canUndoWaiver: false,
+      ...(detail.actions ?? { canPayAgain: false }),
+    },
     invoice: detail.invoice ?? null,
+    billStatus: detailBillStatus((detail as { billStatus?: unknown }).billStatus),
   };
+}
+
+/** The details page's bill status: a known word (or NOT_REQUIRED), else null. */
+function detailBillStatus(value: unknown): DetailBillStatus | null {
+  return value === 'NOT_REQUIRED' ? 'NOT_REQUIRED' : billStatus(value);
 }
 
 const invoicePath = (outletId: number, entryId: number | string) =>
@@ -530,4 +578,22 @@ export async function deleteWalletInvoice(
   token: string,
 ): Promise<void> {
   await apiRequest<void>(invoicePath(outletId, entryId), { token, method: 'DELETE' });
+}
+
+/** Say this payment needs no bill (200). 422 INVOICE_NOT_ALLOWED, 409 INVOICE_EXISTS. */
+export async function waiveWalletBill(
+  outletId: number,
+  entryId: number | string,
+  token: string,
+): Promise<void> {
+  await apiRequest<void>(`${invoicePath(outletId, entryId)}/waiver`, { token, method: 'PUT' });
+}
+
+/** Take back "no bill needed" (204). */
+export async function undoWalletBillWaiver(
+  outletId: number,
+  entryId: number | string,
+  token: string,
+): Promise<void> {
+  await apiRequest<void>(`${invoicePath(outletId, entryId)}/waiver`, { token, method: 'DELETE' });
 }

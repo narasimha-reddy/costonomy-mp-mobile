@@ -188,6 +188,32 @@ export function billErrorMessage(error: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+/**
+ * A plain-English sentence for whatever went wrong marking a payment "no bill needed" (`waive`)
+ * or taking that back (`undo`).
+ */
+export function waiverErrorMessage(error: unknown, action: 'waive' | 'undo'): string {
+  if (error instanceof NetworkError) {
+    return 'You seem to be offline. Check your connection and try again.';
+  }
+  if (error instanceof ApiError) {
+    if (error.code === 'INVOICE_EXISTS' || error.status === 409) {
+      return 'This payment already has a bill, so it cannot be marked as no bill needed.';
+    }
+    if (error.code === 'INVOICE_NOT_ALLOWED' || error.status === 422) {
+      return action === 'waive' ? 'This payment does not need a bill.' : 'This payment cannot be changed back.';
+    }
+    switch (error.status) {
+      case 401: return 'Your session has ended. Sign in again.';
+      case 403: return 'You do not have permission to change bills for this outlet.';
+      case 404: return 'We could not find this transaction.';
+      default:
+        if (error.status >= 500) return 'Something went wrong on our side. Please try again in a moment.';
+    }
+  }
+  return 'Something went wrong. Please try again.';
+}
+
 /** Whether another try could work: false for the errors the owner has to act on. */
 export function billErrorRetryable(error: unknown): boolean {
   if (error instanceof NetworkError) return true;

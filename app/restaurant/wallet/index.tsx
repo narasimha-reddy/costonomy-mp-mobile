@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,6 +25,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { isAmount } from '@/lib/disputes/refundCopy';
 import { walletKey } from '@/lib/queryKeys';
+import { billChipRoute } from '@/lib/wallet/billChip';
+import { useBillListLive } from '@/hooks/useBillListLive';
 import { TransactionRow } from '@/components/wallet/TransactionRow';
 import { RoundAction } from '@/components/wallet/RoundAction';
 import { WalletHero } from '@/components/wallet/WalletHero';
@@ -73,11 +75,20 @@ export default function WalletScreen() {
   /** The server's last answer to a withdrawal, shown in the form until the next attempt. */
   const [failure, setFailure] = useState<WithdrawFailure | null>(null);
 
+  const [reading, setReading] = useState(false);
+  const refetchRef = useRef<() => unknown>(() => undefined);
+  const refetchInterval = useBillListLive(reading, () => refetchRef.current());
+
   const wallet = useQuery({
     queryKey: walletKey(outlet?.id),
     queryFn: () => fetchWallet(accessToken as string, outlet?.id as number),
     enabled: outlet != null && accessToken != null,
+    refetchInterval,
   });
+  refetchRef.current = () => wallet.refetch();
+  const anyReading = (wallet.data?.recent ?? []).slice(0, RECENT_SHOWN)
+    .some((e) => e.bill?.status === 'READING');
+  useEffect(() => { setReading(anyReading); }, [anyReading]);
 
   // Only to know whether to offer "Pay any shop by scanning"; hidden if it fails.
   const quickScan = useQuery({
@@ -123,6 +134,7 @@ export default function WalletScreen() {
   };
 
   const mayWithdraw = canForOutlet('WALLET_WITHDRAW', outlet);
+  const mayAddBill = canForOutlet('QUICKSCAN_PAY', outlet);
 
   return (
     <MandiScreen
@@ -227,6 +239,8 @@ export default function WalletScreen() {
                   entry={entry}
                   last={i === shown.length - 1}
                   onPress={() => router.push(`/restaurant/wallet/transaction/${entry.id}`)}
+                  onBillPress={(e) => router.push(billChipRoute(e))}
+                  mayAddBill={mayAddBill}
                 />
               ))}
             </View>

@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DetailActions } from '@/components/wallet/detail/DetailActions';
 import { DetailHeader } from '@/components/wallet/detail/DetailHeader';
 import { HelpGlyph } from '@/components/wallet/detail/DetailIcons';
-import { InvoiceRow } from '@/components/wallet/bill/InvoiceRow';
+import { BillStatusSection } from '@/components/wallet/detail/BillStatusSection';
 import { ReceiptCard } from '@/components/wallet/detail/ReceiptCard';
 import { TransactionCard } from '@/components/wallet/detail/TransactionCard';
 import { detailHeader, detailTime, receiptFileName } from '@/lib/wallet/detail';
@@ -22,6 +22,7 @@ import { DetailColors, DetailLayout, DetailType } from '@/theme';
  */
 export function TransactionDetailView({
   entry, onBack, onCopy, onPayAgain, onWallet, onHistory, onSupport, onError, onAddBill, onInvoice, mayChangeBill = false,
+  onWaiveBill, onUndoWaiver, billBusy = false,
 }: {
   entry: WalletTransactionDetail;
   onBack: () => void;
@@ -35,6 +36,12 @@ export function TransactionDetailView({
   onInvoice?: () => void;
   /** The user holds QUICKSCAN_PAY: without it "Add bill" is not offered. */
   mayChangeBill?: boolean;
+  /** "No bill needed" confirmed. */
+  onWaiveBill?: () => Promise<void> | void;
+  /** "Undo" on a payment marked no bill needed. */
+  onUndoWaiver?: () => Promise<void> | void;
+  /** A waive or undo is in flight. */
+  billBusy?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const header = detailHeader(entry.status);
@@ -72,9 +79,16 @@ export function TransactionDetailView({
           expanded={expanded}
           onToggle={() => setExpanded((v) => !v)}
           onCopy={onCopy}
-          invoiceRow={entry.invoice != null ? (
-            <InvoiceRow invoice={entry.invoice} onPress={() => onInvoice?.()} />
-          ) : null}
+          invoiceRow={(
+            <BillStatusSection
+              entry={entry}
+              mayChangeBill={mayChangeBill}
+              busy={billBusy}
+              onInvoice={onInvoice}
+              onWaiveBill={onWaiveBill}
+              onUndoWaiver={onUndoWaiver}
+            />
+          )}
           footer={(
             <DetailActions
               canAddBill={entry.actions.canAddBill === true && mayChangeBill}

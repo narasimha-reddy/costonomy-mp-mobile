@@ -17,6 +17,22 @@ export type ExplanationCode =
   | 'FULL_QUANTITY'
   | 'HIGHLY_RATED'
   | 'PREVIOUSLY_ORDERED';
+export interface BrandOption {
+  supplierSkuId: number;
+  offerId: number | null;
+  skuName: string;
+  brandName: string | null;
+  packSize: Money;
+  packUnit: string;
+  sellingPrice: Money;
+  gstRate: Money | null;
+  unitPriceInclusiveGst: Money | null;
+  imageUrl: string | null;
+  availability: string;
+  availableQuantity: Money | null;
+  measureValue: Money | null;
+  measureUnit: string | null;
+}
 
 export interface RecommendedOffer {
   offerId: number;
@@ -75,6 +91,8 @@ export interface RecommendedOffer {
    * rest exist.
    */
   otherPackCount: number;
+  /** All brand options for this item from this supplier, sorted lowest priced first. */
+  brandOptions?: BrandOption[];
 }
 
 export interface ProductRecommendation {
@@ -163,6 +181,8 @@ export interface StorefrontSku {
   /** The amount inside one pack, where a pack has one. */
   measureValue: Money | null;
   measureUnit: string | null;
+  /** All brand options for this item from this supplier, sorted lowest priced first. */
+  brandOptions?: BrandOption[];
 }
 
 /**

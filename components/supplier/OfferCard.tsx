@@ -48,13 +48,16 @@ export function OfferCard({
   onOpenPack,
   lineTotal,
   busy,
+  quantityForSku,
+  lineTotalForSku,
+  onSelectSku,
 }: {
   offer: RecommendedOffer;
   /** Drawn with an accent edge; the reason is the order, not a label. */
   recommended?: boolean;
   /** Packs currently in the cart from this supplier. Zero means none. */
   quantity: number;
-  onQuantity: (next: number) => void;
+  onQuantity: (next: number, selectedSkuId?: number, selectedOfferId?: number) => void;
   /**
    * Open this supplier's shelf.
    *
@@ -65,15 +68,38 @@ export function OfferCard({
    */
   onOpenSupplier?: () => void;
   /** Open this pack's own page — what it is, not just what it costs. D-096. */
-  onOpenSku?: () => void;
+  onOpenSku?: (supplierSkuId?: number) => void;
   /** Open one of this supplier's other packs. */
   onOpenPack?: (supplierSkuId: number) => void;
   /** The server's total for this line, present only once something is in it. */
   lineTotal?: string | null;
   busy?: boolean;
+  quantityForSku?: (skuId: number) => number;
+  lineTotalForSku?: (skuId: number) => string | null | undefined;
+  onSelectSku?: (skuId: number, offerId: number) => void;
 }) {
   const [showingPacks, setShowingPacks] = useState(false);
-  const unavailable = offer.availability !== 'AVAILABLE';
+  const brandOptions = offer.brandOptions ?? [];
+  const hasMultiBrand = brandOptions.length > 1;
+  const [selectedSkuId, setSelectedSkuId] = useState<number>(offer.supplierSkuId);
+
+  const activeOption = brandOptions.find((opt) => opt.supplierSkuId === selectedSkuId) ?? null;
+  const activeSkuName = activeOption?.skuName ?? offer.skuName;
+  const activeBrandName = activeOption?.brandName ?? offer.brandName;
+  const activePackSize = activeOption?.packSize ?? offer.packSize;
+  const activePackUnit = activeOption?.packUnit ?? offer.packUnit;
+  const activeUnitPriceInclusiveGst = activeOption?.unitPriceInclusiveGst ?? offer.unitPriceInclusiveGst;
+  const activeGstRate = activeOption?.gstRate ?? offer.gstRate;
+  const activeImageUrl = activeOption?.imageUrl ?? offer.imageUrl;
+  const activeAvailability = activeOption?.availability ?? offer.availability;
+  const activeAvailableQuantity = activeOption?.availableQuantity ?? offer.availableQuantity;
+  const activeSkuId = activeOption?.supplierSkuId ?? offer.supplierSkuId;
+  const activeOfferId = activeOption?.offerId ?? offer.offerId;
+
+  const currentQuantity = quantityForSku ? quantityForSku(activeSkuId) : quantity;
+  const currentLineTotal = lineTotalForSku ? lineTotalForSku(activeSkuId) : lineTotal;
+
+  const unavailable = activeAvailability !== 'AVAILABLE';
   /**
    * The branch is named in full, and where it is goes beside the business.
    *
@@ -91,27 +117,27 @@ export function OfferCard({
   const place = locality === offer.storeName ? null : locality;
   // On a one-unit pack the price per unit *is* the pack price, and printing both
   // says the same number twice. It earns its place on a 25 kg sack.
-  const perUnit = Number(offer.packSize) === 1 ? null : offer.pricePerBaseUnit;
+  const perUnit = Number(activePackSize) === 1 ? null : (activeOption ? null : offer.pricePerBaseUnit);
 
   return (
     <MandiCard outlined={recommended} accentColor={recommended ? Colors.primary : undefined}>
       {/* What you are buying. */}
       <Pressable
-        onPress={onOpenSku}
+        onPress={() => onOpenSku?.(activeSkuId)}
         disabled={onOpenSku == null}
         accessibilityRole={onOpenSku == null ? undefined : 'button'}
-        accessibilityLabel={onOpenSku == null ? undefined : `About ${offer.skuName}`}
+        accessibilityLabel={onOpenSku == null ? undefined : `About ${activeSkuName}`}
         style={({ pressed }) => [styles.sku, pressed && styles.skuPressed]}
       >
-        <ProductThumb uri={offer.imageUrl} size={56} radius={Radius.md} />
+        <ProductThumb uri={activeImageUrl} size={56} radius={Radius.md} />
 
         <View style={styles.names}>
-          <MandiText variant="bodyEmphasis" numberOfLines={2}>{offer.skuName}</MandiText>
+          <MandiText variant="bodyEmphasis" numberOfLines={2}>{activeSkuName}</MandiText>
           <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
             {[
-              offer.brandName,
-              `${formatQuantity(offer.packSize)} ${offer.packUnit.toLowerCase()}`,
-              perUnit != null ? `${formatMoney(perUnit)}/${offer.packUnit.toLowerCase()}` : null,
+              activeBrandName,
+              `${formatQuantity(activePackSize)} ${activePackUnit.toLowerCase()}`,
+              perUnit != null ? `${formatMoney(perUnit)}/${activePackUnit.toLowerCase()}` : null,
             ].filter(Boolean).join(' · ')}
           </MandiText>
         </View>
@@ -120,12 +146,89 @@ export function OfferCard({
             rather than left to be inferred — a price that quietly includes tax is
             indistinguishable from one that quietly excludes it. */}
         <View style={styles.pricing}>
-          <MandiText variant="price">{formatMoney(offer.unitPriceInclusiveGst)}</MandiText>
+          <MandiText variant="price">{formatMoney(activeUnitPriceInclusiveGst)}</MandiText>
           <MandiText variant="caption" color={Colors.textTertiary}>
-            Inc. {formatGstRate(offer.gstRate)} GST
+            Inc. {formatGstRate(activeGstRate)} GST
           </MandiText>
         </View>
       </Pressable>
+
+      {/* Brand Options: When an item is fulfilled by multiple brands, display all options
+          with lowest priced one first (doc / user requirement). */}
+      {hasMultiBrand && (
+        <View style={styles.brandOptionsSection}>
+          <View style={styles.brandOptionsHeader}>
+            <Ionicons name="pricetags-outline" size={12} color={Colors.primary} />
+            <MandiText variant="captionEmphasis" color={Colors.textPrimary}>
+              Brand Options
+            </MandiText>
+            <MandiText variant="caption" color={Colors.textTertiary}>
+              (Lowest price first)
+            </MandiText>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brandOptionsRail}
+          >
+            {brandOptions.map((opt, idx) => {
+              const isSelected = opt.supplierSkuId === activeSkuId;
+              const isLowest = idx === 0;
+              const priceDisplay = opt.unitPriceInclusiveGst != null
+                ? formatMoney(opt.unitPriceInclusiveGst)
+                : formatMoney(opt.sellingPrice);
+
+              return (
+                <Pressable
+                  key={opt.supplierSkuId}
+                  onPress={() => {
+                    setSelectedSkuId(opt.supplierSkuId);
+                    onSelectSku?.(opt.supplierSkuId, opt.offerId ?? offer.offerId);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${opt.brandName || opt.skuName}, ${priceDisplay}${isLowest ? ', lowest price' : ''}`}
+                  style={({ pressed }) => [
+                    styles.brandChip,
+                    isSelected && styles.brandChipSelected,
+                    pressed && styles.skuPressed,
+                  ]}
+                >
+                  <View style={styles.brandChipTop}>
+                    <MandiText
+                      variant="captionEmphasis"
+                      color={isSelected ? Colors.primary : Colors.textPrimary}
+                      numberOfLines={1}
+                    >
+                      {opt.brandName || opt.skuName}
+                    </MandiText>
+                    {isLowest && (
+                      <View style={styles.lowestBadge}>
+                        <MandiText variant="caption" style={styles.lowestBadgeText}>
+                          Lowest
+                        </MandiText>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.brandChipBottom}>
+                    <MandiText
+                      variant="caption"
+                      color={isSelected ? Colors.primary : Colors.textSecondary}
+                    >
+                      {formatQuantity(opt.packSize)} {opt.packUnit.toLowerCase()}
+                    </MandiText>
+                    <MandiText
+                      variant="captionEmphasis"
+                      color={isSelected ? Colors.primaryDark : Colors.textPrimary}
+                    >
+                      {priceDisplay}
+                    </MandiText>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Who you are buying it from — name, standing, and reach, in one panel.
           Distance and ETA sit inside it because they are facts about the seller;
@@ -202,9 +305,9 @@ export function OfferCard({
           backgroundColor={Colors.dangerLight}
           style={styles.notice}
         />
-      ) : offer.availableQuantity != null && !offer.coversFullQuantity ? (
+      ) : activeAvailableQuantity != null && !offer.coversFullQuantity ? (
         <MandiBadge
-          label={`Only ${formatQuantity(offer.availableQuantity)} available`}
+          label={`Only ${formatQuantity(activeAvailableQuantity)} available`}
           icon="alert-circle-outline"
           color={Colors.warning}
           backgroundColor={Colors.warningLight}
@@ -214,17 +317,17 @@ export function OfferCard({
 
       <View style={styles.actions}>
         <MandiQuantityStepper
-          value={quantity}
-          onChange={onQuantity}
+          value={currentQuantity}
+          onChange={(next) => onQuantity(next, activeSkuId, activeOfferId)}
           min={0}
           disabled={unavailable || busy}
-          unit={quantity === 1 ? 'pack' : 'packs'}
-          itemLabel={`${offer.skuName} from ${offer.supplierName}`}
+          unit={currentQuantity === 1 ? 'pack' : 'packs'}
+          itemLabel={`${activeSkuName} from ${offer.supplierName}`}
         />
-        {quantity > 0 && lineTotal != null && (
+        {currentQuantity > 0 && currentLineTotal != null && (
           <View style={styles.line}>
             <MandiText variant="caption" color={Colors.textSecondary}>In cart</MandiText>
-            <MandiText variant="bodyEmphasis">{formatMoney(lineTotal)}</MandiText>
+            <MandiText variant="bodyEmphasis">{formatMoney(currentLineTotal)}</MandiText>
           </View>
         )}
       </View>
@@ -432,6 +535,58 @@ const styles = StyleSheet.create({
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
 
   notice: { marginTop: GAP, alignSelf: 'flex-start' },
+  brandOptionsSection: {
+    marginTop: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  brandOptionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  brandOptionsRail: {
+    gap: Spacing.xs,
+    paddingVertical: 2,
+  },
+  brandChip: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    gap: 2,
+    minWidth: 100,
+  },
+  brandChipSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: '#E8F5E9',
+  },
+  brandChipTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.xs,
+  },
+  brandChipBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.xs,
+  },
+  lowestBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#4CAF50',
+  },
+  lowestBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',

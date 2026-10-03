@@ -4,6 +4,25 @@ All notable changes to the Costonomy MP (Mandi) Mobile Application across all fe
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Discovery & Multi-Brand Fulfillment]
+
+### [feat/item-multi-brand-options] - Multi-Brand Options with Lowest Priced First
+#### Added
+- **Multi-Brand Models (`models/discovery.ts`, `models/catalog.ts`)**:
+  - `BrandOption` interface with pack dimensions, selling price, GST-inclusive price, and stock availability.
+  - Attached `brandOptions` to `RecommendedOffer`, `StorefrontSku`, and `SkuDetail`.
+  - Added `brandName`, `gstRate`, `unitPriceInclusiveGst`, and `offerId` to `SkuSibling`.
+- **Offer Comparison Card (`components/supplier/OfferCard.tsx`)**:
+  - Horizontal brand options rail rendered under the item when an item from a supplier has multiple brand options.
+  - Lists options sorted with lowest priced first, badged with "Lowest Price".
+  - Interactive selection updates the active brand variant, pack size, unit price, and stepper cart actions dynamically.
+- **Storefront & Catalog (`components/product/SkuRow.tsx`)**:
+  - Added brand options rail under the item row displaying all fulfilling brands sorted lowest price first.
+- **SKU Details (`app/restaurant/sku/[id].tsx`)**:
+  - Added "Brand Options from [Store]" section highlighting "Lowest Price" and "Viewing" badges with lowest priced option listed first.
+- **Unit Tests (`tests/brandOptions.test.ts`)**:
+  - Tests verifying model contracts and lowest-price-first ordering.
+
 ---
 
 ## [Procurement & Open Requests]

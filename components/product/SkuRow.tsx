@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { StorefrontSku } from '@/models/discovery';
 import { ProductThumb } from './ProductThumb';
@@ -40,6 +40,7 @@ export function SkuRow({
   lineTotal,
   /** Hides the supplier line, for a list that is already one supplier's shelf. */
   hideSupplier,
+  onSelectBrandSku,
 }: {
   sku: StorefrontSku;
   onPress?: () => void;
@@ -64,8 +65,10 @@ export function SkuRow({
    */
   lineTotal?: Money | null;
   hideSupplier?: boolean;
+  onSelectBrandSku?: (supplierSkuId: number) => void;
 }) {
   const unavailable = sku.availability !== 'AVAILABLE';
+  const hasBrandOptions = sku.brandOptions != null && sku.brandOptions.length > 1;
 
   const body = (
     <>
@@ -152,78 +155,142 @@ export function SkuRow({
   );
 
   return (
-    <View style={styles.row}>
-      {onPress ? (
-        <Pressable
-          onPress={onPress}
-          accessibilityRole="button"
-          // The row opens the pack now, not the comparison. A label describing
-          // the old destination is worse than none: a screen reader user hears
-          // where they are going and lands somewhere else.
-          accessibilityLabel={
-            `${sku.skuName} from ${sku.supplierName}, ${formatMoney(sku.sellingPrice)}. `
-            + 'About this pack'
-          }
-          style={styles.main}
-        >
-          {body}
-        </Pressable>
-      ) : (
-        <View style={styles.main}>{body}</View>
-      )}
-
-      <View style={styles.trailing}>
-        {/* What this line comes to, over the control that sets it. Only once
-            there is a line: a total of nothing is not a fact about this pack,
-            and the unit price beside the name already says what one costs. */}
-        {onChangePacks != null && lineTotal != null && (packs ?? 0) > 0 && (
-          <MandiText variant="priceSmall">{formatMoney(lineTotal)}</MandiText>
+    <View style={styles.container}>
+      <View style={styles.row}>
+        {onPress ? (
+          <Pressable
+            onPress={onPress}
+            accessibilityRole="button"
+            // The row opens the pack now, not the comparison. A label describing
+            // the old destination is worse than none: a screen reader user hears
+            // where they are going and lands somewhere else.
+            accessibilityLabel={
+              `${sku.skuName} from ${sku.supplierName}, ${formatMoney(sku.sellingPrice)}. `
+              + 'About this pack'
+            }
+            style={styles.main}
+          >
+            {body}
+          </Pressable>
+        ) : (
+          <View style={styles.main}>{body}</View>
         )}
 
-        {onChangePacks != null ? (
-          <>
-            <MandiQuantityStepper
-              value={packs ?? 0}
+        <View style={styles.trailing}>
+          {/* What this line comes to, over the control that sets it. Only once
+              there is a line: a total of nothing is not a fact about this pack,
+              and the unit price beside the name already says what one costs. */}
+          {onChangePacks != null && lineTotal != null && (packs ?? 0) > 0 && (
+            <MandiText variant="priceSmall">{formatMoney(lineTotal)}</MandiText>
+          )}
+
+          {onChangePacks != null ? (
+            <>
+              <MandiQuantityStepper
+                value={packs ?? 0}
+                disabled={unavailable}
+                onChange={onChangePacks}
+              />
+              {/* The SKU's own unit, which is what the quantity is counted in
+                  everywhere else — a request line for this reads "2 KG".
+                  
+                  In the flow and right-aligned with the control, not floated
+                  under it: absolutely positioned it escaped the row's height and
+                  struck the divider below, and a caption sitting on a rule reads
+                  as belonging to the next row. */}
+              {sku.packUnit != null && (
+                <MandiText variant="caption" color={Colors.textTertiary}>
+                  {sku.packUnit.toLowerCase()}
+                </MandiText>
+              )}
+            </>
+          ) : onAdd ? (
+            <MandiButton
+              label={unavailable ? 'Out of stock' : 'Add'}
+              variant="secondary"
+              size="sm"
               disabled={unavailable}
-              onChange={onChangePacks}
+              loading={adding}
+              onPress={onAdd}
+              fullWidth={false}
             />
-            {/* The SKU's own unit, which is what the quantity is counted in
-                everywhere else — a request line for this reads "2 KG".
-                
-                In the flow and right-aligned with the control, not floated
-                under it: absolutely positioned it escaped the row's height and
-                struck the divider below, and a caption sitting on a rule reads
-                as belonging to the next row. */}
-            {sku.packUnit != null && (
-              <MandiText variant="caption" color={Colors.textTertiary}>
-                {sku.packUnit.toLowerCase()}
-              </MandiText>
-            )}
-          </>
-        ) : onAdd ? (
-          <MandiButton
-            label={unavailable ? 'Out of stock' : 'Add'}
-            variant="secondary"
-            size="sm"
-            disabled={unavailable}
-            loading={adding}
-            onPress={onAdd}
-            fullWidth={false}
-          />
-        ) : null}
+          ) : null}
+        </View>
       </View>
+
+      {/* When an item is fulfilled by multiple brands, display all options
+          under the item with lowest priced one first. */}
+      {hasBrandOptions && (
+        <View style={styles.brandOptionsContainer}>
+          <View style={styles.brandOptionsHeader}>
+            <Ionicons name="pricetags-outline" size={11} color={Colors.primary} />
+            <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
+              Brand options (lowest first):
+            </MandiText>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brandOptionsRail}
+          >
+            {sku.brandOptions?.map((opt, idx) => {
+              const isCurrent = opt.supplierSkuId === sku.supplierSkuId;
+              const isLowest = idx === 0;
+              const priceDisplay = opt.unitPriceInclusiveGst != null
+                ? formatMoney(opt.unitPriceInclusiveGst)
+                : formatMoney(opt.sellingPrice);
+
+              return (
+                <Pressable
+                  key={opt.supplierSkuId}
+                  onPress={() => onSelectBrandSku?.(opt.supplierSkuId) ?? onPress?.()}
+                  style={({ pressed }) => [
+                    styles.brandChip,
+                    isCurrent && styles.brandChipCurrent,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <MandiText
+                    variant="captionEmphasis"
+                    color={isCurrent ? Colors.primary : Colors.textPrimary}
+                    numberOfLines={1}
+                  >
+                    {opt.brandName || opt.skuName}
+                  </MandiText>
+                  {isLowest && (
+                    <View style={styles.lowestBadge}>
+                      <MandiText variant="caption" style={styles.lowestBadgeText}>
+                        Lowest
+                      </MandiText>
+                    </View>
+                  )}
+                  <MandiText
+                    variant="caption"
+                    color={isCurrent ? Colors.primaryDark : Colors.textSecondary}
+                  >
+                    {priceDisplay}
+                  </MandiText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+    paddingVertical: Spacing.xs,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    paddingVertical: Spacing.sm,
   },
   main: { flex: 1, flexDirection: 'row', gap: Spacing.md, alignItems: 'center' },
   body: { flex: 1, gap: 2 },
@@ -231,4 +298,50 @@ const styles = StyleSheet.create({
   signals: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   trailing: { alignItems: 'flex-end', gap: 2 },
+  brandOptionsContainer: {
+    marginTop: 2,
+    marginBottom: Spacing.xs,
+    paddingLeft: 48 + Spacing.md,
+    gap: 4,
+  },
+  brandOptionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  brandOptionsRail: {
+    gap: Spacing.xs,
+    paddingVertical: 2,
+  },
+  brandChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  brandChipCurrent: {
+    borderColor: Colors.primary,
+    backgroundColor: '#E8F5E9',
+  },
+  lowestBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#4CAF50',
+  },
+  lowestBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
 });

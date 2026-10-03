@@ -1,4 +1,5 @@
 import type { Money } from '@/utils/money';
+import type { BrandOption } from './discovery';
 
 /**
  * Catalog shapes as the API returns them (doc 04 §8).
@@ -118,6 +119,8 @@ export interface SkuDetail {
   reviews: SkuReview[];
   /** Other packs of the same product from the same store. */
   otherPacks: SkuSibling[];
+  /** All brand options for this item from this supplier, sorted lowest priced first. */
+  brandOptions?: BrandOption[];
 }
 
 export interface SkuReview {
@@ -137,4 +140,8 @@ export interface SkuSibling {
   sellingPrice: Money | null;
   imageUrl: string | null;
   availability: string | null;
+  brandName?: string | null;
+  gstRate?: Money | null;
+  unitPriceInclusiveGst?: Money | null;
+  offerId?: number | null;
 }

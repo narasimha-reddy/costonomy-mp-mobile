@@ -235,6 +235,13 @@ export default function MorningRateSheetScreen() {
                           </MandiText>
                         </View>
                       ) : null}
+                      {row.requiresColdChain ? (
+                        <View style={styles.coldChainTag}>
+                          <MandiText variant="caption" color={Colors.info}>
+                            ❄️ Cold Chain
+                          </MandiText>
+                        </View>
+                      ) : null}
                       <MandiText variant="caption" color={Colors.textTertiary}>
                         Pack: {row.packSize} {row.packUnit}
                       </MandiText>
@@ -409,6 +416,12 @@ const styles = StyleSheet.create({
   },
   catchWeightTag: {
     backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+  },
+  coldChainTag: {
+    backgroundColor: '#E0F2FE',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: Radius.sm,

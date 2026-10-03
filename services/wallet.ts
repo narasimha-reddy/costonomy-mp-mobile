@@ -15,6 +15,7 @@ import type {
   WalletLimits,
   WalletMonthTotal,
   WalletTopUp,
+  WalletTransactionDetail,
   WalletTransactionsPage,
   Withdrawal,
 } from '@/models/wallet';
@@ -297,4 +298,23 @@ export async function fetchWalletStatement(
     throw error;
   }
   throw new NetworkError();
+}
+
+/**
+ * One wallet movement in full, for the Transaction details screen.
+ *
+ * <p>`entryId` is the numeric id the History row carries. The server answers 404 for
+ * an entry that does not exist or belongs to another outlet; callers show that as
+ * "Transaction not found". The server masks the counterparty; nothing here unmasks it.
+ */
+export async function fetchWalletTransaction(
+  outletId: number,
+  entryId: number | string,
+  token: string,
+): Promise<WalletTransactionDetail> {
+  const detail = await apiRequest<WalletTransactionDetail>(
+    `/api/v1/outlets/${outletId}/wallet/transactions/${encodeURIComponent(String(entryId))}`,
+    { token },
+  );
+  return { ...detail, references: detail.references ?? [], actions: detail.actions ?? { canPayAgain: false } };
 }

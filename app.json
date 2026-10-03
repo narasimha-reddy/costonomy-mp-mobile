@@ -48,7 +48,8 @@
         {
           "locationWhenInUsePermission": "Mandi uses your location once, to place your outlet on the map so suppliers know where to deliver."
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "router": {}

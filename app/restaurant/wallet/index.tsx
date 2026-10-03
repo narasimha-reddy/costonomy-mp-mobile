@@ -222,7 +222,12 @@ export default function WalletScreen() {
           ) : (
             <View style={styles.recent} testID="recent-list">
               {wallet.data.recent.slice(0, RECENT_SHOWN).map((entry, i, shown) => (
-                <TransactionRow key={entry.id} entry={entry} last={i === shown.length - 1} />
+                <TransactionRow
+                  key={entry.id}
+                  entry={entry}
+                  last={i === shown.length - 1}
+                  onPress={() => router.push(`/restaurant/wallet/transaction/${entry.id}`)}
+                />
               ))}
             </View>
           )}

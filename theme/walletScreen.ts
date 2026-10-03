@@ -3,7 +3,7 @@
  * (next) the transaction detail screen.
  *
  * <p>Every number here was measured from a reference render (see the PR notes) at
- * 1 dp = 620/360 px on a 360 dp phone, so the sizes are the measured sizes scaled
+ * 1 dp = 620/360 px on a 360 dp phone, so the sizes are the measured Inter sizes scaled
  * by SANS_SCALE and set in the app's Source Sans 3 (FontFamily). Keep the values
  * in this file; a screen that needs one writes `WalletScreen.x`, never a literal.
  */
@@ -18,8 +18,8 @@ export const WalletFont = {
 } as const;
 
 /**
- * The reference render's typeface has a cap height of 0.73 em; the app's Source Sans 3 has a cap
- * height of about 0.66 em, so every size below is the measured size times this ratio to keep
+ * The reference render is set in Inter (cap height 0.73 em); the app's Source Sans 3 has a cap
+ * height of about 0.66 em, so every size below is the measured Inter size times this ratio to keep
  * the same visual size. Line heights, tracking-free layout and dp structure are unchanged.
  */
 export const SANS_SCALE = 1.1;
@@ -162,4 +162,128 @@ export const WalletLayout = {
   scanLinkUnderline: 1.2,
   scanLinkUnderlineGap: 0.3,
   tap: 44,
+} as const;
+
+// ── Transaction details and the shared receipt ────────────────────────
+// Measured from the detail reference (plan2/detail/spec.md), 1 dp = 620/360 px (sizes scaled for Source Sans 3).
+
+/** Header colour and wording per entry status; the system status bar is painted the same colour. */
+export const DetailStatusColors = {
+  success: '#0B7A2D',
+  inProgress: '#B45309',
+  failed: '#B91C1C',
+  returned: '#9A3412',
+} as const;
+
+export const DetailColors = {
+  page: '#F6F6F6',
+  card: '#FFFFFF',
+  divider: '#E9E9E9',
+  title: '#000000',
+  name: '#1A1A1A',
+  text: '#141414',
+  value: '#171717',
+  wallet: '#131313',
+  secondary: '#666666',
+  section: '#1B1B1B',
+  support: '#1D1D1D',
+  icon: '#111111',
+  bandTitle: '#1D1D1D',
+  bandTime: '#444444',
+  actionRipple: '#FFE2CC',
+  snackbar: '#323232',
+  skeleton: '#EAEAEA',
+  shadow: '#000000',
+  headerRipple: 'rgba(255, 255, 255, 0.2)',
+} as const;
+
+export const DetailType = {
+  headerTitle: { fontFamily: WalletFont.semibold, fontSize: 15, lineHeight: 16.5, letterSpacing: 0 },
+  headerTime: { fontFamily: WalletFont.regular, fontSize: 10.5, lineHeight: 11.5, letterSpacing: 0 },
+  cardTitle: { fontFamily: WalletFont.semibold, fontSize: 13, lineHeight: 14.5, letterSpacing: 0 },
+  name: { fontFamily: WalletFont.regular, fontSize: 15, lineHeight: 16.5, letterSpacing: 0 },
+  amountBold: { fontFamily: WalletFont.semibold, fontSize: 15, lineHeight: 16.5, letterSpacing: 0 },
+  sub: { fontFamily: WalletFont.regular, fontSize: 12.5, lineHeight: 14, letterSpacing: 0 },
+  section: { fontFamily: WalletFont.medium, fontSize: 12.5, lineHeight: 14, letterSpacing: 0 },
+  label: { fontFamily: WalletFont.regular, fontSize: 11, lineHeight: 12, letterSpacing: 0 },
+  value: { fontFamily: WalletFont.regular, fontSize: 12.5, lineHeight: 14, letterSpacing: 0 },
+  action: { fontFamily: WalletFont.regular, fontSize: 10.5, lineHeight: 11.5, letterSpacing: 0 },
+  bandTitle: { fontFamily: WalletFont.regular, fontSize: 15, lineHeight: 16.5, letterSpacing: 0 },
+  bandTime: { fontFamily: WalletFont.regular, fontSize: 10.5, lineHeight: 11.5, letterSpacing: 0 },
+} as const;
+
+export const DetailLayout = {
+  headerBar: 56,
+  back: 48,
+  backLeft: 0,
+  titleLeft: 62,
+  headerTimeGap: 0.1,
+  /** Back arrow and titles sit 4 dp under the bar's centre, as measured. */
+  headerShift: 8,
+  backGlyph: 17,
+  cardMargin: 7,
+  cardTop: 8,
+  cardRadius: 8,
+  cardPadTop: 11.5,
+  cardPadBottom: 15.5,
+  cardInset: 14,
+  titleToAvatar: 12,
+  avatar: 35,
+  avatarRadius: 13,
+  avatarArrow: 17.5,
+  avatarLeft: 13.5,
+  textGap: 14.5,
+  nameTop: 4,
+  subTop: 2,
+  dividerInset: 21,
+  dividerTop: 14.5,
+  divider: 0.6,
+  sectionHeight: 48,
+  sectionLeft: 15.5,
+  sectionRight: 16,
+  sectionTop: -0.6,
+  sectionBottom: -7.5,
+  sectionIcon: 16.5,
+  sectionTextGap: 15.8,
+  chevron: 16,
+  labelTop: 8,
+  labelNext: 13.2,
+  valueTop: 4.5,
+  walletTop: 10.6,
+  walletRow: 17.5,
+  walletIcon: 20,
+  walletLeft: 17,
+  walletNameGap: 26,
+  /** The copy button is 48 wide; its 12 dp glyph then ends 21 dp from the card edge. */
+  copyRowRight: 3,
+  refTop: 11,
+  refLeft: 62,
+  copyTap: 48,
+  copyIcon: 17,
+  copyWidth: 11.5,
+  copyHeight: 15,
+  actionsTop: 16.9,
+  actionsDividerTop: 14.3,
+  circle: 40.5,
+  actionLabelTop: 8.3,
+  actionColumnWidth: 80,
+  supportTop: 7.5,
+  supportHeight: 48,
+  supportLeft: 19,
+  supportRight: 16.3,
+  supportTextGap: 25.3,
+  supportIcon: 17,
+  pageBottom: 16,
+  // Receipt picture
+  receiptWidth: 360,
+  receiptBand: 48,
+  receiptLogoLeft: 21,
+  receiptLogoHeight: 17.5,
+  receiptLogoWidth: 77.5,
+  receiptTitleLeft: 111,
+  receiptCardTop: 6,
+  receiptBottom: 14,
+  receiptScale: 3,
+  receiptPixelWidth: 1080,
+  snackbarHeight: 40,
 } as const;

@@ -1,21 +1,21 @@
 import React, { useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import jsQR from 'jsqr';
-import { Ionicons } from '@expo/vector-icons';
-import { MandiButton, MandiText } from '@/components/common';
-import { Colors, IconSize, Radius, Spacing } from '@/theme';
+import { ScanSurface, type ScanAction } from '@/components/quickscan/ScanSurface';
+import { UploadGlyph } from '@/components/quickscan/ScanGlyphs';
+import { WalletColors, WalletType } from '@/theme';
 import type { QrScannerProps } from './QrScanner';
 
 /**
- * A UPI QR scanner. Web build.
+ * The full-page UPI QR scanner. Web build.
  *
  * <p>There is no camera stream worth relying on in a browser tab, so this reads
  * a QR from a photo instead: draw the chosen image to an off-screen canvas and
  * decode its pixels with `jsqr`, a pure-JS reader that needs no native module.
- * The manual-entry field on REST-QUICKSCAN-01 is what a restaurant falls back to
- * when they have no photo, same as the native build's denied-permission path.
+ * The same screen as the phone's, on a flat backdrop, with Upload QR as the way in
+ * (there is no torch in a browser) and the "Or enter a UPI ID" link as the way out.
  */
-export function QrScanner({ onScan }: QrScannerProps) {
+export function QrScanner({ onScan, onManualEntry, notice, children }: QrScannerProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,37 +44,41 @@ export function QrScanner({ onScan }: QrScannerProps) {
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(pixels.data, pixels.width, pixels.height);
       if (code == null || code.data === '') {
-        setError("Couldn't find a QR code in that photo. Try another, or enter the UPI ID below.");
+        setError("Couldn't find a QR code in that photo. Try another, or enter the UPI ID.");
         return;
       }
       onScan(code.data);
     } catch {
-      setError("Couldn't read that photo. Try another, or enter the UPI ID below.");
+      setError("Couldn't read that photo. Try another, or enter the UPI ID.");
     } finally {
       setBusy(false);
     }
   }
 
+  const actions: ScanAction[] = [
+    {
+      key: 'upload',
+      label: busy ? 'Reading…' : 'Upload QR',
+      accessibilityLabel: 'Upload a photo of a QR code',
+      glyph: <UploadGlyph />,
+      onPress: pick,
+      disabled: busy,
+    },
+  ];
+
   return (
-    <View style={styles.frame}>
-      <Ionicons name="qr-code-outline" size={IconSize.hero} color={Colors.textTertiary} />
-      <MandiText variant="bodyEmphasis" center>Upload a photo of the QR</MandiText>
-      <MandiText variant="caption" color={Colors.textSecondary} center>
-        {"Scanning with a camera isn't available in the browser. Choose a photo of the shop's "
-          + 'QR code instead.'}
-      </MandiText>
-      <MandiButton
-        label={busy ? 'Reading…' : 'Choose Photo'}
-        size="md"
-        fullWidth={false}
-        loading={busy}
-        onPress={pick}
-      />
-      {error != null && (
-        <MandiText variant="caption" color={Colors.danger} center accessibilityLiveRegion="polite">
-          {error}
-        </MandiText>
+    <ScanSurface
+      background={<View style={styles.backdrop} />}
+      actions={actions}
+      error={error ?? notice ?? null}
+      onManualEntry={onManualEntry}
+      windowContent={(
+        <Text style={styles.hint}>
+          {"Scanning with a camera isn't available in the browser. Upload a photo of the shop's QR code."}
+        </Text>
       )}
+    >
+      {children}
       {React.createElement('input', {
         ref: inputRef,
         type: 'file',
@@ -83,7 +87,7 @@ export function QrScanner({ onScan }: QrScannerProps) {
         onChange: handleFile,
         'aria-label': 'Upload a photo of the QR code',
       })}
-    </View>
+    </ScanSurface>
   );
 }
 
@@ -104,16 +108,8 @@ function loadImage(file: File): Promise<HTMLImageElement> {
 }
 
 const styles = StyleSheet.create({
-  frame: {
-    minHeight: 220,
-    gap: Spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.xl,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surfaceSunken,
-  },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: WalletColors.scanBackdrop },
+  hint: { ...WalletType.scanChipLabel, lineHeight: 13, color: WalletColors.white, textAlign: 'center' },
 });
 
 export default QrScanner;

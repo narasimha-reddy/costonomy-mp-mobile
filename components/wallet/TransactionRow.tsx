@@ -1,57 +1,108 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiStatusChip } from '@/components/common/MandiStatusChip';
-import { MandiText } from '@/components/common/MandiText';
-import { entryKey, presentEntry, relativeTime } from '@/lib/wallet/history';
+import { accountLine, rowLabel, rowTitle } from '@/lib/wallet/entryCopy';
+import { entryKey, formatRupees, presentEntry } from '@/lib/wallet/history';
+import { historyTime } from '@/lib/wallet/relativeTime';
 import type { WalletEntry } from '@/models/wallet';
-import { formatMoney } from '@/utils/money';
-import { Colors, IconSize, Radius, Spacing } from '@/theme';
+import { WalletColors, WalletLayout, WalletType } from '@/theme';
 
 /**
- * One line of the wallet's history: a small category above a bold title, how long
- * ago, and the amount with what it was paid with underneath.
+ * One line of the wallet's history: the avatar (an orange tile with a down arrow for money
+ * in, a grey disc with an up arrow for money out), a small label over the title, how long
+ * ago, and on the right the amount over "Debited from wallet" with the wallet glyph.
  *
- * <p>The amount is green with a plus when money came in, plain with a minus when it
- * went out, and neutral with no sign when it was returned (see `presentEntry`).
+ * <p>The amount is green with a "+ " when money came in, plain when it went out, and plain
+ * when it was returned (see `presentEntry`). A failed, in-progress or returned row also
+ * carries its status chip under the time, which makes that one row taller.
+ *
+ * <p>With `onPress` the whole row is a button (to the entry's detail screen); without it,
+ * it is just a row. Rows are separated by a hairline inset to the text, except the `last`
+ * of a group.
  */
 export function TransactionRow({
-  entry, now, last = false,
+  entry, now, last = false, onPress,
 }: {
   entry: WalletEntry;
   now?: Date;
   /** The last row of a group has no rule under it. */
   last?: boolean;
+  onPress?: () => void;
 }) {
   const view = presentEntry(entry);
-  const amountColor = view.tone === 'credit' ? Colors.success
-    : view.tone === 'neutral' ? Colors.textSecondary : Colors.textPrimary;
+  const credit = entry.direction === 'CREDIT';
+  const amountColor = view.tone === 'credit' ? WalletColors.credit : WalletColors.ink;
+  const label = rowLabel(entry);
+  const title = rowTitle(entry);
+  const when = historyTime(entry.at, now);
+  const account = accountLine(entry);
+  const amount = `${view.sign === '+' ? '+ ' : ''}${formatRupees(entry.amount)}`;
+
+  const content = (
+    <>
+      {credit ? (
+        <View style={[styles.avatar, styles.avatarIn]} testID="avatar-in">
+          <Ionicons
+            name="arrow-down-outline"
+            size={WalletLayout.avatarArrow}
+            color={WalletColors.white}
+            style={styles.rotated}
+          />
+        </View>
+      ) : (
+        <View style={[styles.avatar, styles.avatarOut]} testID="avatar-out">
+          <Ionicons
+            name="arrow-up-outline"
+            size={WalletLayout.avatarArrow}
+            color={WalletColors.ink}
+            style={styles.rotated}
+          />
+        </View>
+      )}
+      <View style={styles.body}>
+        <View style={styles.line1}>
+          <View style={styles.names}>
+            <Text style={styles.label}>{label}</Text>
+            <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">{title}</Text>
+          </View>
+          <Text style={[styles.amount, { color: amountColor }]}>{amount}</Text>
+        </View>
+        <View style={styles.line2}>
+          <Text style={styles.meta}>{when}</Text>
+          <View style={styles.account}>
+            <Text style={styles.accountText}>{account}</Text>
+            <Ionicons name="wallet-outline" size={WalletLayout.accountIcon} color={WalletColors.account} />
+          </View>
+        </View>
+        {view.chip != null && (
+          <View style={styles.chip}>
+            <MandiStatusChip label={view.chip.label} tone={view.chip.tone} size="sm" />
+          </View>
+        )}
+      </View>
+    </>
+  );
+
+  // Read out as one sentence; the pieces are not separate stops.
+  const spoken = `${label} ${title}, ${amount}, ${when}, ${account}`
+    + (view.chip != null ? `, ${view.chip.label}` : '');
 
   return (
-    <View style={[styles.row, last && styles.last]} testID={`entry-${entryKey(entry)}`}>
-      <View style={styles.icon}>
-        <Ionicons name="wallet-outline" size={IconSize.md} color={Colors.textSecondary} />
-      </View>
-      <View style={styles.body}>
-        <MandiText variant="caption" color={Colors.textSecondary}>{view.category}</MandiText>
-        <MandiText variant="bodyEmphasis">{view.title}</MandiText>
-        <MandiText variant="caption" color={Colors.textSecondary}>
-          {relativeTime(entry.at, now)}
-        </MandiText>
-        {view.chip != null && (
-          <MandiStatusChip label={view.chip.label} tone={view.chip.tone} size="sm" />
-        )}
-      </View>
-      <View style={styles.amount}>
-        <MandiText variant="price" color={amountColor}>
-          {view.sign}{formatMoney(entry.amount)}
-        </MandiText>
-        {view.instrumentLine != null && (
-          <MandiText variant="caption" color={Colors.textSecondary} style={styles.right}>
-            {view.instrumentLine}
-          </MandiText>
-        )}
-      </View>
+    <View testID={`entry-${entryKey(entry)}`}>
+      {onPress != null ? (
+        <Pressable
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={spoken}
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        >
+          {content}
+        </Pressable>
+      ) : (
+        <View style={styles.row} accessible accessibilityLabel={spoken}>{content}</View>
+      )}
+      {!last && <View style={styles.divider} testID="row-divider" />}
     </View>
   );
 }
@@ -60,21 +111,45 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    minHeight: WalletLayout.rowHeight,
+    paddingLeft: WalletLayout.rowLeft,
+    paddingRight: WalletLayout.rowRight,
+    backgroundColor: WalletColors.background,
   },
-  last: { borderBottomWidth: 0 },
-  icon: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.full,
+  pressed: { backgroundColor: WalletColors.rowPressed },
+  avatar: {
+    width: WalletLayout.avatar,
+    height: WalletLayout.avatar,
+    marginTop: WalletLayout.rowTop,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surfaceSunken,
   },
-  body: { flex: 1, gap: 2 },
-  amount: { alignItems: 'flex-end', maxWidth: '40%' },
-  right: { textAlign: 'right' },
+  avatarOut: { borderRadius: WalletLayout.avatar / 2, backgroundColor: WalletColors.avatarCircle },
+  avatarIn: { borderRadius: WalletLayout.avatarMoneyInRadius, backgroundColor: WalletColors.orange },
+  rotated: { transform: [{ rotate: '45deg' }] },
+  body: { flex: 1, marginLeft: WalletLayout.textGap },
+  line1: { flexDirection: 'row', alignItems: 'flex-start' },
+  names: { flex: 1, marginRight: WalletLayout.nameAmountGap },
+  label: { ...WalletType.rowLabel, marginTop: WalletLayout.labelTop, color: WalletColors.label },
+  name: { ...WalletType.rowName, marginTop: WalletLayout.nameTop, color: WalletColors.ink },
+  amount: {
+    ...WalletType.rowAmount,
+    marginTop: WalletLayout.amountTop,
+    flexShrink: 0,
+  },
+  line2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: WalletLayout.metaTop,
+  },
+  meta: { ...WalletType.rowMeta, color: WalletColors.meta },
+  account: { flexDirection: 'row', alignItems: 'center', gap: WalletLayout.accountGap },
+  accountText: { ...WalletType.rowAccount, color: WalletColors.account },
+  chip: { alignItems: 'flex-start', marginTop: 6, paddingBottom: 12 },
+  divider: {
+    height: 1,
+    marginLeft: WalletLayout.dividerInset,
+    backgroundColor: WalletColors.divider,
+  },
 });

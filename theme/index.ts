@@ -30,3 +30,4 @@ export {
   Freshness,
   type CountdownLevel,
 } from './motion';
+export { WalletFont, WalletColors, WalletType, WalletLayout } from './walletScreen';

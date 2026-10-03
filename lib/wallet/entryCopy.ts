@@ -50,3 +50,71 @@ export function withdrawalProgress(entry: WalletEntry): { label: string; tone: S
     default: return { label: 'Status unavailable', tone: 'neutral' };
   }
 }
+
+// ── The History row (REST-WALLET-02) ──────────────────────────────────
+
+/**
+ * The small line above a History row's title, in the order of "what happened, to whom":
+ * "Paid to", "Added to wallet", "Refund from", "Withdrawal to", "Received from".
+ */
+export function rowLabel(entry: WalletEntry): string {
+  switch (entry.kind) {
+    case 'TOP_UP': return 'Added to wallet';
+    case 'ORDER_PAYMENT':
+    case 'QUICKSCAN_PAYMENT': return 'Paid to';
+    case 'ORDER_REFUND':
+    case 'REFUND':
+    case 'DISPUTE_REFUND': return 'Refund from';
+    case 'WITHDRAWAL': return 'Withdrawal to';
+    case 'WITHDRAWAL_REVERSAL':
+    case 'QUICKSCAN_RETURN': return 'Received from';
+    default:
+      if (entry.direction === 'CREDIT') return 'Received from';
+      if (entry.direction === 'DEBIT') return 'Paid to';
+      return 'Wallet';
+  }
+}
+
+/**
+ * An instrument as the History rows write it: "Card •1007" or "Card ****1007" become
+ * "Card •••• 1007"; anything else ("UPI", "Netbanking") is left as it came. Null for none.
+ */
+export function instrumentName(instrument: string | null | undefined): string | null {
+  const text = instrument?.trim();
+  if (!text) return null;
+  const card = /^card\s*[•*xX.\s-]*(\d{4})$/i.exec(text);
+  return card ? `Card •••• ${card[1]}` : text;
+}
+
+/** "Order MP-260919-000013" when the reason carries the order number, else "Order #12", else null. */
+function orderRef(entry: WalletEntry): string | null {
+  const number = /\bMP-[A-Za-z0-9-]+/.exec(entry.reason ?? '');
+  if (number) return `Order ${number[0]}`;
+  return entry.supplierOrderId != null ? `Order #${entry.supplierOrderId}` : null;
+}
+
+/**
+ * The bold line of a History row. The list has no counterparty name, so it is the best
+ * thing the entry does say: the order, the card it was paid from or sent to, the
+ * server's reason text, and last a plain name for the kind.
+ */
+export function rowTitle(entry: WalletEntry): string {
+  const reason = entry.reason?.trim() || null;
+  switch (entry.kind) {
+    case 'TOP_UP': return instrumentName(entry.instrument) ?? 'Wallet top-up';
+    case 'ORDER_PAYMENT': return orderRef(entry) ?? reason ?? 'Order payment';
+    case 'ORDER_REFUND': return orderRef(entry) ?? reason ?? 'Cancelled order';
+    case 'REFUND': return orderRef(entry) ?? reason ?? 'Refund';
+    case 'DISPUTE_REFUND': return orderRef(entry) ?? reason ?? 'Dispute refund';
+    case 'WITHDRAWAL': return instrumentName(entry.instrument) ?? 'Card or bank';
+    case 'WITHDRAWAL_REVERSAL': return 'Returned withdrawal';
+    case 'QUICKSCAN_PAYMENT':
+    case 'QUICKSCAN_RETURN': return reason ?? 'QuickScan payment';
+    default: return reason ?? entryLabel(entry);
+  }
+}
+
+/** "Debited from wallet" or "Credited to wallet": the wallet is always the other side of a row. */
+export function accountLine(entry: WalletEntry): string {
+  return entry.direction === 'CREDIT' ? 'Credited to wallet' : 'Debited from wallet';
+}

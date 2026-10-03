@@ -1,5 +1,7 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { WalletColors } from '@/theme';
 import { TransactionRow } from '@/components/wallet/TransactionRow';
 import { MonthHeader } from '@/components/wallet/MonthHeader';
 import type { WalletEntry } from '@/models/wallet';
@@ -21,51 +23,91 @@ function entry(over: Partial<WalletEntry> = {}): WalletEntry {
 }
 
 describe('TransactionRow', () => {
-  it('shows category, title, age, +amount and where it was paid from', () => {
+  it('a top-up shows label, the card, age, + amount and the wallet line', () => {
     render(<TransactionRow entry={entry()} now={NOW} />);
-    expect(screen.getByText('Top-up')).toBeTruthy();
-    expect(screen.getByText('Money added')).toBeTruthy();
+    expect(screen.getByText('Added to wallet')).toBeTruthy();
+    expect(screen.getByText('Card •••• 1007')).toBeTruthy();
     expect(screen.getByText('1 day ago')).toBeTruthy();
-    expect(screen.getByText('+₹500.00')).toBeTruthy();
-    expect(screen.getByText('Debited from Card •1007')).toBeTruthy();
+    expect(screen.getByText('+ ₹500')).toBeTruthy();
+    expect(screen.getByText('Credited to wallet')).toBeTruthy();
+    expect(screen.getByText('icon:wallet-outline')).toBeTruthy();
+    expect(screen.getByTestId('avatar-in')).toBeTruthy();
     expect(screen.queryByText('On its way')).toBeNull();
   });
 
-  it('a debit reads −amount', () => {
-    render(<TransactionRow entry={entry({ direction: 'DEBIT', kind: 'ORDER_PAYMENT', instrument: null })} now={NOW} />);
-    expect(screen.getByText('−₹500.00')).toBeTruthy();
-    expect(screen.getByText('Order payment')).toBeTruthy();
-    expect(screen.queryByText(/Debited from/)).toBeNull();
+  it('a debit reads the plain amount, "Paid to", the order and "Debited from wallet"', () => {
+    render(<TransactionRow
+      entry={entry({ direction: 'DEBIT', kind: 'ORDER_PAYMENT', instrument: null, reason: 'Order MP-260919-000013 payment' })}
+      now={NOW}
+    />);
+    expect(screen.getByText('₹500')).toBeTruthy();
+    expect(screen.getByText('Paid to')).toBeTruthy();
+    expect(screen.getByText('Order MP-260919-000013')).toBeTruthy();
+    expect(screen.getByText('Debited from wallet')).toBeTruthy();
+    expect(screen.getByTestId('avatar-out')).toBeTruthy();
   });
 
-  it('IN_PROGRESS carries the On its way chip', () => {
+  it('IN_PROGRESS carries the On its way chip under the time', () => {
     render(<TransactionRow entry={entry({ direction: 'DEBIT', kind: 'WITHDRAWAL', status: 'IN_PROGRESS', instrument: 'UPI' })} now={NOW} />);
     expect(screen.getByText('On its way')).toBeTruthy();
-    expect(screen.getByText('Sent to UPI')).toBeTruthy();
+    expect(screen.getByText('Withdrawal to')).toBeTruthy();
+    expect(screen.getByText('UPI')).toBeTruthy();
   });
 
   it('RETURNED shows the amount with no sign and the returned chip', () => {
     render(<TransactionRow entry={entry({ direction: 'DEBIT', kind: 'WITHDRAWAL', status: 'RETURNED' })} now={NOW} />);
-    expect(screen.getByText('₹500.00')).toBeTruthy();
-    expect(screen.queryByText('−₹500.00')).toBeNull();
+    expect(screen.getByText('₹500')).toBeTruthy();
+    expect(screen.queryByText(/\+/)).toBeNull();
     expect(screen.getByText('Returned to your bank/card')).toBeTruthy();
   });
 
   it('copes with an older API row: no status or instrument', () => {
     render(<TransactionRow entry={entry({ status: undefined, instrument: undefined })} now={NOW} />);
-    expect(screen.getByText('+₹500.00')).toBeTruthy();
+    expect(screen.getByText('+ ₹500')).toBeTruthy();
+    expect(screen.getByText('Wallet top-up')).toBeTruthy();
+  });
+
+  it('is a button that opens the entry when given onPress, and a plain row otherwise', () => {
+    const onPress = jest.fn();
+    const { rerender } = render(<TransactionRow entry={entry()} now={NOW} onPress={onPress} />);
+    fireEvent.press(screen.getByRole('button'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    rerender(<TransactionRow entry={entry()} now={NOW} />);
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('has a rule under it unless it is the last of its group', () => {
+    const { rerender } = render(<TransactionRow entry={entry()} now={NOW} />);
+    expect(screen.getByTestId('row-divider')).toBeTruthy();
+    rerender(<TransactionRow entry={entry()} now={NOW} last />);
+    expect(screen.queryByTestId('row-divider')).toBeNull();
+  });
+
+  it('reads as one sentence for a screen reader', () => {
+    render(<TransactionRow entry={entry()} now={NOW} onPress={() => {}} />);
+    expect(screen.getByLabelText('Added to wallet Card •••• 1007, + ₹500, 1 day ago, Credited to wallet')).toBeTruthy();
   });
 });
 
 describe('MonthHeader', () => {
-  it('shows the month and what was spent', () => {
-    render(<MonthHeader title="September 2026" spent="₹1,250" />);
-    expect(screen.getByText('September 2026')).toBeTruthy();
-    expect(screen.getByText('₹1,250 spent')).toBeTruthy();
+  it('shows the month, the net and a chevron', () => {
+    render(<MonthHeader title="October 2026" amount="+ ₹48,876" credit />);
+    expect(screen.getByText('October 2026')).toBeTruthy();
+    expect(screen.getByText('+ ₹48,876')).toBeTruthy();
+    expect(screen.getByText('icon:chevron-forward')).toBeTruthy();
+    expect(screen.getByLabelText('October 2026, + ₹48,876')).toBeTruthy();
   });
   it('shows the name alone with no total', () => {
-    render(<MonthHeader title="September 2026" spent={null} />);
+    render(<MonthHeader title="September 2026" amount={null} />);
     expect(screen.getByText('September 2026')).toBeTruthy();
-    expect(screen.queryByText(/spent/)).toBeNull();
+    expect(screen.queryByText('icon:chevron-forward')).toBeNull();
+  });
+  it('the stuck band carries the hairline, the others do not', () => {
+    const { rerender } = render(<MonthHeader title="September 2026" amount="₹10" stuck />);
+    expect(StyleSheet.flatten(screen.getByTestId('month-September 2026').props.style).borderTopColor)
+      .toBe(WalletColors.bandHairline);
+    rerender(<MonthHeader title="September 2026" amount="₹10" />);
+    expect(StyleSheet.flatten(screen.getByTestId('month-September 2026').props.style).borderTopColor)
+      .toBe(WalletColors.bandBackground);
   });
 });

@@ -1,5 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
-import { ActivityIndicator, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator, Pressable, RefreshControl, SectionList, StyleSheet, Text, View,
+  type ViewToken,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,15 +11,17 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchWalletTransactions } from '@/services/wallet';
 import {
+  MandiBottomSheet,
   MandiButton,
   MandiEmptyState,
   MandiErrorState,
-  MandiHeader,
+  MandiText,
   MandiSkeletonList,
 } from '@/components/common';
 import { TransactionRow } from '@/components/wallet/TransactionRow';
 import { MonthHeader } from '@/components/wallet/MonthHeader';
-import { PillButton } from '@/components/wallet/PillButton';
+import { MonthSheet, type MonthSheetData } from '@/components/wallet/MonthSheet';
+import { HistorySearch } from '@/components/wallet/HistorySearch';
 import { FilterChips, type ActiveFilter } from '@/components/wallet/FilterChips';
 import {
   CATEGORY_OPTIONS,
@@ -30,17 +36,22 @@ import {
   matchesInstruments,
   mergeMonthTotals,
   mergePages,
-  monthSpentLabel,
+  monthNet,
   monthTitle,
 } from '@/lib/wallet/history';
+import { searchEntries } from '@/lib/wallet/search';
+import { useDebounced } from '@/hooks/useDebounced';
 import { walletTransactionsKey } from '@/lib/queryKeys';
 import type { WalletEntry } from '@/models/wallet';
-import { Colors, Spacing } from '@/theme';
+import { Colors, Spacing, WalletColors, WalletLayout, WalletType } from '@/theme';
 
 const PAGE_SIZE = 20;
 
 /** With an instrument chosen, keep loading pages until this many rows match (or there are no more). */
 const MIN_MATCHES = 10;
+
+/** How long typing must pause before the list is searched. */
+const SEARCH_DEBOUNCE_MS = 250;
 
 /**
  * REST-WALLET-02. Wallet Transaction History: everything that moved in or out of the
@@ -50,9 +61,9 @@ const MIN_MATCHES = 10;
  * land here. Filters live in the route (the Filters screen sends them back as params),
  * so a link or a refresh keeps them and no shared store is needed.
  *
- * <p>Months, categories and statuses are applied by the server; the instrument is not,
- * so it narrows what has loaded and, since the server's month totals count every
- * instrument, the bars drop their total while it is on.
+ * <p>Months, categories and statuses are applied by the server; the instrument and the
+ * search are not, so they narrow what has loaded and, since the server's month totals count
+ * every row, the bands drop their total while either is on.
  */
 export default function WalletHistoryScreen() {
   const router = useRouter();
@@ -82,30 +93,58 @@ export default function WalletHistoryScreen() {
   });
 
   const pages = history.data?.pages;
+  const [query, setQuery] = useState('');
+  const search = useDebounced(query.trim(), SEARCH_DEBOUNCE_MS);
+  const searching = search !== '';
   const instrumentNarrowed = filters.instruments.length > 0;
+  // The server's month totals count every row, so they say nothing about a narrowed list.
+  const narrowed = instrumentNarrowed || searching;
 
   const entries = useMemo<WalletEntry[]>(
-    () => mergePages(pages ?? []).filter((e) => matchesInstruments(e, filters.instruments)),
-    [pages, filters.instruments],
+    () => searchEntries(
+      mergePages(pages ?? []).filter((e) => matchesInstruments(e, filters.instruments)),
+      search,
+    ),
+    [pages, filters.instruments, search],
   );
   const totals = useMemo(() => mergeMonthTotals(pages ?? []), [pages]);
   const sections = useMemo(
-    () => groupEntriesByMonth(entries).map(({ month, entries: data }) => ({
-      month,
-      title: monthTitle(month),
-      spent: monthSpentLabel(month, totals, instrumentNarrowed),
-      data,
-    })),
-    [entries, totals, instrumentNarrowed],
+    () => groupEntriesByMonth(entries).map(({ month, entries: data }) => {
+      const net = monthNet(month, totals, narrowed);
+      return {
+        month,
+        title: monthTitle(month),
+        amount: net?.label ?? null,
+        credit: net?.credit ?? false,
+        sheet: net == null ? null : {
+          title: monthTitle(month), moneyIn: net.moneyIn, moneyOut: net.moneyOut,
+          net: net.label, credit: net.credit,
+        },
+        data,
+      };
+    }),
+    [entries, totals, narrowed],
   );
+
+  const [monthSheet, setMonthSheet] = useState<MonthSheetData | null>(null);
+
+  // The band pinned to the top of the list is the one over the first row on screen.
+  const [stuckMonth, setStuckMonth] = useState<string | null>(null);
+  const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const first = viewableItems.find((t) => t.item != null);
+    const month = (first?.section as { month?: string } | undefined)?.month;
+    if (month != null) setStuckMonth(month);
+  });
+  const nowRef = useRef(new Date());
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage, isFetchNextPageError } = history;
   useEffect(() => {
-    if (instrumentNarrowed && hasNextPage && !isFetchingNextPage && !isFetchNextPageError
+    if (narrowed && hasNextPage && !isFetchingNextPage && !isFetchNextPageError
       && entries.length < MIN_MATCHES) {
       void fetchNextPage();
     }
-  }, [instrumentNarrowed, hasNextPage, isFetchingNextPage, isFetchNextPageError,
+  }, [narrowed, hasNextPage, isFetchingNextPage, isFetchNextPageError,
     entries.length, fetchNextPage]);
 
   const chips: ActiveFilter[] = [
@@ -127,31 +166,61 @@ export default function WalletHistoryScreen() {
       { type: 'toggle', section: section as keyof typeof filters, value: rest.join(':') }));
   }
 
+  const openFilters = useCallback(() => router.push({
+    pathname: '/restaurant/wallet/filters', params: filtersToParams(filters) }), [router, filters]);
+
   const header = (
     <View>
-      <View style={styles.actions}>
-        <PillButton
-          testID="open-statements"
-          label="My Statements"
-          icon="download-outline"
-          onPress={() => router.push('/restaurant/wallet/statement')}
-        />
-        <PillButton
-          testID="open-filters"
-          label="Filters"
-          icon="options-outline"
-          trailingIcon="chevron-down"
-          onPress={() => router.push({
-            pathname: '/restaurant/wallet/filters', params: filtersToParams(filters) })}
-        />
+      <View style={styles.topBar}>
+        <Pressable
+          testID="history-back"
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          style={[styles.topTarget, styles.back]}
+        >
+          <Ionicons name="arrow-back" size={WalletLayout.helpIcon} color={WalletColors.ink} />
+        </Pressable>
+        <Pressable
+          testID="history-help"
+          onPress={() => setHelpOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Help with your history"
+          style={({ pressed }) => [styles.topTarget, styles.help, pressed && styles.helpPressed]}
+        >
+          <Ionicons name="help-circle-outline" size={WalletLayout.helpIcon} color={WalletColors.ink} />
+        </Pressable>
       </View>
+      <View style={styles.titleRow}>
+        <Text style={styles.title} accessibilityRole="header">History</Text>
+        <Pressable
+          testID="open-statements"
+          onPress={() => router.push('/restaurant/wallet/statement')}
+          accessibilityRole="button"
+          accessibilityLabel="My Statements"
+          hitSlop={{ top: 5, bottom: 5 }}
+          style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+        >
+          <Ionicons
+            name="arrow-down-circle-outline"
+            size={WalletLayout.pillIcon}
+            color={WalletColors.ink}
+          />
+          <Text style={styles.pillText}>My Statements</Text>
+        </Pressable>
+      </View>
+      <HistorySearch
+        value={query}
+        onChangeText={setQuery}
+        onOpenFilters={openFilters}
+        activeFilters={filterCount(filters)}
+      />
       <FilterChips filters={chips} onRemove={removeChip} />
     </View>
   );
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <MandiHeader title="Wallet Transaction History" subtitle={outlet?.name} back />
       {header}
 
       {history.isPending ? (
@@ -171,11 +240,28 @@ export default function WalletHistoryScreen() {
           keyExtractor={entryKey}
           stickySectionHeadersEnabled
           renderSectionHeader={({ section }) => (
-            <MonthHeader title={section.title} spent={section.spent} />
+            <MonthHeader
+              title={section.title}
+              amount={section.amount}
+              credit={section.credit}
+              stuck={(stuckMonth ?? sections[0]?.month) === section.month}
+              onPress={section.sheet != null ? () => setMonthSheet(section.sheet) : undefined}
+            />
           )}
-          renderItem={({ item }) => (
-            <View style={styles.rowPad}><TransactionRow entry={item} /></View>
+          renderItem={({ item, index, section }) => (
+            <TransactionRow
+              entry={item}
+              now={nowRef.current}
+              last={index === section.data.length - 1}
+              onPress={() => router.push(`/restaurant/wallet/transaction/${item.id}`)}
+            />
           )}
+          onViewableItemsChanged={onViewable.current}
+          viewabilityConfig={VIEWABILITY}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={{
+            paddingTop: WalletLayout.listTop, paddingBottom: insets.bottom + Spacing.xl }}
           onEndReachedThreshold={0.5}
           onEndReached={() => {
             if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
@@ -189,15 +275,25 @@ export default function WalletHistoryScreen() {
           )}
           ListEmptyComponent={
             hasNextPage ? <View style={styles.pad}><MandiSkeletonList count={2} /></View> : (
-              <MandiEmptyState
-                icon="wallet-outline"
-                title={filterCount(filters) > 0 ? 'Nothing matches these filters' : 'Nothing yet'}
-                description={filterCount(filters) > 0
-                  ? 'Try removing a filter to see more.'
-                  : 'Money added, refunds and wallet payments will appear here.'}
-                actionLabel={filterCount(filters) > 0 ? 'Clear filters' : undefined}
-                onAction={filterCount(filters) > 0 ? () => setFilters(filterReducer(filters, { type: 'clear' })) : undefined}
-              />
+              searching ? (
+                <MandiEmptyState
+                  icon="search-outline"
+                  title="No matches"
+                  description={`Nothing in your history matches “${search}”. Try a name, an order number or an amount.`}
+                  actionLabel="Clear search"
+                  onAction={() => setQuery('')}
+                />
+              ) : (
+                <MandiEmptyState
+                  icon="wallet-outline"
+                  title={filterCount(filters) > 0 ? 'Nothing matches these filters' : 'Nothing yet'}
+                  description={filterCount(filters) > 0
+                    ? 'Try removing a filter to see more.'
+                    : 'Money added, refunds and wallet payments will appear here.'}
+                  actionLabel={filterCount(filters) > 0 ? 'Clear filters' : undefined}
+                  onAction={filterCount(filters) > 0 ? () => setFilters(filterReducer(filters, { type: 'clear' })) : undefined}
+                />
+              )
             )
           }
           ListFooterComponent={
@@ -214,22 +310,70 @@ export default function WalletHistoryScreen() {
               </View>
             ) : null
           }
-          contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.xl }}
         />
       )}
+
+      <MandiBottomSheet
+        visible={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        title="Your wallet history"
+        closeLabel="Close the history help"
+      >
+        <View style={styles.helpBody}>
+          <MandiText>
+            Every top-up, payment, refund and withdrawal, newest first, grouped by month. Tap a row
+            for its details.
+          </MandiText>
+          <MandiText muted>
+            Search by name, order number or amount, and use the filter button in the search box to
+            narrow by month, type or status. My Statements downloads a PDF or CSV.
+          </MandiText>
+        </View>
+      </MandiBottomSheet>
+      <MonthSheet data={monthSheet} onClose={() => setMonthSheet(null)} />
     </View>
   );
 }
 
+const VIEWABILITY = { itemVisiblePercentThreshold: 1 };
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
-  actions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingVertical: Spacing.sm,
+  root: { flex: 1, backgroundColor: WalletColors.background },
+  topBar: { height: WalletLayout.historyTopBar },
+  topTarget: {
+    position: 'absolute',
+    width: WalletLayout.tap,
+    height: WalletLayout.tap,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: WalletLayout.tap / 2,
   },
+  back: { left: 2, top: WalletLayout.historyIconTop },
+  help: { right: WalletLayout.historyHelpRight, top: WalletLayout.historyIconTop },
+  helpPressed: { backgroundColor: WalletColors.orangeTint },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: WalletLayout.pillHeight,
+    paddingLeft: WalletLayout.titleLeft,
+    paddingRight: WalletLayout.pillRight,
+    marginBottom: WalletLayout.historySearchGap,
+  },
+  title: { ...WalletType.title, flex: 1, color: WalletColors.ink },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: WalletLayout.pillHeight,
+    paddingLeft: WalletLayout.pillPadLeft,
+    paddingRight: WalletLayout.pillPadRight,
+    borderRadius: WalletLayout.pillRadius,
+    borderWidth: WalletLayout.pillBorder,
+    borderColor: WalletColors.pillBorder,
+    backgroundColor: WalletColors.white,
+  },
+  pillPressed: { backgroundColor: WalletColors.orangeTint },
+  pillText: { ...WalletType.pill, marginLeft: WalletLayout.pillIconGap, color: WalletColors.ink },
   pad: { paddingHorizontal: Spacing.screenHorizontal, paddingVertical: Spacing.lg },
-  rowPad: { paddingHorizontal: Spacing.screenHorizontal, backgroundColor: Colors.surface },
   footer: { paddingVertical: Spacing.lg, alignItems: 'center' },
+  helpBody: { gap: 12 },
 });

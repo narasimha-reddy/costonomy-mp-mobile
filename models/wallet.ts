@@ -194,6 +194,194 @@ export interface WalletReference {
 export interface WalletTransactionActions {
   canPayAgain: boolean;
   payeeVpa?: string;
+  /** True only for shop (QuickScan) and order payments made from the wallet. Absent on an older server. */
+  canAddBill?: boolean;
+}
+
+export type InvoiceStatus = 'READING' | 'READ' | 'UNREADABLE';
+
+/** The bill as the details screen sees it: just enough for the Invoice row. */
+export interface WalletInvoiceSummary {
+  status: InvoiceStatus;
+  vendorName: string | null;
+  total: number | null;
+  thumbnailUrl: string | null;
+}
+
+export interface InvoicePage {
+  page: number;
+  contentType: string;
+  sizeBytes: number;
+  /** A short-lived link (about five minutes): refetch the invoice when it has expired. */
+  url: string;
+  expiresAt: string;
+}
+
+export interface InvoiceItem {
+  name: string | null;
+  quantity: number | null;
+  unit: string | null;
+  unitPrice: number | null;
+  total: number | null;
+  /** The SKU the server matched this line to, or null. Absent on an older server. */
+  skuMatch?: SkuOption | null;
+}
+
+/** A SKU as the lookups and the server's matching name it. Money as sent (string or number). */
+export interface SkuOption {
+  id: number;
+  name: string;
+  unit: string | null;
+  unitPrice: string | null;
+  categoryName: string | null;
+}
+
+/** A supplier from the lookup. */
+export interface SupplierOption {
+  id: number;
+  name: string;
+}
+
+export type ReviewPaymentStatus = 'PENDING' | 'COMPLETED';
+
+/** The SKU a review line is resolved to. `id` null: a new SKU typed in by the owner, saved only in this review. */
+export interface ReviewSku {
+  id: number | null;
+  name: string;
+  unit: string | null;
+  unitPrice: string | null;
+}
+
+/** What the bill said for this line; null on a line the owner added. */
+export interface ReviewFromInvoice {
+  name: string | null;
+  quantity: string | null;
+  unit: string | null;
+  unitPrice: string | null;
+  total: string | null;
+}
+
+export interface ReviewLine {
+  /**
+   * The bill line this came from (1..N, each at most once), or null for a line the owner added. The
+   * server checks it against the reading, so it is never invented on the phone.
+   */
+  lineNo: number | null;
+  /** What the bill said; null on an added line. Read from responses only, never sent. */
+  fromInvoice: ReviewFromInvoice | null;
+  sku: ReviewSku | null;
+  quantity: string | null;
+  unit: string | null;
+  amount: string | null;
+  tax: string | null;
+  ignoredDeviation: boolean;
+}
+
+/**
+ * The review of a bill: the server's draft (its starting point) or the owner's saved review.
+ * Money is a decimal string. `subtotal`, `tax` and `total` are the server's; the app never sends them.
+ */
+export interface InvoiceReview {
+  supplier: { id: number | null; name: string };
+  invoiceNumber: string | null;
+  /** The draft carries the date as read off the bill; a saved review carries what the owner chose. */
+  invoiceDate: string | null;
+  /** ISO day. */
+  stockInDate: string | null;
+  paymentStatus: ReviewPaymentStatus;
+  items: ReviewLine[];
+  delivery: string | null;
+  /** Worked out by the server (delivery differs from the bill's); read, never sent. */
+  deliveryOverridden: boolean;
+  /**
+   * The bill-level tax, when it replaces the sum of the line taxes (null: tax is the sum of the lines).
+   * The draft fills it from the bill when the lines carry no tax but the bill does.
+   */
+  taxOverride: string | null;
+  subtotal: string | null;
+  tax: string | null;
+  total: string | null;
+  /** Only on a saved review. */
+  reviewedAt?: string | null;
+  /** The user id (a number) who saved the review. Only on a saved review. */
+  reviewedBy?: number | null;
+}
+
+/** One line as it is sent: what the server reads, nothing it works out itself. */
+export interface ReviewLinePayload {
+  lineNo: number | null;
+  sku: ReviewSku | null;
+  quantity: string | null;
+  unit: string | null;
+  amount: string | null;
+  tax: string | null;
+  ignoredDeviation: boolean;
+}
+
+/** What is sent to save a review: the review without the server's totals, plus the version it was based on. */
+export interface InvoiceReviewPayload {
+  version: number;
+  supplier: { id: number | null; name: string };
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  stockInDate: string | null;
+  paymentStatus: ReviewPaymentStatus;
+  items: ReviewLinePayload[];
+  delivery: string | null;
+  taxOverride: string | null;
+}
+
+/** What was read off the bill. Dates stay as the text read; money stays as the server sent it. */
+export interface InvoiceReading {
+  vendorName: string | null;
+  vendorAddress: string | null;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  customerName: string | null;
+  currency: string | null;
+  items: InvoiceItem[];
+  subtotal: number | null;
+  tax: number | null;
+  delivery: number | null;
+  total: number | null;
+  /** The supplier the server matched the shop to, or null. Absent on an older server. */
+  supplierMatch?: { id: number; name: string } | null;
+}
+
+/** The server's comparison of the bill total with the payment. The app never recomputes it. */
+export interface InvoiceCheck {
+  paid: number;
+  billTotal: number | null;
+  matches: boolean | null;
+  difference: number | null;
+  /** The total as read off the bill, and whether that matched the payment (not shown yet). */
+  readingTotal?: number | null;
+  matchesReading?: boolean | null;
+}
+
+export interface WalletInvoice {
+  status: InvoiceStatus;
+  createdAt: string;
+  uploadedBy?: unknown;
+  pageCount: number;
+  pages: InvoicePage[];
+  reading: InvoiceReading | null;
+  check: InvoiceCheck | null;
+  error: string | null;
+  attempts: number;
+  /** Bumped on every change; sent back with a review so a stale save is refused (409 INVOICE_CHANGED). */
+  version?: number;
+  /** The server's starting point for a review: always sent once the bill is READ or UNREADABLE. */
+  draft?: InvoiceReview | null;
+  /** The owner's saved review, or null. */
+  review?: InvoiceReview | null;
+}
+
+/** One file ready to upload as a `file` part. */
+export interface BillFile {
+  uri: string;
+  name: string;
+  type: string;
 }
 
 /**
@@ -209,4 +397,6 @@ export interface WalletTransactionDetail extends WalletEntry {
   counterpartyDetail: string | null;
   references: WalletReference[];
   actions: WalletTransactionActions;
+  /** The bill the restaurant added, or null. Absent on an older server. */
+  invoice?: WalletInvoiceSummary | null;
 }

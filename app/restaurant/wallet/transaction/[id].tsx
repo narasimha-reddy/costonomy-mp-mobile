@@ -4,6 +4,8 @@ import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MandiEmptyState, MandiErrorState, useToast } from '@/components/common';
+import { useOutlet } from '@/contexts/OutletProvider';
+import { usePermissions } from '@/hooks/usePermissions';
 import { DetailHeader } from '@/components/wallet/detail/DetailHeader';
 import { DetailSkeleton } from '@/components/wallet/detail/DetailSkeleton';
 import { TransactionDetailView } from '@/components/wallet/detail/TransactionDetailView';
@@ -17,6 +19,8 @@ import { DetailColors, WalletColors } from '@/theme';
  * returned) and so does the system status bar. Under it the card says who the money went to
  * or came from, and "Transfer Details" lists our transaction id and the references. Share
  * Receipt turns a plain version of the card into a picture and opens the share sheet.
+ *
+ * <p>"Add bill" is offered only with QUICKSCAN_PAY (the API refuses it otherwise); viewing a bill needs no more.
  */
 export default function TransactionDetailScreen() {
   const router = useRouter();
@@ -25,6 +29,9 @@ export default function TransactionDetailScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const query = useWalletTransaction(id);
+  const { outlet } = useOutlet();
+  const { canForOutlet } = usePermissions();
+  const mayChangeBill = canForOutlet('QUICKSCAN_PAY', outlet);
 
   const back = useCallback(() => {
     if (router.canGoBack?.() === false) router.replace('/restaurant/wallet/history');
@@ -57,6 +64,9 @@ export default function TransactionDetailScreen() {
         })}
         onWallet={() => router.push('/restaurant/wallet')}
         onHistory={() => router.push('/restaurant/wallet/history')}
+        mayChangeBill={mayChangeBill}
+        onAddBill={() => router.push({ pathname: '/restaurant/wallet/transaction/bill', params: { id } })}
+        onInvoice={() => router.push({ pathname: '/restaurant/wallet/transaction/invoice', params: { id } })}
         onSupport={() => toast.show('Support is coming soon', 'info')}
         onError={(message) => toast.show(message, 'error')}
       />

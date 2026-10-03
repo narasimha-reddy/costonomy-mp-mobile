@@ -10,8 +10,8 @@ import { DetailColors, DetailLayout, DetailType, WalletColors } from '@/theme';
  * same colour (the header runs under it, padded by the top inset), with light icons.
  */
 export function DetailHeader({
-  color, title, time, onBack,
-}: { color: string; title: string; time?: string; onBack: () => void }) {
+  color, title, time, onBack, right,
+}: { color: string; title: string; time?: string; onBack: () => void; right?: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.header, { backgroundColor: color, paddingTop: insets.top }]} testID="detail-header">
@@ -31,6 +31,7 @@ export function DetailHeader({
           <Text style={styles.title} accessibilityRole="header">{title}</Text>
           {time ? <Text style={styles.time}>{time}</Text> : null}
         </View>
+        {right != null && <View style={styles.right}>{right}</View>}
       </View>
     </View>
   );
@@ -51,6 +52,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  right: { marginLeft: 'auto' },
   titles: {
     marginLeft: DetailLayout.titleLeft - DetailLayout.back - DetailLayout.backLeft,
     marginTop: 1.2,

@@ -99,6 +99,7 @@ export interface SkuDetail {
   images: string[];
   youtubeUrl: string | null;
   description: string | null;
+  isCatchWeight?: boolean;
   lengthCm: Money | null;
   widthCm: Money | null;
   heightCm: Money | null;
@@ -149,7 +150,48 @@ export interface SkuSibling {
   availability: string | null;
   brandName?: string | null;
   grade?: string | null;
+  isCatchWeight?: boolean;
   gstRate?: Money | null;
   unitPriceInclusiveGst?: Money | null;
   offerId?: number | null;
+}
+
+export interface RateSheetRow {
+  skuId: number;
+  canonicalProductId: number;
+  productName: string | null;
+  skuName: string;
+  brandName: string | null;
+  grade: string | null;
+  isCatchWeight: boolean;
+  packSize: Money;
+  packUnit: string;
+  mrp: Money | null;
+  sellingPrice: Money | null;
+  gstRate: Money;
+  availability: string;
+  availableQuantity: Money | null;
+  updatedAt: string | null;
+}
+
+export interface RateSheetResponse {
+  supplierStoreId: number;
+  rows: RateSheetRow[];
+}
+
+export interface UpdateRateSheetItem {
+  skuId: number;
+  sellingPrice?: Money | null;
+  mrp?: Money | null;
+  availability?: string | null;
+  availableQuantity?: Money | null;
+}
+
+export interface UpdateRateSheetRequest {
+  rows: UpdateRateSheetItem[];
+}
+
+export interface UpdateRateSheetResponse {
+  updatedCount: number;
+  rows: RateSheetRow[];
 }

@@ -231,6 +231,14 @@ export interface SupplierOrderItem {
    */
   acceptedLineTotal: Money | null;
   status: string;
+  isCatchWeight?: boolean;
+  dispatchedWeight?: Money | null;
+  weighedAt?: string | null;
+  weightDeltaAmount?: Money | null;
+  doorstepAcceptedQty?: Money | null;
+  doorstepRejectedQty?: Money | null;
+  doorstepRejectionReason?: string | null;
+  doorstepRefundAmount?: Money | null;
 }
 
 export interface SupplierOrder {
@@ -263,6 +271,9 @@ export interface SupplierOrder {
   /** `acceptedAmount` split the way the ordered total is, so the two can be shown side by side. */
   acceptedSubtotal: Money;
   acceptedGst: Money;
+  weightAdjustmentAmount?: Money | null;
+  doorstepRefundAmount?: Money | null;
+  finalPayableAmount?: Money | null;
   paymentMethod: PaymentMethod | null;
   /**
    * Read live. Beyond the card and wallet statuses it may be RETURNING, RETURNED

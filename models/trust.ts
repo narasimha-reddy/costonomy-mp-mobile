@@ -15,6 +15,8 @@ export interface ReceivingItem {
   missingQuantity: Money;
   unit: string;
   note: string | null;
+  rejectionReason?: string | null;
+  refundAmount?: Money | null;
 }
 
 export interface Receiving {
@@ -29,6 +31,8 @@ export interface Receiving {
   totalMissingQuantity: Money;
   notes: string | null;
   receivedAt: string | null;
+  instantRefundAmount?: Money | null;
+  creditNoteNumber?: string | null;
   items: ReceivingItem[];
 }
 

@@ -173,6 +173,8 @@ export interface Intent {
   acceptance: IntentAcceptance | null;
   supplierOrderId: number | null;
   supplierOrderNumber: string | null;
+  minOrderValue?: Money | null;
+  freeDeliveryThreshold?: Money | null;
 }
 
 /**

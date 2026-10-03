@@ -1,6 +1,7 @@
 import { apiRequest } from '@/lib/api/client';
 import { uploadFile, type UploadedFile } from '@/lib/api/upload';
 import type { IncomingOrder, SupplierOrder } from '@/models/procurement';
+import type { RateSheetResponse, UpdateRateSheetItem, UpdateRateSheetResponse } from '@/models/catalog';
 import type { Money } from '@/utils/money';
 
 export interface SupplierStore {
@@ -479,6 +480,10 @@ export interface DeliveryPolicy {
   ownDeliveryFee: Money | null;
   /** Null means no minimum. */
   ownDeliveryMinOrderValue: Money | null;
+  /** Store minimum order value threshold. Subtotal must reach this to checkout. */
+  minOrderValue?: Money;
+  /** Store subtotal threshold for free delivery. */
+  freeDeliveryThreshold?: Money | null;
   /** Null means no limit beyond the platform's own serviceability. */
   maxDeliveryRadiusKm: Money | null;
 }
@@ -496,6 +501,8 @@ export function saveDeliveryPolicy(
     costonomyDeliveryEnabled: boolean;
     ownDeliveryFee?: string;
     ownDeliveryMinOrderValue?: string | null;
+    minOrderValue?: string | null;
+    freeDeliveryThreshold?: string | null;
     maxDeliveryRadiusKm?: string | null;
   },
 ): Promise<DeliveryPolicy> {
@@ -611,6 +618,53 @@ export function batchUpdateVariants(
       method: 'POST',
       token,
       body: request,
+    },
+  );
+}
+
+// ── Catch-weight weighing & Morning rate sheet ─────────────────────────
+
+export interface RecordDispatchWeightItem {
+  skuId: number;
+  actualDispatchedWeight: string;
+}
+
+export function recordDispatchWeights(
+  token: string,
+  orderId: number,
+  weights: RecordDispatchWeightItem[],
+): Promise<SupplierOrder> {
+  return apiRequest<SupplierOrder>(
+    `/api/v1/supplier-orders/${orderId}/weights`,
+    {
+      method: 'POST',
+      token,
+      body: { items: weights },
+    },
+  );
+}
+
+export function fetchRateSheet(
+  token: string,
+  storeId: number,
+): Promise<RateSheetResponse> {
+  return apiRequest<RateSheetResponse>(
+    `/api/v1/supplier-stores/${storeId}/rate-sheet`,
+    { token },
+  );
+}
+
+export function updateRateSheet(
+  token: string,
+  storeId: number,
+  rows: UpdateRateSheetItem[],
+): Promise<UpdateRateSheetResponse> {
+  return apiRequest<UpdateRateSheetResponse>(
+    `/api/v1/supplier-stores/${storeId}/rate-sheet`,
+    {
+      method: 'POST',
+      token,
+      body: { rows },
     },
   );
 }

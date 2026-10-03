@@ -45,6 +45,12 @@ export function sectionWarning(draft: Intent): string | null {
   if (!draft.pricedComplete) {
     return 'Some items have no price';
   }
+  const minOrder = draft.minOrderValue != null ? parseFloat(draft.minOrderValue) : 0;
+  const currentTotal = draft.agreedTotal != null ? parseFloat(draft.agreedTotal) : 0;
+  if (minOrder > 0 && currentTotal < minOrder) {
+    const diff = (minOrder - currentTotal).toFixed(0);
+    return `Min order ₹${minOrder.toFixed(0)} (Add ₹${diff} more)`;
+  }
   return null;
 }
 
@@ -239,18 +245,61 @@ export function SupplierSectionBody({
         </View>
       ))}
 
-      {draft.agreedTotal != null && (
-        <View style={[styles.totals, !expanded && styles.totalsFirst]}>
-          <Row label="Items" value={formatMoney(draft.agreedValue ?? '0')} />
-          <Row label="GST" value={formatMoney(draft.agreedGst ?? '0')} />
-          <Row label="Total" value={formatMoney(draft.agreedTotal)} emphasis />
-          {!draft.pricedComplete && (
-            <MandiText variant="caption" color={Colors.warning}>
-              One or more items have no current price, so this is less than the whole.
-            </MandiText>
-          )}
-        </View>
-      )}
+      {draft.agreedTotal != null && (() => {
+        const minOrderNum = draft.minOrderValue != null ? parseFloat(draft.minOrderValue) : 0;
+        const currentTotalNum = parseFloat(draft.agreedTotal);
+        const isBelowMov = minOrderNum > 0 && currentTotalNum < minOrderNum;
+        const freeThresholdNum = draft.freeDeliveryThreshold != null ? parseFloat(draft.freeDeliveryThreshold) : 0;
+
+        return (
+          <View style={[styles.totals, !expanded && styles.totalsFirst]}>
+            <Row label="Items" value={formatMoney(draft.agreedValue ?? '0')} />
+            <Row label="GST" value={formatMoney(draft.agreedGst ?? '0')} />
+            <Row label="Total" value={formatMoney(draft.agreedTotal)} emphasis />
+            {!draft.pricedComplete && (
+              <MandiText variant="caption" color={Colors.warning}>
+                One or more items have no current price, so this is less than the whole.
+              </MandiText>
+            )}
+
+            {minOrderNum > 0 && (
+              <View style={styles.thresholdBadge}>
+                <Ionicons
+                  name={!isBelowMov ? 'checkmark-circle' : 'alert-circle'}
+                  size={IconSize.xs}
+                  color={!isBelowMov ? Colors.success : Colors.warning}
+                />
+                <MandiText
+                  variant="caption"
+                  color={!isBelowMov ? Colors.success : Colors.warning}
+                >
+                  {!isBelowMov
+                    ? `Min order ₹${minOrderNum.toFixed(0)} met`
+                    : `Min order ₹${minOrderNum.toFixed(0)} (Add ₹${(minOrderNum - currentTotalNum).toFixed(2)} more)`}
+                </MandiText>
+              </View>
+            )}
+
+            {freeThresholdNum > 0 && (
+              <View style={styles.thresholdBadge}>
+                <Ionicons
+                  name={currentTotalNum >= freeThresholdNum ? 'sparkles' : 'bicycle'}
+                  size={IconSize.xs}
+                  color={currentTotalNum >= freeThresholdNum ? Colors.success : Colors.info}
+                />
+                <MandiText
+                  variant="caption"
+                  color={currentTotalNum >= freeThresholdNum ? Colors.success : Colors.info}
+                >
+                  {currentTotalNum >= freeThresholdNum
+                    ? '🎉 FREE delivery unlocked!'
+                    : `Add ₹${(freeThresholdNum - currentTotalNum).toFixed(2)} more for FREE delivery`}
+                </MandiText>
+              </View>
+            )}
+          </View>
+        );
+      })()}
 
       {/* Sending one supplier without the others.
           <p>A basket of three is three conversations, and they are not always
@@ -263,39 +312,46 @@ export function SupplierSectionBody({
           asks, so the round trip buys nothing. Both are offered rather than one
           replacing the other — a kitchen may still want the supplier to confirm
           before money moves, and that choice is theirs. */}
-      <View style={styles.actions}>
-        <MandiButton
-          label="Send Request"
-          variant="secondary"
-          size="md"
-          loading={sending}
-          onPress={onSend}
-          style={styles.action}
-        />
-        {/* Shown either way, disabled where the supplier wants asking first.
-            <p>Hiding it made two suppliers' cards differ by a button with no
-            explanation, which reads as a bug rather than as a difference
-            between the suppliers. Present and unavailable, with the reason
-            underneath, says the thing that is actually true. */}
-        <MandiButton
-          label="Create Order"
-          size="md"
-          loading={ordering}
-          disabled={!draft.directOrdersEnabled}
-          onPress={onOrderDirectly}
-          style={styles.action}
-        />
-      </View>
+      {(() => {
+        const minOrderNum = draft.minOrderValue != null ? parseFloat(draft.minOrderValue) : 0;
+        const currentTotalNum = draft.agreedTotal != null ? parseFloat(draft.agreedTotal) : 0;
+        const isBelowMov = minOrderNum > 0 && currentTotalNum < minOrderNum;
 
-      {/* No icon. It sat in front of a sentence that already says what it
-          means, and the two variants of this line would otherwise carry
-          different glyphs and hang at different indents under buttons that are
-          side by side. */}
-      <MandiText variant="caption" color={Colors.textTertiary} style={styles.directNote}>
-        {draft.directOrdersEnabled
-          ? 'This supplier keeps stock, so you can order without asking first.'
-          : "You can't order directly from this supplier. Send a request to check stock, then place the order once they confirm."}
-      </MandiText>
+        return (
+          <>
+            <View style={styles.actions}>
+              <MandiButton
+                label="Send Request"
+                variant="secondary"
+                size="md"
+                loading={sending}
+                onPress={onSend}
+                style={styles.action}
+              />
+              <MandiButton
+                label="Create Order"
+                size="md"
+                loading={ordering}
+                disabled={!draft.directOrdersEnabled || isBelowMov}
+                onPress={onOrderDirectly}
+                style={styles.action}
+              />
+            </View>
+
+            <MandiText
+              variant="caption"
+              color={isBelowMov ? Colors.warning : Colors.textTertiary}
+              style={styles.directNote}
+            >
+              {isBelowMov
+                ? `Store minimum order value is ₹${minOrderNum.toFixed(0)}. Please add more items to place an order.`
+                : draft.directOrdersEnabled
+                ? 'This supplier keeps stock, so you can order without asking first.'
+                : "You can't order directly from this supplier. Send a request to check stock, then place the order once they confirm."}
+            </MandiText>
+          </>
+        );
+      })()}
     </View>
   );
 }
@@ -390,5 +446,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
+  },
+  thresholdBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingVertical: 2,
   },
 });

@@ -159,6 +159,22 @@ export default function SupplierCatalogScreen() {
         />
       </View>
 
+      <Pressable
+        style={styles.rateSheetBanner}
+        onPress={() => router.push('/supplier/catalog/rate-sheet')}
+      >
+        <View style={styles.rateSheetIcon}>
+          <Ionicons name="flash" size={18} color="#D97706" />
+        </View>
+        <View style={styles.flex}>
+          <MandiText variant="bodyEmphasis">Morning Mandi Rate Sheet</MandiText>
+          <MandiText variant="caption" color={Colors.textSecondary}>
+            Reprice all catalog items in 60s
+          </MandiText>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+      </Pressable>
+
       {query.isPending ? (
         <MandiSkeletonList count={4} />
       ) : query.error ? (
@@ -503,5 +519,24 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     color: '#E65100',
+  },
+  rateSheetBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: '#FEF3C7',
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: Spacing.md,
+  },
+  rateSheetIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.full,
+    backgroundColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

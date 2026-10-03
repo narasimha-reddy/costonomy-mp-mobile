@@ -75,7 +75,14 @@ export function SkuRow({
       <ProductThumb uri={sku.imageUrl} size={48} radius={Radius.sm} />
 
       <View style={styles.body}>
-        <MandiText variant="bodyEmphasis" numberOfLines={2}>{sku.skuName}</MandiText>
+        <View style={styles.titleRow}>
+          <MandiText variant="bodyEmphasis" numberOfLines={2} style={styles.flexShrink}>{sku.skuName}</MandiText>
+          {sku.grade ? (
+            <View style={styles.gradeBadge}>
+              <MandiText variant="caption" style={styles.gradeBadgeText}>{sku.grade}</MandiText>
+            </View>
+          ) : null}
+        </View>
 
         {/* The same pack line as the request and order screens, from the same
             helper — "12 PACK (500 ML) · Mother Dairy". It used to be brand then
@@ -99,19 +106,23 @@ export function SkuRow({
           })}
         </MandiText>
 
-        {/* What one pack costs, in the pack line's own register. It was set in
-            the price face, which made a per-unit figure shout louder than the
-            total beside the counter — the opposite of which number is being
-            decided on.
-
-            <b>Excluding GST, and saying so.</b> The rate is stated as something
-            still to be added rather than already in — which is what the figure
-            is, and what makes it reconcile with the total above the counter:
-            that one includes the tax this one is about to attract. */}
+        {/* What one pack costs, in the pack line's own register. Strikethrough MRP and discount badge when available. */}
         <View style={styles.unitPrice}>
+          {sku.mrp != null && Number(sku.mrp) > Number(sku.sellingPrice) && (
+            <MandiText variant="caption" style={styles.mrpStrikethrough}>
+              {formatMoney(sku.mrp)}
+            </MandiText>
+          )}
           <MandiText variant="caption" color={Colors.textPrimary}>
             {formatMoney(sku.sellingPrice)}
           </MandiText>
+          {sku.discountPercent != null && sku.discountPercent > 0 && (
+            <View style={styles.discountBadge}>
+              <MandiText variant="caption" style={styles.discountBadgeText}>
+                {sku.discountPercent}% OFF
+              </MandiText>
+            </View>
+          )}
           {sku.gstRate != null && Number(sku.gstRate) > 0 && (
             <MandiText variant="caption" color={Colors.textTertiary}>
               + {formatGstRate(sku.gstRate)} GST
@@ -264,12 +275,33 @@ export function SkuRow({
                       </MandiText>
                     </View>
                   )}
-                  <MandiText
-                    variant="caption"
-                    color={isCurrent ? Colors.primaryDark : Colors.textSecondary}
-                  >
-                    {priceDisplay}
-                  </MandiText>
+                  {opt.grade ? (
+                    <View style={styles.gradeBadge}>
+                      <MandiText variant="caption" style={styles.gradeBadgeText}>
+                        {opt.grade}
+                      </MandiText>
+                    </View>
+                  ) : null}
+                  <View style={styles.chipPricing}>
+                    {opt.mrp != null && Number(opt.mrp) > Number(opt.sellingPrice) && (
+                      <MandiText variant="caption" style={styles.chipMrpStrikethrough}>
+                        {formatMoney(opt.mrp)}
+                      </MandiText>
+                    )}
+                    <MandiText
+                      variant="caption"
+                      color={isCurrent ? Colors.primaryDark : Colors.textSecondary}
+                    >
+                      {priceDisplay}
+                    </MandiText>
+                    {opt.discountPercent != null && opt.discountPercent > 0 && (
+                      <View style={styles.chipDiscountBadge}>
+                        <MandiText variant="caption" style={styles.chipDiscountText}>
+                          {opt.discountPercent}% OFF
+                        </MandiText>
+                      </View>
+                    )}
+                  </View>
                 </Pressable>
               );
             })}
@@ -294,6 +326,44 @@ const styles = StyleSheet.create({
   },
   main: { flex: 1, flexDirection: 'row', gap: Spacing.md, alignItems: 'center' },
   body: { flex: 1, gap: 2 },
+  flexShrink: { flexShrink: 1 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+  },
+  gradeBadge: {
+    backgroundColor: '#EDE7F6',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D1C4E9',
+  },
+  gradeBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#5E35B1',
+  },
+  mrpStrikethrough: {
+    textDecorationLine: 'line-through',
+    color: Colors.textTertiary,
+    fontSize: 10,
+  },
+  discountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFE0B2',
+  },
+  discountBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#E65100',
+  },
   unitPrice: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.xs },
   signals: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
@@ -340,6 +410,27 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '700',
     color: '#2E7D32',
+  },
+  chipPricing: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  chipMrpStrikethrough: {
+    textDecorationLine: 'line-through',
+    color: Colors.textTertiary,
+    fontSize: 8,
+  },
+  chipDiscountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 3,
+    paddingVertical: 0.5,
+    borderRadius: 2,
+  },
+  chipDiscountText: {
+    fontSize: 7,
+    fontWeight: '700',
+    color: '#E65100',
   },
   pressed: {
     opacity: 0.7,

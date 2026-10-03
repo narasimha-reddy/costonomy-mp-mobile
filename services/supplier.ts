@@ -226,6 +226,7 @@ export interface SupplierSku {
   skuCode: string | null;
   name: string;
   brandName: string | null;
+  grade?: string | null;
   packSize: Money;
   packUnit: string;
   /**
@@ -253,7 +254,10 @@ export interface SupplierSku {
   youtubeUrl: string | null;
   images: string[];
   status: string;
+  mrp?: Money | null;
   sellingPrice: Money;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
   gstRate: Money;
   availability: string;
   availableQuantity: Money | null;
@@ -268,6 +272,7 @@ export function updateSku(
   token: string,
   skuId: number,
   patch: Partial<{
+    mrp: string;
     sellingPrice: string;
     gstRate: string;
     availability: 'AVAILABLE' | 'OUT_OF_STOCK';
@@ -275,6 +280,7 @@ export function updateSku(
     status: 'ACTIVE' | 'INACTIVE';
     name: string;
     brandName: string;
+    grade: string;
     packSize: string;
     packUnit: string;
     measureValue: string;
@@ -382,11 +388,13 @@ export interface CreateSkuInput {
   skuCode?: string;
   name: string;
   brandName?: string;
+  grade?: string;
   packSize: string;
   packUnit: string;
   /** Required when packUnit is a container; refused otherwise. */
   measureValue?: string;
   measureUnit?: string;
+  mrp?: string;
   imageUrl?: string;
   /**
    * Optional detail, for the page a kitchen decides on. D-096.
@@ -537,3 +545,73 @@ export function saveCreditPolicy(
     `/api/v1/supplier-stores/${storeId}/credit-policy`,
     { method: 'PUT', token, body: policy });
 }
+
+// ── Item Variants Management ──────────────────────────────────────────
+
+export interface VariantPreset {
+  brandName: string;
+  grade: string | null;
+  packSize: Money;
+  packUnit: string;
+  typicalMrp: Money | null;
+  isTopSeller: boolean;
+}
+
+export interface ItemVariantGroupResponse {
+  canonicalProductId: number;
+  productName: string;
+  categoryId: number | null;
+  categoryName: string | null;
+  imageUrl: string | null;
+  baseUnit: string;
+  variants: SupplierSku[];
+  recommendedPresets: VariantPreset[];
+}
+
+export interface BatchVariantEntry {
+  skuId?: number | null;
+  skuCode?: string | null;
+  name?: string | null;
+  brandName?: string | null;
+  grade?: string | null;
+  packSize: string;
+  packUnit: string;
+  mrp?: string | null;
+  sellingPrice: string;
+  gstRate: string;
+  availability: string;
+  availableQuantity?: string | null;
+}
+
+export interface BatchUpdateVariantsRequest {
+  canonicalProductId: number;
+  variants: BatchVariantEntry[];
+}
+
+export function fetchItemVariants(
+  token: string,
+  storeId: number,
+  productId: number,
+): Promise<ItemVariantGroupResponse> {
+  return apiRequest<ItemVariantGroupResponse>(
+    `/api/v1/supplier-stores/${storeId}/products/${productId}/variants`,
+    { token },
+  );
+}
+
+export function batchUpdateVariants(
+  token: string,
+  storeId: number,
+  productId: number,
+  request: BatchUpdateVariantsRequest,
+): Promise<SupplierSku[]> {
+  return apiRequest<SupplierSku[]>(
+    `/api/v1/supplier-stores/${storeId}/products/${productId}/variants/batch`,
+    {
+      method: 'POST',
+      token,
+      body: request,
+    },
+  );
+}
+

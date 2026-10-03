@@ -80,11 +80,15 @@ export interface SkuDetail {
   offerId: number | null;
   skuName: string;
   brandName: string | null;
+  grade?: string | null;
   packSize: Money;
   packUnit: string;
   measureValue: Money | null;
   measureUnit: string | null;
+  mrp?: Money | null;
   sellingPrice: Money | null;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
   gstRate: Money | null;
   /** One pack with GST, computed by the server (guardrail 3). */
   unitPriceInclusiveGst: Money | null;
@@ -137,10 +141,14 @@ export interface SkuSibling {
   skuName: string;
   packSize: Money;
   packUnit: string;
+  mrp?: Money | null;
   sellingPrice: Money | null;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
   imageUrl: string | null;
   availability: string | null;
   brandName?: string | null;
+  grade?: string | null;
   gstRate?: Money | null;
   unitPriceInclusiveGst?: Money | null;
   offerId?: number | null;

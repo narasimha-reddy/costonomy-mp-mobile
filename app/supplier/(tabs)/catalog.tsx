@@ -222,6 +222,7 @@ function SkuCard({
   storeId: number | null;
 }) {
   const toast = useToast();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const [price, setPrice] = useState(String(sku.sellingPrice));
@@ -276,7 +277,14 @@ function SkuCard({
           <ProductThumb uri={sku.imageUrl || sku.canonicalProductImageUrl} size={40} />
 
           <View style={styles.text}>
-            <MandiText variant="bodyEmphasis" numberOfLines={1}>{sku.name}</MandiText>
+            <View style={styles.titleRow}>
+              <MandiText variant="bodyEmphasis" numberOfLines={1} style={styles.flexShrink}>{sku.name}</MandiText>
+              {sku.grade ? (
+                <View style={styles.gradeBadge}>
+                  <MandiText variant="caption" style={styles.gradeBadgeText}>{sku.grade}</MandiText>
+                </View>
+              ) : null}
+            </View>
             {/* The canonical product first: a supplier naming a SKU "BTR-1KG"
                 still needs to see that it is Butter, and that name is what a
                 restaurant searches by. Availability joins this line rather than
@@ -294,6 +302,7 @@ function SkuCard({
                   sku.canonicalProductName !== sku.name ? sku.canonicalProductName : null,
                   formatPack(sku.packSize, sku.packUnit, sku.measureValue, sku.measureUnit),
                   sku.brandName,
+                  sku.grade,
                 ].filter(Boolean).join(' · ')}
                 {' · '}
                 <MandiText variant="caption" color={stateTone.tint}>{stateTone.label}</MandiText>
@@ -302,7 +311,19 @@ function SkuCard({
           </View>
 
           <View style={styles.money}>
+            {sku.mrp != null && Number(sku.mrp) > Number(sku.sellingPrice) && (
+              <MandiText variant="caption" style={styles.mrpStrikethrough}>
+                {formatMoney(sku.mrp)}
+              </MandiText>
+            )}
             <MandiText variant="priceSmall">{formatMoney(sku.sellingPrice)}</MandiText>
+            {sku.discountPercent != null && sku.discountPercent > 0 && (
+              <View style={styles.discountBadge}>
+                <MandiText variant="caption" style={styles.discountBadgeText}>
+                  {sku.discountPercent}% OFF
+                </MandiText>
+              </View>
+            )}
             <MandiText variant="caption" color={Colors.textTertiary}>
               GST {formatGstRate(sku.gstRate)}
             </MandiText>
@@ -342,6 +363,14 @@ function SkuCard({
         // card a whole band to say "there is more".
         <View style={styles.actions}>
           <MandiButton
+            label="Variants"
+            variant="neutral"
+            size="sm"
+            icon="layers-outline"
+            onPress={() => router.push(`/supplier/catalog/item-variants/${sku.canonicalProductId}`)}
+            fullWidth={false}
+          />
+          <MandiButton
             label="Change Price"
             variant="neutral"
             size="sm"
@@ -353,7 +382,7 @@ function SkuCard({
             // "Out of stock" is also a filter tab on this screen. A label that
             // reads as a state next to one that reads as a filter is ambiguous;
             // an action should say what it does.
-            label={available ? 'Mark out of stock' : 'Mark in stock'}
+            label={available ? 'Out of stock' : 'In stock'}
             variant="neutral"
             size="sm"
             icon={available ? 'close-circle-outline' : 'checkmark-circle-outline'}
@@ -436,5 +465,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     marginTop: Spacing.sm,
+  },
+  flexShrink: { flexShrink: 1 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+  },
+  gradeBadge: {
+    backgroundColor: '#EDE7F6',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D1C4E9',
+  },
+  gradeBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#5E35B1',
+  },
+  mrpStrikethrough: {
+    textDecorationLine: 'line-through',
+    color: Colors.textTertiary,
+    fontSize: 10,
+  },
+  discountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFE0B2',
+  },
+  discountBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#E65100',
   },
 });

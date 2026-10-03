@@ -86,9 +86,13 @@ export function OfferCard({
   const activeOption = brandOptions.find((opt) => opt.supplierSkuId === selectedSkuId) ?? null;
   const activeSkuName = activeOption?.skuName ?? offer.skuName;
   const activeBrandName = activeOption?.brandName ?? offer.brandName;
+  const activeGrade = activeOption?.grade ?? offer.grade;
   const activePackSize = activeOption?.packSize ?? offer.packSize;
   const activePackUnit = activeOption?.packUnit ?? offer.packUnit;
   const activeUnitPriceInclusiveGst = activeOption?.unitPriceInclusiveGst ?? offer.unitPriceInclusiveGst;
+  const activeSellingPrice = activeOption?.sellingPrice ?? offer.unitPrice;
+  const activeMrp = activeOption?.mrp ?? offer.mrp;
+  const activeDiscountPercent = activeOption?.discountPercent ?? offer.discountPercent;
   const activeGstRate = activeOption?.gstRate ?? offer.gstRate;
   const activeImageUrl = activeOption?.imageUrl ?? offer.imageUrl;
   const activeAvailability = activeOption?.availability ?? offer.availability;
@@ -132,7 +136,14 @@ export function OfferCard({
         <ProductThumb uri={activeImageUrl} size={56} radius={Radius.md} />
 
         <View style={styles.names}>
-          <MandiText variant="bodyEmphasis" numberOfLines={2}>{activeSkuName}</MandiText>
+          <View style={styles.titleRow}>
+            <MandiText variant="bodyEmphasis" numberOfLines={2} style={styles.flexShrink}>{activeSkuName}</MandiText>
+            {activeGrade ? (
+              <View style={styles.gradeBadge}>
+                <MandiText variant="caption" style={styles.gradeBadgeText}>{activeGrade}</MandiText>
+              </View>
+            ) : null}
+          </View>
           <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
             {[
               activeBrandName,
@@ -142,11 +153,21 @@ export function OfferCard({
           </MandiText>
         </View>
 
-        {/* What you pay for one pack, tax and all. The rate is named beneath it
-            rather than left to be inferred — a price that quietly includes tax is
-            indistinguishable from one that quietly excludes it. */}
+        {/* What you pay for one pack, tax and all. Strikethrough MRP and discount badge when available. */}
         <View style={styles.pricing}>
+          {activeMrp != null && Number(activeMrp) > Number(activeUnitPriceInclusiveGst) && (
+            <MandiText variant="caption" style={styles.mrpStrikethrough}>
+              {formatMoney(activeMrp)}
+            </MandiText>
+          )}
           <MandiText variant="price">{formatMoney(activeUnitPriceInclusiveGst)}</MandiText>
+          {activeDiscountPercent != null && activeDiscountPercent > 0 && (
+            <View style={styles.discountBadge}>
+              <MandiText variant="caption" style={styles.discountBadgeText}>
+                {activeDiscountPercent}% OFF
+              </MandiText>
+            </View>
+          )}
           <MandiText variant="caption" color={Colors.textTertiary}>
             Inc. {formatGstRate(activeGstRate)} GST
           </MandiText>
@@ -208,6 +229,13 @@ export function OfferCard({
                         </MandiText>
                       </View>
                     )}
+                    {opt.grade ? (
+                      <View style={styles.gradeBadge}>
+                        <MandiText variant="caption" style={styles.gradeBadgeText}>
+                          {opt.grade}
+                        </MandiText>
+                      </View>
+                    ) : null}
                   </View>
                   <View style={styles.brandChipBottom}>
                     <MandiText
@@ -216,12 +244,26 @@ export function OfferCard({
                     >
                       {formatQuantity(opt.packSize)} {opt.packUnit.toLowerCase()}
                     </MandiText>
-                    <MandiText
-                      variant="captionEmphasis"
-                      color={isSelected ? Colors.primaryDark : Colors.textPrimary}
-                    >
-                      {priceDisplay}
-                    </MandiText>
+                    <View style={styles.brandChipPricing}>
+                      {opt.mrp != null && Number(opt.mrp) > Number(opt.sellingPrice) && (
+                        <MandiText variant="caption" style={styles.chipMrpStrikethrough}>
+                          {formatMoney(opt.mrp)}
+                        </MandiText>
+                      )}
+                      <MandiText
+                        variant="captionEmphasis"
+                        color={isSelected ? Colors.primaryDark : Colors.textPrimary}
+                      >
+                        {priceDisplay}
+                      </MandiText>
+                      {opt.discountPercent != null && opt.discountPercent > 0 && (
+                        <View style={styles.chipDiscountBadge}>
+                          <MandiText variant="caption" style={styles.chipDiscountText}>
+                            {opt.discountPercent}% OFF
+                          </MandiText>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 </Pressable>
               );
@@ -595,4 +637,62 @@ const styles = StyleSheet.create({
     marginTop: GAP,
   },
   line: { alignItems: 'flex-end', gap: 1 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+  },
+  gradeBadge: {
+    backgroundColor: '#EDE7F6',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D1C4E9',
+  },
+  gradeBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#5E35B1',
+  },
+  mrpStrikethrough: {
+    textDecorationLine: 'line-through',
+    color: Colors.textTertiary,
+    fontSize: 11,
+  },
+  discountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFE0B2',
+  },
+  discountBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#E65100',
+  },
+  brandChipPricing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  chipMrpStrikethrough: {
+    textDecorationLine: 'line-through',
+    color: Colors.textTertiary,
+    fontSize: 9,
+  },
+  chipDiscountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 3,
+    paddingVertical: 0.5,
+    borderRadius: 2,
+  },
+  chipDiscountText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#E65100',
+  },
 });

@@ -77,10 +77,18 @@ export default function SkuDetailScreen() {
           <Gallery sku={sku} />
 
           <View style={styles.block}>
-            <MandiText variant="title" numberOfLines={3}>{sku.skuName}</MandiText>
+            <View style={styles.titleRow}>
+              <MandiText variant="title" numberOfLines={3} style={styles.flex}>{sku.skuName}</MandiText>
+              {sku.grade ? (
+                <View style={styles.gradeBadge}>
+                  <MandiText variant="caption" style={styles.gradeBadgeText}>{sku.grade}</MandiText>
+                </View>
+              ) : null}
+            </View>
             <MandiText variant="caption" color={Colors.textSecondary}>
               {[
                 sku.brandName,
+                sku.grade,
                 `${formatQuantity(sku.packSize)} ${sku.packUnit}`,
                 sku.measureValue != null
                   ? `${formatQuantity(sku.measureValue)} ${sku.measureUnit}` : null,
@@ -90,10 +98,26 @@ export default function SkuDetailScreen() {
             {/* The price with GST, as the cart will charge it, and the rate
                 named beneath rather than left to be inferred. */}
             {sku.unitPriceInclusiveGst != null && (
-              <View style={styles.priceRow}>
-                <MandiText variant="priceLarge">
-                  {formatMoney(sku.unitPriceInclusiveGst)}
-                </MandiText>
+              <View style={styles.priceContainer}>
+                <View style={styles.priceRow}>
+                  {sku.mrp != null && Number(sku.mrp) > Number(sku.unitPriceInclusiveGst) && (
+                    <MandiText variant="caption" style={styles.mrpStrikethrough}>
+                      {formatMoney(sku.mrp)}
+                    </MandiText>
+                  )}
+                  <MandiText variant="priceLarge">
+                    {formatMoney(sku.unitPriceInclusiveGst)}
+                  </MandiText>
+                  {sku.discountPercent != null && sku.discountPercent > 0 && (
+                    <View style={styles.discountBadge}>
+                      <MandiText variant="caption" style={styles.discountBadgeText}>
+                        {sku.discountAmount != null
+                          ? `Save ${formatMoney(sku.discountAmount)} · ${sku.discountPercent}% OFF`
+                          : `${sku.discountPercent}% OFF`}
+                      </MandiText>
+                    </View>
+                  )}
+                </View>
                 {sku.gstRate != null && (
                   <MandiText variant="caption" color={Colors.textTertiary}>
                     per pack · inc. {formatGstRate(sku.gstRate)} GST
@@ -337,6 +361,13 @@ function OtherPacks({ sku }: { sku: SkuDetail }) {
                       </MandiText>
                     </View>
                   )}
+                  {opt.grade ? (
+                    <View style={styles.gradeBadge}>
+                      <MandiText variant="caption" style={styles.gradeBadgeText}>
+                        {opt.grade}
+                      </MandiText>
+                    </View>
+                  ) : null}
                   {isCurrent && (
                     <View style={styles.currentBadge}>
                       <MandiText variant="caption" style={styles.currentBadgeText}>
@@ -348,13 +379,26 @@ function OtherPacks({ sku }: { sku: SkuDetail }) {
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {[
                     opt.skuName !== (opt.brandName || opt.skuName) ? opt.skuName : null,
+                    opt.grade,
                     `${formatQuantity(opt.packSize)} ${opt.packUnit.toLowerCase()}`,
                     opt.availability !== 'AVAILABLE' ? 'Out of stock' : null,
                   ].filter(Boolean).join(' · ')}
                 </MandiText>
               </View>
               <View style={styles.packPriceCol}>
+                {opt.mrp != null && Number(opt.mrp) > Number(opt.sellingPrice) && (
+                  <MandiText variant="caption" style={styles.mrpStrikethrough}>
+                    {formatMoney(opt.mrp)}
+                  </MandiText>
+                )}
                 <MandiText variant="bodyEmphasis">{priceDisplay}</MandiText>
+                {opt.discountPercent != null && opt.discountPercent > 0 && (
+                  <View style={styles.chipDiscountBadge}>
+                    <MandiText variant="caption" style={styles.chipDiscountText}>
+                      {opt.discountPercent}% OFF
+                    </MandiText>
+                  </View>
+                )}
                 {opt.gstRate != null && Number(opt.gstRate) > 0 && (
                   <MandiText variant="caption" color={Colors.textTertiary}>
                     Inc. GST
@@ -387,20 +431,42 @@ function OtherPacks({ sku }: { sku: SkuDetail }) {
         >
           <ProductThumb uri={pack.imageUrl} size={40} radius={Radius.sm} />
           <View style={styles.flex}>
-            <MandiText variant="body" numberOfLines={1}>{pack.skuName}</MandiText>
+            <View style={styles.packTitleRow}>
+              <MandiText variant="body" numberOfLines={1}>{pack.skuName}</MandiText>
+              {pack.grade ? (
+                <View style={styles.gradeBadge}>
+                  <MandiText variant="caption" style={styles.gradeBadgeText}>{pack.grade}</MandiText>
+                </View>
+              ) : null}
+            </View>
             <MandiText variant="caption" color={Colors.textSecondary}>
               {[
                 pack.brandName,
+                pack.grade,
                 `${formatQuantity(pack.packSize)} ${pack.packUnit}`,
                 pack.availability !== 'AVAILABLE' ? 'Out of stock' : null,
               ].filter(Boolean).join(' · ')}
             </MandiText>
           </View>
-          {pack.sellingPrice != null && (
-            <MandiText variant="bodyEmphasis">
-              {formatMoney(pack.unitPriceInclusiveGst ?? pack.sellingPrice)}
-            </MandiText>
-          )}
+          <View style={styles.packPriceCol}>
+            {pack.mrp != null && Number(pack.mrp) > Number(pack.sellingPrice ?? 0) && (
+              <MandiText variant="caption" style={styles.mrpStrikethrough}>
+                {formatMoney(pack.mrp)}
+              </MandiText>
+            )}
+            {pack.sellingPrice != null && (
+              <MandiText variant="bodyEmphasis">
+                {formatMoney(pack.unitPriceInclusiveGst ?? pack.sellingPrice)}
+              </MandiText>
+            )}
+            {pack.discountPercent != null && pack.discountPercent > 0 && (
+              <View style={styles.chipDiscountBadge}>
+                <MandiText variant="caption" style={styles.chipDiscountText}>
+                  {pack.discountPercent}% OFF
+                </MandiText>
+              </View>
+            )}
+          </View>
           <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
         </Pressable>
       ))}
@@ -582,4 +648,55 @@ const styles = StyleSheet.create({
   },
   reviewTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   stars: { flexDirection: 'row', alignItems: 'center' },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+  },
+  priceContainer: {
+    gap: 2,
+  },
+  gradeBadge: {
+    backgroundColor: '#EDE7F6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D1C4E9',
+  },
+  gradeBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#5E35B1',
+  },
+  mrpStrikethrough: {
+    textDecorationLine: 'line-through',
+    color: Colors.textTertiary,
+    fontSize: 14,
+  },
+  discountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFE0B2',
+  },
+  discountBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#E65100',
+  },
+  chipDiscountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
+  },
+  chipDiscountText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#E65100',
+  },
 });

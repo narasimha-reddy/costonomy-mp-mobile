@@ -164,6 +164,7 @@ export interface RateSheetRow {
   brandName: string | null;
   grade: string | null;
   isCatchWeight: boolean;
+  requiresColdChain?: boolean;
   packSize: Money;
   packUnit: string;
   mrp: Money | null;

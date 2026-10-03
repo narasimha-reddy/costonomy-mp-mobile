@@ -387,6 +387,15 @@ export default function SupplierOrderScreen() {
               </View>
             )}
 
+            {order.hasColdChainItems && (
+              <View style={[styles.valueRow, { backgroundColor: '#E0F2FE', padding: 8, borderRadius: 6 }]}>
+                <Ionicons name="snow" size={16} color="#0284C7" />
+                <MandiText variant="captionEmphasis" color="#0369A1">
+                  ❄️ Cold Chain Required: Use insulated / refrigerated vehicle only (2-wheelers blocked)
+                </MandiText>
+              </View>
+            )}
+
             {order.weightAdjustmentAmount != null && parseFloat(order.weightAdjustmentAmount) !== 0 && (
               <View style={styles.valueRow}>
                 <Ionicons name="scale-outline" size={16} color={Colors.warning} />
@@ -526,6 +535,14 @@ export default function SupplierOrderScreen() {
               <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.sm }}>
                 Order is packed and ready. Request a delivery partner to dispatch via Pidge Smart Dispatch.
               </MandiText>
+              {order.hasColdChainItems && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.sm, backgroundColor: '#E0F2FE', padding: 8, borderRadius: 6 }}>
+                  <Ionicons name="snow" size={14} color="#0284C7" />
+                  <MandiText variant="caption" color="#0369A1">
+                    Temperature-controlled: Enclosed/insulated 3W/4W vehicle will be assigned (2-wheelers restricted)
+                  </MandiText>
+                </View>
+              )}
               <MandiButton
                 label="Request Delivery Partner"
                 size="md"

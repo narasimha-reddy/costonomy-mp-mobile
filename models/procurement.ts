@@ -232,6 +232,7 @@ export interface SupplierOrderItem {
   acceptedLineTotal: Money | null;
   status: string;
   isCatchWeight?: boolean;
+  requiresColdChain?: boolean;
   dispatchedWeight?: Money | null;
   weighedAt?: string | null;
   weightDeltaAmount?: Money | null;
@@ -300,6 +301,7 @@ export interface SupplierOrder {
   scheduledDeliveryDate?: string | null;
   isSubscriptionOrder?: boolean | null;
   subscriptionId?: number | null;
+  hasColdChainItems?: boolean | null;
   /** Set only on a cancelled order, and the reason it is not three statuses. */
   cancelledBy: CancelledBy | null;
   cancellationReason: string | null;
@@ -339,6 +341,7 @@ export interface IncomingOrder {
   /** What the store committed to. Zero before they answer, below the total after a partial. */
   acceptedAmount: Money;
   paymentMethod: PaymentMethod | null;
+  hasColdChainItems?: boolean | null;
   items: SupplierOrderItem[];
 }
 

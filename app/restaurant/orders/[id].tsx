@@ -241,6 +241,12 @@ export default function OrderDetailScreen() {
                       {formatQuantity(item.requestedQuantity)} {item.unit} ordered ·
                       Inc. {formatGstRate(item.gstRate)} GST
                     </MandiText>
+                    {item.requiresColdChain && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                        <Ionicons name="snow" size={12} color="#0284C7" />
+                        <MandiText variant="caption" color="#0369A1">Cold Chain (Perishable)</MandiText>
+                      </View>
+                    )}
                     {short && (
                       <View style={styles.shortRow}>
                         <Ionicons name="alert-circle-outline" size={14} color={Colors.warning} />
@@ -276,6 +282,15 @@ export default function OrderDetailScreen() {
                 <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, deliveryStatus.status)} size="sm" />
               )}
             </View>
+
+            {order.hasColdChainItems && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 6, backgroundColor: '#E0F2FE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                <Ionicons name="snow" size={14} color="#0284C7" />
+                <MandiText variant="caption" color="#0369A1">
+                  Cold-Chain Consignment · Temperature-controlled transport
+                </MandiText>
+              </View>
+            )}
 
             {order.scheduledDeliveryDate && (
               <Row label="Scheduled Date" value={order.scheduledDeliveryDate} />

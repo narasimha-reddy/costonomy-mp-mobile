@@ -4,6 +4,25 @@ All notable changes to the Costonomy MP (Mandi) Mobile Application across all fe
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Money paths and the API's later phases]
+
+### [phase5/mobile] - Catch-weight, receiving, subscriptions, cold chain (API D-128 to D-134)
+#### Fixed
+- **Weight adjustment sign.** Positive is a refund to the buyer ("Weighed less: the buyer pays ₹42.00 less"), as the server defines it; the supplier screen had it inverted.
+- **Weigh sheet.** Offered only in CONFIRMED and PREPARING (the API refuses it from READY); fields start empty (or with the reading already taken) instead of the accepted quantity; an empty field is refused instead of sending the ordered quantity as if weighed; the API's refusals (band, decimals, unit) show inside the sheet; the reading is shown beside the billed quantity; "Mark ready" is disabled with the server's sentence until every catch-weight line is weighed.
+- **Minimum order value** is compared on the goods before GST (`agreedValue`), as the server does; the "Add ₹X more" client arithmetic is gone.
+- **Receiving.** The three counts add up to the billed quantity on a weighed line; the client refund estimate and the invented `CN-…` number are gone; only the server's refund, where it went (by how the order was paid), and a credit note number if one exists are shown; a card refund still waiting on capture says so; the idempotency key is per attempt, so a retry after one refusal no longer fails. Steppers accept decimals.
+- **Subscriptions.** The payment method (wallet or credit) is sent and shown; Costonomy delivery is no longer offered; an invalid quantity is refused instead of becoming 1; "tomorrow" is India's; the supplier's generate-orders button and client code are removed (orders are created by the platform each evening); subscription notifications open the list.
+- **Record payment.** One idempotency key per attempt (a retry cannot record the repayment twice).
+- **Billing.** Tax invoice failures show the server's reason (a missing GSTIN, HSN code or address in words; "not available" while the feature is off).
+- **Chilled goods.** The delivery picker shows the server's "no carrier can carry chilled goods" sentence, and a fee quoted for ordinary goods that meets a chilled order asks for the fee again.
+- **Accessibility and theme.** Payment, rejection, frequency, delivery and slot chips announce role, state and label; the weight input is labelled; cold-chain banners use theme tokens (one `ColdChainBanner`), and no longer claim 3-wheelers are insulated.
+
+#### Added
+- Wallet copy for `ORDER_ADJUSTMENT` (credit "Order adjusted · money back", debit "Order adjusted · extra charge") and the two bank-payout kinds, matching the API's `WalletEntryCopy`.
+- "Estimated. The final price follows the scale weight and will never be more than this." on cart, checkout and order lines sold by weight (from `isCatchWeight` on the SKU descriptor and preview lines, added to the API in `phase5/api-flags`); after weighing the line says what was billed.
+- Contract fixtures with the API's real JSON (money as numbers) in `tests/fixtures/catchWeightContract.ts`, and tests built from them.
+
 ## [Discovery & Multi-Brand Fulfillment]
 
 ### [feat/item-multi-brand-options] - Multi-Brand Options with Lowest Priced First

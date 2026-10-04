@@ -175,3 +175,39 @@ export const SUBSCRIPTION_REFUSALS = {
   delivery: apiError('VALIDATION_ERROR', 'Subscriptions are delivered by the supplier or picked up.'),
   doesNotDeliver: apiError('VALIDATION_ERROR', "This supplier doesn't deliver. Choose pickup."),
 };
+
+// ── Billing refusals (`TaxInvoiceService`, API D-133): 422 with `details.missing`, and 404 while the feature is off ──
+
+export const TAX_INVOICE_MISSING_GSTIN = {
+  data: null,
+  error: {
+    code: 'TAX_INVOICE_DATA_MISSING',
+    message: "A tax invoice can't be issued until this is filled in: supplier.gstin",
+    details: { missing: ['supplier.gstin'] },
+  },
+  meta: { requestId: 'r-2' },
+};
+
+export const TAX_INVOICE_MISSING_SEVERAL = {
+  ...TAX_INVOICE_MISSING_GSTIN,
+  error: {
+    code: 'TAX_INVOICE_DATA_MISSING',
+    message: "A tax invoice can't be issued until this is filled in: supplier.gstin, supplier.address, line[301 Chicken].hsnCode",
+    details: { missing: ['supplier.gstin', 'supplier.address', 'line[301 Chicken].hsnCode'] },
+  },
+};
+
+export const TAX_INVOICE_NOT_READY = apiError('TAX_INVOICE_NOT_ALLOWED',
+  'A tax invoice can be issued once the order is ready; this order is CONFIRMED.');
+
+export const TAX_INVOICE_FEATURE_OFF = apiError('RESOURCE_NOT_FOUND', 'TaxInvoice was not found.');
+
+// ── Chilled goods at checkout (`DeliveryFeeQuoteService`, API D-134) ─────────────────────────────────────────
+
+/** 422 from POST /intents/{id}/delivery-quote when no carrier is verified to carry chilled goods on the route. */
+export const DELIVERY_UNAVAILABLE_CHILLED = apiError('DELIVERY_UNAVAILABLE',
+  'No delivery partner can carry chilled goods on this route yet. Choose pickup, or ask the supplier to deliver.');
+
+/** 422 from POST /intents/{id}/orders when the fee was quoted for ordinary goods and the order is chilled by now. */
+export const PRICE_CHANGED_NOW_CHILLED = apiError('PRICE_CHANGED',
+  'This order now needs temperature-controlled delivery. Please check the delivery fee again.');

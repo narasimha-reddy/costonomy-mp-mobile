@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   coldChainTag: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: Colors.coldChainLight,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: Radius.sm,

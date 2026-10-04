@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { quoteDelivery } from '@/services/intent';
+import { deliveryUnavailableMessage } from '@/lib/delivery/quoteMessages';
 import { MandiCard, MandiText } from '@/components/common';
 import type { Intent } from '@/models/intent';
 import type { DeliveryMode } from '@/models/procurement';
@@ -107,7 +108,7 @@ export function DeliveryModePicker({
                 <MandiText variant="body">{LABELS[mode]}</MandiText>
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {unavailable
-                    ? "We can't deliver to this address yet"
+                    ? deliveryUnavailableMessage(quote.error)
                     : mode === 'COSTONOMY_DELIVERY' && quote.isPending
                       ? 'Checking the fee…'
                       : DESCRIPTIONS[mode]}

@@ -1,6 +1,7 @@
 import { paymentStatusCopy } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { billingFailureMessage } from '@/lib/billing/messages';
 import { fetchTaxInvoice, fetchCreditNotes, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -20,7 +21,7 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
-import { CatchWeightNote, PaymentMethodPill } from '@/components/order';
+import { CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { isApiError } from '@/lib/api/errors';
 import { DeliveryMode, orderStatusFor, resolveStatus, DeliveryStatus as DeliveryStatusRegistry, SupplierOrderStatus } from '@/models/status';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
@@ -114,8 +115,8 @@ export default function OrderDetailScreen() {
     try {
       const inv = await fetchTaxInvoice(accessToken, orderId);
       setInvoice(inv);
-    } catch {
-      Alert.alert('Invoice', 'Tax invoice is not yet available for this order.');
+    } catch (caught) {
+      Alert.alert('Invoice', billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -131,8 +132,8 @@ export default function OrderDetailScreen() {
       } else {
         setCreditNotes(notes);
       }
-    } catch {
-      Alert.alert('Credit Notes', 'Could not load credit notes for this order.');
+    } catch (caught) {
+      Alert.alert('Credit Notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -242,10 +243,7 @@ export default function OrderDetailScreen() {
                       Inc. {formatGstRate(item.gstRate)} GST
                     </MandiText>
                     {item.requiresColdChain && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                        <Ionicons name="snow" size={12} color="#0284C7" />
-                        <MandiText variant="caption" color="#0369A1">Cold Chain (Perishable)</MandiText>
-                      </View>
+                      <ColdChainBanner compact text="Chilled goods" />
                     )}
                     {short && (
                       <View style={styles.shortRow}>
@@ -287,12 +285,7 @@ export default function OrderDetailScreen() {
             </View>
 
             {order.hasColdChainItems && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 6, backgroundColor: '#E0F2FE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                <Ionicons name="snow" size={14} color="#0284C7" />
-                <MandiText variant="caption" color="#0369A1">
-                  Cold-Chain Consignment · Temperature-controlled transport
-                </MandiText>
-              </View>
+              <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />
             )}
 
             {order.scheduledDeliveryDate && (

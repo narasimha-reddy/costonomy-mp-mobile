@@ -269,6 +269,9 @@ export default function ReceivingScreen() {
                             key={r.key}
                             style={[styles.reasonChip, active && styles.reasonChipActive]}
                             onPress={() => setLine(item.id, { reason: r.key })}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected: active }}
+                            accessibilityLabel={`${r.label} for ${item.productName}`}
                           >
                             <MandiText
                               variant="caption"
@@ -395,7 +398,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   catchWeightPill: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: Colors.warningLight,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: Radius.sm,

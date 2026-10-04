@@ -46,6 +46,7 @@ import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 import { CatchWeightNote } from '@/components/order';
+import { feeNeedsRefreshing } from '@/lib/delivery/quoteMessages';
 
 const SCREEN = 'REST-REQ-02';
 
@@ -205,6 +206,12 @@ export default function RequestDetailScreen() {
       if (caught instanceof ApiError && caught.status < 500
         && caught.code !== 'IDEMPOTENT_REQUEST_IN_PROGRESS' && caught.status !== 429) {
         orderKey.current = null;
+      }
+      // The fee shown is no longer the right one (the goods have become chilled since it was quoted): ask for it
+      // again and make the restaurant choose again, rather than leave a choice standing that the server will refuse.
+      if (feeNeedsRefreshing(caught)) {
+        void queryClient.invalidateQueries({ queryKey: ['delivery-quote', intentId] });
+        setDelivery(null);
       }
       toast.show(
         caught instanceof ApiError ? caught.message : 'Could not create that order.', 'error');

@@ -162,3 +162,16 @@ describe('retrying a check-in', () => {
     expect(keys[2]).not.toBe(keys[1]);   // the server refused it: a new one
   });
 });
+
+describe('the rejection-reason chips', () => {
+  it('announce their role, which is chosen, and which line they are for', async () => {
+    paidBy('PREPAID');
+    setup();
+    await enterShortDelivery();
+
+    const chip = await screen.findByLabelText('Damaged Crate for Chicken');
+    expect(chip.props.accessibilityRole).toBe('radio');
+    expect(chip.props.accessibilityState.selected).toBe(true);
+    expect(screen.getByLabelText('Short Delivery for Chicken').props.accessibilityState.selected).toBe(false);
+  });
+});

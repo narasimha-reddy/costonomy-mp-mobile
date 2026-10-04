@@ -1,6 +1,7 @@
 import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
 import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { billingFailureMessage } from '@/lib/billing/messages';
 import { fetchTaxInvoice, fetchCreditNotes, generateTaxInvoice, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -49,7 +50,7 @@ import {
 } from '@/lib/orders/catchWeight';
 import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
-import { PaymentMethodPill } from '@/components/order';
+import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
@@ -252,8 +253,8 @@ export default function SupplierOrderScreen() {
     try {
       const inv = await fetchTaxInvoice(accessToken, orderId);
       setInvoice(inv);
-    } catch {
-      Alert.alert('Invoice', 'Tax invoice is not yet available for this order.');
+    } catch (caught) {
+      Alert.alert('Invoice', billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -265,8 +266,8 @@ export default function SupplierOrderScreen() {
     try {
       const inv = await generateTaxInvoice(accessToken, orderId);
       setInvoice(inv);
-    } catch {
-      Alert.alert('Invoice', 'Could not generate tax invoice for this order.');
+    } catch (caught) {
+      Alert.alert('Invoice', billingFailureMessage(caught, 'Could not generate tax invoice for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -282,8 +283,8 @@ export default function SupplierOrderScreen() {
       } else {
         setCreditNotes(notes);
       }
-    } catch {
-      Alert.alert('Credit Notes', 'Could not load credit notes for this order.');
+    } catch (caught) {
+      Alert.alert('Credit Notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -399,12 +400,7 @@ export default function SupplierOrderScreen() {
             )}
 
             {order.hasColdChainItems && (
-              <View style={[styles.valueRow, { backgroundColor: '#E0F2FE', padding: 8, borderRadius: 6 }]}>
-                <Ionicons name="snow" size={16} color="#0284C7" />
-                <MandiText variant="captionEmphasis" color="#0369A1">
-                  ❄️ Cold Chain Required: Use insulated / refrigerated vehicle only (2-wheelers blocked)
-                </MandiText>
-              </View>
+              <ColdChainBanner text="Cold chain: this order needs temperature-controlled transport. Only a carrier verified for chilled goods can be assigned." />
             )}
 
             {(() => {
@@ -546,12 +542,7 @@ export default function SupplierOrderScreen() {
                 Order is packed and ready. Request a delivery partner to dispatch via Pidge Smart Dispatch.
               </MandiText>
               {order.hasColdChainItems && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.sm, backgroundColor: '#E0F2FE', padding: 8, borderRadius: 6 }}>
-                  <Ionicons name="snow" size={14} color="#0284C7" />
-                  <MandiText variant="caption" color="#0369A1">
-                    Temperature-controlled: Enclosed/insulated 3W/4W vehicle will be assigned (2-wheelers restricted)
-                  </MandiText>
-                </View>
+                <ColdChainBanner text="Temperature-controlled: only a carrier verified for chilled goods can be assigned. If none can, the delivery fails and you will see why." />
               )}
               <MandiButton
                 label="Request Delivery Partner"

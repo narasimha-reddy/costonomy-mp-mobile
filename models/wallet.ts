@@ -155,7 +155,11 @@ export type WalletEntryKind =
   | 'TOP_UP' | 'ORDER_PAYMENT' | 'ORDER_REFUND' | 'REFUND' | 'WITHDRAWAL' | 'DISPUTE_REFUND'
   /** A withdrawal the provider refused, put back in the wallet (API D-110). A credit. */
   | 'WITHDRAWAL_REVERSAL'
-  | 'QUICKSCAN_PAYMENT' | 'QUICKSCAN_RETURN';
+  | 'QUICKSCAN_PAYMENT' | 'QUICKSCAN_RETURN'
+  /** A catch-weight order settled at the scale weight: money back (credit) or, on old data, an extra charge (API D-128). */
+  | 'ORDER_ADJUSTMENT'
+  /** Money sent to a verified bank account, and the same put back when the transfer failed. */
+  | 'BANK_PAYOUT' | 'BANK_PAYOUT_REVERSAL';
 
 /** Where a withdrawal's refund has got to. `REJECTED`/`REVERSED` need API D-110. */
 export type WithdrawalRefundStatus =

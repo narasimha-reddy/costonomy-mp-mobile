@@ -147,6 +147,7 @@ export function SupplierSectionBody({
   expanded,
   sending,
   ordering,
+  shownQuantity,
   onChangeQuantity,
   onRemove,
   onSend,
@@ -159,6 +160,8 @@ export function SupplierSectionBody({
   sending: boolean;
   /** An order is being prepared from this draft. */
   ordering: boolean;
+  /** The quantity to show for a line: one the person has just tapped, else the server's. */
+  shownQuantity?: (itemId: number, serverQuantity: number) => number;
   onChangeQuantity: (itemId: number, quantity: string) => void;
   onRemove: (itemId: number) => void;
   onSend: () => void;
@@ -203,7 +206,7 @@ export function SupplierSectionBody({
             </Pressable>
 
             <MandiQuantityStepper
-              value={Number(item.requestedQuantity)}
+              value={shownQuantity?.(item.id, Number(item.requestedQuantity)) ?? Number(item.requestedQuantity)}
               onChange={(quantity) => onChangeQuantity(item.id, String(quantity))}
               min={0}
               unit={item.unit}

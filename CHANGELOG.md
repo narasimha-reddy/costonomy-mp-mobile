@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-cart] - The cart no longer loses lines (API D-137)
+#### Fixed
+- **Quantity taps** in the cart are held briefly and sent as one write of the last value, in order per line; a tap still waiting is sent when the screen is left, and sending or ordering waits for it first.
+- **Minus at one** removes the line and offers Undo (a toast action), instead of writing a zero.
+
 ### [phase5/mobile] - Catch-weight, receiving, subscriptions, cold chain (API D-128 to D-134)
 #### Fixed
 - **Weight adjustment sign.** Positive is a refund to the buyer ("Weighed less: the buyer pays ₹42.00 less"), as the server defines it; the supplier screen had it inverted.

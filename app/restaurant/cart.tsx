@@ -5,7 +5,9 @@ import { useMutation } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useRequestBasket, useInvalidateBasket } from '@/hooks/useRequestBasket';
+import { useDebouncedEdits } from '@/hooks/useDebouncedEdits';
 import {
+  addIntentItem,
   prepareDirectOrder,
   removeIntentItem,
   sendBasket,
@@ -79,20 +81,68 @@ export default function BasketScreen() {
   } | null>(null);
   const [explaining, setExplaining] = useState(false);
 
-  const update = useMutation({
-    mutationFn: ({ itemId, quantity }: { itemId: number; quantity: string }) =>
-      updateIntentItem(accessToken as string, itemId, quantity),
-    onSuccess: () => void invalidate(),
-    onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not update that.', 'error'),
+  /**
+   * Quantity taps are held briefly and sent as one decision, so a burst of taps
+   * is one write, edits to a line land in order, and nothing is dropped when the
+   * screen is left. Sending and ordering wait for them (see `flush` below).
+   */
+  const edits = useDebouncedEdits(async (itemId, quantity) => {
+    try {
+      await updateIntentItem(accessToken as string, itemId, String(quantity));
+    } catch (caught) {
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not update that.', 'error');
+    }
+    await invalidate();
   });
+  const { flush } = edits;
 
   const remove = useMutation({
-    mutationFn: (itemId: number) => removeIntentItem(accessToken as string, itemId),
-    onSuccess: () => void invalidate(),
+    mutationFn: ({ itemId }: { itemId: number; supplierSkuId: number; quantity: string }) =>
+      removeIntentItem(accessToken as string, itemId),
+    onSuccess: (_result, removed) => {
+      void invalidate();
+      // The line is gone for good (the server keeps no row), so putting it back
+      // is a fresh add of the same pack and quantity.
+      toast.show('Removed from your request', 'info', {
+        label: 'Undo',
+        onPress: () => {
+          addIntentItem(accessToken as string, outletId as number, {
+            supplierSkuId: removed.supplierSkuId,
+            quantity: removed.quantity,
+          })
+            .then(() => invalidate())
+            .catch((caught) =>
+              toast.show(
+                caught instanceof ApiError ? caught.message : 'Could not put that back.',
+                'error',
+              ));
+        },
+      });
+    },
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not remove that.', 'error'),
   });
+
+  /** Minus at one removes the line, with an undo, rather than writing a zero. */
+  const removeLine = (itemId: number) => {
+    const item = drafts.flatMap((draft) => draft.items).find((line) => line.id === itemId);
+    if (item == null) return;
+    edits.discard(itemId);
+    remove.mutate({
+      itemId,
+      supplierSkuId: item.supplierSkuId,
+      quantity: String(item.requestedQuantity),
+    });
+  };
+
+  const changeQuantity = (itemId: number, quantity: string) => {
+    const packs = Number(quantity);
+    if (packs <= 0) {
+      removeLine(itemId);
+      return;
+    }
+    edits.set(itemId, packs);
+  };
 
   /**
    * Order from one supplier without asking them first. D-094.
@@ -108,10 +158,13 @@ export default function BasketScreen() {
    * basket already uses. Nothing is prepared until it is agreed to.
    */
   const orderDirectly = useMutation({
-    mutationFn: ({ intentId, acceptPriceChanges }: {
+    mutationFn: async ({ intentId, acceptPriceChanges }: {
       intentId: number;
       acceptPriceChanges: boolean;
-    }) => prepareDirectOrder(accessToken as string, intentId, acceptPriceChanges),
+    }) => {
+      await flush();
+      return prepareDirectOrder(accessToken as string, intentId, acceptPriceChanges);
+    },
     onSuccess: (result, variables) => {
       void invalidate();
       if (result.held.length > 0) {
@@ -132,11 +185,16 @@ export default function BasketScreen() {
   });
 
   const send = useMutation({
-    mutationFn: ({ acceptPriceChanges, intentId }: {
+    mutationFn: async ({ acceptPriceChanges, intentId }: {
       acceptPriceChanges: boolean;
       intentId?: number;
-    }) => sendBasket(accessToken as string, outletId as number,
-      { acceptPriceChanges, intentId }),
+    }) => {
+      // What was tapped is what gets sent: a quantity still waiting its turn is
+      // written first, or the request would go out with the old one.
+      await flush();
+      return sendBasket(accessToken as string, outletId as number,
+        { acceptPriceChanges, intentId });
+    },
     onSuccess: (result, variables) => {
       track('basket_sent', { screen: SCREEN, outletId }, { sent: result.sent.length });
       void invalidate();
@@ -277,8 +335,9 @@ export default function BasketScreen() {
           expanded={expanded}
           sending={send.isPending && send.variables?.intentId === draft.id}
           ordering={orderDirectly.isPending && orderDirectly.variables?.intentId === draft.id}
-          onChangeQuantity={(itemId, quantity) => update.mutate({ itemId, quantity })}
-          onRemove={(itemId) => remove.mutate(itemId)}
+          shownQuantity={edits.valueFor}
+          onChangeQuantity={changeQuantity}
+          onRemove={removeLine}
           onSend={() => send.mutate({ acceptPriceChanges: false, intentId: draft.id })}
           onOrderDirectly={() =>
             orderDirectly.mutate({ intentId: draft.id, acceptPriceChanges: false })}

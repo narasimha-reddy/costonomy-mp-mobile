@@ -275,10 +275,12 @@ Do not close one of these silently.
 2. **Supplier and popular lists do not filter by serviceability**, unlike product
    comparison — so a restaurant can be shown a supplier who cannot deliver to
    them. Bug or deliberate reach, undecided.
-3. **The cart lost lines twice**, observed on screen and confirmed against the
-   database, and could not be reproduced across a plain load, expand-all,
-   expand-and-scroll or a 50-second idle poll. It is recorded here rather than
-   closed, because it happened.
+3. **Resolved (API D-137): the cart lost lines.** Two causes, both found: the app sent every
+   tap as its own write and dropped a tap still waiting when the screen was left, and the API let
+   simultaneous adds, removals and sends race. The cart now holds taps briefly and sends the last
+   (`hooks/useDebouncedEdits.ts`), writes them in order, flushes on leaving and before sending or
+   ordering, and removes the line with an Undo when minus is pressed at one. Tests:
+   `tests/useDebouncedEdits.test.tsx`, `tests/cartSend.test.tsx`.
 4. **The Razorpay checkout has not run on a phone.** Web only so far — a
    development build is needed. **UPI is untested** too: the Razorpay test
    account's checkout doesn't offer it yet.

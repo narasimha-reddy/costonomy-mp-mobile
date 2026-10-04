@@ -1,6 +1,5 @@
 import { apiRequest } from '@/lib/api/client';
 import type {
-  GenerateOrdersResult,
   Subscription,
   SubscriptionFrequency,
   SubscriptionManifest,
@@ -13,7 +12,9 @@ export interface CreateSubscriptionPayload {
   unit: string;
   frequency: SubscriptionFrequency;
   preferredSlotId?: number;
-  deliveryMode?: string;
+  deliveryMode?: 'SUPPLIER_DELIVERY' | 'PICKUP';
+  /** WALLET, or CREDIT with an active agreement with this supplier; the server refuses anything else (API D-132). */
+  paymentMethod: 'WALLET' | 'CREDIT';
   startDate: string;
   endDate?: string;
   notes?: string;
@@ -96,16 +97,4 @@ export function fetchStoreSubscriptionManifest(
 ): Promise<SubscriptionManifest> {
   const qs = date ? `?date=${encodeURIComponent(date)}` : '';
   return apiRequest<SubscriptionManifest>(`/api/v1/supplier-stores/${storeId}/subscriptions/manifest${qs}`, { token });
-}
-
-export function generateDailyOrders(
-  token: string,
-  storeId: number,
-  date?: string,
-): Promise<GenerateOrdersResult> {
-  const qs = date ? `?date=${encodeURIComponent(date)}` : '';
-  return apiRequest<GenerateOrdersResult>(`/api/v1/supplier-stores/${storeId}/subscriptions/generate-orders${qs}`, {
-    method: 'POST',
-    token,
-  });
 }

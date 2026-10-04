@@ -27,6 +27,7 @@ import {
 import type { Subscription } from '@/models/subscription';
 import { ApiError } from '@/lib/api/errors';
 import { Colors, Radius, Spacing } from '@/theme';
+import { deliveryModeLabel, paymentMethodLabel } from '@/lib/subscription/form';
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
@@ -113,6 +114,20 @@ export default function SubscriptionsScreen() {
               Slot: {item.preferredSlotName}
             </MandiText>
           ) : null}
+        </View>
+
+        {/* How each delivery is paid for and how it gets here, as the API sends them (API D-132). */}
+        <View style={styles.detailRow}>
+          {paymentMethodLabel(item.paymentMethod) != null && (
+            <MandiText variant="caption" color={Colors.textSecondary}>
+              {paymentMethodLabel(item.paymentMethod)}
+            </MandiText>
+          )}
+          {deliveryModeLabel(item.deliveryMode) != null && (
+            <MandiText variant="caption" color={Colors.textSecondary}>
+              {deliveryModeLabel(item.deliveryMode)}
+            </MandiText>
+          )}
         </View>
 
         {item.nextDeliveryDate && !isCancelled && !isPaused && (

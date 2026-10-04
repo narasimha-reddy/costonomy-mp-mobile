@@ -58,8 +58,3 @@ export interface SubscriptionManifest {
   deliveries: ManifestDeliveryOrder[];
 }
 
-export interface GenerateOrdersResult {
-  date: string;
-  ordersGenerated: number;
-  orderIds: number[];
-}

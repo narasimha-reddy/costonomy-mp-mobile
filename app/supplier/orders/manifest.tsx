@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import {
   fetchStoreSubscriptionManifest,
-  generateDailyOrders,
 } from '@/services/subscription';
 import type { ManifestDeliveryOrder } from '@/models/subscription';
 import {
-  MandiButton,
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
@@ -19,11 +17,8 @@ import {
   MandiScreen,
   MandiSkeletonList,
   MandiStatusChip,
-  MandiStickyBar,
   MandiText,
-  useToast,
 } from '@/components/common';
-import { ApiError } from '@/lib/api/errors';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 function formatDate(d: Date): string {
@@ -48,8 +43,6 @@ export default function SupplierManifestScreen() {
   const storeId = paramStoreId ? Number(paramStoreId) : supplier?.stores?.[0]?.id;
 
   const { accessToken } = useSession();
-  const toast = useToast();
-  const queryClient = useQueryClient();
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const dateStr = formatDate(currentDate);
@@ -58,23 +51,6 @@ export default function SupplierManifestScreen() {
     queryKey: ['supplier-manifest', storeId, dateStr],
     queryFn: () => fetchStoreSubscriptionManifest(accessToken as string, storeId as number, dateStr),
     enabled: accessToken != null && storeId != null && Number.isFinite(storeId),
-  });
-
-  const generateMutation = useMutation({
-    mutationFn: () => generateDailyOrders(accessToken as string, storeId as number, dateStr),
-    onSuccess: (res) => {
-      void queryClient.invalidateQueries({ queryKey: ['supplier-manifest', storeId] });
-      void queryClient.invalidateQueries({ queryKey: ['store', storeId, 'orders'] });
-      toast.show(
-        res.ordersGenerated > 0
-          ? `Created ${res.ordersGenerated} replenishment orders for ${dateStr}`
-          : `No new orders needed for ${dateStr}`,
-        'success',
-      );
-    },
-    onError: (err) => {
-      toast.show(err instanceof ApiError ? err.message : 'Failed to generate orders', 'error');
-    },
   });
 
   function shiftDate(offset: number) {
@@ -113,18 +89,12 @@ export default function SupplierManifestScreen() {
   return (
     <MandiScreen
       header={<MandiHeader title="Daily Manifest" subtitle="Subscription Dispatches" back />}
-      footer={
-        <MandiStickyBar>
-          <MandiButton
-            label={`Generate Replenishment Orders (${dateStr})`}
-            icon="flash-outline"
-            size="lg"
-            loading={generateMutation.isPending}
-            onPress={() => generateMutation.mutate()}
-          />
-        </MandiStickyBar>
-      }
     >
+      {/* Orders are created by the platform each evening for the next day (API D-132); there is nothing to trigger. */}
+      <MandiText variant="caption" color={Colors.textSecondary}>
+        Subscription orders are created automatically each evening for the next day.
+      </MandiText>
+
       {/* Date Navigation Bar */}
       <View style={styles.dateNav}>
         <Pressable

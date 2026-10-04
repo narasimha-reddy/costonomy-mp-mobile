@@ -157,3 +157,21 @@ export const PREVIEW_LINE_CATCH_WEIGHT = {
   intentItemId: 61, supplierSkuId: 77, productName: 'Chicken', skuName: 'Chicken', offeredQuantity: 10, quantity: 10,
   unit: 'KG', unitPrice: 100, gstRate: 5, lineValue: 1000, lineGst: 50, lineTotal: 1050, isCatchWeight: true, requiresColdChain: false,
 };
+
+// ── Subscriptions (`SubscriptionDtos`, API D-132) ────────────────────────────────────────────────────────────
+
+/** `SubscriptionDtos.SubscriptionResponse` for a wallet-paid daily subscription (`SubscriptionGenerationIT`). */
+export const SUBSCRIPTION_WALLET = {
+  id: 501, outletId: 3, outletName: 'Banjara Hills', supplierStoreId: 12, storeName: 'Dairy Central', canonicalProductId: 55,
+  productName: 'Fresh Milk 1L', productImage: null, supplierSkuId: 77, skuDescription: 'Fresh Milk 1L', quantity: 10, unit: 'LTR',
+  frequency: 'DAILY', preferredSlotId: null, preferredSlotName: null, deliveryMode: 'SUPPLIER_DELIVERY', paymentMethod: 'WALLET',
+  status: 'ACTIVE', startDate: '2026-10-06', endDate: null, nextDeliveryDate: '2026-10-06', skipDates: [], notes: null,
+};
+
+/** What the API refuses on create (400, `VALIDATION_ERROR`), with its messages. */
+export const SUBSCRIPTION_REFUSALS = {
+  payment: apiError('VALIDATION_ERROR', 'Subscriptions can be paid from the wallet or on credit.'),
+  credit: apiError('VALIDATION_ERROR', "You don't have active credit with this supplier."),
+  delivery: apiError('VALIDATION_ERROR', 'Subscriptions are delivered by the supplier or picked up.'),
+  doesNotDeliver: apiError('VALIDATION_ERROR', "This supplier doesn't deliver. Choose pickup."),
+};

@@ -295,6 +295,8 @@ export interface OrderPreviewLine {
   lineValue: Money;
   lineGst: Money;
   lineTotal: Money;
+  isCatchWeight?: boolean;
+  requiresColdChain?: boolean;
 }
 
 export interface OrderBlocker {

@@ -124,3 +124,36 @@ export const RECEIVING_IN_FULL = receiving({
   hasDiscrepancy: false, totalReceivedQuantity: 9.6, totalMissingQuantity: 0, instantRefundAmount: 0, refundStatus: null,
   items: [receivingItem({ receivedQuantity: 9.6, missingQuantity: 0, rejectionReason: null, refundAmount: null })],
 });
+
+// ── What the restaurant sees before and at checkout (`IntentDtos.IntentResponse`, `OrderPreviewResponse`) ─────
+
+/** A draft of 10 kg of catch-weight chicken at Rs 100 + 5% GST: the SKU descriptor carries `isCatchWeight` (API phase5/api-flags). */
+export const INTENT_DRAFT_CATCH_WEIGHT = {
+  id: 41, reference: 'REQ-41', outletId: 3, outletName: 'Banjara Hills', restaurantName: 'Paradise', outletLocality: null,
+  outletCity: 'Hyderabad', distanceKm: 7.1, supplierStoreId: 12, storeName: 'Fresh Meats store', supplierName: 'Fresh Meats',
+  directOrdersEnabled: true, status: 'DRAFT', fulfilment: 'AWAITING', source: 'DIRECT', clonedFromId: null,
+  requestedDeliveryTime: null, notes: null, sentAt: null, responseDeadline: null, responseWindowSeconds: 1800,
+  acceptedAt: null, orderCreationDeadline: null, orderCreationWindowSeconds: 1800, cancelledAt: null, expiredAt: null,
+  createdAt: '2026-10-05T05:00:00Z', serverTime: '2026-10-05T05:00:00Z', editable: true, quantityEditable: true, revision: 1,
+  withinOrderWindow: true,
+  items: [{
+    id: 61, supplierSkuId: 77, canonicalProductId: 55, sku, requestedQuantity: 10, unit: 'KG', notes: null,
+    fulfilment: 'AWAITING', offeredQuantity: null, availability: null, unitPrice: null, lineValue: null, lineGst: null,
+    lineTotal: null, gstRate: null, supplierNotes: null, agreedUnitPrice: 100, agreedUnitPriceInclusiveGst: 105,
+    agreedGstRate: 5, agreedLineValue: 1000, agreedLineGst: 50, agreedLineTotal: 1050, priceChanged: false, previousUnitPrice: null,
+  }],
+  agreedValue: 1000, agreedGst: 50, agreedTotal: 1050, pricedComplete: true, priceChanged: false, acceptance: null,
+  supplierOrderId: null, supplierOrderNumber: null, minOrderValue: null, freeDeliveryThreshold: null,
+};
+
+/** The same draft with an ordinary SKU: no disclosure. */
+export const INTENT_DRAFT_ORDINARY = {
+  ...INTENT_DRAFT_CATCH_WEIGHT,
+  items: [{ ...INTENT_DRAFT_CATCH_WEIGHT.items[0], sku: { ...sku, isCatchWeight: false } }],
+};
+
+/** `OrderPreviewResponse.PreviewLine` with the flags added in phase5/api-flags. */
+export const PREVIEW_LINE_CATCH_WEIGHT = {
+  intentItemId: 61, supplierSkuId: 77, productName: 'Chicken', skuName: 'Chicken', offeredQuantity: 10, quantity: 10,
+  unit: 'KG', unitPrice: 100, gstRate: 5, lineValue: 1000, lineGst: 50, lineTotal: 1050, isCatchWeight: true, requiresColdChain: false,
+};

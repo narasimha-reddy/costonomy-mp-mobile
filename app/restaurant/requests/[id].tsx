@@ -45,6 +45,7 @@ import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
+import { CatchWeightNote } from '@/components/order';
 
 const SCREEN = 'REST-REQ-02';
 
@@ -533,6 +534,7 @@ export default function RequestDetailScreen() {
                 value={formatMoney(preview.data?.grandTotal ?? request.acceptance.offeredTotal)}
                 emphasis
               />
+              {(preview.data?.lines ?? []).some((line) => line.isCatchWeight === true) && <CatchWeightNote />}
               {request.acceptance.notes != null && (
                 <MandiText variant="caption" color={Colors.textSecondary} style={styles.note}>
                   “{request.acceptance.notes}”
@@ -776,6 +778,7 @@ function RequestLine({
               Inc. {formatGstRate((answered ? item.gstRate : item.agreedGstRate) as string)} GST
             </MandiText>
           )}
+          {item.sku?.isCatchWeight === true && <CatchWeightNote />}
         </View>
       )}
     </View>

@@ -12,6 +12,7 @@ import type { Intent } from '@/models/intent';
 import { formatMoney } from '@/utils/money';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { Colors, Elevation, FontSize, IconSize, Radius, Spacing } from '@/theme';
+import { CatchWeightNote } from '@/components/order';
 
 /**
  * One supplier's request in the cart, as a heading and a body.
@@ -222,6 +223,7 @@ export function SupplierSectionBody({
                     was {formatMoney(item.previousUnitPrice)}
                   </MandiText>
                 )}
+                {item.sku?.isCatchWeight === true && <CatchWeightNote />}
               </>
             ) : (
               // No live offer behind this line. Said plainly rather than shown as

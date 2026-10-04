@@ -20,7 +20,7 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
-import { PaymentMethodPill } from '@/components/order';
+import { CatchWeightNote, PaymentMethodPill } from '@/components/order';
 import { isApiError } from '@/lib/api/errors';
 import { DeliveryMode, orderStatusFor, resolveStatus, DeliveryStatus as DeliveryStatusRegistry, SupplierOrderStatus } from '@/models/status';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
@@ -269,6 +269,9 @@ export default function OrderDetailScreen() {
                     <MandiText variant="bodyEmphasis">
                       {formatMoney(item.acceptedLineTotal ?? item.lineTotal)}
                     </MandiText>
+                    {item.isCatchWeight === true && (
+                      <CatchWeightNote billed={item.billableQuantity} unit={item.unit} />
+                    )}
                   </View>
                 </View>
               );

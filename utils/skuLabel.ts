@@ -18,6 +18,10 @@ export interface SkuDescriptor {
   measureUnit: string | null;
   imageUrl: string | null;
   status: string | null;
+  /** Sold by weight: the price is an estimate until the scale weight fixes it (API D-128). */
+  isCatchWeight?: boolean;
+  /** Needs temperature-controlled carriage (API D-134). */
+  requiresColdChain?: boolean;
 }
 
 /**

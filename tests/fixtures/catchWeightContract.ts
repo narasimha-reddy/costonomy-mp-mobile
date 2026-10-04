@@ -87,3 +87,40 @@ export const REFUSAL_NOT_A_WEIGHT_UNIT = apiError('VALIDATION_ERROR',
   'Only lines sold by weight (GM, KG, OZ, LB) can be weighed; this one is sold by PKT.');
 export const REFUSAL_AFTER_READY = apiError('INVALID_STATE_TRANSITION', 'Weights can only be recorded before the order is marked ready.');
 export const REFUSAL_UNWEIGHED = apiError('VALIDATION_ERROR', 'Weigh every catch-weight line before marking the order ready.');
+
+// ── The restaurant's check-in (`TrustDtos.ReceivingResponse`) ───────────────────────────────────────────────
+
+function receivingItem(over: Record<string, unknown> = {}) {
+  return {
+    id: 801, supplierOrderItemId: 301, productName: 'Chicken', requestedQuantity: 10, acceptedQuantity: 10,
+    receivedQuantity: 9.5, damagedQuantity: 0, missingQuantity: 0.1, rejectionReason: 'SHORT_DELIVERY',
+    refundAmount: 10.5, unit: 'KG', note: null, ...over,
+  };
+}
+
+function receiving(over: Record<string, unknown>) {
+  return {
+    id: 701, supplierOrderId: 501, orderNumber: 'MP-261005-000501', status: 'COMPLETED', hasDiscrepancy: true,
+    totalAcceptedQuantity: 10, totalReceivedQuantity: 9.5, totalDamagedQuantity: 0, totalMissingQuantity: 0.1,
+    instantRefundAmount: 10.5, creditNoteNumber: null, notes: null, receivedAt: '2026-10-05T08:00:00Z',
+    items: [receivingItem()], refundStatus: 'APPLIED', ...over,
+  };
+}
+
+/**
+ * 0.1 kg of the weighed 9.6 kg missing at the door: Rs 10.50 (10.00 + 0.50 GST). Billed 9.6, so 9.5 + 0.1 accounts for it
+ * (`cardRejectionIsAWithdrawableRefund`). Applied, and no credit note yet: it is issued after this commits.
+ */
+export const RECEIVING_APPLIED_NO_NOTE_YET = receiving({});
+
+/** The same check-in on a card whose capture has not finished (`rejectionBeforeCaptureIsDeferred`). */
+export const RECEIVING_PENDING_CAPTURE = receiving({ refundStatus: 'PENDING_CAPTURE' });
+
+/** With tax invoices on and the note already issued. */
+export const RECEIVING_WITH_CREDIT_NOTE = receiving({ creditNoteNumber: 'CN/2627/000001' });
+
+/** Everything arrived: no rejection, no refund, no status. */
+export const RECEIVING_IN_FULL = receiving({
+  hasDiscrepancy: false, totalReceivedQuantity: 9.6, totalMissingQuantity: 0, instantRefundAmount: 0, refundStatus: null,
+  items: [receivingItem({ receivedQuantity: 9.6, missingQuantity: 0, rejectionReason: null, refundAmount: null })],
+});

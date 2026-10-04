@@ -4,7 +4,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
-import { fetchSupplierOrder, newIdempotencyKey } from '@/services/procurement';
+import { fetchSupplierOrder } from '@/services/procurement';
+import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
+import { accountsFor, billedQuantityOf, quantityString, refundOutcome, weighedCaption, type RefundOutcome } from '@/lib/orders/receiving';
 import { receiveOrder, type ReceiveItemInput } from '@/services/trust';
 import {
   MandiBottomSheet,
@@ -53,11 +55,10 @@ export default function ReceivingScreen() {
 
   const [lines, setLines] = useState<Record<number, LineState>>({});
   const [notes, setNotes] = useState('');
-  const [idempotencyKey] = useState(() => newIdempotencyKey());
-  const [completionModal, setCompletionModal] = useState<{
-    creditNoteNumber: string | null;
-    instantRefundAmount: string | null;
-  } | null>(null);
+  // One key per attempt: kept across a retry whose outcome is unknown, replaced once the server answers definitively.
+  // A key fixed for the whole screen made every retry after one refusal report "previous attempt failed".
+  const idempotency = useIdempotencyKey();
+  const [completionModal, setCompletionModal] = useState<RefundOutcome | null>(null);
 
   const order = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -67,11 +68,13 @@ export default function ReceivingScreen() {
 
   const items = order.data?.items ?? [];
 
-  /** What was actually agreed: the accepted quantity, falling back to requested. */
+  /**
+   * What the three counts must add up to: the billed quantity on a weighed catch-weight line (API D-128), otherwise
+   * what the supplier accepted.
+   */
   const agreedOf = (itemId: number): number => {
     const item = items.find((i) => i.id === itemId);
-    if (!item) return 0;
-    return Number(item.acceptedQuantity ?? item.requestedQuantity);
+    return item ? billedQuantityOf(item) : 0;
   };
 
   const stateOf = (itemId: number): LineState =>
@@ -93,7 +96,7 @@ export default function ReceivingScreen() {
           const state = stateOf(item.id);
           const total = state.received + state.damaged + state.missing;
           const agreed = agreedOf(item.id);
-          if (total === agreed) return null;
+          if (accountsFor(state.received, state.damaged, state.missing, agreed)) return null;
           return {
             id: item.id,
             name: item.productName,
@@ -112,34 +115,15 @@ export default function ReceivingScreen() {
     return state.damaged > 0 || state.missing > 0;
   });
 
-  const estimatedRefund = useMemo(() => {
-    let sum = 0;
-    items.forEach((item) => {
-      const state = stateOf(item.id);
-      const rejected = state.damaged + state.missing;
-      if (rejected > 0) {
-        const lineTotal =
-          item.acceptedLineTotal != null
-            ? parseFloat(item.acceptedLineTotal)
-            : parseFloat(item.lineTotal);
-        const agreed = agreedOf(item.id);
-        if (agreed > 0) {
-          sum += (lineTotal / agreed) * rejected;
-        }
-      }
-    });
-    return sum;
-  }, [items, lines]);
-
   const submit = useMutation({
     mutationFn: () => {
       const payload: ReceiveItemInput[] = items.map((item) => {
         const state = stateOf(item.id);
         return {
           supplierOrderItemId: item.id,
-          receivedQuantity: String(state.received),
-          damagedQuantity: String(state.damaged),
-          missingQuantity: String(state.missing),
+          receivedQuantity: quantityString(state.received),
+          damagedQuantity: quantityString(state.damaged),
+          missingQuantity: quantityString(state.missing),
           rejectionReason:
             state.damaged > 0 || state.missing > 0
               ? state.reason ?? 'DAMAGED_CRATE'
@@ -151,23 +135,22 @@ export default function ReceivingScreen() {
         orderId,
         payload,
         notes || undefined,
-        idempotencyKey,
+        idempotency.key(),
       );
     },
     onSuccess: (receiving) => {
+      idempotency.settle();
       track('receiving_completed', { screen: SCREEN, entityId: orderId },
         { discrepancy: receiving.hasDiscrepancy });
       void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId] });
+      // The refund went back by the order's payment method: the wallet, or the credit invoice.
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      void queryClient.invalidateQueries({ queryKey: ['credit'] });
 
-      if (
-        receiving.instantRefundAmount != null &&
-        parseFloat(receiving.instantRefundAmount) > 0
-      ) {
-        setCompletionModal({
-          creditNoteNumber: receiving.creditNoteNumber ?? `CN-${orderId}-01`,
-          instantRefundAmount: receiving.instantRefundAmount,
-        });
+      // Only what the server said: its refund amount, where it went, and a credit note if it has issued one.
+      const outcome = refundOutcome(receiving, order.data?.paymentMethod);
+      if (outcome != null) {
+        setCompletionModal(outcome);
       } else if (receiving.hasDiscrepancy) {
         toast.show('Recorded with discrepancies. Dispute opened.', 'info');
         router.replace(`/restaurant/dispute/${orderId}`);
@@ -176,11 +159,13 @@ export default function ReceivingScreen() {
         router.replace(`/restaurant/rating/${orderId}`);
       }
     },
-    onError: (caught) =>
+    onError: (caught) => {
+      idempotency.settle(caught);
       toast.show(
         caught instanceof ApiError ? caught.message : 'Could not record that.',
         'error',
-      ),
+      );
+    },
   });
 
   return (
@@ -199,21 +184,8 @@ export default function ReceivingScreen() {
               </View>
             )}
 
-            {estimatedRefund > 0 && (
-              <View style={styles.refundPreviewBanner}>
-                <Ionicons name="wallet-outline" size={16} color={Colors.primary} />
-                <MandiText variant="captionEmphasis" color={Colors.primary}>
-                  Estimated Instant Refund: ~₹{estimatedRefund.toFixed(2)} to Costonomy Wallet
-                </MandiText>
-              </View>
-            )}
-
             <MandiButton
-              label={
-                anyDiscrepancy
-                  ? 'Sign Off & Issue Credit Note'
-                  : 'Complete receiving'
-              }
+              label="Complete check-in"
               size="lg"
               disabled={problems.length > 0}
               loading={submit.isPending}
@@ -230,7 +202,7 @@ export default function ReceivingScreen() {
       ) : (
         <>
           <MandiText variant="caption" color={Colors.textSecondary}>
-            Inspect all items upon delivery. Damaged or missing quantities are rejected at the door and automatically refunded with an instant Credit Note.
+            Inspect all items when they arrive. Anything damaged or missing is rejected at the door and refunded to you automatically; the amount is worked out when you complete the check-in.
           </MandiText>
 
           {items.map((item) => {
@@ -245,8 +217,13 @@ export default function ReceivingScreen() {
                     <MandiText variant="bodyEmphasis">{item.productName}</MandiText>
                     <MandiText variant="caption" color={Colors.textSecondary}>
                       Ordered {formatQuantity(item.requestedQuantity)} {item.unit} · supplier accepted{' '}
-                      {formatQuantity(String(agreed))} {item.unit}
+                      {formatQuantity(String(item.acceptedQuantity ?? item.requestedQuantity))} {item.unit}
                     </MandiText>
+                    {weighedCaption(item) != null && (
+                      <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
+                        {weighedCaption(item)}
+                      </MandiText>
+                    )}
                   </View>
                   {item.isCatchWeight && (
                     <View style={styles.catchWeightPill}>
@@ -282,7 +259,7 @@ export default function ReceivingScreen() {
                 {hasRejection && (
                   <View style={styles.rejectionSection}>
                     <MandiText variant="captionEmphasis" color={Colors.danger}>
-                      Rejection Reason (for Credit Note):
+                      Why was it rejected?
                     </MandiText>
                     <View style={styles.reasonsList}>
                       {REJECTION_REASONS.map((r) => {
@@ -322,38 +299,42 @@ export default function ReceivingScreen() {
               setCompletionModal(null);
               router.replace(`/restaurant/rating/${orderId}`);
             }}
-            title="Doorstep Sign-Off Complete"
+            title="Delivery checked in"
           >
             <View style={styles.modalContent}>
               <View style={styles.successIconCircle}>
                 <Ionicons name="checkmark-done" size={32} color={Colors.success} />
               </View>
               <MandiText variant="title" style={{ textAlign: 'center', marginTop: Spacing.sm }}>
-                Instant Credit Note Issued
+                Refund of {completionModal?.amount}
               </MandiText>
-              <MandiText
-                variant="body"
-                color={Colors.textSecondary}
-                style={{ textAlign: 'center', marginTop: 4 }}
-              >
-                ₹{completionModal?.instantRefundAmount} has been refunded to your Costonomy Wallet.
-              </MandiText>
+              {completionModal?.where != null && (
+                <MandiText
+                  variant="body"
+                  color={Colors.textSecondary}
+                  style={{ textAlign: 'center', marginTop: 4 }}
+                >
+                  {completionModal.where}
+                </MandiText>
+              )}
 
               <View style={styles.creditNoteCard}>
+                {completionModal?.lines.map((line) => (
+                  <View key={line.name} style={styles.creditNoteRow}>
+                    <MandiText variant="caption" color={Colors.textSecondary}>{line.name}</MandiText>
+                    <MandiText variant="captionEmphasis">{line.amount}</MandiText>
+                  </View>
+                ))}
                 <View style={styles.creditNoteRow}>
-                  <MandiText variant="caption" color={Colors.textSecondary}>Credit Note #</MandiText>
-                  <MandiText variant="captionEmphasis">{completionModal?.creditNoteNumber}</MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>Total refund</MandiText>
+                  <MandiText variant="bodyEmphasis" color={Colors.success}>{completionModal?.amount}</MandiText>
                 </View>
-                <View style={styles.creditNoteRow}>
-                  <MandiText variant="caption" color={Colors.textSecondary}>Refund Amount</MandiText>
-                  <MandiText variant="bodyEmphasis" color={Colors.success}>
-                    ₹{completionModal?.instantRefundAmount}
-                  </MandiText>
-                </View>
-                <View style={styles.creditNoteRow}>
-                  <MandiText variant="caption" color={Colors.textSecondary}>Credited To</MandiText>
-                  <MandiText variant="captionEmphasis">Costonomy Wallet</MandiText>
-                </View>
+                {completionModal?.creditNoteNumber != null && (
+                  <View style={styles.creditNoteRow}>
+                    <MandiText variant="caption" color={Colors.textSecondary}>Credit note</MandiText>
+                    <MandiText variant="captionEmphasis">{completionModal.creditNoteNumber}</MandiText>
+                  </View>
+                )}
               </View>
 
               <View style={{ gap: Spacing.sm, marginTop: Spacing.lg, width: '100%' }}>
@@ -399,7 +380,7 @@ function Line({
   return (
     <View style={styles.line}>
       <MandiText variant="body" color={Colors.textSecondary}>{label}</MandiText>
-      <MandiQuantityStepper value={value} onChange={onChange} min={0} max={max} unit={unit} />
+      <MandiQuantityStepper value={value} onChange={onChange} min={0} max={max} unit={unit} editable />
     </View>
   );
 }

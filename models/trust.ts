@@ -32,7 +32,16 @@ export interface Receiving {
   notes: string | null;
   receivedAt: string | null;
   instantRefundAmount?: Money | null;
+  /**
+   * Issued after the check-in commits, and not at all while tax invoices are off: null is normal and means "none yet",
+   * never "none coming" (API D-133).
+   */
   creditNoteNumber?: string | null;
+  /**
+   * What became of the refund: APPLIED (given back by the order's payment method) or PENDING_CAPTURE (a card payment not
+   * yet captured; the server applies it when the capture lands). Null when nothing was refunded (API D-129).
+   */
+  refundStatus?: 'APPLIED' | 'PENDING_CAPTURE' | null;
   items: ReceivingItem[];
 }
 

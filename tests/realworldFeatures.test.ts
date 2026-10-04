@@ -1,7 +1,7 @@
 import React from 'react';
 import { sectionWarning } from '@/components/restaurant/CartSupplierSection';
 import { weightAdjustmentCopy } from '@/lib/orders/catchWeight';
-import { ORDER_PREPARING_WEIGHED_9_6 } from './fixtures/catchWeightContract';
+import { ORDER_PREPARING_WEIGHED_9_6, RECEIVING_APPLIED_NO_NOTE_YET } from './fixtures/catchWeightContract';
 import {
   fetchRateSheet,
   recordDispatchWeights,
@@ -216,16 +216,9 @@ describe('Morning Mandi Rate Sheet API Service', () => {
 
 describe('Doorstep Receiving with Instant Credit Note', () => {
   it('submits doorstep receiving with line rejection reasons', async () => {
-    const mockReceiving = {
-      id: 77,
-      supplierOrderId: 101,
-      orderNumber: 'MP-101',
-      status: 'RECEIVED',
-      hasDiscrepancy: true,
-      instantRefundAmount: '120.00',
-      creditNoteNumber: 'CN-MP-101-01',
-      items: [],
-    };
+    // The API's response for 0.1 kg of the weighed 9.6 missing: Rs 10.50 back, no credit note yet (it is issued after the
+    // check-in commits, and not at all while tax invoices are off). The old mock invented a 'CN-MP-101-01'.
+    const mockReceiving = RECEIVING_APPLIED_NO_NOTE_YET;
     const fn = mockFetch(jsonResponse(mockReceiving));
 
     const items = [
@@ -246,10 +239,11 @@ describe('Doorstep Receiving with Instant Credit Note', () => {
 
     const result = await receiveOrder('test-token', 101, items, 'Damaged crate rejected at door', 'idemp-123');
 
-    expect(result.id).toBe(77);
+    expect(result.id).toBe(701);
     expect(result.hasDiscrepancy).toBe(true);
-    expect(result.instantRefundAmount).toBe('120.00');
-    expect(result.creditNoteNumber).toBe('CN-MP-101-01');
+    expect(Number(result.instantRefundAmount)).toBe(10.5);
+    expect(result.creditNoteNumber).toBeNull();
+    expect(result.refundStatus).toBe('APPLIED');
 
     const call = lastCall(fn);
     expect(call.url).toContain('/api/v1/supplier-orders/101/receive');

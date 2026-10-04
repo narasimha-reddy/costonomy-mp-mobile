@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
+import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { recordPayment } from '@/services/credit';
 import type { CreditInvoice } from '@/models/credit';
 import {
@@ -43,15 +44,21 @@ export function RecordPaymentModal({
   const [method, setMethod] = useState('BANK_TRANSFER');
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
+  // One key per attempt at this payment: the same across a retry whose outcome is unknown (so a retry cannot record the
+  // repayment twice), a new one once the server answered definitively or what is being sent changed. It used to be built
+  // inside the mutation, so every tap, retry included, was a new payment.
+  const idempotency = useIdempotencyKey();
 
   // Pre-fill full outstanding amount when modal opens
   React.useEffect(() => {
+    idempotency.reset();
     if (invoice) {
       setAmount(String(invoice.outstanding));
       setMethod('BANK_TRANSFER');
       setReference('');
       setNote('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoice]);
 
   const outstanding = invoice ? Number(invoice.outstanding) : 0;
@@ -61,7 +68,6 @@ export function RecordPaymentModal({
   const mutation = useMutation({
     mutationFn: () => {
       if (!invoice) throw new Error('No invoice selected');
-      const idempotencyKey = `pay-${invoice.id}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
       return recordPayment(
         accessToken as string,
         invoice.id,
@@ -71,10 +77,11 @@ export function RecordPaymentModal({
           reference: reference.trim() || undefined,
           note: note.trim() || undefined,
         },
-        idempotencyKey,
+        idempotency.key(),
       );
     },
     onSuccess: () => {
+      idempotency.settle();
       toast.show('Repayment recorded and credit limit restored', 'success');
       void queryClient.invalidateQueries({ queryKey: ['credit-agreement', agreementId] });
       void queryClient.invalidateQueries({ queryKey: ['credit-agreement', agreementId, 'invoices'] });
@@ -83,6 +90,7 @@ export function RecordPaymentModal({
       onClose();
     },
     onError: (err) => {
+      idempotency.settle(err);
       toast.show(err instanceof ApiError ? err.message : 'Could not record repayment.', 'error');
     },
   });
@@ -92,7 +100,10 @@ export function RecordPaymentModal({
   return (
     <MandiBottomSheet
       visible={visible}
-      onClose={onClose}
+      onClose={() => {
+        idempotency.reset();
+        onClose();
+      }}
       title={`Record Payment for ${invoice.invoiceNumber}`}
     >
       <View style={styles.container}>
@@ -107,7 +118,10 @@ export function RecordPaymentModal({
         <MandiFormField
           label="Amount Received (₹)"
           value={amount}
-          onChangeText={(val) => setAmount(val.replace(/[^\d.]/g, ''))}
+          onChangeText={(val) => {
+            idempotency.reset();
+            setAmount(val.replace(/[^\d.]/g, ''));
+          }}
           keyboardType="decimal-pad"
           placeholder="0.00"
           required
@@ -130,7 +144,13 @@ export function RecordPaymentModal({
               return (
                 <Pressable
                   key={m.value}
-                  onPress={() => setMethod(m.value)}
+                  onPress={() => {
+                    idempotency.reset();
+                    setMethod(m.value);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={m.label}
                   style={[styles.methodChip, active && styles.methodChipActive]}
                 >
                   <MandiText

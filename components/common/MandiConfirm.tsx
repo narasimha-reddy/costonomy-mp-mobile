@@ -23,6 +23,7 @@ export function MandiConfirm({
   confirmLabel,
   cancelLabel = 'Keep editing',
   destructive = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: {
@@ -33,6 +34,8 @@ export function MandiConfirm({
   confirmLabel: string;
   cancelLabel?: string;
   destructive?: boolean;
+  /** The verb cannot be carried out just now (something is in flight). */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -52,6 +55,7 @@ export function MandiConfirm({
           variant={destructive ? 'destructive' : 'primary'}
           size="lg"
           onPress={onConfirm}
+          disabled={confirmDisabled}
         />
         <MandiButton label={cancelLabel} variant="neutral" onPress={onCancel} />
       </View>

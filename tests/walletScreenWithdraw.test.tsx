@@ -24,7 +24,11 @@ jest.mock('@/components/common/MandiToast', () => ({
   MandiToastProvider: ({ children }: { children: React.ReactNode }) => children,
   useToast: () => ({ show: mockToast }),
 }));
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn(), back: jest.fn() }) }));
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+  usePathname: () => '/restaurant/wallet',
+  useIsFocused: () => true,
+}));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
 jest.mock('@/contexts/OutletProvider', () => ({ useOutlet: () => ({ outlet: { id: 7, name: 'Test outlet' } }) }));
 jest.mock('@/hooks/usePermissions', () => ({ usePermissions: () => ({ canForOutlet: () => true }) }));
@@ -53,7 +57,7 @@ let client: QueryClient;
 
 function setup() {
   (fetchWallet as jest.Mock).mockResolvedValue(wallet);
-  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false, gcTime: 0 } } });
   render(
     <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 800 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } }}>
       <QueryClientProvider client={client}>
@@ -133,8 +137,8 @@ describe('redesigned wallet screen: withdraw errors', () => {
 
   it('the Recent list shows a reversal as a credit and a reversed withdrawal as not sent', async () => {
     setup();
-    await screen.findByText('Withdrawal returned to your wallet');
-    expect(screen.getByText('+₹50.00')).toBeTruthy();
+    await screen.findByText('Returned withdrawal');
+    expect(screen.getByText('+ ₹50')).toBeTruthy();
     expect(screen.getByText("Couldn't be sent · back in your wallet")).toBeTruthy();
   });
 });

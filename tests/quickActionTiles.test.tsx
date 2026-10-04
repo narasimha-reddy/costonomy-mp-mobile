@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { QuickActionTiles, type MoneyAction } from '@/components/wallet/QuickActionTiles';
+import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
 
 // The icon font loader needs native modules the test runtime does not have.
 jest.mock('@expo/vector-icons', () => {
@@ -14,6 +15,7 @@ function setup(scanEnabled: boolean) {
   const actions: MoneyAction[] = [
     {
       key: 'quickscan', label: 'Quick Scan', icon: 'qr-code-outline', visible: scanEnabled,
+      renderIcon: (size) => <ScanQrIcon size={size} variant="white" />,
       accessibilityLabel: 'Quick Scan. Pay a shop by scanning its QR.', onPress: onScan,
     },
     { key: 'wallet', label: 'Wallet', icon: 'wallet-outline', visible: true, onPress: onWallet },
@@ -32,7 +34,9 @@ describe('QuickActionTiles (Money Transfers)', () => {
 
     const order = screen.getAllByRole('button').map((b) => b.props.testID);
     expect(order).toEqual(['action-quickscan', 'action-wallet']);
-    expect(screen.getByText('icon:qr-code-outline')).toBeTruthy();
+    // The Quick Scan tile draws the scan glyph, not the stock QR icon.
+    expect(screen.getByTestId('scan-qr-icon-white', { includeHiddenElements: true })).toBeTruthy();
+    expect(screen.queryByText('icon:qr-code-outline')).toBeNull();
     expect(screen.getByText('icon:wallet-outline')).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Quick Scan. Pay a shop by scanning its QR.'));
@@ -40,6 +44,12 @@ describe('QuickActionTiles (Money Transfers)', () => {
     fireEvent.press(screen.getByLabelText('Wallet'));
     expect(h.onWallet).toHaveBeenCalledTimes(1);
     expect(h.onScan).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands the glyph the circle\'s diameter, so it fills the circle like the wallet glyph does', () => {
+    setup(true);
+    const svg = screen.getByTestId('scan-qr-icon-white', { includeHiddenElements: true });
+    expect(svg.props.bbWidth).toBe(64);
   });
 
   it('leaves Quick Scan out when disabled; Wallet takes the first slot', () => {

@@ -28,7 +28,17 @@ export function walletKey(outletId: number | null | undefined) {
  * anything that refreshes the wallet (a top-up, a withdrawal) refreshes this too.
  */
 export function walletTransactionsKey(outletId: number | null | undefined, filters: unknown = null) {
-  return [...walletKey(outletId), 'transactions', filters] as const;
+  return [...walletTransactionsRootKey(outletId), filters] as const;
+}
+
+/** Every history list and filter-options query of an outlet: invalidate this to refresh them all. */
+export function walletTransactionsRootKey(outletId: number | null | undefined) {
+  return [...walletKey(outletId), 'transactions'] as const;
+}
+
+/** One wallet movement's detail. Under `walletKey`, so anything that refreshes the wallet refreshes it. */
+export function walletTransactionKey(outletId: number | null | undefined, entryId: string | number | null | undefined) {
+  return [...walletKey(outletId), 'transaction', String(entryId)] as const;
 }
 
 // ── Requests ──────────────────────────────────────────────────────────
@@ -64,4 +74,19 @@ export function storeIntentsKey(storeId: number | null) {
  */
 export function orderPaymentKey(supplierOrderId: number) {
   return ['supplier-order', supplierOrderId, 'payment-intent'] as const;
+}
+
+/** The bill of one wallet movement. Under `walletKey`, so it follows the wallet's refreshes. */
+export function walletInvoiceKey(outletId: number | null | undefined, entryId: string | number | null | undefined) {
+  return [...walletKey(outletId), 'invoice', String(entryId)] as const;
+}
+
+/** A read-only lookup for the bill review pickers. Not under `walletKey`: a wallet refresh need not refetch it. */
+export function invoiceLookupKey(
+  outletId: number | null | undefined,
+  kind: 'suppliers' | 'skus',
+  q: string,
+  supplierId: number | null = null,
+) {
+  return ['outlet', outletId, 'invoice-lookups', kind, q, supplierId] as const;
 }

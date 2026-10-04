@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,18 +25,24 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { isAmount } from '@/lib/disputes/refundCopy';
 import { walletKey } from '@/lib/queryKeys';
+import { billChipRoute } from '@/lib/wallet/billChip';
+import { useBillListLive } from '@/hooks/useBillListLive';
 import { TransactionRow } from '@/components/wallet/TransactionRow';
 import { RoundAction } from '@/components/wallet/RoundAction';
 import { WalletHero } from '@/components/wallet/WalletHero';
 import { withdrawFailure, type WithdrawFailure } from '@/lib/wallet/withdrawError';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
-import { Colors, IconSize, Spacing } from '@/theme';
+import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
+import { Colors, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'REST-WALLET-01';
 
 /** How many of the latest movements the wallet screen shows; the rest are on History. */
 const RECENT_SHOWN = 3;
+
+/** Diameter of the orange circle on the "Do more" tiles; the glyph inside scales to it. */
+const TIP_CIRCLE = 40;
 
 /**
  * REST-WALLET-01. The outlet's wallet: what is in it, why, and sending refund
@@ -69,11 +75,20 @@ export default function WalletScreen() {
   /** The server's last answer to a withdrawal, shown in the form until the next attempt. */
   const [failure, setFailure] = useState<WithdrawFailure | null>(null);
 
+  const [reading, setReading] = useState(false);
+  const refetchRef = useRef<() => unknown>(() => undefined);
+  const refetchInterval = useBillListLive(reading, () => refetchRef.current());
+
   const wallet = useQuery({
     queryKey: walletKey(outlet?.id),
     queryFn: () => fetchWallet(accessToken as string, outlet?.id as number),
     enabled: outlet != null && accessToken != null,
+    refetchInterval,
   });
+  refetchRef.current = () => wallet.refetch();
+  const anyReading = (wallet.data?.recent ?? []).slice(0, RECENT_SHOWN)
+    .some((e) => e.bill?.status === 'READING');
+  useEffect(() => { setReading(anyReading); }, [anyReading]);
 
   // Only to know whether to offer "Pay any shop by scanning"; hidden if it fails.
   const quickScan = useQuery({
@@ -119,6 +134,7 @@ export default function WalletScreen() {
   };
 
   const mayWithdraw = canForOutlet('WALLET_WITHDRAW', outlet);
+  const mayAddBill = canForOutlet('QUICKSCAN_PAY', outlet);
 
   return (
     <MandiScreen
@@ -216,11 +232,18 @@ export default function WalletScreen() {
               description="Refunds and wallet payments will appear here."
             />
           ) : (
-            <MandiCard>
+            <View style={styles.recent} testID="recent-list">
               {wallet.data.recent.slice(0, RECENT_SHOWN).map((entry, i, shown) => (
-                <TransactionRow key={entry.id} entry={entry} last={i === shown.length - 1} />
+                <TransactionRow
+                  key={entry.id}
+                  entry={entry}
+                  last={i === shown.length - 1}
+                  onPress={() => router.push(`/restaurant/wallet/transaction/${entry.id}`)}
+                  onBillPress={(e) => router.push(billChipRoute(e))}
+                  mayAddBill={mayAddBill}
+                />
               ))}
-            </MandiCard>
+            </View>
           )}
 
           <MandiSectionHeader title="Do more with your wallet" />
@@ -232,7 +255,7 @@ export default function WalletScreen() {
                 accessibilityLabel="Pay any shop by scanning"
               >
                 <View style={styles.tip}>
-                  <Ionicons name="qr-code-outline" size={IconSize.lg} color={Colors.primary} />
+                  <ScanQrIcon size={TIP_CIRCLE} variant="filled" />
                   <MandiText variant="bodyEmphasis">Pay any shop by scanning</MandiText>
                 </View>
               </MandiCard>
@@ -243,7 +266,9 @@ export default function WalletScreen() {
               accessibilityLabel="Use it on orders"
             >
               <View style={styles.tip}>
-                <Ionicons name="cart-outline" size={IconSize.lg} color={Colors.primary} />
+                <View style={styles.cartCircle}>
+                  <Ionicons name="cart-outline" size={TIP_CIRCLE * 0.5} color={Colors.white} />
+                </View>
                 <MandiText variant="bodyEmphasis">Use it on orders</MandiText>
               </View>
             </MandiCard>
@@ -269,4 +294,19 @@ const styles = StyleSheet.create({
   form: { gap: Spacing.md },
   tips: { flexDirection: 'row', gap: Spacing.listGap },
   tip: { gap: Spacing.sm },
+  // The rows carry their own padding and dividers, as on History: no card padding around them,
+  // so the card hugs its content.
+  recent: {
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    backgroundColor: Colors.surface,
+  },
+  cartCircle: {
+    width: TIP_CIRCLE,
+    height: TIP_CIRCLE,
+    borderRadius: TIP_CIRCLE / 2,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

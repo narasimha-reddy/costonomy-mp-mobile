@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
 import { DEVICE_WIDTH } from './DeviceFrame';
@@ -29,6 +29,8 @@ export function MandiBottomSheet({
   onClose,
   title,
   closeLabel,
+  avoidKeyboard = false,
+  testID,
   children,
 }: {
   visible: boolean;
@@ -37,6 +39,9 @@ export function MandiBottomSheet({
   title?: string;
   /** What the close button announces, e.g. "Close the filter". */
   closeLabel?: string;
+  /** Lift the sheet above the keyboard (iOS; Android resizes the window itself). For sheets with inputs. */
+  avoidKeyboard?: boolean;
+  testID?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -60,7 +65,12 @@ export function MandiBottomSheet({
         accessible={false}
         importantForAccessibility="no"
       >
-        <View style={styles.column} pointerEvents="box-none">
+        <KeyboardAvoidingView
+          style={styles.column}
+          pointerEvents="box-none"
+          behavior={avoidKeyboard && Platform.OS === 'ios' ? 'padding' : undefined}
+          enabled={avoidKeyboard}
+        >
           {/* A View that claims the touch, not a Pressable.
               The sheet has to swallow taps so they do not reach the scrim and
               close it — but a Pressable inside a Pressable renders as a button
@@ -72,6 +82,7 @@ export function MandiBottomSheet({
             onStartShouldSetResponder={() => true}
             accessibilityViewIsModal
             accessibilityLabel={title}
+            testID={testID}
           >
             <View style={styles.titleRow}>
               {title ? (
@@ -89,7 +100,7 @@ export function MandiBottomSheet({
             </View>
             {children}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );

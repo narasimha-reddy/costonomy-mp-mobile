@@ -1,5 +1,9 @@
 import {
+  BILL_FILTER_OPTIONS,
+  EMPTY_FILTER_PARAMS,
   NO_FILTERS,
+  billBanner,
+  billsPendingLine,
   buildTransactionsQuery,
   canApply,
   categoryLabel,
@@ -21,6 +25,7 @@ import {
   relativeTime,
 } from '@/lib/wallet/history';
 import type { WalletEntry, WalletFilters } from '@/models/wallet';
+import { BILL_STATUSES } from '@/models/wallet';
 
 function entry(id: number, over: Partial<WalletEntry> = {}): WalletEntry {
   return {
@@ -200,7 +205,7 @@ describe('filter reducer', () => {
 
   it('clear all empties every section', () => {
     const full: WalletFilters = {
-      months: ['2026-09'], categories: ['TOP_UP'], instruments: ['UPI'], statuses: ['RETURNED'],
+      months: ['2026-09'], categories: ['TOP_UP'], instruments: ['UPI'], statuses: ['RETURNED'], bills: ['PENDING'],
     };
     expect(filterReducer(full, { type: 'clear' })).toEqual(NO_FILTERS);
   });
@@ -237,6 +242,7 @@ describe('buildTransactionsQuery', () => {
         categories: ['REFUND', 'TOP_UP', 'SHOP_PAYMENT'],
         instruments: ['CARD'],
         statuses: ['COMPLETED', 'IN_PROGRESS'],
+        bills: [],
       },
       cursor: null,
       size: 20,
@@ -257,7 +263,7 @@ describe('buildTransactionsQuery', () => {
 describe('filters in route params', () => {
   it('round-trips', () => {
     const filters: WalletFilters = {
-      months: ['2026-09', '2026-08'], categories: ['TOP_UP'], instruments: ['UPI', 'CARD'], statuses: ['RETURNED'],
+      months: ['2026-09', '2026-08'], categories: ['TOP_UP'], instruments: ['UPI', 'CARD'], statuses: ['RETURNED'], bills: ['READING', 'UNREADABLE'],
     };
     expect(filtersFromParams(filtersToParams(filters))).toEqual(filters);
   });
@@ -265,7 +271,9 @@ describe('filters in route params', () => {
     expect(filtersToParams(NO_FILTERS)).toEqual({});
     expect(filtersFromParams({
       months: '2026-09,junk,2026-1', categories: 'TOP_UP,HACK', instruments: '', statuses: ['RETURNED,X'],
-    })).toEqual({ months: ['2026-09'], categories: ['TOP_UP'], instruments: [], statuses: ['RETURNED'] });
+    })).toEqual({
+      months: ['2026-09'], categories: ['TOP_UP'], instruments: [], statuses: ['RETURNED'], bills: [],
+    });
     expect(filtersFromParams({})).toEqual(NO_FILTERS);
   });
 });
@@ -281,15 +289,38 @@ describe('matchesInstruments', () => {
     expect(matchesInstruments(entry(1, { instrument: 'netbanking' }), ['UPI', 'NETBANKING'])).toBe(true);
     expect(matchesInstruments(entry(1, { instrument: 'Debit Card' }), ['CARD'])).toBe(false);
   });
-  it('does not match a row with no instrument once one is chosen', () => {
-    expect(matchesInstruments(entry(1, { instrument: null }), ['WALLET'])).toBe(false);
-    expect(matchesInstruments(entry(1), ['WALLET'])).toBe(false);
+  it('matches payments made from the wallet (no instrument) for Wallet', () => {
+    expect(matchesInstruments(entry(1, { kind: 'ORDER_PAYMENT', instrument: null }), ['WALLET'])).toBe(true);
+    expect(matchesInstruments(entry(1, { kind: 'QUICKSCAN_PAYMENT' }), ['WALLET'])).toBe(true);
+    expect(matchesInstruments(entry(1, { kind: 'ORDER_PAYMENT' }), ['CARD'])).toBe(false);
+  });
+  it('still matches an instrument text starting with wallet', () => {
+    expect(matchesInstruments(entry(1, { kind: 'TOP_UP', instrument: 'Wallet' }), ['WALLET'])).toBe(true);
+  });
+  it('keeps a card top-up under Card and out of Wallet', () => {
+    const topUp = entry(1, { kind: 'TOP_UP', direction: 'CREDIT', instrument: 'Card •1111' });
+    expect(matchesInstruments(topUp, ['CARD'])).toBe(true);
+    expect(matchesInstruments(topUp, ['WALLET'])).toBe(false);
+  });
+  it('does not match refunds back to the wallet or null-instrument non-wallet kinds', () => {
+    for (const kind of ['WITHDRAWAL', 'ORDER_REFUND', 'REFUND', 'DISPUTE_REFUND', 'QUICKSCAN_RETURN'] as const) {
+      expect(matchesInstruments(entry(1, { kind, instrument: null }), ['WALLET'])).toBe(false);
+      expect(matchesInstruments(entry(1, { kind, instrument: null }), ['CARD', 'UPI', 'NETBANKING'])).toBe(false);
+    }
+  });
+  it('combines: Card + Wallet matches both a card top-up and a wallet payment, not a UPI top-up', () => {
+    const chosen: ('CARD' | 'WALLET')[] = ['CARD', 'WALLET'];
+    expect(matchesInstruments(entry(1, { kind: 'TOP_UP', instrument: 'Card •1111' }), chosen)).toBe(true);
+    expect(matchesInstruments(entry(2, { kind: 'QUICKSCAN_PAYMENT' }), chosen)).toBe(true);
+    expect(matchesInstruments(entry(3, { kind: 'TOP_UP', instrument: 'UPI' }), chosen)).toBe(false);
   });
 });
 
 describe('hasInstruments', () => {
-  it('is true only if a row names one', () => {
-    expect(hasInstruments([entry(1), entry(2, { instrument: null })])).toBe(false);
+  it('is true if a row names one, or was paid from the wallet', () => {
+    expect(hasInstruments([entry(1, { kind: 'WITHDRAWAL' }), entry(2, { kind: 'REFUND', instrument: null })])).toBe(false);
+    expect(hasInstruments([entry(1, { kind: 'QUICKSCAN_PAYMENT' })])).toBe(true);
+    expect(hasInstruments([entry(1), entry(2, { instrument: null })])).toBe(true);
     expect(hasInstruments([entry(1), entry(2, { instrument: 'UPI' })])).toBe(true);
     expect(hasInstruments([])).toBe(false);
   });
@@ -314,5 +345,76 @@ describe('monthChoices', () => {
     expect(choices.find((c) => c.month === '2024-05')!.disabled).toBe(false);
     expect(choices.find((c) => c.month === '2024-01')!.disabled).toBe(false);
     expect(choices).toHaveLength(14);
+  });
+});
+
+describe('bill filter', () => {
+  it('lists the five statuses in the screen order, with the header chip words', () => {
+    expect(BILL_FILTER_OPTIONS.map((o) => o.key)).toEqual([...BILL_STATUSES]);
+    expect(BILL_FILTER_OPTIONS.map((o) => o.label)).toEqual(['Pending', 'Reading', 'Added', 'Reviewed', 'Check bill']);
+    expect(BILL_FILTER_OPTIONS.map((o) => o.chipLabel)).toEqual([
+      'Bill: Pending', 'Bill: Reading', 'Bill: Added', 'Bill: Reviewed', 'Bill: Check bill']);
+  });
+
+  it('counts bills, toggles them and clears them', () => {
+    let state = filterReducer(NO_FILTERS, { type: 'toggle', section: 'bills', value: 'PENDING' });
+    state = filterReducer(state, { type: 'toggle', section: 'bills', value: 'ADDED' });
+    expect(state.bills).toEqual(['PENDING', 'ADDED']);
+    expect(filterCount(state)).toBe(2);
+    expect(canApply(state)).toBe(true);
+    state = filterReducer(state, { type: 'toggle', section: 'bills', value: 'PENDING' });
+    expect(state.bills).toEqual(['ADDED']);
+    expect(filterReducer(state, { type: 'clear' })).toEqual(NO_FILTERS);
+    expect(NO_FILTERS.bills).toEqual([]);
+  });
+
+  it('sends bills in the screen order, after statuses and before the cursor', () => {
+    const filters: WalletFilters = {
+      months: ['2026-09'], categories: ['TOP_UP'], instruments: ['CARD'],
+      statuses: ['COMPLETED'], bills: ['ADDED', 'PENDING'],
+    };
+    expect(buildTransactionsQuery({ filters, cursor: 'c 1', size: 20 })).toBe(
+      '?months=2026-09&kinds=TOP_UP&statuses=COMPLETED&bills=PENDING,ADDED&cursor=c%201&size=20');
+    expect(buildTransactionsQuery({ filters: { ...NO_FILTERS, bills: ['UNREADABLE'] } })).toBe('?bills=UNREADABLE');
+  });
+
+  it('keeps bills in route params, dropping unknown words and treating a missing one as none', () => {
+    expect(filtersToParams({ ...NO_FILTERS, bills: ['PENDING', 'READING'] })).toEqual({ bills: 'PENDING,READING' });
+    expect(filtersFromParams({ bills: 'PENDING,HACK,UNREADABLE' }).bills).toEqual(['PENDING', 'UNREADABLE']);
+    expect(filtersFromParams({ bills: ['ADDED'] }).bills).toEqual(['ADDED']);
+    expect(filtersFromParams({}).bills).toEqual([]);
+  });
+
+  it('clears every section when the empty params sit under the chosen ones', () => {
+    expect(EMPTY_FILTER_PARAMS).toEqual({ months: '', categories: '', instruments: '', statuses: '', bills: '' });
+    expect({ ...EMPTY_FILTER_PARAMS, ...filtersToParams({ ...NO_FILTERS, bills: ['ADDED'] }) }.bills).toBe('ADDED');
+  });
+});
+
+describe('billBanner', () => {
+  const summary = { pending: 3, reading: 0, unreadable: 0 };
+  it('prompts when nothing is filtered and some bills are pending', () => {
+    expect(billBanner(summary, [])).toEqual({ kind: 'prompt', text: '3 payments need a bill' });
+    expect(billBanner({ ...summary, pending: 1 }, [])).toEqual({ kind: 'prompt', text: '1 payment needs a bill' });
+  });
+  it('says it is active when the filter is exactly Pending, whatever the count', () => {
+    expect(billBanner(summary, ['PENDING'])).toEqual({ kind: 'active' });
+    expect(billBanner(null, ['PENDING'])).toEqual({ kind: 'active' });
+  });
+  it('is hidden for any other bill filter, for none pending and for an older server', () => {
+    expect(billBanner(summary, ['ADDED'])).toBeNull();
+    expect(billBanner(summary, ['PENDING', 'ADDED'])).toBeNull();
+    expect(billBanner({ ...summary, pending: 0 }, [])).toBeNull();
+    expect(billBanner(null, [])).toBeNull();
+    expect(billBanner(undefined, [])).toBeNull();
+  });
+});
+
+describe('billsPendingLine', () => {
+  it('says the count when above zero', () => {
+    expect(billsPendingLine(4)).toBe('Bills pending: 4');
+  });
+  it('says nothing for zero, absent or odd numbers', () => {
+    for (const n of [0, -1, 1.5, NaN, null, undefined]) expect(billsPendingLine(n)).toBeNull();
   });
 });

@@ -45,11 +45,13 @@ export function sectionWarning(draft: Intent): string | null {
   if (!draft.pricedComplete) {
     return 'Some items have no price';
   }
-  const minOrder = draft.minOrderValue != null ? parseFloat(draft.minOrderValue) : 0;
-  const currentTotal = draft.agreedTotal != null ? parseFloat(draft.agreedTotal) : 0;
-  if (minOrder > 0 && currentTotal < minOrder) {
-    const diff = (minOrder - currentTotal).toFixed(0);
-    return `Min order ₹${minOrder.toFixed(0)} (Add ₹${diff} more)`;
+  // The server holds the order to its minimum on the goods BEFORE GST (`IntentOrderCreator`), so that is what is
+  // compared: `agreedValue`, not the GST-inclusive `agreedTotal`. Compared only; both figures shown are the server's,
+  // and the shortfall is not worked out here (the app does no money arithmetic).
+  const minOrder = draft.minOrderValue != null ? Number(draft.minOrderValue) : 0;
+  const goods = draft.agreedValue != null ? Number(draft.agreedValue) : 0;
+  if (minOrder > 0 && goods < minOrder) {
+    return `Minimum order ${formatMoney(draft.minOrderValue as string)} before GST · items ${formatMoney(String(draft.agreedValue ?? '0'))}`;
   }
   return null;
 }

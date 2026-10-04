@@ -1,5 +1,7 @@
 import React from 'react';
 import { sectionWarning } from '@/components/restaurant/CartSupplierSection';
+import { weightAdjustmentCopy } from '@/lib/orders/catchWeight';
+import { ORDER_PREPARING_WEIGHED_9_6 } from './fixtures/catchWeightContract';
 import {
   fetchRateSheet,
   recordDispatchWeights,
@@ -99,17 +101,19 @@ describe('Store Minimum Order Value (MOV) & Free Delivery Rules', () => {
     freeDeliveryThreshold: '2000.00',
   };
 
-  it('triggers warning when agreed total is below store minimum order value', () => {
-    const warning = sectionWarning(baseDraft);
-    expect(warning).toBe('Min order ₹1000 (Add ₹160 more)');
+  it('warns when the goods before GST are below the store minimum, saying both figures and no sum', () => {
+    expect(sectionWarning(baseDraft)).toBe('Minimum order ₹1,000.00 before GST · items ₹800.00');
   });
 
-  it('returns no warning when agreed total meets or exceeds store minimum order value', () => {
-    const qualifyingDraft: Intent = {
-      ...baseDraft,
-      agreedTotal: '1250.00',
-    };
-    expect(sectionWarning(qualifyingDraft)).toBeNull();
+  it('compares the goods before GST, as the server does, not the GST-inclusive total', () => {
+    // Rs 800 of goods + GST is over Rs 1,000 with the delivery or a high rate, but the server still refuses it.
+    const gstInflated: Intent = { ...baseDraft, agreedValue: '800.00', agreedGst: '250.00', agreedTotal: '1050.00' };
+    expect(sectionWarning(gstInflated)).toBe('Minimum order ₹1,000.00 before GST · items ₹800.00');
+  });
+
+  it('returns no warning once the goods before GST reach the minimum', () => {
+    expect(sectionWarning({ ...baseDraft, agreedValue: '1000.00', agreedGst: '50.00', agreedTotal: '1050.00' })).toBeNull();
+    expect(sectionWarning({ ...baseDraft, agreedValue: '1250.00', agreedGst: '62.50', agreedTotal: '1312.50' })).toBeNull();
   });
 
   it('prioritises price change warning over MOV warning', () => {
@@ -131,26 +135,21 @@ describe('Store Minimum Order Value (MOV) & Free Delivery Rules', () => {
 
 describe('Catch-Weight Weighing API Service', () => {
   it('posts scale weights to order weights endpoint', async () => {
-    const mockOrder = {
-      id: 55,
-      orderNumber: 'MP-ORD-55',
-      weightAdjustmentAmount: '-15.50',
-      finalPayableAmount: '484.50',
-    };
-    const fn = mockFetch(jsonResponse(mockOrder));
+    // The API's own response for a 9.6 kg reading on 10 kg accepted at Rs 100 + 5% GST: the buyer pays Rs 42 less.
+    // Positive means a refund to the buyer (`SupplierOrder.weightAdjustmentAmount`); the old mock here had it negative.
+    const fn = mockFetch(jsonResponse(ORDER_PREPARING_WEIGHED_9_6));
 
-    const weights = [
-      { supplierOrderItemId: 101, dispatchedWeight: '4.85' },
-      { supplierOrderItemId: 102, dispatchedWeight: '2.10' },
-    ];
+    const weights = [{ supplierOrderItemId: 301, dispatchedWeight: '9.6' }];
 
-    const result = await recordDispatchWeights('test-token', 55, weights);
+    const result = await recordDispatchWeights('test-token', 501, weights);
 
-    expect(result.id).toBe(55);
-    expect(result.weightAdjustmentAmount).toBe('-15.50');
+    expect(result.id).toBe(501);
+    expect(Number(result.weightAdjustmentAmount)).toBe(42);
+    expect(weightAdjustmentCopy(result.weightAdjustmentAmount)?.refund).toBe(true);
+    expect(result.items[0]?.billableQuantity).toBe(9.6);
 
     const call = lastCall(fn);
-    expect(call.url).toContain('/api/v1/supplier-orders/55/weights');
+    expect(call.url).toContain('/api/v1/supplier-orders/501/weights');
     expect(call.init.method).toBe('POST');
     expect(call.body).toEqual({ weights });
   });

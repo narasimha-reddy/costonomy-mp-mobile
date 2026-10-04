@@ -234,6 +234,8 @@ export interface SupplierOrderItem {
   isCatchWeight?: boolean;
   requiresColdChain?: boolean;
   dispatchedWeight?: Money | null;
+  /** What a weighed catch-weight line is billed for: the lesser of the scale reading and what was accepted (API D-128). Null until weighed. */
+  billableQuantity?: Money | null;
   weighedAt?: string | null;
   weightDeltaAmount?: Money | null;
   doorstepAcceptedQty?: Money | null;

@@ -43,6 +43,10 @@ import { DeliveryMode, orderStatusFor, resolveStatus, SupplierOrderStatus as Sup
 import type { SupplierOrder, SupplierOrderStatus } from '@/models/procurement';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import {
+  buildWeighPayload, canWeigh, catchWeightLines, initialWeights, readyBlockedMessage, weighedLine,
+  weightAdjustmentCopy,
+} from '@/lib/orders/catchWeight';
 import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { PaymentMethodPill } from '@/components/order';
@@ -103,6 +107,8 @@ export default function SupplierOrderScreen() {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [weighingModalOpen, setWeighingModalOpen] = useState(false);
   const [actualWeights, setActualWeights] = useState<Record<number, string>>({});
+  // The server's refusal (or ours for an empty field), shown inside the sheet where the supplier is looking.
+  const [weighError, setWeighError] = useState<string | null>(null);
 
   // ── Billing: statutory invoices & credit notes ──────────────────────
   const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
@@ -121,12 +127,17 @@ export default function SupplierOrderScreen() {
     mutationFn: (weights: RecordDispatchWeightItem[]) =>
       recordDispatchWeights(accessToken as string, orderId, weights),
     onSuccess: (updated) => {
-      show('Dispatch weights recorded & prices reconciled', 'success');
+      // Weighing moves no money: the price is fixed when the order is marked ready (API D-128).
+      show('Weights saved. The price is fixed when you mark the order ready.', 'success');
       queryClient.setQueryData(['supplier-order', orderId], updated);
       invalidate();
       setWeighingModalOpen(false);
     },
-    onError: (caught) => onRefusal(caught, 'Could not record weights.'),
+    // Inside the sheet, not a toast behind it: the refusal says which reading to check.
+    onError: (caught) => {
+      setWeighError(caught instanceof ApiError ? caught.message : 'Could not save the weights. Try again.');
+      invalidate();
+    },
   });
 
   function invalidate() {
@@ -228,7 +239,7 @@ export default function SupplierOrderScreen() {
 
   const mode = order?.deliveryMode ?? null;
   const busy = advance.isPending || cancel.isPending;
-  const catchWeightItems = (order?.items ?? []).filter((item) => item.isCatchWeight);
+  const catchWeightItems = catchWeightLines(order);
   const hasCatchWeight = catchWeightItems.length > 0;
 
   const billingEligible = order != null && [
@@ -396,16 +407,17 @@ export default function SupplierOrderScreen() {
               </View>
             )}
 
-            {order.weightAdjustmentAmount != null && parseFloat(order.weightAdjustmentAmount) !== 0 && (
-              <View style={styles.valueRow}>
-                <Ionicons name="scale-outline" size={16} color={Colors.warning} />
-                <MandiText variant="captionEmphasis" color={Colors.warning}>
-                  Weight Adjustment: {parseFloat(order.weightAdjustmentAmount) < 0 ? '-' : '+'}
-                  {formatMoney(Math.abs(parseFloat(order.weightAdjustmentAmount)).toFixed(2))}
-                  {parseFloat(order.weightAdjustmentAmount) < 0 ? ' (Refunded to buyer)' : ' (Charged to buyer)'}
-                </MandiText>
-              </View>
-            )}
+            {(() => {
+              const adjustment = weightAdjustmentCopy(order.weightAdjustmentAmount);
+              return adjustment == null ? null : (
+                <View style={styles.valueRow}>
+                  <Ionicons name="scale-outline" size={16} color={Colors.warning} />
+                  <MandiText variant="captionEmphasis" color={Colors.warning}>
+                    {adjustment.text}
+                  </MandiText>
+                </View>
+              );
+            })()}
 
             {order.doorstepRefundAmount != null && parseFloat(order.doorstepRefundAmount) > 0 && (
               <View style={styles.valueRow}>
@@ -496,7 +508,7 @@ export default function SupplierOrderScreen() {
             </MandiCard>
           )}
 
-          {hasCatchWeight && (order.status === 'PREPARING' || order.status === 'READY_FOR_PICKUP') && (
+          {hasCatchWeight && canWeigh(order.status) && (
             <MandiCard>
               <View style={styles.deliveryRow}>
                 <View style={styles.flex}>
@@ -512,11 +524,9 @@ export default function SupplierOrderScreen() {
                   size="sm"
                   variant="secondary"
                   onPress={() => {
-                    const initial: Record<number, string> = {};
-                    catchWeightItems.forEach((i) => {
-                      initial[i.id] = i.dispatchedWeight ? String(i.dispatchedWeight) : String(i.acceptedQuantity ?? i.requestedQuantity);
-                    });
-                    setActualWeights(initial);
+                    // Empty, or the reading already taken: never the accepted quantity, which nobody read off a scale.
+                    setActualWeights(initialWeights(catchWeightItems));
+                    setWeighError(null);
                     setWeighingModalOpen(true);
                   }}
                 />
@@ -663,15 +673,16 @@ export default function SupplierOrderScreen() {
                     <View style={styles.itemCatchWeightRow}>
                       <Ionicons name="scale-outline" size={14} color={Colors.warning} />
                       <MandiText variant="caption" color={Colors.warning}>
-                        {item.dispatchedWeight != null
-                          ? `Weighed: ${item.dispatchedWeight} ${item.unit} (Scale verified)`
-                          : 'Catch-weight: Pending scale weigh-in'}
+                        {weighedLine(item) ?? 'Catch-weight: not weighed yet'}
                       </MandiText>
-                      {item.weightDeltaAmount != null && parseFloat(item.weightDeltaAmount) !== 0 && (
-                        <MandiText variant="caption" color={Colors.textSecondary}>
-                          · Δ {formatMoney(item.weightDeltaAmount)}
-                        </MandiText>
-                      )}
+                      {(() => {
+                        const adjustment = weightAdjustmentCopy(item.weightDeltaAmount);
+                        return adjustment == null ? null : (
+                          <MandiText variant="caption" color={Colors.textSecondary}>
+                            · {adjustment.text}
+                          </MandiText>
+                        );
+                      })()}
                     </View>
                   )}
 
@@ -699,7 +710,7 @@ export default function SupplierOrderScreen() {
             title="Weigh Catch-Weight Items"
           >
             <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.md }}>
-              Enter the exact scale weight for each perishable crate/pack. Price and buyer wallet are automatically reconciled.
+              Enter the weight shown on the scale for each line. The buyer is billed the weighed amount, never more than was ordered; the price is fixed when you mark the order ready.
             </MandiText>
             {catchWeightItems.map((item) => (
               <View key={item.id} style={styles.weighRow}>
@@ -716,21 +727,31 @@ export default function SupplierOrderScreen() {
                     placeholder="0.00"
                     placeholderTextColor={Colors.textTertiary}
                     keyboardType="decimal-pad"
+                    accessibilityLabel={`Scale weight for ${item.productName}, in ${item.unit}`}
                     style={styles.weightInput}
                   />
                   <MandiText variant="caption" color={Colors.textSecondary}>{item.unit}</MandiText>
                 </View>
               </View>
             ))}
+            {weighError != null && (
+              <MandiText variant="caption" color={Colors.danger} accessibilityLiveRegion="polite" style={{ marginTop: Spacing.sm }}>
+                {weighError}
+              </MandiText>
+            )}
             <MandiButton
-              label="Save Weights & Recalculate"
+              label="Save weights"
               size="md"
               loading={recordWeightsMutation.isPending}
               onPress={() => {
-                const payload: RecordDispatchWeightItem[] = catchWeightItems.map((i) => ({
-                  supplierOrderItemId: i.id,
-                  dispatchedWeight: actualWeights[i.id]?.trim() || String(i.acceptedQuantity ?? i.requestedQuantity),
-                }));
+                // An empty field is refused here; anything else (the band, the decimals) is the server's call.
+                const built = buildWeighPayload(catchWeightItems, actualWeights);
+                if (!built.ok) {
+                  setWeighError(built.message);
+                  return;
+                }
+                setWeighError(null);
+                const payload: RecordDispatchWeightItem[] = built.weights;
                 recordWeightsMutation.mutate(payload);
               }}
               style={{ marginTop: Spacing.lg }}
@@ -845,13 +866,22 @@ export default function SupplierOrderScreen() {
       return null;
     }
 
+    // Weigh first: the server refuses "Mark ready" until every catch-weight line is weighed, so say so before the tap.
+    const blocked = next.to === 'READY_FOR_PICKUP' ? readyBlockedMessage(order) : null;
+
     return (
       <MandiStickyBar>
+        {blocked != null && (
+          <MandiText variant="caption" color={Colors.warning} accessibilityLiveRegion="polite">
+            {blocked}
+          </MandiText>
+        )}
         <MandiButton
           label={next.label}
           variant="primary"
           size="md"
           loading={busy}
+          disabled={blocked != null}
           onPress={() => advance.mutate({ to: next.to })}
         />
         {/* Only while the goods are still in the store. Doc 01 §13: once they

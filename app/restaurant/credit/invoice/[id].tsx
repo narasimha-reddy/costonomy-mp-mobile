@@ -15,10 +15,12 @@ import {
   MandiStickyBar,
   MandiText,
 } from '@/components/common';
+import { CreditClaimsSection } from '@/components/credit/CreditClaimsSection';
 import { CreditPaymentRow } from '@/components/credit/CreditPaymentRow';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { useCreditInvoice, useWalletRepayEnabled } from '@/hooks/useCreditInvoice';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useWithdrawClaim } from '@/hooks/useWithdrawClaim';
 import { dueChip } from '@/lib/credit/dueChip';
 import { ApiError } from '@/lib/api/errors';
 import type { CreditInvoiceStatus } from '@/models/credit';
@@ -59,10 +61,16 @@ export default function CreditInvoiceScreen() {
   const repayEnabled = useWalletRepayEnabled();
   const { offline } = useNetworkStatus();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const withdrawal = useWithdrawClaim(Number(query.data?.agreementId));
 
   const invoice = query.data;
   const goBack = () => (router.canGoBack?.() === false ? router.replace('/restaurant/credit') : router.back());
   const notFound = query.error instanceof ApiError && query.error.status === 404;
+
+  const openClaim = () => router.push({
+    pathname: '/restaurant/credit/claim',
+    params: { agreementId: String(invoice?.agreementId), invoiceId: String(invoiceId) },
+  });
 
   const header = (
     <MandiHeader title={invoice?.invoiceNumber ?? 'Invoice'} subtitle={invoice?.supplierName ?? undefined} back />
@@ -109,6 +117,8 @@ export default function CreditInvoiceScreen() {
     || invoice.dueState === 'PAID' || invoice.dueState === 'WRITTEN_OFF';
   const owes = Number(invoice.outstanding) > 0;
   const canPay = !settled && owes && repayEnabled;
+  // Reporting a payment made elsewhere does not depend on wallet repayment being on.
+  const canClaim = !settled && owes;
   const orderLabel = invoice.orderNumber ?? (invoice.supplierOrderId != null ? String(invoice.supplierOrderId) : null);
   const issued = formatDay(invoice.issuedAt);
   const due = formatDay(invoice.dueDate);
@@ -121,17 +131,28 @@ export default function CreditInvoiceScreen() {
         header={header}
         onRefresh={() => { void query.refresh(); }}
         refreshing={query.isRefetching}
-        footer={canPay ? (
+        footer={canPay || canClaim ? (
           <MandiStickyBar>
-            <MandiButton
-              label={`Pay ${formatMoney(invoice.outstanding)}`}
-              onPress={() => setSheetOpen(true)}
-              disabled={offline}
-              testID="invoice-pay"
-            />
+            {canPay && (
+              <MandiButton
+                label={`Pay ${formatMoney(invoice.outstanding)}`}
+                onPress={() => setSheetOpen(true)}
+                disabled={offline}
+                testID="invoice-pay"
+              />
+            )}
+            {canClaim && (
+              <MandiButton
+                label="I paid outside the app"
+                variant="secondary"
+                onPress={() => openClaim()}
+                disabled={offline}
+                testID="invoice-i-paid"
+              />
+            )}
             {offline && (
               <MandiText variant="caption" color={Colors.textSecondary}>
-                Reconnect to pay.
+                {canPay ? 'Reconnect to pay.' : 'Reconnect to report a payment.'}
               </MandiText>
             )}
           </MandiStickyBar>
@@ -196,6 +217,17 @@ export default function CreditInvoiceScreen() {
               />
             ))}
           </MandiCard>
+        )}
+
+        {invoice.claims != null && invoice.claims.length > 0 && (
+          <CreditClaimsSection
+            claims={invoice.claims}
+            supplierName={invoice.supplierName ?? 'your supplier'}
+            busy={withdrawal.pending}
+            offline={offline}
+            onWithdraw={(claim) => withdrawal.withdraw(claim.id)}
+            onReportAgain={() => openClaim()}
+          />
         )}
       </MandiScreen>
 

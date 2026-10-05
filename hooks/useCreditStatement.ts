@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
-import { apiRequest } from '@/lib/api/client';
 import { fetchCreditStatement } from '@/services/credit';
 import type { CreditStatement } from '@/models/credit';
 
@@ -19,11 +18,7 @@ export function useCreditStatement(agreementId: number, range: StatementRange | 
   const { outletId } = useOutlet();
   return useQuery<CreditStatement>({
     queryKey: ['outlet', outletId, 'credit', 'statement', agreementId, range?.from ?? null, range?.to ?? null],
-    queryFn: () => range == null
-      // The service function insists on both days; no range means "let the server choose".
-      ? apiRequest<CreditStatement>(
-        `/api/v1/credit/agreements/${agreementId}/statement`, { token: accessToken as string })
-      : fetchCreditStatement(accessToken as string, agreementId, range),
+    queryFn: () => fetchCreditStatement(accessToken as string, agreementId, range ?? {}),
     enabled: Number.isFinite(agreementId) && outletId != null && accessToken != null,
   });
 }

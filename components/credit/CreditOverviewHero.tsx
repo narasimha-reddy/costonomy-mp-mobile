@@ -13,11 +13,16 @@ export function CreditOverviewHero({
   showPay,
   payDisabled,
   onPay,
+  showClaim = false,
+  onClaim,
 }: {
   summary: CreditSummary;
   showPay: boolean;
   payDisabled: boolean;
   onPay: () => void;
+  /** Offer "I paid outside the app". */
+  showClaim?: boolean;
+  onClaim?: () => void;
 }) {
   const owes = Number(summary.due) > 0;
   const overdue = Number(summary.overdue) > 0;
@@ -65,6 +70,16 @@ export function CreditOverviewHero({
           label="Pay from wallet"
           onPress={onPay}
           disabled={payDisabled}
+          fullWidth
+        />
+      )}
+
+      {showClaim && onClaim != null && (
+        <MandiButton
+          testID="i-paid"
+          label="I paid outside the app"
+          variant="secondary"
+          onPress={onClaim}
           fullWidth
         />
       )}

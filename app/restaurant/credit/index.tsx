@@ -40,6 +40,7 @@ export default function CreditOverviewScreen() {
   const { outletId } = useOutlet();
   const { offline } = useNetworkStatus();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickFor, setPickFor] = useState<'pay' | 'claim'>('pay');
   const [target, setTarget] = useState<CreditAgreement | null>(null);
 
   const query = useQuery({
@@ -56,8 +57,21 @@ export default function CreditOverviewScreen() {
   const showPay = summary?.walletRepayEnabled === true && Number(summary.due) > 0 && groups.dues.length > 0;
 
   const onPay = () => {
+    setPickFor('pay');
     if (groups.dues.length === 1) setTarget(groups.dues[0] ?? null);
     else setPickerOpen(true);
+  };
+
+  const showClaim = summary != null && Number(summary.due) > 0 && groups.dues.length > 0;
+  const claimFor = (id: number) =>
+    router.push({ pathname: '/restaurant/credit/claim', params: { agreementId: String(id) } });
+  const onClaim = () => {
+    const only = groups.dues[0];
+    if (groups.dues.length === 1 && only != null) claimFor(only.id);
+    else {
+      setPickFor('claim');
+      setPickerOpen(true);
+    }
   };
 
   return (
@@ -96,6 +110,8 @@ export default function CreditOverviewScreen() {
             showPay={showPay}
             payDisabled={offline}
             onPay={onPay}
+            showClaim={showClaim}
+            onClaim={onClaim}
           />
 
           {groups.dues.length > 0 && (
@@ -129,9 +145,11 @@ export default function CreditOverviewScreen() {
             visible={pickerOpen}
             onClose={() => setPickerOpen(false)}
             agreements={groups.dues}
+            title={pickFor === 'claim' ? 'Which supplier did you pay?' : 'Pay which supplier?'}
             onPick={(a) => {
               setPickerOpen(false);
-              setTarget(a);
+              if (pickFor === 'claim') claimFor(a.id);
+              else setTarget(a);
             }}
           />
           {target != null && (

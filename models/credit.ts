@@ -75,6 +75,8 @@ export interface CreditAgreement {
   nextDueDate?: string | null;
   nextDueAmount?: Money | null;
   openInvoices?: number;
+  /** Payments the restaurant reported that the supplier has not answered yet. 0 when none. */
+  openClaimsAmount?: Money;
   creditPeriodDays: number | null;
   gracePeriodDays: number | null;
   maxSingleOrderCredit: Money | null;
@@ -169,6 +171,45 @@ export interface CreditInvoiceDetail {
   supplierName: string | null;
   storeName: string | null;
   payments: CreditInvoicePayment[];
+  /** The restaurant's "I paid" reports on this invoice, newest first. Absent on older payloads. */
+  claims?: ClaimResponse[];
+}
+
+export type ClaimMethod = 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CHEQUE' | 'CARD';
+export type ClaimStatus = 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
+
+/** A restaurant's report that it paid a supplier outside the app. */
+export interface ClaimResponse {
+  id: number;
+  invoiceId: number;
+  invoiceNumber: string;
+  agreementId: number;
+  outletId: number;
+  outletName: string | null;
+  restaurantName: string | null;
+  amount: Money;
+  method: ClaimMethod;
+  reference: string | null;
+  /** 'YYYY-MM-DD'. */
+  paidOn: string;
+  note: string | null;
+  status: ClaimStatus;
+  decisionNote: string | null;
+  confirmedAmount: Money | null;
+  creditPaymentId: number | null;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface SubmitClaimRequest {
+  /** At most 2 decimals, at least 1. */
+  amount: number;
+  method: ClaimMethod;
+  /** Required unless the method is CASH. At most 200 characters. */
+  reference?: string;
+  /** 'YYYY-MM-DD', India time; not in the future. */
+  paidOn: string;
+  note?: string;
 }
 
 export interface CreditStatementLine {

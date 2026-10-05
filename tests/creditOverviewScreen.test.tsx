@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -56,8 +56,16 @@ const OWING = summary({ due: '1700', overdue: '500' }, [
 
 const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
 
+// Cached queries keep a garbage-collection timer alive; clearing them lets jest exit by itself.
+const clients: QueryClient[] = [];
+afterEach(() => {
+  cleanup();
+  clients.splice(0).forEach((c) => c.clear());
+});
+
 function renderScreen() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  clients.push(client);
   return render(
     <SafeAreaProvider initialMetrics={metrics}>
       <QueryClientProvider client={client}>
@@ -88,7 +96,7 @@ describe('Credit overview', () => {
     expect(screen.getByText('Overdue')).toBeTruthy();
     expect(screen.getByText('Owed ₹600.00')).toBeTruthy();
     expect(screen.getByText(/Next ₹600\.00 on 24th Sep/)).toBeTruthy();
-    expect(screen.queryByText(/I paid outside/)).toBeNull();
+    expect(screen.getByText('I paid outside the app')).toBeTruthy();
   });
 
   it('says Nothing owed with no overdue line and no Pay button', async () => {
@@ -125,6 +133,67 @@ describe('Credit overview', () => {
     expect(mockSheetProps).toHaveBeenLastCalledWith(expect.objectContaining({
       agreementId: 1, supplierName: 'Zed Foods', due: '600', overdue: '0',
     }));
+  });
+
+  it('I paid goes straight to the claim form when exactly one supplier is owed', async () => {
+    fetchSummary.mockResolvedValue(summary({ due: '600' }, [
+      agreement({ id: 9, supplierName: 'Solo', due: '600' }),
+      agreement({ id: 10, supplierName: 'Other' }),
+    ]));
+    renderScreen();
+    fireEvent.press(await screen.findByTestId('i-paid'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/restaurant/credit/claim', params: { agreementId: '9' },
+    });
+    expect(screen.queryByText('Which supplier did you pay?')).toBeNull();
+  });
+
+  it('I paid asks which supplier first when several are owed', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    fireEvent.press(await screen.findByTestId('i-paid'));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByText('Which supplier did you pay?')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('pick-supplier-1'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/restaurant/credit/claim', params: { agreementId: '1' },
+    });
+    expect(screen.queryByTestId('pay-sheet')).toBeNull();
+  });
+
+  it('shows I paid even when wallet repay is off, as the outline button beside the orange Pay', async () => {
+    fetchSummary.mockResolvedValue({ ...OWING, walletRepayEnabled: false });
+    renderScreen();
+    const claim = await screen.findByTestId('i-paid');
+    expect(screen.queryByTestId('pay-from-wallet')).toBeNull();
+    expect(StyleSheet.flatten(claim.props.style).backgroundColor).toBe(Colors.surface);
+    expect(StyleSheet.flatten(claim.props.style).backgroundColor).not.toBe(Colors.credit);
+  });
+
+  it('keeps Pay from wallet orange next to I paid', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    const pay = await screen.findByTestId('pay-from-wallet');
+    expect(StyleSheet.flatten(pay.props.style).backgroundColor).toBe(Colors.primary);
+    expect(screen.getByTestId('i-paid')).toBeTruthy();
+  });
+
+  it('hides I paid when nothing is owed', async () => {
+    fetchSummary.mockResolvedValue(summary({}, [agreement({ id: 1 })]));
+    renderScreen();
+    await screen.findByText('Nothing owed');
+    expect(screen.queryByTestId('i-paid')).toBeNull();
+  });
+
+  it('says a payment is waiting for the supplier on that supplier only', async () => {
+    fetchSummary.mockResolvedValue(summary({ due: '1700' }, [
+      agreement({ id: 1, supplierName: 'Zed Foods', due: '600', openClaimsAmount: '250.0000' }),
+      agreement({ id: 2, supplierName: 'Acme', due: '1100', openClaimsAmount: '0.0000' }),
+    ]));
+    renderScreen();
+    expect(await screen.findByTestId('dues-reported-1'))
+      .toHaveTextContent('Payment reported: ₹250.00 · waiting for supplier');
+    expect(screen.queryByTestId('dues-reported-2')).toBeNull();
   });
 
   it('hides Pay when the flag is off or absent', async () => {

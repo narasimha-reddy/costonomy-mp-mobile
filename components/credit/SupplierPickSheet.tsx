@@ -12,17 +12,19 @@ export function SupplierPickSheet({
   onClose,
   agreements,
   onPick,
+  title = 'Pay which supplier?',
 }: {
   visible: boolean;
   onClose: () => void;
   agreements: CreditAgreement[];
   onPick: (agreement: CreditAgreement) => void;
+  title?: string;
 }) {
   return (
     <MandiBottomSheet
       visible={visible}
       onClose={onClose}
-      title="Pay which supplier?"
+      title={title}
       closeLabel="Close supplier list"
       testID="supplier-pick-sheet"
     >

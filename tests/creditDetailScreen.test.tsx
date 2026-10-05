@@ -1,10 +1,10 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StyleSheet } from 'react-native';
 import CreditAgreementScreen from '@/app/restaurant/credit/[id]';
 import {
-  acceptAgreement, fetchAgreement, fetchCreditSummary, fetchInvoices, fetchLedger,
+  acceptAgreement, fetchAgreement, fetchCreditSummary, fetchInvoices,
 } from '@/services/credit';
 import { Colors } from '@/theme';
 
@@ -41,7 +41,6 @@ jest.mock('@/services/credit', () => ({
   fetchAgreement: jest.fn(),
   fetchCreditSummary: jest.fn(),
   fetchInvoices: jest.fn(),
-  fetchLedger: jest.fn(),
 }));
 
 const txt = (t: string) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -49,7 +48,6 @@ const txt = (t: string) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 const agreementM = fetchAgreement as jest.Mock;
 const summaryM = fetchCreditSummary as jest.Mock;
 const invoicesM = fetchInvoices as jest.Mock;
-const ledgerM = fetchLedger as jest.Mock;
 const acceptM = acceptAgreement as jest.Mock;
 
 const agreement = (o: Record<string, unknown> = {}) => ({
@@ -65,8 +63,16 @@ const inv = (id: number, o: Record<string, unknown> = {}) => ({
   daysToDue: 15, settledAt: null, ...o,
 });
 
+// Cached queries keep a garbage-collection timer alive; clearing them lets jest exit by itself.
+const clients: QueryClient[] = [];
+afterEach(() => {
+  cleanup();
+  clients.splice(0).forEach((c) => c.clear());
+});
+
 function renderScreen() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } } });
+  clients.push(client);
   return render(
     <QueryClientProvider client={client}>
       <CreditAgreementScreen />
@@ -80,7 +86,6 @@ beforeEach(() => {
   agreementM.mockResolvedValue(agreement());
   summaryM.mockResolvedValue({ walletRepayEnabled: true });
   invoicesM.mockResolvedValue([]);
-  ledgerM.mockResolvedValue([]);
 });
 
 describe('summary', () => {
@@ -218,20 +223,22 @@ describe('sticky pay bar', () => {
     }));
   });
 
-  it('is hidden when wallet repay is disabled', async () => {
+  it('drops Pay but keeps I paid when wallet repay is disabled', async () => {
     summaryM.mockResolvedValue({ walletRepayEnabled: false });
     renderScreen();
     await screen.findByTestId('credit-owed');
     await waitFor(() => expect(summaryM).toHaveBeenCalled());
     expect(screen.queryByTestId('credit-pay-bar-button')).toBeNull();
+    expect(screen.getByTestId('credit-i-paid-bar-button')).toBeTruthy();
   });
 
-  it('is hidden when the flag is absent', async () => {
+  it('drops Pay but keeps I paid when the flag is absent', async () => {
     summaryM.mockResolvedValue({});
     renderScreen();
     await screen.findByTestId('credit-owed');
     await waitFor(() => expect(summaryM).toHaveBeenCalled());
     expect(screen.queryByTestId('credit-pay-bar-button')).toBeNull();
+    expect(screen.getByTestId('credit-i-paid-bar-button')).toBeTruthy();
   });
 
   it('is hidden when nothing is owed', async () => {
@@ -239,6 +246,27 @@ describe('sticky pay bar', () => {
     renderScreen();
     await screen.findByTestId('credit-owed');
     expect(screen.queryByTestId('credit-pay-bar-button')).toBeNull();
+    expect(screen.queryByTestId('credit-i-paid-bar-button')).toBeNull();
+  });
+
+  it('shows Pay and I paid together, I paid as the outline button, and opens the claim form', async () => {
+    renderScreen();
+    await screen.findByTestId('credit-pay-bar-button');
+    const claim = screen.getByTestId('credit-i-paid-bar-button');
+    expect(claim).toHaveTextContent(txt('I paid'));
+    expect(StyleSheet.flatten(claim.props.style).backgroundColor).toBe(Colors.surface);
+    expect(StyleSheet.flatten(claim.props.style).backgroundColor).not.toBe(Colors.credit);
+    fireEvent.press(claim);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/restaurant/credit/claim', params: { agreementId: '3' },
+    });
+  });
+
+  it('is hidden while the agreement is not usable yet', async () => {
+    agreementM.mockResolvedValue(agreement({ status: 'REJECTED', canFund: false, latestRequest: { status: 'REJECTED' } }));
+    renderScreen();
+    await screen.findByText('They turned this down');
+    expect(screen.queryByTestId('credit-i-paid-bar-button')).toBeNull();
   });
 
   it('is disabled offline', async () => {
@@ -246,6 +274,51 @@ describe('sticky pay bar', () => {
     renderScreen();
     const button = await screen.findByTestId('credit-pay-bar-button');
     expect(button.props.accessibilityState?.disabled).toBe(true);
+  });
+});
+
+describe('payment reported', () => {
+  it('says a report is waiting for the supplier when there is one', async () => {
+    agreementM.mockResolvedValue(agreement({ openClaimsAmount: '1500.0000' }));
+    renderScreen();
+    expect(await screen.findByTestId('credit-reported'))
+      .toHaveTextContent('Payment reported: ₹1,500.00 · waiting for supplier');
+  });
+
+  it.each([['0.0000'], [undefined]])('says nothing when the open amount is %p', async (value) => {
+    agreementM.mockResolvedValue(agreement({ openClaimsAmount: value }));
+    renderScreen();
+    await screen.findByTestId('credit-owed');
+    expect(screen.queryByTestId('credit-reported')).toBeNull();
+  });
+});
+
+describe('statement link', () => {
+  it('replaces the Activity list with one Statement row and a note', async () => {
+    renderScreen();
+    await screen.findByTestId('credit-owed');
+    expect(screen.queryByText('Activity')).toBeNull();
+    expect(screen.queryByText(/No activity yet/)).toBeNull();
+    expect(screen.getByText('Statement')).toBeTruthy();
+    expect(screen.getByText('Every order and repayment, with what you owed after each.')).toBeTruthy();
+    expect(screen.getByText('icon:chevron-forward')).toBeTruthy();
+  });
+
+  it('opens the statement for this agreement', async () => {
+    renderScreen();
+    fireEvent.press(await screen.findByTestId('credit-statement-row'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/restaurant/credit/statement', params: { agreementId: '3' },
+    });
+  });
+
+  it('is not offered on a request nobody has answered', async () => {
+    agreementM.mockResolvedValue(agreement({
+      status: 'REQUESTED', canFund: false, due: '0', latestRequest: { requestedLimit: '1', requestedPeriodDays: 7, status: 'REQUESTED' },
+    }));
+    renderScreen();
+    await screen.findByText('You asked for');
+    expect(screen.queryByTestId('credit-statement-row')).toBeNull();
   });
 });
 

@@ -11,8 +11,12 @@ jest.mock('@/contexts/OutletProvider', () => ({ useOutlet: () => ({ outletId: mo
 
 const fetchMock = fetchCreditAttention as jest.Mock;
 
+const clients: QueryClient[] = [];
+afterEach(() => { clients.splice(0).forEach((c) => c.clear()); });
+
 function wrapper() {
-  const client = new QueryClient({ defaultOptions: { queries: { retryDelay: 1 } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retryDelay: 1, gcTime: 0 } } });
+  clients.push(client);
   function Wrapper({ children }: { children: React.ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   }

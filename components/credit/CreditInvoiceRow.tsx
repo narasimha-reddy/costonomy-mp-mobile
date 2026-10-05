@@ -10,9 +10,12 @@ import { Colors, Spacing } from '@/theme';
 export function CreditInvoiceRow({
   invoice,
   onPress,
+  selected,
 }: {
   invoice: CreditInvoiceListItem;
-  onPress: () => void;
+  onPress?: () => void;
+  /** Set (true or false) when the row is one choice in a list; adds the word "Selected". */
+  selected?: boolean;
 }) {
   const chip = dueChip(invoice.dueState, invoice.daysToDue);
   const order = invoice.orderNumber ?? invoice.supplierOrderId;
@@ -26,12 +29,14 @@ export function CreditInvoiceRow({
     orderText,
     amountText,
     chip?.label,
+    selected === true ? 'selected' : null,
   ].filter(Boolean).join(', ');
 
   return (
     <MandiCard
       compact
       onPress={onPress}
+      accentColor={selected === true ? Colors.primary : undefined}
       testID={`credit-invoice-${invoice.id}`}
       accessibilityLabel={label}
     >
@@ -45,6 +50,9 @@ export function CreditInvoiceRow({
         <MandiText variant="caption" color={Colors.textSecondary}>{orderText}</MandiText>
       )}
       <MandiText variant="caption" color={Colors.textSecondary}>{amountText}</MandiText>
+      {selected === true && (
+        <MandiText variant="captionEmphasis" color={Colors.primary}>Selected</MandiText>
+      )}
     </MandiCard>
   );
 }

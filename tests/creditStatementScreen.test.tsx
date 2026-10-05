@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CreditStatementScreen from '@/app/restaurant/credit/statement';
@@ -55,8 +55,16 @@ function respond(statement: unknown) {
 }
 const statementCalls = () => api.mock.calls.filter(([p]) => String(p).includes('/statement'));
 
+// Cached queries keep a garbage-collection timer alive; clearing them lets jest exit by itself.
+const clients: QueryClient[] = [];
+afterEach(() => {
+  cleanup();
+  clients.splice(0).forEach((c) => c.clear());
+});
+
 function renderScreen() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  clients.push(client);
   return render(
     <SafeAreaProvider initialMetrics={METRICS}>
       <QueryClientProvider client={client}><CreditStatementScreen /></QueryClientProvider>

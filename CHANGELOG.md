@@ -14,6 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Credit data layer: invoice detail, statement and wallet-repayment types and services, `isShortBalanceError` / `isOverpaymentError` helpers, and `dueChip` (`lib/credit/dueChip.ts`) for the server's due state.
 - `MoneyAction.badge` on the Money Transfers tiles.
 
+### [feat/credit-m8-i-paid-and-statement-link]
+#### Added
+- Restaurant credit screens, end to end: a Credit overview that leads with what you owe and to whom, a supplier credit page with its open and paid invoices, an invoice page with every payment against it, and a Statement of every order and repayment with what you owed after each. You can pay from your wallet when your supplier's credit allows it.
+- "I paid outside the app" (`app/restaurant/credit/claim.tsx`): tell a supplier you paid them directly by bank transfer, UPI, cash, cheque or card, with the amount, the reference (needed for everything except cash), the day and an optional note. Your supplier confirms it; until then it still shows as owed, and the overview and supplier page say "Payment reported ... waiting for supplier". Reachable from the overview, the supplier page and the invoice page, which also lists "Your reports" with Withdraw, Confirmed, "Supplier said ..." plus Report again, and Withdrawn.
+- The supplier page's Activity list is now a single Statement row.
+#### Changed
+- `fetchCreditStatement` takes an optional range and sends no query string without one; the workaround in `useCreditStatement` is gone.
+- The credit overview, supplier and statement screen tests clear their query clients so each file exits by itself.
+
 ---
 
 ## [Procurement & Open Requests]

@@ -11,12 +11,12 @@ import {
   fetchAgreement,
   fetchCreditSummary,
   fetchInvoices,
-  fetchLedger,
 } from '@/services/credit';
 import { CreditPosition } from '@/components/credit/CreditPosition';
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
 import { CreditStickyPayBar } from '@/components/credit/CreditStickyPayBar';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
+import { reportedLine } from '@/lib/credit/claims';
 import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import {
   MandiButton,
@@ -33,7 +33,7 @@ import {
 import { CreditAgreementStatus, resolveStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
-import { Colors, IconSize, Radius, Spacing } from '@/theme';
+import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
 
 const PAGE_SIZE = 50;
 type InvoiceTab = 'open' | 'paid';
@@ -65,12 +65,6 @@ export default function CreditAgreementScreen() {
   const agreement = useQuery({
     queryKey: ['credit-agreement', agreementId],
     queryFn: () => fetchAgreement(accessToken as string, agreementId),
-    enabled: Number.isFinite(agreementId) && accessToken != null,
-  });
-
-  const ledger = useQuery({
-    queryKey: ['credit-agreement', agreementId, 'ledger'],
-    queryFn: () => fetchLedger(accessToken as string, agreementId),
     enabled: Number.isFinite(agreementId) && accessToken != null,
   });
 
@@ -140,13 +134,21 @@ export default function CreditAgreementScreen() {
       header={<MandiHeader title={data?.supplierName ?? 'Credit'} subtitle={data?.storeName ?? undefined} back />}
       onRefresh={() => {
         void agreement.refetch();
-        void ledger.refetch();
         void invoices.refetch();
       }}
       refreshing={agreement.isRefetching}
       footer={
-        data != null && !pending && !rejected && !awaitingAcceptance && walletRepayEnabled ? (
-          <CreditStickyPayBar due={data.due} disabled={offline} onPress={() => setPayOpen(true)} />
+        data != null && !pending && !rejected && !awaitingAcceptance ? (
+          <CreditStickyPayBar
+            due={data.due}
+            disabled={offline}
+            showPay={walletRepayEnabled}
+            onPress={() => setPayOpen(true)}
+            onClaim={() => router.push({
+              pathname: '/restaurant/credit/claim',
+              params: { agreementId: String(agreementId) },
+            })}
+          />
         ) : undefined
       }
     >
@@ -265,6 +267,11 @@ export default function CreditAgreementScreen() {
                     </MandiText>
                   </View>
                 )}
+                {reportedLine(data.openClaimsAmount) != null && (
+                  <MandiText variant="caption" color={Colors.textSecondary} testID="credit-reported">
+                    {reportedLine(data.openClaimsAmount)}
+                  </MandiText>
+                )}
                 {termsLine(data.creditPeriodDays, data.gracePeriodDays) != null && (
                   <MandiText variant="caption" color={Colors.textSecondary} testID="credit-terms-line">
                     {termsLine(data.creditPeriodDays, data.gracePeriodDays)}
@@ -356,31 +363,27 @@ export default function CreditAgreementScreen() {
             </MandiCard>
           )}
 
-          <View style={styles.section}>
-            <MandiSectionHeader
-              title="Activity"
-              subtitle="Every movement, with the balance it left"
-            />
-            {(ledger.data ?? []).length === 0 ? (
-              <MandiText variant="caption" color={Colors.textTertiary}>
-                No activity yet.
+          {!pending && !rejected && (
+            <View style={styles.section}>
+              <Pressable
+                testID="credit-statement-row"
+                onPress={() => router.push({
+                  pathname: '/restaurant/credit/statement',
+                  params: { agreementId: String(agreementId) },
+                })}
+                accessibilityRole="button"
+                accessibilityLabel="Statement"
+                accessibilityHint="Every order and repayment, with what you owed after each"
+                style={styles.statementRow}
+              >
+                <MandiText variant="bodyEmphasis" style={styles.flex}>Statement</MandiText>
+                <Ionicons name="chevron-forward" size={IconSize.sm} color={Colors.textTertiary} />
+              </Pressable>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Every order and repayment, with what you owed after each.
               </MandiText>
-            ) : (
-              (ledger.data ?? []).slice(0, 20).map((entry) => (
-                <MandiCard key={entry.id} compact>
-                  <View style={styles.row}>
-                    <MandiText variant="body">
-                      {entry.description ?? humanise(entry.type)}
-                    </MandiText>
-                    <MandiText variant="bodyEmphasis">{formatMoney(entry.amount)}</MandiText>
-                  </View>
-                  <MandiText variant="caption" color={Colors.textTertiary}>
-                    {formatMoney(entry.availableAfter)} available after
-                  </MandiText>
-                </MandiCard>
-              ))
-            )}
-          </View>
+            </View>
+          )}
           {data.due != null && (
             <PayFromWalletSheet
               visible={payOpen}
@@ -426,11 +429,6 @@ function termsLine(period: number | null, grace: number | null): string | null {
   return grace != null && grace > 0 ? `${days} + ${grace} ${grace === 1 ? 'day' : 'days'} grace` : days;
 }
 
-function humanise(value: string): string {
-  const spaced = value.replace(/_/g, ' ').toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
@@ -449,6 +447,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   segmentOn: { backgroundColor: Colors.primary },
+  statementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    minHeight: TouchTarget.min,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
   spacedTop: { marginTop: Spacing.xs },
   section: { gap: Spacing.listGap },
   row: {

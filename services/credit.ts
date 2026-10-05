@@ -10,6 +10,9 @@ import type {
   CreditInvoice,
   CreditLedgerEntry,
   CreditSummary,
+  ClaimResponse,
+  ClaimStatus,
+  SubmitClaimRequest,
 } from '@/models/credit';
 
 // ── Restaurant side ───────────────────────────────────────────────────
@@ -194,15 +197,58 @@ export function fetchCreditInvoice(token: string, invoiceId: number): Promise<Cr
   return apiRequest<CreditInvoiceDetail>(`/api/v1/credit/invoices/${invoiceId}`, { token });
 }
 
-/** Newest line first. `from` and `to` are 'YYYY-MM-DD'. */
+/**
+ * Newest line first. `from` and `to` are 'YYYY-MM-DD' and both optional: with
+ * neither, no query string is sent and the server chooses the last 90 days.
+ */
 export function fetchCreditStatement(
   token: string,
   agreementId: number,
-  range: { from: string; to: string },
+  range: { from?: string; to?: string } = {},
 ): Promise<CreditStatement> {
-  const query = `from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+  const parts: string[] = [];
+  if (range.from != null) parts.push(`from=${encodeURIComponent(range.from)}`);
+  if (range.to != null) parts.push(`to=${encodeURIComponent(range.to)}`);
+  const query = parts.length === 0 ? '' : `?${parts.join('&')}`;
   return apiRequest<CreditStatement>(
-    `/api/v1/credit/agreements/${agreementId}/statement?${query}`, { token });
+    `/api/v1/credit/agreements/${agreementId}/statement${query}`, { token });
+}
+
+/**
+ * Tell the supplier a payment was made outside the app. Changes nothing that is
+ * owed until the supplier confirms it. Needs an idempotency key (D-065).
+ */
+export function submitClaim(
+  token: string,
+  invoiceId: number,
+  body: SubmitClaimRequest,
+  idempotencyKey: string,
+): Promise<ClaimResponse> {
+  return apiRequest<ClaimResponse>(`/api/v1/credit/invoices/${invoiceId}/claims`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    body,
+  });
+}
+
+/** Take back a report the supplier has not answered yet. */
+export function withdrawClaim(token: string, claimId: number): Promise<ClaimResponse> {
+  return apiRequest<ClaimResponse>(`/api/v1/credit/claims/${claimId}/withdraw`, {
+    method: 'POST',
+    token,
+  });
+}
+
+/** Every report on one agreement, newest first. */
+export function fetchAgreementClaims(
+  token: string,
+  agreementId: number,
+  status?: ClaimStatus,
+): Promise<ClaimResponse[]> {
+  const query = status == null ? '' : `?status=${encodeURIComponent(status)}`;
+  return apiRequest<ClaimResponse[]>(
+    `/api/v1/credit/agreements/${agreementId}/claims${query}`, { token });
 }
 
 /** Repay from the wallet. Moves money, so it needs an idempotency key. */
@@ -237,4 +283,10 @@ export function isShortBalanceError(error: unknown): { shortBy: number; balance:
 export function isOverpaymentError(error: unknown): { outstanding: number } | null {
   const outstanding = numberDetail(error, 'CREDIT_OVERPAYMENT', 'outstanding');
   return outstanding == null ? null : { outstanding };
+}
+
+/** The report cannot be made or changed because the invoice or the report has moved on. */
+export function isClaimStateError(error: unknown): boolean {
+  return error instanceof ApiError
+    && (error.code === 'CREDIT_CLAIM_STATE' || error.status === 404);
 }

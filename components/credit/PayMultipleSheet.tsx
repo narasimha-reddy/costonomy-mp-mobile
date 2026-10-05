@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -150,12 +150,13 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
         : !answered ? 'Paying…'
           : paidCount === 0 ? 'Nothing was paid' : `Paid ${paidCount} of ${attempted.length}`}
       closeLabel="Close"
-      avoidKeyboard
       testID="pay-multiple-sheet"
     >
       {attempted == null ? (
         <View style={styles.body}>
-          <View style={styles.list}>
+          {/* Only the supplier list scrolls; the total, the wallet line and the Pay
+              buttons below it stay on screen however many suppliers are owed. */}
+          <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} testID="multi-list">
             {rows.map((r) => {
               const on = checked.has(r.agreement.id);
               const disabled = r.amount == null;
@@ -187,7 +188,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
 
           <View style={styles.totals}>
             <MandiText variant="caption" color={Colors.textSecondary} testID="multi-wallet">
@@ -216,7 +217,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
         </View>
       ) : (
         <View style={styles.body}>
-          <View style={styles.list} accessibilityLiveRegion="polite">
+          <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} accessibilityLiveRegion="polite" testID="multi-results">
             {attempted.map((item) => {
               const result: PayItemResult | undefined = payment.results[item.agreementId];
               return (
@@ -228,7 +229,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
                 />
               );
             })}
-          </View>
+          </ScrollView>
           {paidCount > 0 && balanceAfter != null && (
             <MandiText variant="caption" color={Colors.textSecondary} testID="multi-balance-now">
               {`Wallet balance now ${formatMoney(balanceAfter)}`}
@@ -310,7 +311,8 @@ function ResultRow({
 }
 
 const styles = StyleSheet.create({
-  body: { gap: Spacing.md, paddingTop: Spacing.sm },
+  body: { gap: Spacing.md, paddingTop: Spacing.sm, flexShrink: 1 },
+  listScroll: { flexGrow: 0, flexShrink: 1 },
   list: { gap: Spacing.sm },
   flex: { flex: 1, gap: Spacing.xs },
   row: {

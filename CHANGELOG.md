@@ -32,6 +32,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Pay all overdue: with several suppliers owed, "Pay from wallet" opens `PayMultipleSheet` (overdue suppliers pre-checked, a paise-safe display total, one repayment per supplier run one after another under its own idempotency key, a per-supplier result with "Try again" for the failed ones); "Pay one supplier instead" keeps the single-supplier path.
 - Request credit polish: the keyboard no longer hides the field or the Send button, the supplier list shows existing credit per supplier (active, waiting, terms ready, paused), every server refusal reads in plain English and keeps the form filled, a double tap sends once, and a confirmation ("Request sent to ...") replaces the toast.
 
+### [feat/credit-m11-blank-cards-and-claim-form]
+#### Fixed
+- Android blank cards hardened (`MandiCard` un-collapsable body, accent as a separate stripe instead of a one-sided border, credit list rows use the outlined card) and the "I paid" form now shows one invoice card with "Change invoice" (sheet), hides its fields when everything is already reported, shows a "Scroll for reference, date and note" cue (`MandiMoreBelow`) and why Send is off; `PayMultipleSheet` keeps the total and Pay buttons fixed while only the supplier list scrolls.
+
 ---
 
 ## [Procurement & Open Requests]

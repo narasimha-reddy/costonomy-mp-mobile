@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useSubmitClaim, type ClaimError } from '@/hooks/useSubmitClaim';
 import { fetchAgreement, fetchInvoices } from '@/services/credit';
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
 import {
+  MandiBottomSheet,
   MandiButton,
   MandiCard,
   MandiEmptyState,
@@ -19,7 +20,6 @@ import {
   MandiHeader,
   MandiOfflineBanner,
   MandiScreen,
-  MandiSectionHeader,
   MandiSkeletonList,
   MandiStickyBar,
   MandiText,
@@ -46,6 +46,7 @@ function overpaymentText(outstanding: number): string {
 }
 
 const DUPLICATE_TEXT = 'You already reported this payment. Sending it again may be a duplicate.';
+const MORE_BELOW_TEXT = 'Scroll for reference, date and note';
 const ALL_REPORTED_TEXT = 'Everything you owe on this invoice is already reported. Your supplier will confirm it.';
 
 const STATE_TEXT = 'This invoice changed. Go back and try again.';
@@ -106,8 +107,10 @@ export default function CreditClaimScreen() {
     [invoices.data],
   );
   const [pickedId, setPickedId] = useState<number | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   // The first overdue, else the oldest due: `open` is already in that order.
-  const selectedId = presetInvoiceId ?? pickedId ?? open[0]?.id ?? null;
+  // A person's own pick wins over the invoice the screen was opened from.
+  const selectedId = pickedId ?? presetInvoiceId ?? open[0]?.id ?? null;
   const invoice = open.find((i) => i.id === selectedId) ?? null;
 
   // The reports already waiting on this invoice come from its detail. Without them
@@ -140,11 +143,21 @@ export default function CreditClaimScreen() {
   const check = checkClaim({ amountText, method, reference, paidOn, note }, today, issuedOn);
   const needsReference = referenceRequired(method);
   const referenceMissing = needsReference && reference.trim() === '';
+  const otherReportable = invoice != null && open.some(
+    (i) => i.id !== invoice.id && Number(i.reportableAmount ?? i.outstanding) > 0);
+  const canChoose = presetInvoiceId == null && open.length > 1;
   const canSend = invoice != null && check.valid && !claim.pending && !offline && !nothingToReport;
   // The same amount, method and day as a report that is still waiting: very likely the same payment.
   const duplicate = check.amount != null && waitingClaims.some((c) => (
     Number(c.amount) === Number(check.amount) && c.method === method && c.paidOn === paidOn
   ));
+
+  // Why Send is off, in one plain line (offline and in-flight are said elsewhere).
+  const disabledReason: string | null = canSend || offline || claim.pending || nothingToReport ? null
+    : check.amount == null ? 'Enter an amount of at least ₹1.'
+      : referenceMissing ? 'Add the reference number to send.'
+        : check.errors.paidOn != null ? 'Fix the date to send.'
+          : null;
 
   const goBack = () => (router.canGoBack?.() === false ? router.replace('/restaurant/credit') : router.back());
 
@@ -210,7 +223,8 @@ export default function CreditClaimScreen() {
   return (
     <MandiScreen
       header={header}
-      footer={(
+      moreBelow={nothingToReport ? undefined : MORE_BELOW_TEXT}
+      footer={nothingToReport && claim.error == null ? undefined : (
         <MandiStickyBar>
           {claim.error != null && (
             <View style={styles.note} accessibilityLiveRegion="polite" testID={`claim-error-${claim.error.kind}`}>
@@ -226,6 +240,11 @@ export default function CreditClaimScreen() {
                 />
               )}
             </View>
+          )}
+          {disabledReason != null && (
+            <MandiText variant="caption" color={Colors.textSecondary} testID="claim-disabled-reason">
+              {disabledReason}
+            </MandiText>
           )}
           <MandiButton
             testID="claim-send"
@@ -243,49 +262,57 @@ export default function CreditClaimScreen() {
     >
       <MandiOfflineBanner visible={offline} />
 
-      <MandiCard testID="claim-explainer">
-        <MandiText variant="body" testID="claim-explainer-text">
-          Your supplier will confirm this. Until then it still shows as owed.
-        </MandiText>
-      </MandiCard>
+      {!nothingToReport && (
+        <MandiCard testID="claim-explainer">
+          <MandiText variant="body" testID="claim-explainer-text">
+            Your supplier will confirm this. Until then it still shows as owed.
+          </MandiText>
+        </MandiCard>
+      )}
 
-      {presetInvoiceId == null ? (
-        <View style={styles.section}>
-          <MandiSectionHeader title="Which invoice?" />
-          <View accessibilityRole="radiogroup" style={styles.section}>
-            {open.map((row) => (
-              <CreditInvoiceRow
-                key={row.id}
-                invoice={row}
-                selected={row.id === selectedId}
-                onPress={() => { setPickedId(row.id); claim.reset(); }}
-              />
-            ))}
-          </View>
-        </View>
-      ) : invoice != null ? (
+      {invoice != null && (
         <View style={styles.section} testID="claim-invoice">
-          <MandiSectionHeader title="Invoice" />
+          <View style={styles.sectionHead}>
+            <MandiText variant="captionEmphasis" muted style={styles.flex}>Invoice</MandiText>
+            {canChoose && (
+              <MandiButton
+                testID="claim-change-invoice"
+                label="Change invoice"
+                variant="tertiary"
+                size="sm"
+                onPress={() => setSheetOpen(true)}
+              />
+            )}
+          </View>
           <CreditInvoiceRow invoice={invoice} />
         </View>
-      ) : null}
+      )}
 
-      {waitingTotal > 0 && (
+      {nothingToReport ? (
+        <View style={styles.info} accessibilityLiveRegion="polite" testID="claim-all-reported">
+          <Ionicons name="checkmark-circle" size={IconSize.md} color={Colors.primary} />
+          <MandiText variant="body" style={styles.infoText}>{ALL_REPORTED_TEXT}</MandiText>
+        </View>
+      ) : waitingTotal > 0 ? (
         <View style={styles.info} accessibilityLiveRegion="polite" testID="claim-waiting-info">
           <Ionicons name="information-circle" size={IconSize.md} color={Colors.primary} />
           <MandiText variant="body" style={styles.infoText}>
             {`${formatMoney(waitingTotal)} already reported and waiting for ${supplierName}.`}
           </MandiText>
         </View>
+      ) : null}
+
+      {nothingToReport && otherReportable && (
+        <MandiButton
+          testID="claim-report-different"
+          label="Report a different invoice"
+          variant="secondary"
+          onPress={() => setSheetOpen(true)}
+        />
       )}
 
-      {nothingToReport && (
-        <View style={styles.info} accessibilityLiveRegion="polite" testID="claim-all-reported">
-          <Ionicons name="checkmark-circle" size={IconSize.md} color={Colors.primary} />
-          <MandiText variant="body" style={styles.infoText}>{ALL_REPORTED_TEXT}</MandiText>
-        </View>
-      )}
-
+      {!nothingToReport && (
+        <>
       <MandiFormField
         label="Amount"
         value={amountText}
@@ -335,7 +362,7 @@ export default function CreditClaimScreen() {
       </View>
 
       <MandiFormField
-        label="UTR / reference number"
+        label={needsReference ? 'Reference' : 'Reference (optional)'}
         value={reference}
         onChangeText={(next) => { setReference(next); claim.reset(); }}
         placeholder={needsReference ? 'From your bank or UPI app' : 'Optional for cash'}
@@ -402,12 +429,40 @@ export default function CreditClaimScreen() {
         disabled={claim.pending}
         testID="claim-note"
       />
+        </>
+      )}
+
+      <MandiBottomSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title="Choose an invoice"
+        closeLabel="Close invoice list"
+        testID="claim-invoice-sheet"
+      >
+        <ScrollView style={styles.sheetList} contentContainerStyle={styles.sheetContent} testID="claim-invoice-list">
+          <View accessibilityRole="radiogroup" style={styles.section}>
+            {open.map((row) => (
+              <CreditInvoiceRow
+                key={row.id}
+                invoice={row}
+                selected={row.id === selectedId}
+                testID={`claim-pick-invoice-${row.id}`}
+                onPress={() => { setPickedId(row.id); claim.reset(); setSheetOpen(false); }}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      </MandiBottomSheet>
     </MandiScreen>
   );
 }
 
 const styles = StyleSheet.create({
   section: { gap: Spacing.sm },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  flex: { flex: 1 },
+  sheetList: { flexGrow: 0, flexShrink: 1 },
+  sheetContent: { paddingVertical: Spacing.sm },
   note: { gap: Spacing.sm },
   info: {
     flexDirection: 'row',

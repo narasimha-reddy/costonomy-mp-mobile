@@ -85,7 +85,7 @@ const apiError = (code: string, status: number, details?: Record<string, unknown
 async function ready(preset?: string) {
   mockParams = preset == null ? { agreementId: '3' } : { agreementId: '3', invoiceId: preset };
   const view = renderScreen();
-  await screen.findByTestId('claim-send');
+  await screen.findByTestId('claim-invoice');
   return view;
 }
 
@@ -100,27 +100,41 @@ beforeEach(() => {
 });
 
 describe('invoice choice', () => {
-  it('lists only open invoices and selects the first overdue one', async () => {
+  it('shows only the selected open invoice as a compact card, first overdue first', async () => {
     await ready();
-    expect(screen.getByText('Which invoice?')).toBeTruthy();
-    expect(screen.getAllByTestId(/^credit-invoice-\d+$/).map((n) => n.props.testID))
-      .toEqual(['credit-invoice-12', 'credit-invoice-11']);
-    expect(screen.getAllByText('Selected')).toHaveLength(1);
-    expect(screen.getByTestId('credit-invoice-12')).toHaveTextContent(/Selected/);
+    expect(screen.queryByText('Which invoice?')).toBeNull();
+    expect(screen.getAllByTestId(/^credit-invoice-\d+$/).map((n) => n.props.testID)).toEqual(['credit-invoice-12']);
+    expect(screen.getByTestId('claim-invoice')).toHaveTextContent(/INV-12/);
+    expect(screen.getByTestId('claim-invoice')).toHaveTextContent(/₹600\.00 of ₹9,200\.00 owed/);
+    expect(screen.queryByTestId('credit-invoice-11')).toBeNull();
+    expect(screen.getByTestId('claim-change-invoice')).toBeTruthy();
     expect(screen.getByTestId('claim-amount').props.value).toBe('600.00');
   });
 
-  it('falls back to the oldest due when nothing is overdue, and switching refills the amount', async () => {
+  it('Change invoice opens a sheet with the open invoices, the current one Selected; picking re-prefills', async () => {
     invoicesM.mockResolvedValue([
       inv(21, { dueDate: '2026-12-20', outstanding: '100.0000' }),
       inv(22, { dueDate: '2026-12-01', outstanding: '250.5000' }),
     ]);
     await ready();
-    expect(screen.getByTestId('credit-invoice-22')).toHaveTextContent(/Selected/);
+    expect(screen.getByTestId('credit-invoice-22')).toBeTruthy();
     expect(screen.getByTestId('claim-amount').props.value).toBe('250.50');
-    fireEvent.press(screen.getByTestId('credit-invoice-21'));
-    expect(screen.getByTestId('credit-invoice-21')).toHaveTextContent(/Selected/);
+    expect(screen.queryByTestId('claim-pick-invoice-21')).toBeNull();
+    fireEvent.press(screen.getByTestId('claim-change-invoice'));
+    expect(screen.getAllByTestId(/^claim-pick-invoice-\d+$/)).toHaveLength(2);
+    expect(screen.getByTestId('claim-pick-invoice-22')).toHaveTextContent(/Selected/);
+    expect(screen.getByTestId('claim-pick-invoice-21')).not.toHaveTextContent(/Selected/);
+    fireEvent.press(screen.getByTestId('claim-pick-invoice-21'));
+    expect(screen.queryByTestId('claim-pick-invoice-21')).toBeNull();
+    expect(screen.getByTestId('credit-invoice-21')).toBeTruthy();
+    expect(screen.queryByTestId('credit-invoice-22')).toBeNull();
     expect(screen.getByTestId('claim-amount').props.value).toBe('100.00');
+  });
+
+  it('has no Change invoice button with a single open invoice', async () => {
+    invoicesM.mockResolvedValue([LIST[0]]);
+    await ready();
+    expect(screen.queryByTestId('claim-change-invoice')).toBeNull();
   });
 
   it('shows a preset invoice read-only with what is still owed', async () => {
@@ -464,9 +478,39 @@ describe('reporting the same payment twice', () => {
     await ready('11');
     expect(screen.getByTestId('claim-all-reported'))
       .toHaveTextContent(/Everything\ you\ owe\ on\ this\ invoice\ is\ already\ reported\.\ Your\ supplier\ will\ confirm\ it\./);
-    type('claim-amount', '100');
-    type('claim-reference', 'UTR1');
-    expect(sendDisabled()).toBe(true);
+    expect(screen.queryByTestId('claim-send')).toBeNull();
+  });
+
+  it('at reportable 0 hides every field and shows one banner only', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 0 })]);
+    detailM.mockResolvedValue({ id: 11, claims: [waiting()] });
+    await ready('11');
+    expect(await screen.findByTestId('claim-all-reported')).toBeTruthy();
+    expect(screen.getByTestId('claim-invoice')).toBeTruthy();
+    for (const id of ['claim-amount', 'claim-reference', 'claim-note', 'claim-date', 'claim-method-UPI', 'claim-explainer']) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    expect(screen.queryByTestId('claim-waiting-info')).toBeNull();
+    expect(screen.queryByTestId('claim-report-different')).toBeNull();
+  });
+
+  it('offers Report a different invoice when another open invoice has something to report', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 0 }), inv(12, { reportableAmount: 500 })]);
+    await ready('11');
+    fireEvent.press(await screen.findByTestId('claim-report-different'));
+    fireEvent.press(screen.getByTestId('claim-pick-invoice-12'));
+    expect(screen.getByTestId('credit-invoice-12')).toBeTruthy();
+    expect(screen.getByTestId('claim-amount').props.value).toBe('500.00');
+    expect(screen.queryByTestId('claim-all-reported')).toBeNull();
+    expect(screen.getByTestId('claim-send')).toBeTruthy();
+  });
+
+  it('merges partly reported into one banner with the amount', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 4000 })]);
+    detailM.mockResolvedValue({ id: 11, claims: [waiting()] });
+    await ready('11');
+    expect(await screen.findByTestId('claim-waiting-info')).toHaveTextContent(/₹1,000\.00 already reported and waiting for Acme Foods\./);
+    expect(screen.queryByTestId('claim-all-reported')).toBeNull();
   });
 
   it('phrases an overpayment refusal as up to the reportable amount more', async () => {
@@ -476,5 +520,65 @@ describe('reporting the same payment twice', () => {
     type('claim-reference', 'UTR1');
     await act(async () => { fireEvent.press(sendButton()); });
     expect(await screen.findByTestId('claim-error-overpayment')).toHaveTextContent(/up to ₹250\.00 more/);
+  });
+});
+
+describe('first screen and cues', () => {
+  const scrollEvent = (offset: number, viewport: number, content: number) => ({
+    nativeEvent: {
+      contentOffset: { x: 0, y: offset },
+      layoutMeasurement: { width: 390, height: viewport },
+      contentSize: { width: 390, height: content },
+    },
+  });
+  const scroller = () => screen.getByTestId('mandi-screen-scroll');
+  const measure = (viewport: number, content: number) => {
+    act(() => {
+      fireEvent(scroller(), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: viewport } } });
+      fireEvent(scroller(), 'contentSizeChange', 390, content);
+    });
+  };
+
+  it('puts the invoice, amount, method chips and Send within the first screen, with a required reference', async () => {
+    await ready();
+    for (const id of ['claim-invoice', 'claim-amount', 'claim-method-BANK_TRANSFER', 'claim-method-CARD', 'claim-send']) {
+      expect(screen.getByTestId(id)).toBeTruthy();
+    }
+    // The chips are one wrapping row, not a column that pushes the form down.
+    let node = screen.getByTestId('claim-method-UPI').parent;
+    while (node != null && StyleSheet.flatten(node.props.style)?.flexWrap == null) node = node.parent;
+    expect(StyleSheet.flatten(node?.props.style).flexWrap).toBe('wrap');
+    expect(screen.getByTestId('claim-reference')).toBeTruthy();
+    expect(screen.getByText(/^Reference \*$/)).toBeTruthy();
+    // The asterisk marks a required reference, and is gone for cash.
+    expect(screen.getAllByText('*').length).toBeGreaterThanOrEqual(2);
+    fireEvent.press(screen.getByTestId('claim-method-CASH'));
+    expect(screen.getByText(/^Reference \(optional\)$/)).toBeTruthy();
+  });
+
+  it('shows the more-below cue only while the content is taller than the screen and not at the end', async () => {
+    await ready();
+    expect(screen.queryByTestId('more-below')).toBeNull();
+    measure(500, 900);
+    expect(screen.getByTestId('more-below')).toHaveTextContent(/Scroll for reference, date and note/);
+    act(() => { fireEvent.scroll(scroller(), scrollEvent(100, 500, 900)); });
+    expect(screen.getByTestId('more-below')).toBeTruthy();
+    act(() => { fireEvent.scroll(scroller(), scrollEvent(400, 500, 900)); });
+    expect(screen.queryByTestId('more-below')).toBeNull();
+    act(() => { fireEvent.scroll(scroller(), scrollEvent(200, 500, 900)); });
+    expect(screen.getByTestId('more-below')).toBeTruthy();
+    measure(500, 480);
+    expect(screen.queryByTestId('more-below')).toBeNull();
+  });
+
+  it('says why Send is off, in one line, and drops the line when it can send', async () => {
+    await ready();
+    type('claim-amount', '');
+    expect(screen.getByTestId('claim-disabled-reason')).toHaveTextContent('Enter an amount of at least ₹1.');
+    type('claim-amount', '100');
+    expect(screen.getByTestId('claim-disabled-reason')).toHaveTextContent('Add the reference number to send.');
+    type('claim-reference', 'UTR1');
+    expect(screen.queryByTestId('claim-disabled-reason')).toBeNull();
+    expect(sendDisabled()).toBe(false);
   });
 });

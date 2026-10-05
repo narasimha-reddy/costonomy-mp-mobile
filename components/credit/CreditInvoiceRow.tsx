@@ -11,11 +11,14 @@ export function CreditInvoiceRow({
   invoice,
   onPress,
   selected,
+  testID,
 }: {
   invoice: CreditInvoiceListItem;
   onPress?: () => void;
   /** Set (true or false) when the row is one choice in a list; adds the word "Selected". */
   selected?: boolean;
+  /** Overrides the default `credit-invoice-{id}`, for the same invoice drawn twice on a screen. */
+  testID?: string;
 }) {
   const chip = dueChip(invoice.dueState, invoice.daysToDue);
   const order = invoice.orderNumber ?? invoice.supplierOrderId;
@@ -35,9 +38,10 @@ export function CreditInvoiceRow({
   return (
     <MandiCard
       compact
+      outlined
       onPress={onPress}
       accentColor={selected === true ? Colors.primary : undefined}
-      testID={`credit-invoice-${invoice.id}`}
+      testID={testID ?? `credit-invoice-${invoice.id}`}
       accessibilityLabel={label}
     >
       <View style={styles.row}>

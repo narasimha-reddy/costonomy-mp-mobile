@@ -75,7 +75,7 @@ export function CreditClaimsSection({
           && Number(claim.confirmedAmount) !== Number(claim.amount);
         return (
           <View key={claim.id} testID={`claim-${claim.id}`}>
-            <MandiCard compact>
+            <MandiCard compact outlined>
               <View style={styles.row}>
                 <MandiText variant="bodyEmphasis" style={styles.flex}>{formatMoney(claim.amount)}</MandiText>
                 <MandiStatusChip

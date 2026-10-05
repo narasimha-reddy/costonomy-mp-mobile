@@ -77,6 +77,20 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); client.clear(); });
 
+describe('PayMultipleSheet layout', () => {
+  it('scrolls only the supplier list: total, wallet line and Pay buttons sit outside the scroll view', () => {
+    renderSheet();
+    const list = screen.getByTestId('multi-list');
+    const inside = (id: string) => {
+      for (let n = screen.getByTestId(id).parent; n != null; n = n.parent) if (n === list) return true;
+      return false;
+    };
+    expect(inside('multi-row-1')).toBe(true);
+    for (const id of ['multi-total', 'multi-wallet', 'multi-pay', 'multi-one-instead']) expect(inside(id)).toBe(false);
+    expect(StyleSheet.flatten(list.props.style).flexShrink).toBe(1);
+  });
+});
+
 describe('PayMultipleSheet list', () => {
   it('lists suppliers in the given order, overdue checked, the rest unchecked and not overdue', async () => {
     renderSheet();

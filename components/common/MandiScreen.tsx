@@ -1,6 +1,7 @@
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MandiMoreBelow, useMoreBelow } from './MandiMoreBelow';
 import { Colors, Spacing } from '@/theme';
 
 /**
@@ -20,6 +21,7 @@ export function MandiScreen({
   footer,
   floating,
   stickyIndices,
+  moreBelow,
 }: {
   children: React.ReactNode;
   onRefresh?: () => void;
@@ -40,6 +42,12 @@ export function MandiScreen({
    * prices with nobody's name on it.
    */
   stickyIndices?: number[];
+  /**
+   * Shows this line (with a down arrow) just above the footer while the content
+   * is taller than the screen and not yet scrolled to the end. For a form whose
+   * primary button sits in the footer and whose last fields are below the fold.
+   */
+  moreBelow?: string;
   /** Pinned above the scroll area — a title bar, a search field. */
   header?: React.ReactNode;
   /** Pinned below it — a checkout summary bar. */
@@ -54,6 +62,7 @@ export function MandiScreen({
   floating?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const more = useMoreBelow();
 
   const body = (
     <View style={[styles.content, contentStyle]}>{children}</View>
@@ -70,6 +79,8 @@ export function MandiScreen({
               : styles.scroll
           }
           stickyHeaderIndices={stickyIndices}
+          testID="mandi-screen-scroll"
+          {...(moreBelow != null ? more.scrollProps : null)}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             onRefresh
@@ -82,6 +93,7 @@ export function MandiScreen({
       ) : (
         body
       )}
+      {scroll && moreBelow != null && <MandiMoreBelow visible={more.visible} label={moreBelow} />}
       {floating}
       {footer}
       {!footer && <View style={{ height: insets.bottom }} />}

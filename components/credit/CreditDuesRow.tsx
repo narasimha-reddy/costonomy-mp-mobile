@@ -31,6 +31,7 @@ export function CreditDuesRow({
     <MandiCard
       testID={`dues-row-${agreement.id}`}
       onPress={onPress}
+      outlined
       accentColor={overdue || suspended ? Colors.danger : undefined}
       accessibilityLabel={[name, owed, status, next, reported].filter(Boolean).join(', ')}
     >

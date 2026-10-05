@@ -34,6 +34,7 @@ export function CreditLineRow({ agreement, onPress }: { agreement: CreditAgreeme
     <MandiCard
       testID={`line-row-${agreement.id}`}
       onPress={onPress}
+      outlined
       accessibilityLabel={[name, chip, caption].filter(Boolean).join(', ')}
     >
       <View style={styles.row}>

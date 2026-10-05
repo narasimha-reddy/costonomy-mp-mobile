@@ -209,6 +209,8 @@ export function SupplierSectionBody({
               value={shownQuantity?.(item.id, Number(item.requestedQuantity)) ?? Number(item.requestedQuantity)}
               onChange={(quantity) => onChangeQuantity(item.id, String(quantity))}
               min={0}
+              editable
+              commitOnBlur
               unit={item.unit}
               itemLabel={skuTitle(item.sku)}
             />

@@ -6,8 +6,8 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useRequestBasket, useInvalidateBasket } from '@/hooks/useRequestBasket';
 import { useDebouncedEdits } from '@/hooks/useDebouncedEdits';
-import { DeliveryDayChoice } from '@/components/restaurant/DeliveryDayChoice';
-import { preferredDateFor } from '@/lib/delivery/deliveryDay';
+import { DeliveryDayChoice, type DeliveryWhen } from '@/components/restaurant/DeliveryDayChoice';
+import { istInstant, preferredDateFor } from '@/lib/delivery/deliveryDay';
 import {
   addIntentItem,
   prepareDirectOrder,
@@ -82,8 +82,8 @@ export default function BasketScreen() {
     direct?: boolean;
   } | null>(null);
   const [explaining, setExplaining] = useState(false);
-  /** Days from today the buyer wants delivery, or null for immediate. Sent with every request. */
-  const [dayOffset, setDayOffset] = useState<number | null>(null);
+  /** When the buyer wants delivery: immediate, or a day and optionally an hour. Sent with every request. */
+  const [when, setWhen] = useState<DeliveryWhen>({ offset: null, byHour: null });
 
   /**
    * Quantity taps are held briefly and sent as one decision, so a burst of taps
@@ -199,7 +199,11 @@ export default function BasketScreen() {
       return sendBasket(accessToken as string, outletId as number, {
         acceptPriceChanges,
         intentId,
-        preferredDeliveryDate: preferredDateFor(dayOffset),
+        preferredDeliveryDate: preferredDateFor(when.offset),
+        // "By 6 am" on that day, as an instant: the supplier is shown it as the time it is wanted by.
+        requestedDeliveryTime: when.offset != null && when.byHour != null
+          ? istInstant(preferredDateFor(when.offset) as string, when.byHour)
+          : undefined,
       });
     },
     onSuccess: (result, variables) => {
@@ -319,7 +323,7 @@ export default function BasketScreen() {
     }
 
     nodes.push(
-      <DeliveryDayChoice key="delivery-day" value={dayOffset} onChange={setDayOffset} />,
+      <DeliveryDayChoice key="delivery-day" value={when} onChange={setWhen} />,
     );
 
     drafts.forEach((draft, index) => {

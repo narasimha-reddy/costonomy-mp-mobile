@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -27,6 +27,14 @@ interface MandiQuantityStepperProps {
   unit?: string;
   /** Allows typing a quantity directly. Off for compact card-level steppers. */
   editable?: boolean;
+  /**
+   * With {@code editable}: report a typed quantity when typing ends, not on every keystroke.
+   *
+   * <p>For a screen where a change is saved. Per keystroke, clearing the box to type a new number reports zero and
+   * the line would be removed; here the box can be emptied and refilled freely, and an empty or zero entry goes
+   * back to the quantity it had (minus is how a line is taken away).
+   */
+  commitOnBlur?: boolean;
   disabled?: boolean;
   /**
    * Show the quantity in the same frame, with no controls.
@@ -53,6 +61,7 @@ export function MandiQuantityStepper({
   step = 1,
   unit,
   editable = false,
+  commitOnBlur = false,
   disabled = false,
   readOnly = false,
   size = 'md',
@@ -65,6 +74,21 @@ export function MandiQuantityStepper({
   const height = size === 'sm' ? ControlHeight.sm : ControlHeight.md;
   const glyph = size === 'sm' ? IconSize.sm : IconSize.md;
   const suffix = itemLabel ? ` ${itemLabel}` : '';
+
+  // What is in the box while it is being typed in (commitOnBlur only).
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+
+  const commitText = () => {
+    const parsed = Number(text.replace(/[^0-9.]/g, ''));
+    if (!Number.isFinite(parsed) || parsed <= 0 || text.trim() === '') {
+      setText(String(value));
+      return;
+    }
+    const next = clamp(parsed);
+    setText(String(next));
+    if (next !== value) onChange(next);
+  };
 
   const clamp = (next: number) => {
     if (next < min) return min;
@@ -94,11 +118,16 @@ export function MandiQuantityStepper({
 
       {editable && !readOnly ? (
         <TextInput
-          value={String(value)}
-          onChangeText={(text) => {
-            const parsed = Number(text.replace(/[^0-9.]/g, ''));
+          value={commitOnBlur ? text : String(value)}
+          onChangeText={(typed) => {
+            if (commitOnBlur) {
+              setText(typed);
+              return;
+            }
+            const parsed = Number(typed.replace(/[^0-9.]/g, ''));
             onChange(Number.isFinite(parsed) ? clamp(parsed) : min);
           }}
+          onEndEditing={commitOnBlur ? commitText : undefined}
           keyboardType="decimal-pad"
           editable={!disabled}
           selectTextOnFocus

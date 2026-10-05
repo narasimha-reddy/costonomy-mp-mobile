@@ -120,4 +120,44 @@ describe('the cart', () => {
     expect((sendBasket as jest.Mock).mock.calls[1][2].preferredDeliveryDate)
       .toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
+
+  it('lets a quantity be typed, and saves it when typing ends', async () => {
+    setup();
+    const box = screen.getByLabelText(/^Quantity/);
+
+    fireEvent.changeText(box, '50');
+    expect(updateIntentItem).not.toHaveBeenCalled();
+    fireEvent(box, 'endEditing');
+
+    await waitFor(() => expect(updateIntentItem).toHaveBeenCalledWith('token', 501, '50'));
+    expect(removeIntentItem).not.toHaveBeenCalled();
+  });
+
+  it('does not remove the line when the box is emptied to type a new number', async () => {
+    setup();
+    const box = screen.getByLabelText(/^Quantity/);
+
+    fireEvent.changeText(box, '');
+    fireEvent(box, 'endEditing');
+
+    // Back to what it was: minus is how a line is taken away.
+    await act(async () => { await Promise.resolve(); });
+    expect(removeIntentItem).not.toHaveBeenCalled();
+    expect(updateIntentItem).not.toHaveBeenCalled();
+  });
+
+  it('sends a day and a deliver-by time with the request', async () => {
+    setup();
+
+    fireEvent.press(screen.getByLabelText('Delivery: Tomorrow'));
+    fireEvent.press(screen.getByLabelText('Delivery: By 6 am'));
+    fireEvent.press(screen.getByText('Send Request'));
+
+    await waitFor(() => expect(sendBasket).toHaveBeenCalled());
+    const body = (sendBasket as jest.Mock).mock.calls[0][2];
+    expect(body.preferredDeliveryDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // 6:00 in India is 00:30 UTC.
+    expect(body.requestedDeliveryTime).toMatch(/T00:30:00\.000Z$/);
+  });
 });
+

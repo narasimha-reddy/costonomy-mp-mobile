@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-bulk-orders] - Ordering for an event
+#### Changed
+- **Cart quantities can be typed** (50 kg without 50 taps). It saves when typing ends; emptying the box to type a new number no longer removes the line, and minus is still how a line is taken away.
+- **Delivery day** scrolls to 30 days ahead (what the server accepts), not just two.
+- **Deliver by** an hour (6 am, 8 am, noon, 4 pm, in India's time) can be sent with the request; the supplier sees it as the time it is wanted by. Hours already past are not offered for today.
+
 ### [phase6/mobile-delivery-time] - As soon as possible, and a day's first slot (API D-142)
 #### Changed
 - The delivery time picker offers "As soon as possible" (selected when the request was sent as Immediate); a request sent for a day starts on that day's first available slot, skipping one that has started. The day buttons use India's date, not UTC's.

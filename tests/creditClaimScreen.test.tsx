@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/api/errors';
 import { istDay, shiftDay } from '@/lib/credit/claims';
 import { fetchAgreement, fetchCreditInvoice, fetchInvoices, submitClaim } from '@/services/credit';
 import { Colors } from '@/theme';
+import { renderedText } from './fixtures/renderedText';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
@@ -161,10 +162,17 @@ describe('invoice choice', () => {
 });
 
 describe('form', () => {
+  it('has no "I paid" wording anywhere on the form', async () => {
+    await ready();
+    expect(renderedText(screen.toJSON())).not.toMatch(/I paid|I Paid|paid outside/i);
+  });
+
   it('explains that the supplier confirms and labels the header', async () => {
     await ready();
-    expect(screen.getByText('I paid outside the app')).toBeTruthy();
-    expect(screen.getByText('Your supplier will confirm this. Until then it still shows as owed.')).toBeTruthy();
+    expect(screen.getByText('Paid the supplier directly')).toBeTruthy();
+    expect(screen.getByTestId('claim-explainer-text')).toHaveTextContent(
+      'Paid Acme Foods by cash, UPI, bank transfer or cheque? Tell them here. They will check and confirm it.');
+    expect(screen.getByText('Your supplier will confirm this. Until they do, it still shows as owed.')).toBeTruthy();
   });
 
   it.each([
@@ -299,7 +307,7 @@ describe('sending', () => {
     expect(mockBack).not.toHaveBeenCalled();
     expect(sendDisabled()).toBe(true);
     await act(async () => { answer({ id: 5, status: 'SUBMITTED' }); });
-    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("Sent to Acme Foods. They'll confirm it.", 'success'));
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Sent to Acme Foods. They will confirm it. Until then, ₹600.00 still shows as owed.', 'success'));
     expect(order).toEqual(['toast', 'back']);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['outlet', 7, 'credit'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['credit-agreement', 3] });
@@ -477,7 +485,7 @@ describe('reporting the same payment twice', () => {
     invoicesM.mockResolvedValue([inv(11, { reportableAmount: 0 })]);
     await ready('11');
     expect(screen.getByTestId('claim-all-reported'))
-      .toHaveTextContent(/Everything\ you\ owe\ on\ this\ invoice\ is\ already\ reported\.\ Your\ supplier\ will\ confirm\ it\./);
+      .toHaveTextContent(/You've\ told\ your\ supplier\ about\ all\ of\ this\ invoice\.\ They\ will\ confirm\ it\./);
     expect(screen.queryByTestId('claim-send')).toBeNull();
   });
 

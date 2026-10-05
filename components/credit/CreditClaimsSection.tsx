@@ -25,14 +25,14 @@ const TONE: Record<ClaimStatus, StatusTone> = {
 function statusText(claim: ClaimResponse, supplierName: string): string {
   switch (claim.status) {
     case 'SUBMITTED': return `Waiting for ${supplierName}`;
-    case 'CONFIRMED': return 'Confirmed';
-    case 'REJECTED': return 'Not accepted';
+    case 'CONFIRMED': return `Confirmed by ${supplierName}`;
+    case 'REJECTED': return `Not confirmed. Check with ${supplierName}`;
     default: return 'Withdrawn';
   }
 }
 
 /**
- * The restaurant's own "I paid" reports on one invoice, and what the supplier
+ * The restaurant's own "Paid direct" reports on one invoice, and what the supplier
  * did with each. Every amount is the server's. Withdrawing asks first, and the
  * list is refreshed by the caller once the server has answered.
  */
@@ -111,7 +111,7 @@ export function CreditClaimsSection({
               {claim.status === 'REJECTED' && (
                 <MandiButton
                   testID={`claim-again-${claim.id}`}
-                  label="Report again"
+                  label="Tell them again"
                   variant="secondary"
                   size="sm"
                   disabled={offline}

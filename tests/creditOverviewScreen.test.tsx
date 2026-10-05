@@ -6,10 +6,14 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CreditOverviewScreen from '@/app/restaurant/credit/index';
 import { fetchCreditSummary } from '@/services/credit';
 import { Colors } from '@/theme';
+import { renderedText } from './fixtures/renderedText';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
-  return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
+  return {
+    Ionicons: ({ name, color }: { name: string; color?: string }) => <Text testID={`glyph-${name}`} style={{ color }}>{`icon:${name}`}</Text>,
+    MaterialCommunityIcons: ({ name, color }: { name: string; color?: string }) => <Text testID={`glyph-${name}`} style={{ color }}>{`mci:${name}`}</Text>,
+  };
 });
 jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null, PROVIDER_GOOGLE: 'google' }));
 const mockPush = jest.fn();
@@ -102,7 +106,7 @@ describe('Credit overview', () => {
     expect(screen.getByText('Overdue')).toBeTruthy();
     expect(screen.getByText('Owed ₹600.00')).toBeTruthy();
     expect(screen.getByText(/Next ₹600\.00 on 24th Sep/)).toBeTruthy();
-    expect(screen.getByText('I paid')).toBeTruthy();
+    expect(screen.getByText('Paid direct')).toBeTruthy();
   });
 
   it('says Nothing owed with no overdue line and no Pay button', async () => {
@@ -145,7 +149,7 @@ describe('Credit overview', () => {
     }));
   });
 
-  it('I paid goes straight to the claim form when exactly one supplier is owed', async () => {
+  it('Paid direct goes straight to the claim form when exactly one supplier is owed', async () => {
     fetchSummary.mockResolvedValue(summary({ due: '600' }, [
       agreement({ id: 9, supplierName: 'Solo', due: '600' }),
       agreement({ id: 10, supplierName: 'Other' }),
@@ -155,15 +159,15 @@ describe('Credit overview', () => {
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/restaurant/credit/claim', params: { agreementId: '9' },
     });
-    expect(screen.queryByText('Which supplier did you pay?')).toBeNull();
+    expect(screen.queryByText('Which supplier did you pay directly?')).toBeNull();
   });
 
-  it('I paid asks which supplier first when several are owed', async () => {
+  it('Paid direct asks which supplier first when several are owed', async () => {
     fetchSummary.mockResolvedValue(OWING);
     renderScreen();
     fireEvent.press(await screen.findByTestId('i-paid'));
     expect(mockPush).not.toHaveBeenCalled();
-    expect(screen.getByText('Which supplier did you pay?')).toBeTruthy();
+    expect(screen.getByText('Which supplier did you pay directly?')).toBeTruthy();
     fireEvent.press(screen.getByTestId('pick-supplier-1'));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/restaurant/credit/claim', params: { agreementId: '1' },
@@ -171,7 +175,7 @@ describe('Credit overview', () => {
     expect(screen.queryByTestId('pay-sheet')).toBeNull();
   });
 
-  it('without wallet repay the slots drop out: I paid takes the filled emphasis, Get credit stays', async () => {
+  it('without wallet repay the slots drop out: Paid direct takes the filled emphasis, Get credit stays', async () => {
     fetchSummary.mockResolvedValue({ ...OWING, walletRepayEnabled: false });
     renderScreen();
     await screen.findByTestId('i-paid');
@@ -213,7 +217,7 @@ describe('Credit overview', () => {
     expect(within(hero).queryByText('Pay')).toBeNull();
   });
 
-  it('hides I paid when nothing is owed', async () => {
+  it('hides Paid direct when nothing is owed', async () => {
     fetchSummary.mockResolvedValue(summary({}, [agreement({ id: 1 })]));
     renderScreen();
     await screen.findByText('Nothing owed');
@@ -227,7 +231,7 @@ describe('Credit overview', () => {
     ]));
     renderScreen();
     expect(await screen.findByTestId('dues-reported-1'))
-      .toHaveTextContent('Payment reported: ₹250.00 · waiting for supplier');
+      .toHaveTextContent('Told supplier: ₹250.00 · waiting for them to confirm');
     expect(screen.queryByTestId('dues-reported-2')).toBeNull();
   });
 
@@ -423,14 +427,14 @@ describe('Credit overview hero and lists', () => {
     expect(screen.getByTestId('get-credit').props.accessibilityState?.disabled).not.toBe(true);
   });
 
-  it('hides I paid when the summary says nothing more can be reported, and keeps Pay', async () => {
+  it('hides Paid direct when the summary says nothing more can be reported, and keeps Pay', async () => {
     fetchSummary.mockResolvedValue({ ...OWING, reportableAmount: 0 });
     renderScreen();
     await screen.findByTestId('pay-from-wallet');
     expect(screen.queryByTestId('i-paid')).toBeNull();
   });
 
-  it('shows I paid when something is reportable or the field is absent (old API)', async () => {
+  it('shows Paid direct when something is reportable or the field is absent (old API)', async () => {
     fetchSummary.mockResolvedValue({ ...OWING, reportableAmount: 250 });
     const first = renderScreen();
     expect(await screen.findByTestId('i-paid')).toBeTruthy();
@@ -438,5 +442,50 @@ describe('Credit overview hero and lists', () => {
     fetchSummary.mockResolvedValue(OWING);
     renderScreen();
     expect(await screen.findByTestId('i-paid')).toBeTruthy();
+  });
+});
+
+describe('Credit overview action row wording and icons', () => {
+  const glyphColor = (name: string) => (StyleSheet.flatten(screen.getByTestId(`glyph-${name}`).props.style) as { color?: string }).color;
+
+  it('uses Paid direct, Pay and Get credit with their icons, left to right', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    await screen.findByTestId('credit-actions');
+    expect(within(screen.getByTestId('i-paid')).getByText('mci:cash-check')).toBeTruthy();
+    expect(within(screen.getByTestId('pay-from-wallet')).getByText('icon:cash-outline')).toBeTruthy();
+    expect(within(screen.getByTestId('get-credit')).getByText('icon:storefront-outline')).toBeTruthy();
+    expect(within(screen.getByTestId('i-paid')).getByText('Paid direct')).toBeTruthy();
+    expect(within(screen.getByTestId('pay-from-wallet')).getByText('Pay')).toBeTruthy();
+    expect(within(screen.getByTestId('get-credit')).getByText('Get credit')).toBeTruthy();
+  });
+
+  it('gives each action its hint and lets captions wrap to two centred lines', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    await screen.findByTestId('credit-actions');
+    expect(screen.getByTestId('pay-from-wallet')).toHaveProp('accessibilityHint', 'Pays from your Mandi wallet');
+    expect(screen.getByTestId('i-paid')).toHaveProp('accessibilityHint',
+      'Tell your supplier about a payment you made outside Mandi. They will confirm it.');
+    expect(screen.getByTestId('get-credit')).toHaveProp('accessibilityHint', 'Ask another supplier for credit');
+    const caption = screen.getByText('Paid direct');
+    expect(caption).toHaveProp('numberOfLines', 2);
+    expect((StyleSheet.flatten(caption.props.style) as { textAlign?: string }).textAlign).toBe('center');
+  });
+
+  it('draws the outline glyphs in the stronger orange and the filled Pay glyph in white', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    await screen.findByTestId('credit-actions');
+    expect(glyphColor('cash-check')).toBe(Colors.primaryDark);
+    expect(glyphColor('storefront-outline')).toBe(Colors.primaryDark);
+    expect(glyphColor('cash-outline')).toBe(Colors.textInverse);
+  });
+
+  it('has no "I paid" wording anywhere on the screen', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    await screen.findByTestId('credit-actions');
+    expect(renderedText(screen.toJSON())).not.toMatch(/I paid|I Paid|paid outside/i);
   });
 });

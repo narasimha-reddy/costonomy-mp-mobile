@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/api/errors';
 import { isDefinitiveFailure } from '@/lib/api/idempotency';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 import { isClaimStateError, isOverpaymentError, submitClaim } from '@/services/credit';
+import { formatMoney } from '@/utils/money';
 import type { ClaimResponse, SubmitClaimRequest } from '@/models/credit';
 
 /** What went wrong, in the terms the form words. Never a raw code. */
@@ -73,7 +74,7 @@ export function useSubmitClaim(target: { agreementId: number; supplierName: stri
       keyedFor.current = null;
       void queryClient.invalidateQueries({ queryKey: ['outlet', outletId, 'credit'] });
       void queryClient.invalidateQueries({ queryKey: ['credit-agreement', agreementId] });
-      toast.show(`Sent to ${supplierName}. They'll confirm it.`, 'success');
+      toast.show(`Sent to ${supplierName}. They will confirm it. Until then, ${formatMoney(response.amount ?? body.amount)} still shows as owed.`, 'success');
       return response;
     } catch (caught) {
       idempotency.settle(caught);

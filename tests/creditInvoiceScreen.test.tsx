@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CreditInvoiceScreen from '@/app/restaurant/credit/invoice/[id]';
 import { ApiError } from '@/lib/api/errors';
 import { Colors } from '@/theme';
+import { renderedText } from './fixtures/renderedText';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
@@ -163,7 +164,7 @@ describe('credit invoice detail', () => {
     expect(sheetProps).toMatchObject({ overdue: 0 });
   });
 
-  it('hides Pay when wallet repay is disabled, but I paid still works', () => {
+  it('hides Pay when wallet repay is disabled, but Paid direct still works', () => {
     mockRepay = false;
     show();
     expect(screen.queryByTestId('invoice-pay')).toBeNull();
@@ -185,11 +186,11 @@ describe('credit invoice detail', () => {
     expect(style.backgroundColor).toBe(Colors.primary);
   });
 
-  it('shows I paid under Pay as the outline button, orange stays on Pay', () => {
+  it('shows Paid direct under Pay as the outline button, orange stays on Pay', () => {
     show();
     const pay = screen.getByTestId('invoice-pay');
     const claim = screen.getByTestId('invoice-i-paid');
-    expect(screen.getByText('I paid outside the app')).toBeTruthy();
+    expect(screen.getByText('Paid direct')).toBeTruthy();
     expect(StyleSheet.flatten(claim.props.style).backgroundColor).toBe(Colors.surface);
     expect(StyleSheet.flatten(pay.props.style).backgroundColor).toBe(Colors.primary);
   });
@@ -198,12 +199,12 @@ describe('credit invoice detail', () => {
     ['paid', { status: 'PAID', dueState: 'PAID', outstanding: '0.0000', paidAmount: '1000.0000', settledAt: '2026-09-10' }],
     ['written off', { status: 'WRITTEN_OFF', dueState: 'WRITTEN_OFF', outstanding: '0.0000' }],
     ['owing nothing', { outstanding: '0.0000' }],
-  ])('hides I paid on a %s invoice', (_name, over) => {
+  ])('hides Paid direct on a %s invoice', (_name, over) => {
     show(over);
     expect(screen.queryByTestId('invoice-i-paid')).toBeNull();
   });
 
-  it('hides I paid at reportable 0 but keeps Pay; shows it when positive or absent', () => {
+  it('hides Paid direct at reportable 0 but keeps Pay; shows it when positive or absent', () => {
     show({ reportableAmount: 0 });
     expect(screen.queryByTestId('invoice-i-paid')).toBeNull();
     expect(screen.getByTestId('invoice-pay')).toBeTruthy();
@@ -211,7 +212,7 @@ describe('credit invoice detail', () => {
     expect(screen.getAllByTestId('invoice-i-paid').length).toBeGreaterThan(0);
   });
 
-  it('disables I paid offline', () => {
+  it('disables Paid direct offline', () => {
     mockOffline = true;
     show();
     expect(screen.getByTestId('invoice-i-paid').props.accessibilityState?.disabled).toBe(true);
@@ -292,16 +293,22 @@ describe('your reports', () => {
       claim(1, { status: 'CONFIRMED', confirmedAmount: '400.0000' }),
       claim(2, { status: 'CONFIRMED', confirmedAmount: '350.0000' }),
     ] });
-    expect(screen.getByTestId('claim-status-1')).toHaveTextContent(/Confirmed/);
+    expect(screen.getByTestId('claim-status-1')).toHaveTextContent(/Confirmed by Acme Foods/);
     expect(screen.queryByTestId('claim-confirmed-1')).toBeNull();
     expect(screen.getByTestId('claim-confirmed-2')).toHaveTextContent('Acme Foods confirmed ₹350.00');
     expect(screen.queryByTestId('claim-withdraw-1')).toBeNull();
   });
 
+  it('has no "I paid" wording and says Tell them again on a rejection', () => {
+    show({ claims: [claim(1, { status: 'REJECTED', decisionNote: 'UTR does not match' })] });
+    expect(renderedText(screen.toJSON())).not.toMatch(/I paid|I Paid|paid outside|Report again/i);
+    expect(screen.getByText('Tell them again')).toBeTruthy();
+  });
+
   it('shows the supplier reason on a rejection and reports again for this invoice', () => {
     show({ claims: [claim(1, { status: 'REJECTED', decisionNote: 'UTR does not match' })] });
     expect(screen.getByTestId('claim-decision-1')).toHaveTextContent('Supplier said: UTR does not match');
-    expect(screen.getByTestId('claim-status-1')).toHaveTextContent(/Not accepted/);
+    expect(screen.getByTestId('claim-status-1')).toHaveTextContent(/Not confirmed\. Check with Acme Foods/);
     fireEvent.press(screen.getByTestId('claim-again-1'));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/restaurant/credit/claim', params: { agreementId: '3', invoiceId: '55' },

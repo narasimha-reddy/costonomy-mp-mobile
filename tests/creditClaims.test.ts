@@ -73,7 +73,7 @@ describe('labels', () => {
   });
 
   it('words the waiting line only when something is waiting', () => {
-    expect(reportedLine('1500.0000')).toBe('Payment reported: ₹1,500.00 · waiting for supplier');
+    expect(reportedLine('1500.0000')).toBe('Told supplier: ₹1,500.00 · waiting for them to confirm');
     expect(reportedLine('0.0000')).toBeNull();
     expect(reportedLine(undefined)).toBeNull();
     expect(reportedLine(null)).toBeNull();

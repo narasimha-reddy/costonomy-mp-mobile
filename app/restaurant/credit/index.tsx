@@ -115,8 +115,10 @@ export default function CreditOverviewScreen() {
             {showClaim && (
               <RoundAction
                 testID="i-paid"
-                icon="checkmark-done-outline"
-                label="I paid"
+                icon={{ set: 'mci', name: 'cash-check' }}
+                label="Paid direct"
+                glyphTone="strong"
+                accessibilityHint="Tell your supplier about a payment you made outside Mandi. They will confirm it."
                 primary={!showPay}
                 onPress={onClaim}
               />
@@ -124,8 +126,9 @@ export default function CreditOverviewScreen() {
             {showPay && (
               <RoundAction
                 testID="pay-from-wallet"
-                icon="wallet-outline"
+                icon="cash-outline"
                 label="Pay"
+                accessibilityHint="Pays from your Mandi wallet"
                 primary
                 disabled={offline}
                 onPress={onPay}
@@ -133,8 +136,10 @@ export default function CreditOverviewScreen() {
             )}
             <RoundAction
               testID="get-credit"
-              icon="add-circle-outline"
+              icon="storefront-outline"
               label="Get credit"
+              glyphTone="strong"
+              accessibilityHint="Ask another supplier for credit"
               primary={!showPay && !showClaim}
               onPress={request}
             />
@@ -169,7 +174,7 @@ export default function CreditOverviewScreen() {
             visible={pickerOpen}
             onClose={() => setPickerOpen(false)}
             agreements={groups.dues}
-            title={pickFor === 'claim' ? 'Which supplier did you pay?' : 'Pay which supplier?'}
+            title={pickFor === 'claim' ? 'Which supplier did you pay directly?' : 'Pay which supplier?'}
             onPick={(a) => {
               setPickerOpen(false);
               if (pickFor === 'claim') claimFor(a.id);

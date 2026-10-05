@@ -12,7 +12,10 @@ import { Colors } from '@/theme';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
-  return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
+  return {
+    Ionicons: ({ name, color }: { name: string; color?: string }) => <Text testID={`glyph-${name}`} style={{ color }}>{`icon:${name}`}</Text>,
+    MaterialCommunityIcons: ({ name, color }: { name: string; color?: string }) => <Text testID={`glyph-${name}`} style={{ color }}>{`mci:${name}`}</Text>,
+  };
 });
 jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null, PROVIDER_GOOGLE: 'google' }));
 const mockPush = jest.fn();

@@ -47,7 +47,7 @@ function overpaymentText(outstanding: number): string {
 
 const DUPLICATE_TEXT = 'You already reported this payment. Sending it again may be a duplicate.';
 const MORE_BELOW_TEXT = 'Scroll for reference, date and note';
-const ALL_REPORTED_TEXT = 'Everything you owe on this invoice is already reported. Your supplier will confirm it.';
+const ALL_REPORTED_TEXT = "You've told your supplier about all of this invoice. They will confirm it.";
 
 const STATE_TEXT = 'This invoice changed. Go back and try again.';
 
@@ -67,7 +67,7 @@ function prefill(outstanding: string | number): string {
 }
 
 /**
- * "I paid outside the app": tell a supplier a repayment was made directly (bank,
+ * "Paid the supplier directly": tell a supplier a repayment was made directly (bank,
  * cash, cheque, UPI or card).
  *
  * <p>It changes nothing that is owed until the supplier confirms it, and the screen
@@ -175,7 +175,7 @@ export default function CreditClaimScreen() {
     if (response != null) goBack();
   }
 
-  const header = <MandiHeader title="I paid outside the app" subtitle={agreement.data?.supplierName ?? undefined} back />;
+  const header = <MandiHeader title="Paid the supplier directly" subtitle={agreement.data?.supplierName ?? undefined} back />;
 
   if (!Number.isFinite(agreementId)) {
     return (
@@ -266,7 +266,10 @@ export default function CreditClaimScreen() {
       {!nothingToReport && (
         <MandiCard testID="claim-explainer">
           <MandiText variant="body" testID="claim-explainer-text">
-            Your supplier will confirm this. Until then it still shows as owed.
+            {`Paid ${supplierName} by cash, UPI, bank transfer or cheque? Tell them here. They will check and confirm it.`}
+          </MandiText>
+          <MandiText variant="caption" color={Colors.textSecondary} testID="claim-footnote">
+            Your supplier will confirm this. Until they do, it still shows as owed.
           </MandiText>
         </MandiCard>
       )}

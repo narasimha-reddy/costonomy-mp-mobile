@@ -6,7 +6,7 @@ import { Spacing } from '@/theme';
 
 /**
  * The pinned actions for a supplier: "Pay" (from the wallet, when that is on) and
- * "I paid" (a payment made outside the app, always available while something is
+ * "Paid direct" (a payment made outside the app, always available while something is
  * owed). Renders nothing when nothing is owed. `due` is the server's figure for
  * what is owed to this supplier.
  */
@@ -45,12 +45,12 @@ export function CreditStickyPayBar({
         {onClaim != null && (
           <View style={styles.cell}>
             <MandiButton
-              label="I paid"
+              label="Paid direct"
               variant="secondary"
               onPress={onClaim}
               fullWidth
               testID="credit-i-paid-bar-button"
-              accessibilityLabel="I paid outside the app"
+              accessibilityLabel="Paid direct"
               accessibilityHint="Tell this supplier you paid them directly"
             />
           </View>

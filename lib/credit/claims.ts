@@ -90,7 +90,7 @@ export function checkClaim(draft: ClaimDraft, today: string, issuedOn: string | 
 /** The line shown on a supplier's dues when reports are waiting for them; null when none are. */
 export function reportedLine(openClaimsAmount: Money | number | null | undefined): string | null {
   return Number(openClaimsAmount) > 0
-    ? `Payment reported: ${formatMoney(openClaimsAmount as Money)} · waiting for supplier`
+    ? `Told supplier: ${formatMoney(openClaimsAmount as Money)} · waiting for them to confirm`
     : null;
 }
 

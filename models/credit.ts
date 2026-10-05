@@ -88,7 +88,7 @@ export interface CreditAgreement {
   activatedAt: string | null;
   latestRequest: CreditRequest | null;
   /**
-   * What can still be reported with "I paid": still owed minus reports already
+   * What can still be reported with "Paid direct": still owed minus reports already
    * waiting for the supplier. Absent on older payloads.
    */
   reportableAmount?: number;
@@ -106,7 +106,7 @@ export interface CreditSummary {
   /** Whether repaying from the wallet is switched on. Absent means off. */
   walletRepayEnabled?: boolean;
   /**
-   * What can still be reported with "I paid": still owed minus reports already
+   * What can still be reported with "Paid direct": still owed minus reports already
    * waiting for the supplier. Absent on older payloads.
    */
   reportableAmount?: number;
@@ -144,7 +144,7 @@ export interface CreditInvoice {
   /** Negative once past due, null when settled. The app never computes it. */
   daysToDue?: number | null;
   /**
-   * What can still be reported with "I paid": still owed minus reports already
+   * What can still be reported with "Paid direct": still owed minus reports already
    * waiting for the supplier. Absent on older payloads.
    */
   reportableAmount?: number;
@@ -186,10 +186,10 @@ export interface CreditInvoiceDetail {
   supplierName: string | null;
   storeName: string | null;
   payments: CreditInvoicePayment[];
-  /** The restaurant's "I paid" reports on this invoice, newest first. Absent on older payloads. */
+  /** The restaurant's "Paid direct" reports on this invoice, newest first. Absent on older payloads. */
   claims?: ClaimResponse[];
   /**
-   * What can still be reported with "I paid": still owed minus reports already
+   * What can still be reported with "Paid direct": still owed minus reports already
    * waiting for the supplier. Absent on older payloads.
    */
   reportableAmount?: number;

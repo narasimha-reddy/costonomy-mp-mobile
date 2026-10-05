@@ -223,7 +223,7 @@ describe('sticky pay bar', () => {
     }));
   });
 
-  it('drops Pay but keeps I paid when wallet repay is disabled', async () => {
+  it('drops Pay but keeps Paid direct when wallet repay is disabled', async () => {
     summaryM.mockResolvedValue({ walletRepayEnabled: false });
     renderScreen();
     await screen.findByTestId('credit-owed');
@@ -232,7 +232,7 @@ describe('sticky pay bar', () => {
     expect(screen.getByTestId('credit-i-paid-bar-button')).toBeTruthy();
   });
 
-  it('drops Pay but keeps I paid when the flag is absent', async () => {
+  it('drops Pay but keeps Paid direct when the flag is absent', async () => {
     summaryM.mockResolvedValue({});
     renderScreen();
     await screen.findByTestId('credit-owed');
@@ -241,7 +241,7 @@ describe('sticky pay bar', () => {
     expect(screen.getByTestId('credit-i-paid-bar-button')).toBeTruthy();
   });
 
-  it('hides I paid when this supplier has nothing reportable, and keeps Pay', async () => {
+  it('hides Paid direct when this supplier has nothing reportable, and keeps Pay', async () => {
     agreementM.mockResolvedValue(agreement({ reportableAmount: 0 }));
     summaryM.mockResolvedValue({ walletRepayEnabled: true });
     renderScreen();
@@ -249,7 +249,7 @@ describe('sticky pay bar', () => {
     expect(screen.queryByTestId('credit-i-paid-bar-button')).toBeNull();
   });
 
-  it('shows I paid when this supplier has something reportable', async () => {
+  it('shows Paid direct when this supplier has something reportable', async () => {
     agreementM.mockResolvedValue(agreement({ reportableAmount: 100 }));
     summaryM.mockResolvedValue({ walletRepayEnabled: true });
     renderScreen();
@@ -264,11 +264,11 @@ describe('sticky pay bar', () => {
     expect(screen.queryByTestId('credit-i-paid-bar-button')).toBeNull();
   });
 
-  it('shows Pay and I paid together, I paid as the outline button, and opens the claim form', async () => {
+  it('shows Pay and Paid direct together, Paid direct as the outline button, and opens the claim form', async () => {
     renderScreen();
     await screen.findByTestId('credit-pay-bar-button');
     const claim = screen.getByTestId('credit-i-paid-bar-button');
-    expect(claim).toHaveTextContent(txt('I paid'));
+    expect(claim).toHaveTextContent(txt('Paid direct'));
     expect(StyleSheet.flatten(claim.props.style).backgroundColor).toBe(Colors.surface);
     expect(StyleSheet.flatten(claim.props.style).backgroundColor).not.toBe(Colors.credit);
     fireEvent.press(claim);
@@ -297,7 +297,7 @@ describe('payment reported', () => {
     agreementM.mockResolvedValue(agreement({ openClaimsAmount: '1500.0000' }));
     renderScreen();
     expect(await screen.findByTestId('credit-reported'))
-      .toHaveTextContent('Payment reported: ₹1,500.00 · waiting for supplier');
+      .toHaveTextContent('Told supplier: ₹1,500.00 · waiting for them to confirm');
   });
 
   it.each([['0.0000'], [undefined]])('says nothing when the open amount is %p', async (value) => {

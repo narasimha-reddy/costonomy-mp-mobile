@@ -144,7 +144,7 @@ export default function CreditInvoiceScreen() {
             )}
             {canClaim && (
               <MandiButton
-                label="I paid outside the app"
+                label="Paid direct"
                 variant="secondary"
                 onPress={() => openClaim()}
                 disabled={offline}

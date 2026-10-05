@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/credit-m15-icons-and-wording]
+#### Changed
+- Credit action row now reads Paid direct (`cash-check`), Pay (`cash-outline`, filled), Get credit (`storefront-outline`); "I paid" is "Paid direct" everywhere (picker, invoice, supplier bar, claim form, toast, report chips, "Tell them again", "Told supplier: ₹X · waiting for them to confirm"); `RoundAction` takes Ionicons or MaterialCommunityIcons, `glyphTone="strong"` (primaryDark, 4.27:1) and `accessibilityHint`; Wallet unchanged.
+
 ### [feat/credit-m14-phone-and-walk-fixes]
 #### Fixed
 - "I paid" form is keyboard-safe: `MandiScreen` has a new `avoidKeyboard` prop (KeyboardAvoidingView around content and footer, focused field scrolled above the keyboard via `MandiFormField` or `useScrollFieldIntoView`, drag dismisses the keyboard); on only for the claim screen, and its "Scroll for..." cue hides while the keyboard is open.

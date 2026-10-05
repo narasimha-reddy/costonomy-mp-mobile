@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { MandiCard, MandiStatusChip, MandiText } from '@/components/common';
+import { MandiStatusChip, MandiText } from '@/components/common';
+import { CreditListRow } from '@/components/credit/CreditListRow';
 import { reportedLine } from '@/lib/credit/claims';
 import { agreementName } from '@/lib/credit/overview';
 import type { CreditAgreement } from '@/models/credit';
@@ -8,13 +9,16 @@ import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 import { Colors, Spacing } from '@/theme';
 
-/** One supplier the restaurant owes. Overdue is always words as well as colour. */
+/** One supplier the restaurant owes, a row of a grouped card. Overdue is always words as well as colour. */
 export function CreditDuesRow({
   agreement,
   onPress,
+  last = false,
 }: {
   agreement: CreditAgreement;
   onPress: () => void;
+  /** The last row of a group has no rule under it. */
+  last?: boolean;
 }) {
   const name = agreementName(agreement);
   const overdue = Number(agreement.overdue) > 0;
@@ -28,11 +32,10 @@ export function CreditDuesRow({
   const reported = reportedLine(agreement.openClaimsAmount);
 
   return (
-    <MandiCard
+    <CreditListRow
       testID={`dues-row-${agreement.id}`}
       onPress={onPress}
-      outlined
-      accentColor={overdue || suspended ? Colors.danger : undefined}
+      last={last}
       accessibilityLabel={[name, owed, status, next, reported].filter(Boolean).join(', ')}
     >
       <View style={styles.row}>
@@ -51,7 +54,7 @@ export function CreditDuesRow({
           {agreement.suspensionReason}
         </MandiText>
       ) : null}
-    </MandiCard>
+    </CreditListRow>
   );
 }
 

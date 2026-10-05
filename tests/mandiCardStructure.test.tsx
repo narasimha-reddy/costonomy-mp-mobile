@@ -2,9 +2,7 @@ import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react-native';
 import { StyleSheet, Text } from 'react-native';
 import { MandiCard } from '@/components/common';
-import { CreditDuesRow } from '@/components/credit/CreditDuesRow';
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
-import { CreditLineRow } from '@/components/credit/CreditLineRow';
 import { CreditClaimsSection } from '@/components/credit/CreditClaimsSection';
 import { Colors } from '@/theme';
 
@@ -59,7 +57,7 @@ describe('MandiCard structure (blank-card hardening on Android)', () => {
   });
 });
 
-describe('credit list rows use the outlined card, not the shadow', () => {
+describe('credit invoice row uses the outlined card, not the shadow', () => {
   const expectOutlined = (style: Record<string, unknown>) => {
     expect(style.borderWidth).toBe(1);
     expect(style.borderColor).toBe(Colors.border);
@@ -68,18 +66,6 @@ describe('credit list rows use the outlined card, not the shadow', () => {
     expect(style.borderLeftWidth).toBeUndefined();
     expect(style.overflow).toBe('hidden');
   };
-
-  it('dues row, with a red stripe when overdue', () => {
-    render(<CreditDuesRow agreement={{ id: 1, supplierName: 'A', due: '10', overdue: '5', status: 'ACTIVE' } as never} onPress={() => undefined} />);
-    // The Pressable is the outer element; its first child is the card body.
-    expectOutlined(bodyUnder(screen.getByTestId('dues-row-1') as never));
-    expect(flat('card-accent-dues-row-1').backgroundColor).toBe(Colors.danger);
-  });
-
-  it('line row', () => {
-    render(<CreditLineRow agreement={{ id: 2, supplierName: 'B', status: 'ACTIVE', available: '1' } as never} onPress={() => undefined} />);
-    expectOutlined(bodyUnder(screen.getByTestId('line-row-2') as never));
-  });
 
   it('invoice row, selected shows the primary stripe', () => {
     const invoice = {

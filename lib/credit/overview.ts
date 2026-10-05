@@ -55,3 +55,29 @@ export function allSuspended(agreements: CreditAgreement[]): boolean {
 export function rejectionReason(a: CreditAgreement): string | null {
   return a.latestRequest?.responseNote ?? null;
 }
+
+export interface CreditMeter {
+  /** 0 to 100: the share of the approved limit that is in use, for the hero's bar. */
+  percent: number;
+}
+
+/**
+ * How much of the approved limit is in use, for the thin bar on the hero.
+ *
+ * <p>Used is the limit less what is still available, both the server's numbers.
+ * Null when either is unreadable, and the hero then shows no bar. Clamped: more
+ * available than the limit is an empty bar, negative available a full one, and a
+ * limit of zero is empty (nothing to use).
+ */
+export function creditMeter(
+  approvedLimit: string | number | null | undefined,
+  available: string | number | null | undefined,
+): CreditMeter | null {
+  if (approvedLimit == null || approvedLimit === '' || available == null || available === '') return null;
+  const limit = Number(approvedLimit);
+  const free = Number(available);
+  if (!Number.isFinite(limit) || !Number.isFinite(free)) return null;
+  if (limit <= 0) return { percent: 0 };
+  const used = limit - free;
+  return { percent: Math.min(100, Math.max(0, (used / limit) * 100)) };
+}

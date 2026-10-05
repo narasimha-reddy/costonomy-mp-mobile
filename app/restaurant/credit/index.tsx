@@ -9,12 +9,13 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { fetchCreditSummary } from '@/services/credit';
 import { CreditDuesRow } from '@/components/credit/CreditDuesRow';
 import { CreditLineRow } from '@/components/credit/CreditLineRow';
-import { CreditOverviewHero } from '@/components/credit/CreditOverviewHero';
+import { CreditHero } from '@/components/credit/CreditHero';
+import { CreditListCard } from '@/components/credit/CreditListRow';
+import { RoundAction } from '@/components/wallet/RoundAction';
 import { PayMultipleSheet } from '@/components/credit/PayMultipleSheet';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { SupplierPickSheet } from '@/components/credit/SupplierPickSheet';
 import {
-  MandiButton,
   MandiEmptyState,
   MandiErrorState,
   MandiHeader,
@@ -39,7 +40,7 @@ import { Colors, IconSize, Radius, Spacing } from '@/theme';
 export default function CreditOverviewScreen() {
   const router = useRouter();
   const { accessToken } = useSession();
-  const { outletId } = useOutlet();
+  const { outletId, outlet } = useOutlet();
   const { offline } = useNetworkStatus();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickFor, setPickFor] = useState<'pay' | 'claim'>('pay');
@@ -80,10 +81,9 @@ export default function CreditOverviewScreen() {
 
   return (
     <MandiScreen
-      header={<MandiHeader title="Credit" back />}
+      header={<MandiHeader title="Credit" subtitle={outlet?.name} back />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
-      footer={undefined}
     >
       <MandiOfflineBanner visible={offline} />
       {query.isPending ? (
@@ -109,21 +109,45 @@ export default function CreditOverviewScreen() {
             </View>
           )}
 
-          <CreditOverviewHero
-            summary={summary}
-            showPay={showPay}
-            payDisabled={offline}
-            onPay={onPay}
-            showClaim={showClaim}
-            onClaim={onClaim}
-          />
+          <CreditHero summary={summary} />
+
+          <View style={styles.actions} testID="credit-actions">
+            {showClaim && (
+              <RoundAction
+                testID="i-paid"
+                icon="checkmark-done-outline"
+                label="I paid"
+                primary={!showPay}
+                onPress={onClaim}
+              />
+            )}
+            {showPay && (
+              <RoundAction
+                testID="pay-from-wallet"
+                icon="wallet-outline"
+                label="Pay"
+                primary
+                disabled={offline}
+                onPress={onPay}
+              />
+            )}
+            <RoundAction
+              testID="get-credit"
+              icon="add-circle-outline"
+              label="Get credit"
+              primary={!showPay && !showClaim}
+              onPress={request}
+            />
+          </View>
 
           {groups.dues.length > 0 && (
             <View style={styles.section}>
               <MandiSectionHeader title="Dues by supplier" />
-              {groups.dues.map((a) => (
-                <CreditDuesRow key={a.id} agreement={a} onPress={() => open(a.id)} />
-              ))}
+              <CreditListCard testID="dues-list">
+                {groups.dues.map((a, i, all) => (
+                  <CreditDuesRow key={a.id} agreement={a} last={i === all.length - 1} onPress={() => open(a.id)} />
+                ))}
+              </CreditListCard>
             </View>
           )}
 
@@ -133,17 +157,13 @@ export default function CreditOverviewScreen() {
                 title="Credit lines"
                 subtitle="Each line is separate. One supplier's credit does not fund another's order."
               />
-              {groups.lines.map((a) => (
-                <CreditLineRow key={a.id} agreement={a} onPress={() => open(a.id)} />
-              ))}
+              <CreditListCard testID="lines-list">
+                {groups.lines.map((a, i, all) => (
+                  <CreditLineRow key={a.id} agreement={a} last={i === all.length - 1} onPress={() => open(a.id)} />
+                ))}
+              </CreditListCard>
             </View>
           )}
-
-          <MandiButton
-            label="Request credit from another supplier"
-            variant="secondary"
-            onPress={request}
-          />
 
           <SupplierPickSheet
             visible={pickerOpen}
@@ -186,6 +206,7 @@ export default function CreditOverviewScreen() {
 }
 
 const styles = StyleSheet.create({
+  actions: { flexDirection: 'row', gap: Spacing.sm },
   section: { gap: Spacing.listGap },
   banner: {
     flexDirection: 'row',

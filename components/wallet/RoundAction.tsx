@@ -10,21 +10,25 @@ import { Colors, IconSize, Radius, Spacing } from '@/theme';
  * screen is mostly for.
  */
 export function RoundAction({
-  icon, label, onPress, primary = false, testID,
+  icon, label, onPress, primary = false, disabled = false, testID,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   primary?: boolean;
+  /** Greyed and not pressable (offline, say). */
+  disabled?: boolean;
   testID?: string;
 }) {
   return (
     <Pressable
       testID={testID}
       onPress={onPress}
+      disabled={disabled}
+      accessibilityState={disabled ? { disabled: true } : undefined}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.action, pressed && styles.pressed, disabled && styles.disabled]}
     >
       <View style={[styles.circle, primary && styles.primaryCircle]}>
         <Ionicons
@@ -41,6 +45,7 @@ export function RoundAction({
 const styles = StyleSheet.create({
   action: { flex: 1, alignItems: 'center', gap: Spacing.xs, minHeight: 72 },
   pressed: { opacity: 0.85 },
+  disabled: { opacity: 0.5 },
   circle: {
     width: 56,
     height: 56,

@@ -282,3 +282,81 @@ describe('ReceiptCard', () => {
     expect(screen.getByTestId('receipt-card-root').props.collapsable).toBe(false);
   });
 });
+
+describe('Credit repayment detail', () => {
+  const repayment = (over: Partial<WalletTransactionDetail> = {}) => detail({
+    kind: 'CREDIT_REPAYMENT', reason: 'Credit repayment', amount: '1500.0000',
+    counterpartyName: 'Green Farms', counterpartyDetail: 'INV-1, INV-2',
+    references: [
+      { label: 'Credit invoice', value: 'INV-1', copyable: true },
+      { label: 'Credit invoice', value: 'INV-2', copyable: true },
+      { label: 'Credit line', value: '7', copyable: true },
+      { label: 'Credit repayment', value: '12', copyable: true },
+    ],
+    actions: { canPayAgain: false },
+    ...over,
+  });
+
+  it('names the supplier, lists the invoices and goes to the credit line', async () => {
+    (fetchWalletTransaction as jest.Mock).mockResolvedValue(repayment());
+    setup();
+    expect(await screen.findByText('Green Farms')).toBeTruthy();
+    expect(screen.getByText('Paid to')).toBeTruthy();
+    expect(screen.getByText('Credit repayment')).toBeTruthy();
+    expect(screen.getByText('Invoices settled')).toBeTruthy();
+    expect(screen.getByText('INV-1')).toBeTruthy();
+    expect(screen.getByText('INV-2')).toBeTruthy();
+    expect(screen.getByTestId('detail-avatar-out')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('View in Credit'));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/credit/7');
+  });
+
+  it('renders no bill controls or Pay again, even if the server sent bill fields', async () => {
+    (fetchWalletTransaction as jest.Mock).mockResolvedValue(repayment({
+      billStatus: 'PENDING',
+      actions: { canPayAgain: true, canAddBill: true, canWaiveBill: true },
+      invoice: { status: 'READ', vendorName: null, total: null, thumbnailUrl: null },
+    }));
+    setup();
+    await screen.findByText('Green Farms');
+    expect(screen.queryByTestId('bill-status-section')).toBeNull();
+    expect(screen.queryByLabelText('Add bill')).toBeNull();
+    expect(screen.queryByLabelText('Invoice')).toBeNull();
+    expect(screen.queryByLabelText('No bill needed')).toBeNull();
+    expect(screen.queryByLabelText('Pay again')).toBeNull();
+    expect(screen.queryByText(/bill/i)).toBeNull();
+    expect(screen.getByLabelText('Share Receipt')).toBeTruthy();
+  });
+
+  it('hides View in Credit when the server gave no credit line', async () => {
+    (fetchWalletTransaction as jest.Mock).mockResolvedValue(repayment({
+      references: [{ label: 'Credit invoice', value: 'INV-1', copyable: true }],
+    }));
+    setup();
+    await screen.findByText('Green Farms');
+    expect(screen.queryByLabelText('View in Credit')).toBeNull();
+  });
+
+  it('the share receipt picture says Credit repayment, the supplier and the invoices, with no link', () => {
+    render(
+      <SafeAreaProvider initialMetrics={metrics}>
+        <ReceiptCard entry={repayment()} />
+      </SafeAreaProvider>,
+    );
+    expect(screen.getByText('Credit repayment')).toBeTruthy();
+    expect(screen.getByText('Green Farms')).toBeTruthy();
+    expect(screen.getByText('INV-1')).toBeTruthy();
+    expect(screen.queryByLabelText('View in Credit')).toBeNull();
+  });
+
+  it('an unknown future kind still renders through the fallback', async () => {
+    (fetchWalletTransaction as jest.Mock).mockResolvedValue(detail({
+      kind: 'SOMETHING_NEW' as never, counterpartyName: null, counterpartyDetail: null, reason: null,
+      references: [], actions: { canPayAgain: false },
+    }));
+    setup();
+    expect(await screen.findByText('Money out')).toBeTruthy();
+    expect(screen.getByText('Paid to')).toBeTruthy();
+    expect(screen.queryByTestId('credit-repayment-block')).toBeNull();
+  });
+});

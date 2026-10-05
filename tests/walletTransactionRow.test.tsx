@@ -111,3 +111,25 @@ describe('MonthHeader', () => {
       .toBe(WalletColors.bandBackground);
   });
 });
+
+describe('TransactionRow credit repayment', () => {
+  const repayment = (over: Partial<WalletEntry> = {}) => entry({
+    direction: 'DEBIT', kind: 'CREDIT_REPAYMENT', instrument: null, reason: 'Credit repayment', ...over,
+  });
+
+  it('shows Paid to, the title, a debit amount and no bill chip when the server sends bill: null', () => {
+    render(<TransactionRow entry={repayment({ bill: null })} now={NOW} onBillPress={jest.fn()} />);
+    expect(screen.getByText('Paid to')).toBeTruthy();
+    expect(screen.getByText('Credit repayment')).toBeTruthy();
+    expect(screen.getByText('₹500')).toBeTruthy();
+    expect(screen.getByText('Debited from wallet')).toBeTruthy();
+    expect(screen.getByTestId('avatar-out')).toBeTruthy();
+    expect(screen.queryByTestId('row-bill-chip')).toBeNull();
+  });
+
+  it('shows no bill chip even if a bill status were sent (bill tracking has started)', () => {
+    render(<TransactionRow entry={repayment({ bill: { status: 'PENDING' } as never })} now={NOW} onBillPress={jest.fn()} mayAddBill />);
+    expect(screen.queryByTestId('row-bill-chip')).toBeNull();
+    expect(screen.queryByText(/bill/i)).toBeNull();
+  });
+});

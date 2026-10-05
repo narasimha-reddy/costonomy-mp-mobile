@@ -1,5 +1,5 @@
 import {
-  detailAvatar, detailHeader, detailLabel, detailName, detailTime, receiptFileName, referenceLines,
+  creditLineRoute, creditRepaymentInfo, detailAvatar, detailHeader, detailLabel, detailName, detailTime, receiptFileName, referenceLines,
   spokenAmount, walletSideLabel,
 } from '@/lib/wallet/detail';
 import { DetailStatusColors } from '@/theme';
@@ -109,5 +109,28 @@ describe('receiptFileName and spokenAmount', () => {
   it('reads an amount as rupees', () => {
     expect(spokenAmount('85.0000')).toBe('85 rupees');
     expect(spokenAmount('49000')).toBe('49,000 rupees');
+  });
+});
+
+describe('credit repayment detail', () => {
+  const refs = [
+    { label: 'Credit invoice', value: 'INV-1', copyable: true },
+    { label: 'Credit invoice', value: 'INV-2', copyable: true },
+    { label: 'Credit line', value: '7', copyable: true },
+    { label: 'Credit repayment', value: '12', copyable: true },
+  ];
+  it('reads invoices and the agreement id off the references', () => {
+    expect(creditRepaymentInfo(entry({ kind: 'CREDIT_REPAYMENT', references: refs })))
+      .toEqual({ invoices: ['INV-1', 'INV-2'], agreementId: '7' });
+    expect(creditLineRoute('7')).toBe('/restaurant/credit/7');
+  });
+  it('has no agreement id when the server sends none or a non-number; null for other kinds', () => {
+    expect(creditRepaymentInfo(entry({ kind: 'CREDIT_REPAYMENT', references: [] })))
+      .toEqual({ invoices: [], agreementId: null });
+    expect(creditRepaymentInfo(entry({ kind: 'CREDIT_REPAYMENT', references: [{ label: 'Credit line', value: '../x', copyable: true }] }))?.agreementId).toBeNull();
+    expect(creditRepaymentInfo(entry({ references: refs }))).toBeNull();
+  });
+  it('keeps invoices and the line out of the plain reference lines', () => {
+    expect(referenceLines(refs).map((r) => r.text)).toEqual(['Reference: Credit repayment 12']);
   });
 });

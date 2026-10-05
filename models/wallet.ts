@@ -125,7 +125,7 @@ export interface WalletTransactionsPage {
 }
 
 /** The choices behind the History screen's "Filters", in the server's words where it has them. */
-export type WalletCategory = 'TOP_UP' | 'ORDER_PAYMENT' | 'REFUND' | 'WITHDRAWAL' | 'SHOP_PAYMENT';
+export type WalletCategory = 'TOP_UP' | 'ORDER_PAYMENT' | 'REFUND' | 'WITHDRAWAL' | 'SHOP_PAYMENT' | 'CREDIT_REPAYMENT';
 export type WalletInstrument = 'CARD' | 'UPI' | 'NETBANKING' | 'WALLET';
 export type WalletStatusFilter = 'COMPLETED' | 'IN_PROGRESS' | 'RETURNED';
 
@@ -155,7 +155,9 @@ export type WalletEntryKind =
   | 'TOP_UP' | 'ORDER_PAYMENT' | 'ORDER_REFUND' | 'REFUND' | 'WITHDRAWAL' | 'DISPUTE_REFUND'
   /** A withdrawal the provider refused, put back in the wallet (API D-110). A credit. */
   | 'WITHDRAWAL_REVERSAL'
-  | 'QUICKSCAN_PAYMENT' | 'QUICKSCAN_RETURN';
+  | 'QUICKSCAN_PAYMENT' | 'QUICKSCAN_RETURN'
+  /** A restaurant repaying a supplier's credit invoices from its wallet. A debit; never takes a bill. */
+  | 'CREDIT_REPAYMENT';
 
 /** Where a withdrawal's refund has got to. `REJECTED`/`REVERSED` need API D-110. */
 export type WithdrawalRefundStatus =

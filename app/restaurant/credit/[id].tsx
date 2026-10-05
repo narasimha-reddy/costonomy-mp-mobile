@@ -1,10 +1,23 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import React, { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
-import { acceptAgreement, fetchAgreement, fetchInvoices, fetchLedger } from '@/services/credit';
+import { useOutlet } from '@/contexts/OutletProvider';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import {
+  acceptAgreement,
+  fetchAgreement,
+  fetchCreditSummary,
+  fetchInvoices,
+  fetchLedger,
+} from '@/services/credit';
 import { CreditPosition } from '@/components/credit/CreditPosition';
+import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
+import { CreditStickyPayBar } from '@/components/credit/CreditStickyPayBar';
+import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
+import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import {
   MandiButton,
   MandiCard,
@@ -20,7 +33,10 @@ import {
 import { CreditAgreementStatus, resolveStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
-import { Colors, Spacing } from '@/theme';
+import { Colors, IconSize, Radius, Spacing } from '@/theme';
+
+const PAGE_SIZE = 50;
+type InvoiceTab = 'open' | 'paid';
 
 /**
  * One supplier's credit line. Doc 05 §19.
@@ -37,6 +53,12 @@ export default function CreditAgreementScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const agreementId = Number(id);
   const toast = useToast();
+  const router = useRouter();
+  const { outletId } = useOutlet();
+  const { offline } = useNetworkStatus();
+  const [tab, setTab] = useState<InvoiceTab>('open');
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const [payOpen, setPayOpen] = useState(false);
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
 
@@ -53,10 +75,24 @@ export default function CreditAgreementScreen() {
   });
 
   const invoices = useQuery({
-    queryKey: ['credit-agreement', agreementId, 'invoices'],
+    // Outlet-scoped, so the pay sheet's invalidation of the outlet's credit keys refreshes it.
+    queryKey: ['outlet', outletId, 'credit', 'agreement', agreementId, 'invoices'],
     queryFn: () => fetchInvoices(accessToken as string, agreementId),
     enabled: Number.isFinite(agreementId) && accessToken != null,
   });
+
+  // Same key as the Credit overview, so it is usually already cached.
+  const summary = useQuery({
+    queryKey: ['outlet', outletId, 'credit'],
+    queryFn: () => fetchCreditSummary(accessToken as string, outletId as number),
+    enabled: outletId != null && accessToken != null,
+  });
+  const walletRepayEnabled = summary.data?.walletRepayEnabled === true;
+
+  const split = useMemo(
+    () => splitInvoices((invoices.data ?? []) as CreditInvoiceListItem[]),
+    [invoices.data],
+  );
 
   const accept = useMutation({
     mutationFn: () => acceptAgreement(accessToken as string, agreementId),
@@ -108,6 +144,11 @@ export default function CreditAgreementScreen() {
         void invoices.refetch();
       }}
       refreshing={agreement.isRefetching}
+      footer={
+        data != null && !pending && !rejected && !awaitingAcceptance && walletRepayEnabled ? (
+          <CreditStickyPayBar due={data.due} disabled={offline} onPress={() => setPayOpen(true)} />
+        ) : undefined
+      }
     >
       {agreement.isPending ? (
         <MandiSkeletonList count={3} />
@@ -136,12 +177,19 @@ export default function CreditAgreementScreen() {
           )}
 
           {data.status === 'SUSPENDED' && (
+            <View testID="credit-suspended-banner" accessibilityRole="alert">
             <MandiCard accentColor={Colors.danger}>
               <MandiText variant="bodyEmphasis">This credit line is suspended</MandiText>
               <MandiText variant="caption" color={Colors.textSecondary}>
-                {data.suspensionReason ?? 'The supplier has paused it. Existing invoices still stand.'}
+                {suspensionText(data.suspensionReason)}
               </MandiText>
+              {isOverdueSuspension(data.suspensionReason) && (
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {"Paying what's overdue can restore it."}
+                </MandiText>
+              )}
             </MandiCard>
+            </View>
           )}
 
           {/* What this line is, said once and in the same place whatever the
@@ -205,23 +253,100 @@ export default function CreditAgreementScreen() {
               </MandiText>
             </MandiCard>
           ) : (
-            <CreditPosition
-              approvedLimit={data.approvedLimit}
-              reserved={data.reserved}
-              utilized={data.utilized}
-              available={data.available}
-              due={data.due}
-              overdue={data.overdue}
-            />
+            <>
+              <MandiCard>
+                <MandiText variant="caption" color={Colors.textSecondary}>Owed</MandiText>
+                <MandiText variant="display" testID="credit-owed">{formatMoney(data.due)}</MandiText>
+                {Number(data.overdue) > 0 && (
+                  <View style={styles.overdueRow} testID="credit-overdue" accessible accessibilityLabel={`${formatMoney(data.overdue)} overdue`}>
+                    <Ionicons name="alert-circle" size={IconSize.sm} color={Colors.danger} />
+                    <MandiText variant="bodyEmphasis" color={Colors.danger}>
+                      {formatMoney(data.overdue)} overdue
+                    </MandiText>
+                  </View>
+                )}
+                {termsLine(data.creditPeriodDays, data.gracePeriodDays) != null && (
+                  <MandiText variant="caption" color={Colors.textSecondary} testID="credit-terms-line">
+                    {termsLine(data.creditPeriodDays, data.gracePeriodDays)}
+                  </MandiText>
+                )}
+              </MandiCard>
+              <CreditPosition
+                approvedLimit={data.approvedLimit}
+                reserved={data.reserved}
+                utilized={data.utilized}
+                available={data.available}
+                due={data.due}
+                overdue={data.overdue}
+              />
+            </>
           )}
 
-          {/* Terms only once there are any. Zeros in these rows describe a
-              line that does not exist yet. */}
           {!pending && !rejected && !awaitingAcceptance && (
+            <View style={styles.section}>
+              <MandiSectionHeader title="Invoices" />
+              <View style={styles.segments} accessibilityRole="tablist">
+                {([['open', 'Open'], ['paid', 'Paid']] as const).map(([key, label]) => (
+                  <Pressable
+                    key={key}
+                    testID={`credit-tab-${key}`}
+                    onPress={() => { setTab(key); setShown(PAGE_SIZE); }}
+                    accessibilityRole="tab"
+                    accessibilityLabel={label}
+                    accessibilityState={{ selected: tab === key }}
+                    style={[styles.segment, tab === key && styles.segmentOn]}
+                  >
+                    <MandiText
+                      variant="bodyEmphasis"
+                      color={tab === key ? Colors.textInverse : Colors.textSecondary}
+                    >
+                      {label}
+                    </MandiText>
+                  </Pressable>
+                ))}
+              </View>
+              {invoices.isPending ? (
+                <MandiSkeletonList count={2} />
+              ) : invoices.error ? (
+                <MandiErrorState message="Couldn't load the invoices." onRetry={() => invoices.refetch()} />
+              ) : (
+                (() => {
+                  const list = tab === 'open' ? split.open : split.paid;
+                  if (list.length === 0) {
+                    return (
+                      <MandiText variant="caption" color={Colors.textTertiary} testID="credit-invoices-empty">
+                        {tab === 'open' ? 'No open invoices' : 'No paid invoices yet'}
+                      </MandiText>
+                    );
+                  }
+                  return (
+                    <>
+                      {list.slice(0, shown).map((invoice) => (
+                        <CreditInvoiceRow
+                          key={invoice.id}
+                          invoice={invoice}
+                          onPress={() => router.push(`/restaurant/credit/invoice/${invoice.id}` as never)}
+                        />
+                      ))}
+                      {list.length > shown && (
+                        <MandiButton
+                          label="Show more"
+                          variant="secondary"
+                          size="md"
+                          testID="credit-show-more"
+                          onPress={() => setShown((n) => n + PAGE_SIZE)}
+                        />
+                      )}
+                    </>
+                  );
+                })()
+              )}
+            </View>
+          )}
+
+          {!pending && !rejected && !awaitingAcceptance
+            && (data.maxSingleOrderCredit != null || data.termsVersion != null) && (
             <MandiCard>
-              <Row label="Approved limit" value={formatMoney(data.approvedLimit)} />
-              <Row label="Payment period" value={`${data.creditPeriodDays ?? '—'} days`} />
-              <Row label="Grace period" value={`${data.gracePeriodDays ?? 0} days`} />
               {data.maxSingleOrderCredit && (
                 <Row label="Per-order cap" value={formatMoney(data.maxSingleOrderCredit)} />
               )}
@@ -230,39 +355,6 @@ export default function CreditAgreementScreen() {
               )}
             </MandiCard>
           )}
-
-          <View style={styles.section}>
-            <MandiSectionHeader title="Invoices" />
-            {(invoices.data ?? []).length === 0 ? (
-              <MandiText variant="caption" color={Colors.textTertiary}>
-                Nothing invoiced on this line yet.
-              </MandiText>
-            ) : (
-              (invoices.data ?? []).map((invoice) => (
-                <MandiCard key={invoice.id}>
-                  <View style={styles.row}>
-                    <MandiText variant="bodyEmphasis">{invoice.invoiceNumber}</MandiText>
-                    <MandiStatusChip
-                      label={invoice.status.replace(/_/g, ' ').toLowerCase()}
-                      tone={
-                        invoice.status === 'PAID' ? 'success'
-                          : invoice.status === 'OVERDUE' ? 'danger' : 'pending'
-                      }
-                      size="sm"
-                    />
-                  </View>
-                  <View style={styles.row}>
-                    <MandiText variant="caption" color={Colors.textSecondary}>
-                      {formatMoney(invoice.outstanding)} outstanding
-                    </MandiText>
-                    <MandiText variant="caption" color={Colors.textTertiary}>
-                      due {invoice.dueDate ?? '—'}
-                    </MandiText>
-                  </View>
-                </MandiCard>
-              ))
-            )}
-          </View>
 
           <View style={styles.section}>
             <MandiSectionHeader
@@ -289,6 +381,17 @@ export default function CreditAgreementScreen() {
               ))
             )}
           </View>
+          {data.due != null && (
+            <PayFromWalletSheet
+              visible={payOpen}
+              onClose={() => setPayOpen(false)}
+              agreementId={agreementId}
+              supplierName={data.supplierName ?? 'the supplier'}
+              due={data.due}
+              overdue={data.overdue}
+              onPaid={() => setPayOpen(false)}
+            />
+          )}
         </>
       )}
     </MandiScreen>
@@ -304,6 +407,25 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+const OVERDUE_REASON = 'Overdue balance';
+
+function isOverdueSuspension(reason: string | null): boolean {
+  return reason != null && reason.startsWith(OVERDUE_REASON);
+}
+
+function suspensionText(reason: string | null): string {
+  if (reason == null || reason.trim() === '') {
+    return 'The supplier has paused it. Existing invoices still stand.';
+  }
+  return isOverdueSuspension(reason) ? `Paused: ${reason}` : `Suspended by supplier: ${reason}`;
+}
+
+function termsLine(period: number | null, grace: number | null): string | null {
+  if (period == null) return null;
+  const days = `${period} ${period === 1 ? 'day' : 'days'}`;
+  return grace != null && grace > 0 ? `${days} + ${grace} ${grace === 1 ? 'day' : 'days'} grace` : days;
+}
+
 function humanise(value: string): string {
   const spaced = value.replace(/_/g, ' ').toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
@@ -312,6 +434,21 @@ function humanise(value: string): string {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  overdueRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  segments: {
+    flexDirection: 'row',
+    padding: Spacing.xs,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceSunken,
+  },
+  segment: {
+    flex: 1,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.full,
+  },
+  segmentOn: { backgroundColor: Colors.primary },
   spacedTop: { marginTop: Spacing.xs },
   section: { gap: Spacing.listGap },
   row: {

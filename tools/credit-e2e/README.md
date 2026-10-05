@@ -108,3 +108,29 @@ Notes
   the local stack. It picks its invoices from what exists, so other testers or earlier runs changing the data do not break it.
 * A desktop browser cannot show the Android soft keyboard (the shrunken-window step only approximates it), OS font scaling
   (130%), safe-area insets and the system navigation bar, or native touch/overscroll behaviour.
+
+## Android emulator walk (`android-walk.py`)
+
+A UI walkthrough of the restaurant Credit screens on a real Android emulator, to catch two defects seen on a phone:
+cards that paint as empty white boxes while their text is in the accessibility tree, and the soft keyboard covering an
+input or the primary button. Local only: the app talks to the local API; nothing is sent (the walk stops before every
+"Send to supplier" / "Pay" / "Send Request" tap).
+
+```
+python3 tools/credit-e2e/android-walk.py <apk> [--no-install] [--keep-session] [--shots DIR]
+```
+
+Needs Python 3.9 (standard library only), macOS `sips`, the Android SDK `adb` (`$HOME/.local/opt/android-sdk`), and a
+running emulator `emulator-5554` with the app's local API reachable. The script never starts or stops the emulator; it
+installs the APK with `adb install -r` (uninstalls once on a signature mismatch), clears the app data for a fresh
+sign-in (restaurant +919876500004, OTP 123456, `--keep-session` skips that) and sets `show_ime_with_hard_keyboard=1` so
+the soft keyboard shows on the emulator.
+
+Checks after every step: A blank cards (a card/row node with text in the `uiautomator` dump whose screenshot crop has
+>= 98 % of pixels within tolerance of its dominant colour; sampled at 0, 1 and 3 s), B keyboard (keyboard top from
+`dumpsys window InputMethod` vs the focused field, the primary button and must-read texts), C overlapping clickables,
+D raw codes (`CREDIT_OVERPAYMENT`, `undefined`, `NaN` ...), E crashes in logcat. Output goes to
+`.../android-shots/<apk>-NN-<screen>.png`, `<apk>-REPORT.md` (per step PASS/FAIL, blank-card timeline, keyboard
+measurements, prioritised problems) and `<apk>-results.json`. A "Visual review" section is left for a human to fill in.
+Run it on two builds and diff the reports. Data is shared with other local runs (the repayment suite pays invoices), so
+a supplier can lose its dues row between runs; the walk skips missing rows and notes it.

@@ -1,37 +1,46 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { fetchCreditSummary } from '@/services/credit';
-import { CreditPosition } from '@/components/credit/CreditPosition';
+import { CreditDuesRow } from '@/components/credit/CreditDuesRow';
+import { CreditLineRow } from '@/components/credit/CreditLineRow';
+import { CreditOverviewHero } from '@/components/credit/CreditOverviewHero';
+import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
+import { SupplierPickSheet } from '@/components/credit/SupplierPickSheet';
 import {
   MandiButton,
-  MandiCard,
   MandiEmptyState,
   MandiErrorState,
   MandiHeader,
+  MandiOfflineBanner,
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
 } from '@/components/common';
-import { formatMoney } from '@/utils/money';
-import { Colors, Spacing } from '@/theme';
+import { agreementName, allSuspended, groupAgreements } from '@/lib/credit/overview';
+import type { CreditAgreement } from '@/models/credit';
+import { Colors, IconSize, Radius, Spacing } from '@/theme';
 
 /**
  * REST-CREDIT-01. Doc 05 §19.
  *
- * <p>The whole position first, then each supplier's agreement separately — §19
- * requires supplier-specific agreements to be shown apart, because credit with
- * one supplier says nothing about what another will fund.
+ * <p>What the restaurant owes comes first, the limit second. Credit is
+ * supplier-funded, so the question a restaurant opens this screen with is
+ * "what do I owe, and to whom". Every figure and state is the server's.
  */
 export default function CreditOverviewScreen() {
   const router = useRouter();
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
+  const { offline } = useNetworkStatus();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [target, setTarget] = useState<CreditAgreement | null>(null);
 
   const query = useQuery({
     queryKey: ['outlet', outletId, 'credit'],
@@ -40,6 +49,16 @@ export default function CreditOverviewScreen() {
   });
 
   const summary = query.data;
+  const open = (id: number) => router.push(`/restaurant/credit/${id}`);
+  const request = () => router.push('/restaurant/credit/request');
+
+  const groups = summary ? groupAgreements(summary.agreements) : { dues: [], lines: [] };
+  const showPay = summary?.walletRepayEnabled === true && Number(summary.due) > 0 && groups.dues.length > 0;
+
+  const onPay = () => {
+    if (groups.dues.length === 1) setTarget(groups.dues[0] ?? null);
+    else setPickerOpen(true);
+  };
 
   return (
     <MandiScreen
@@ -48,6 +67,7 @@ export default function CreditOverviewScreen() {
       refreshing={query.isRefetching}
       footer={undefined}
     >
+      <MandiOfflineBanner visible={offline} />
       {query.isPending ? (
         <MandiSkeletonList count={3} />
       ) : query.error ? (
@@ -58,108 +78,88 @@ export default function CreditOverviewScreen() {
           title="No credit yet"
           description="Ask a supplier you order from regularly for a credit line."
           actionLabel="Request credit"
-          onAction={() => router.push('/restaurant/credit/request')}
+          onAction={request}
         />
       ) : (
         <>
-          <CreditPosition
-            approvedLimit={summary.approvedLimit}
-            reserved={summary.reserved}
-            utilized={summary.utilized}
-            available={summary.available}
-            due={summary.due}
-            overdue={summary.overdue}
+          {allSuspended(summary.agreements) && (
+            <View style={styles.banner} accessibilityRole="alert" testID="credit-paused-banner">
+              <Ionicons name="alert-circle" size={IconSize.md} color={Colors.danger} />
+              <MandiText variant="bodyEmphasis" color={Colors.danger} style={styles.bannerText}>
+                {`Ordering on credit is paused. Paying what's overdue can restore it.`}
+              </MandiText>
+            </View>
+          )}
+
+          <CreditOverviewHero
+            summary={summary}
+            showPay={showPay}
+            payDisabled={offline}
+            onPay={onPay}
           />
 
-          <View style={styles.section}>
-            <MandiSectionHeader
-              title="By supplier"
-              subtitle="Each line is separate — one supplier's credit does not fund another's order"
-            />
-            {summary.agreements.map((agreement) => (
-              <MandiCard
-                key={agreement.id}
-                onPress={() => router.push(`/restaurant/credit/${agreement.id}`)}
-                accentColor={agreement.status === 'SUSPENDED' ? Colors.danger : undefined}
-              >
-                <View style={styles.row}>
-                  <MandiText variant="bodyEmphasis">
-                    {agreement.supplierName ?? agreement.storeName}
-                  </MandiText>
-                  <MandiStatusChip
-                    label={agreement.status.toLowerCase()}
-                    tone={
-                      agreement.status === 'ACTIVE' ? 'success'
-                        : agreement.status === 'SUSPENDED' || agreement.status === 'REJECTED'
-                          ? 'danger' : 'pending'
-                    }
-                    size="sm"
-                  />
-                </View>
-                <View style={styles.row}>
-                  {/* An agreement's own `available` is a real figure, but it is only
-                      spendable when the server says it can fund. Showing
-                      "₹35,000 available" under a headline reading "₹0 available"
-                      — which is what a line awaiting acceptance looks like — tells
-                      a restaurant they have money they cannot spend. */}
-                  <MandiText
-                    variant="caption"
-                    color={agreement.canFund ? Colors.textSecondary : Colors.textTertiary}
-                  >
-                    {agreement.canFund
-                      ? `${formatMoney(agreement.available, true)} available`
-                      : `${formatMoney(agreement.approvedLimit, true)} approved`}
-                  </MandiText>
-                  <MandiText variant="caption" color={Colors.textTertiary}>
-                    {agreement.creditPeriodDays ?? '—'} day terms
-                  </MandiText>
-                </View>
-                {/* canFund is the server's answer, never inferred from status. */}
-                {!agreement.canFund && (
-                  <MandiText variant="caption" color={Colors.warning}>
-                    {unusableReason(agreement)}
-                  </MandiText>
-                )}
-              </MandiCard>
-            ))}
-          </View>
+          {groups.dues.length > 0 && (
+            <View style={styles.section}>
+              <MandiSectionHeader title="Dues by supplier" />
+              {groups.dues.map((a) => (
+                <CreditDuesRow key={a.id} agreement={a} onPress={() => open(a.id)} />
+              ))}
+            </View>
+          )}
+
+          {groups.lines.length > 0 && (
+            <View style={styles.section}>
+              <MandiSectionHeader
+                title="Credit lines"
+                subtitle="Each line is separate. One supplier's credit does not fund another's order."
+              />
+              {groups.lines.map((a) => (
+                <CreditLineRow key={a.id} agreement={a} onPress={() => open(a.id)} />
+              ))}
+            </View>
+          )}
 
           <MandiButton
-            label="Request Credit From Another Supplier"
+            label="Request credit from another supplier"
             variant="secondary"
-            onPress={() => router.push('/restaurant/credit/request')}
+            onPress={request}
           />
+
+          <SupplierPickSheet
+            visible={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            agreements={groups.dues}
+            onPick={(a) => {
+              setPickerOpen(false);
+              setTarget(a);
+            }}
+          />
+          {target != null && (
+            <PayFromWalletSheet
+              visible
+              onClose={() => setTarget(null)}
+              agreementId={target.id}
+              supplierName={agreementName(target)}
+              due={target.due}
+              overdue={target.overdue}
+              onPaid={() => setTarget(null)}
+            />
+          )}
         </>
       )}
     </MandiScreen>
   );
 }
 
-/**
- * Why a credit line cannot fund an order, in the restaurant's terms.
- *
- * <p>`canFund` is one boolean with several causes, and "unavailable" would leave
- * a restaurant guessing between a decision they have to make and one the supplier
- * has made for them.
- */
-function unusableReason(agreement: { status: string; suspensionReason: string | null }): string {
-  switch (agreement.status) {
-    case 'APPROVED':
-      return 'Approved — accept the terms to start using it.';
-    case 'REQUESTED':
-      return 'Waiting for the supplier to respond.';
-    case 'SUSPENDED':
-      return agreement.suspensionReason
-        ? `Suspended. ${agreement.suspensionReason}`
-        : 'Suspended by the supplier.';
-    case 'EXPIRED':
-      return 'This credit line has expired.';
-    default:
-      return 'Not usable for a new order right now.';
-  }
-}
-
 const styles = StyleSheet.create({
   section: { gap: Spacing.listGap },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.dangerLight,
+  },
+  bannerText: { flex: 1 },
 });

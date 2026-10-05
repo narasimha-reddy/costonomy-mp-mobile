@@ -8,7 +8,10 @@ import { fetchCreditSummary, repayFromWallet } from '@/services/credit';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
-  return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
+  return {
+    Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text>,
+    MaterialCommunityIcons: ({ name }: { name: string }) => <Text>{`mci:${name}`}</Text>,
+  };
 });
 jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null, PROVIDER_GOOGLE: 'google' }));
 const mockPush = jest.fn();

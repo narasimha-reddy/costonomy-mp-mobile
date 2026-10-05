@@ -342,11 +342,15 @@ export default function OrderDetailScreen() {
               label="GST"
               value={formatMoney(settled ? order.acceptedGst : order.gstAmount)}
             />
-            {/* Where the request screen puts it, and only when it cost
-                something: a "Delivery  Free" line on a collected order states
-                the obvious next to a chip that already said "You collect". */}
+            {/* Where the request screen puts it. A charge is a line; free delivery is a line too (below). */}
             {order.deliveryFee != null && Number(order.deliveryFee) > 0 && (
               <Row label="Delivery" value={formatMoney(order.deliveryFee)} />
+            )}
+            {/* Said outright when somebody delivers for nothing: a missing line reads as "not charged yet". Still
+                nothing for a collected order, where it would state the obvious. */}
+            {order.deliveryFee != null && Number(order.deliveryFee) === 0
+              && order.deliveryMode != null && order.deliveryMode !== 'PICKUP' && (
+              <Row label="Delivery" value="Free" />
             )}
             <Row
               label="Total"

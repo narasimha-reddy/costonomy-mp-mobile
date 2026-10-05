@@ -275,6 +275,10 @@ export function respondToIntent(
     expectedRevision?: number;
     etaMinutes?: number;
     deliveryMode?: string;
+    /** How the supplier will deliver this request; leave out to keep the store's settings (API D-141). */
+    deliveryOffer?: 'SELF_FREE' | 'SELF' | 'COSTONOMY';
+    /** With SELF: the charge for this request, at most the store's own fee; leave out for the store's fee. */
+    deliveryFee?: string;
     notes?: string;
   },
 ): Promise<Intent> {

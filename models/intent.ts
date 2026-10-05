@@ -94,6 +94,8 @@ export interface IntentAcceptance {
    * falls back to what the store's policy allows.
    */
   deliveryModes: string | null;
+  /** What the supplier chose for delivery on this answer; null on an older one (API D-141). */
+  deliveryOffer: 'SELF_FREE' | 'SELF' | 'COSTONOMY' | null;
   notes: string | null;
   submittedAt: string | null;
   expiresAt: string | null;

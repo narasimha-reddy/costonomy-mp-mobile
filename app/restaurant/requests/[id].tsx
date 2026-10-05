@@ -541,11 +541,14 @@ export default function RequestDetailScreen() {
                   no price on this request at all. */}
               <Row label="Item value" value={formatMoney(request.acceptance.offeredValue)} />
               <Row label="GST" value={formatMoney(request.acceptance.offeredGst)} />
-              {/* Only when it costs something. A "Delivery  Free" line on a
-                  pickup states the obvious twice — the picker above already
-                  says Free against the option that was chosen. */}
+              {/* Whoever carries it, the charge is a line the restaurant sees before ordering: the supplier's own fee, or
+                  Costonomy's quoted fee. Free delivery says so; a pickup has no delivery line at all. */}
               {preview.data != null && Number(preview.data.deliveryFee) > 0 && (
                 <Row label="Delivery" value={formatMoney(preview.data.deliveryFee)} />
+              )}
+              {preview.data != null && Number(preview.data.deliveryFee) === 0
+                && delivery != null && delivery.mode !== 'PICKUP' && (
+                <Row label="Delivery" value="Free" />
               )}
               <Row
                 label="Total"

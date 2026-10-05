@@ -111,7 +111,9 @@ export function DeliveryModePicker({
                     ? deliveryUnavailableMessage(quote.error)
                     : mode === 'COSTONOMY_DELIVERY' && quote.isPending
                       ? 'Checking the fee…'
-                      : DESCRIPTIONS[mode]}
+                      : mode === 'SUPPLIER_DELIVERY' && request.acceptance?.deliveryOffer != null && fee != null && Number(fee) === 0
+                        ? 'Free delivery by the supplier, in their own vehicle'
+                        : DESCRIPTIONS[mode]}
                 </MandiText>
               </View>
               {/* The figure, never a tick alone: §23A.48 forbids meaning carried

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-delivery-offer] - Free delivery, and the supplier's delivery choice (API D-141)
+#### Added
+- **Supplier answer:** a "How will this be delivered?" choice (I deliver free, I deliver at my fee, Costonomy delivery), limited to what the store's settings allow. At a fee, the supplier can enter a lower charge for that order (never above their store fee).
+- **Buyer:** the delivery picker says "Free delivery by the supplier" when it is free and shows the supplier's own fee as money (it showed "Free" for any supplier delivery); the order screen shows a "Delivery  Free" line when delivery was free.
+
 ### [phase6/mobile-delivery-day] - Immediate or a day, when sending (API D-140)
 #### Added
 - The cart has a Delivery choice for the whole basket (Immediate, Today, Tomorrow, In 2 days), sent with every request. Immediate is the default. Days are India's, not UTC's.

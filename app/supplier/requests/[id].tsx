@@ -7,6 +7,8 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { useDebounced } from '@/hooks/useDebounced';
 import { fetchIntent, previewResponse, respondToIntent } from '@/services/intent';
+import { fetchDeliveryPolicy } from '@/services/supplier';
+import { DeliveryOfferChoice, deliveryOffersFor, type DeliveryOffer } from '@/components/request/DeliveryOfferChoice';
 import { intentKey, storeIntentsKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import {
@@ -64,6 +66,23 @@ export default function SupplierRequestScreen() {
   const [offered, setOffered] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState('');
   const [confirmDecline, setConfirmDecline] = useState(false);
+  const [deliveryChoice, setDeliveryChoice] = useState<DeliveryOffer | null>(null);
+  // What to charge for this order when delivering at a fee; empty keeps the store's fee.
+  const [deliveryCharge, setDeliveryCharge] = useState('');
+
+  // What this store is allowed to offer for delivery. The server checks it again.
+  const deliveryPolicy = useQuery({
+    queryKey: ['delivery-policy', storeId],
+    queryFn: () => fetchDeliveryPolicy(accessToken as string, storeId as number),
+    enabled: storeId != null && accessToken != null,
+  });
+  const offers = deliveryOffersFor(deliveryPolicy.data);
+  // Their usual way unless they pick another: their own delivery first, else Costonomy's.
+  const deliveryOffer: DeliveryOffer | null =
+    deliveryChoice != null && offers.includes(deliveryChoice) ? deliveryChoice
+      : offers.includes('SELF') ? 'SELF'
+        : offers.includes('SELF_FREE') ? 'SELF_FREE'
+          : offers[0] ?? null;
 
   const query = useQuery({
     queryKey: intentKey(intentId),
@@ -134,6 +153,8 @@ export default function SupplierRequestScreen() {
         // quantities while a request is open, so accepting without saying which
         // version you read is accepting whatever it happens to be now.
         expectedRevision: request?.revision,
+        deliveryOffer: deliveryOffer ?? undefined,
+        deliveryFee: deliveryOffer === 'SELF' && deliveryCharge.trim() !== '' ? deliveryCharge.trim() : undefined,
         notes: notes.trim() === '' ? undefined : notes.trim(),
       }),
     onSuccess: () => {
@@ -263,6 +284,16 @@ export default function SupplierRequestScreen() {
               />
             ))}
           </MandiCard>
+
+          {answerable && deliveryPolicy.data != null && (
+            <DeliveryOfferChoice
+              policy={deliveryPolicy.data}
+              value={deliveryOffer}
+              onChange={setDeliveryChoice}
+              fee={deliveryCharge}
+              onFeeChange={setDeliveryCharge}
+            />
+          )}
 
           {answerable ? (
             <MandiCard>

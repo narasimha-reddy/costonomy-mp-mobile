@@ -17,11 +17,10 @@ export type DeliveryOffer = 'SELF_FREE' | 'SELF' | 'COSTONOMY';
  */
 export function deliveryOffersFor(policy: DeliveryPolicy | undefined): DeliveryOffer[] {
   if (policy == null) return [];
-  const offers: DeliveryOffer[] = [];
-  if (policy.ownDeliveryEnabled) {
-    offers.push('SELF_FREE');
-    if (policy.ownDeliveryFee != null && Number(policy.ownDeliveryFee) > 0) offers.push('SELF');
-  }
+  // "I will deliver this one" is the supplier's own call and needs no setting. Charging for it is limited by the
+  // store's own delivery fee, so that option is there only when a fee is set.
+  const offers: DeliveryOffer[] = ['SELF_FREE'];
+  if (policy.ownDeliveryFee != null && Number(policy.ownDeliveryFee) > 0) offers.push('SELF');
   if (policy.costonomyDeliveryEnabled) offers.push('COSTONOMY');
   return offers;
 }
@@ -46,7 +45,7 @@ export function DeliveryOfferChoice({
   const labels: Record<DeliveryOffer, { title: string; detail: string }> = {
     SELF_FREE: {
       title: 'I will deliver it — free',
-      detail: 'No delivery charge to the restaurant. They are told it is free.',
+      detail: 'You handle the delivery yourself, at no charge to the restaurant. They are told it is free.',
     },
     SELF: {
       title: `I will deliver it — ${formatMoney(policy.ownDeliveryFee ?? '0')}`,

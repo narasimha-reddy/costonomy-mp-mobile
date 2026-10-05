@@ -20,11 +20,13 @@ const policy = (over: Partial<DeliveryPolicy> = {}): DeliveryPolicy => ({
 });
 
 describe('what a supplier can offer', () => {
-  it('lists only what the store allows: free and paid own delivery, and Costonomy riders', () => {
+  it('always lets the supplier deliver free; charging needs a store fee, and riders need Costonomy delivery on', () => {
     expect(deliveryOffersFor(policy())).toEqual(['SELF_FREE', 'SELF', 'COSTONOMY']);
     expect(deliveryOffersFor(policy({ ownDeliveryFee: '0.00' }))).toEqual(['SELF_FREE', 'COSTONOMY']);
-    expect(deliveryOffersFor(policy({ ownDeliveryEnabled: false }))).toEqual(['COSTONOMY']);
-    expect(deliveryOffersFor(policy({ ownDeliveryEnabled: false, costonomyDeliveryEnabled: false }))).toEqual([]);
+    // Own delivery switched off in settings does not stop them saying "I will deliver this one".
+    expect(deliveryOffersFor(policy({ ownDeliveryEnabled: false }))).toEqual(['SELF_FREE', 'SELF', 'COSTONOMY']);
+    expect(deliveryOffersFor(policy({ ownDeliveryEnabled: false, costonomyDeliveryEnabled: false })))
+      .toEqual(['SELF_FREE', 'SELF']);
     expect(deliveryOffersFor(undefined)).toEqual([]);
   });
 

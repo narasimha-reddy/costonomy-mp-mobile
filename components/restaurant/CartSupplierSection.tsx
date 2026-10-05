@@ -150,6 +150,7 @@ export function SupplierSectionBody({
   shownQuantity,
   onChangeQuantity,
   onRemove,
+  onChangeDeliveryPreference,
   onSend,
   onOrderDirectly,
   onOpenSku,
@@ -164,6 +165,8 @@ export function SupplierSectionBody({
   shownQuantity?: (itemId: number, serverQuantity: number) => number;
   onChangeQuantity: (itemId: number, quantity: string) => void;
   onRemove: (itemId: number) => void;
+  /** Deliver to the restaurant or let them collect it, for this supplier's request (API D-143). */
+  onChangeDeliveryPreference?: (preference: 'DELIVERY' | 'PICKUP') => void;
   onSend: () => void;
   onOrderDirectly: () => void;
   /** Open the pack's own page. D-096. */
@@ -253,6 +256,28 @@ export function SupplierSectionBody({
           />
         </View>
       ))}
+
+      {onChangeDeliveryPreference != null && (
+        <View style={styles.preference}>
+          {([['DELIVERY', 'Deliver to me'], ['PICKUP', "I'll collect"]] as const).map(([value, label]) => {
+            const active = (draft.deliveryPreference ?? 'DELIVERY') === value;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => onChangeDeliveryPreference(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${draft.storeName ?? 'Supplier'}: ${label}`}
+                style={[styles.preferenceOption, active && styles.preferenceActive]}
+              >
+                <MandiText variant="caption" color={active ? Colors.surface : Colors.textSecondary}>
+                  {label}
+                </MandiText>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {draft.agreedTotal != null && (() => {
         const minOrderNum = draft.minOrderValue != null ? parseFloat(draft.minOrderValue) : 0;
@@ -381,6 +406,16 @@ function Row({ label, value, emphasis }: {
 }
 
 const styles = StyleSheet.create({
+  preference: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  preferenceOption: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  preferenceActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   flex: { flex: 1 },
   header: {
     flexDirection: 'row',

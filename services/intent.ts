@@ -113,6 +113,19 @@ export function prepareDirectOrder(
   });
 }
 
+/** Whether this supplier's request should be delivered or collected. On the draft, before it is sent (API D-143). */
+export function setDeliveryPreference(
+  token: string,
+  intentId: number,
+  preference: 'DELIVERY' | 'PICKUP',
+): Promise<Intent> {
+  return apiRequest<Intent>(`/api/v1/intents/${intentId}/delivery-preference`, {
+    method: 'PUT',
+    token,
+    body: { preference },
+  });
+}
+
 export function sendIntent(
   token: string,
   intentId: number,
@@ -276,7 +289,7 @@ export function respondToIntent(
     etaMinutes?: number;
     deliveryMode?: string;
     /** How the supplier will deliver this request; leave out to keep the store's settings (API D-141). */
-    deliveryOffer?: 'SELF_FREE' | 'SELF' | 'COSTONOMY';
+    deliveryOffer?: 'SELF_FREE' | 'SELF' | 'COSTONOMY' | 'NONE';
     /** With SELF: the charge for this request, at most the store's own fee; leave out for the store's fee. */
     deliveryFee?: string;
     notes?: string;

@@ -5,7 +5,7 @@ import type { DeliveryPolicy } from '@/services/supplier';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
 
-export type DeliveryOffer = 'SELF_FREE' | 'SELF' | 'COSTONOMY';
+export type DeliveryOffer = 'SELF_FREE' | 'SELF' | 'COSTONOMY' | 'NONE';
 
 /**
  * What the supplier will do about delivery, chosen when they accept (API D-141).
@@ -22,6 +22,8 @@ export function deliveryOffersFor(policy: DeliveryPolicy | undefined): DeliveryO
   const offers: DeliveryOffer[] = ['SELF_FREE'];
   if (policy.ownDeliveryFee != null && Number(policy.ownDeliveryFee) > 0) offers.push('SELF');
   if (policy.costonomyDeliveryEnabled) offers.push('COSTONOMY');
+  // Not every request can be delivered: saying so leaves the restaurant to collect it, or go elsewhere.
+  offers.push('NONE');
   return offers;
 }
 
@@ -50,6 +52,10 @@ export function DeliveryOfferChoice({
     SELF: {
       title: `I will deliver it — ${formatMoney(policy.ownDeliveryFee ?? '0')}`,
       detail: 'Charged to the restaurant. Keep your store fee, or enter a lower amount for this order.',
+    },
+    NONE: {
+      title: "I can't deliver this order",
+      detail: 'The restaurant can collect it instead.',
     },
     COSTONOMY: {
       title: 'Use Costonomy delivery',

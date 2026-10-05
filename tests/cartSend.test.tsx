@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CartScreen from '@/app/restaurant/cart';
 import { MandiToastProvider } from '@/components/common';
-import { addIntentItem, removeIntentItem, sendBasket, updateIntentItem } from '@/services/intent';
+import {
+  addIntentItem, removeIntentItem, sendBasket, setDeliveryPreference, updateIntentItem,
+} from '@/services/intent';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
@@ -22,12 +24,13 @@ jest.mock('@/services/intent', () => ({
   removeIntentItem: jest.fn(),
   updateIntentItem: jest.fn(),
   sendBasket: jest.fn(),
+  setDeliveryPreference: jest.fn(),
   prepareDirectOrder: jest.fn(),
 }));
 
 const mockDraft = {
   id: 31, reference: 'RQ-1', supplierStoreId: 4, storeName: 'Metro', supplierName: 'Metro',
-  status: 'DRAFT', pricedComplete: true, agreedValue: '1230.00', agreedGst: '61.50', agreedTotal: '1291.50',
+  status: 'DRAFT', deliveryPreference: 'DELIVERY', pricedComplete: true, agreedValue: '1230.00', agreedGst: '61.50', agreedTotal: '1291.50',
   items: [{
     id: 501, supplierSkuId: 77, sku: null, requestedQuantity: '3', unit: 'KG',
     agreedLineTotal: '1291.50', agreedUnitPriceInclusiveGst: '430.50', priceChanged: false,
@@ -60,6 +63,7 @@ beforeEach(() => {
   (updateIntentItem as jest.Mock).mockResolvedValue({});
   (removeIntentItem as jest.Mock).mockResolvedValue({});
   (addIntentItem as jest.Mock).mockResolvedValue({});
+  (setDeliveryPreference as jest.Mock).mockResolvedValue({});
   (sendBasket as jest.Mock).mockResolvedValue({ sent: [{ id: 31, storeName: 'Metro' }], held: [] });
 });
 
@@ -158,6 +162,14 @@ describe('the cart', () => {
     expect(body.preferredDeliveryDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     // 6:00 in India is 00:30 UTC.
     expect(body.requestedDeliveryTime).toMatch(/T00:30:00\.000Z$/);
+  });
+
+  it('lets the buyer say, for this supplier, whether they will collect it', async () => {
+    setup();
+
+    fireEvent.press(screen.getByLabelText("Metro: I'll collect"));
+
+    await waitFor(() => expect(setDeliveryPreference).toHaveBeenCalledWith('token', 31, 'PICKUP'));
   });
 });
 

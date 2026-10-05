@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-delivery-preference] - Deliver to me, or I'll collect, per supplier (API D-143)
+#### Added
+- Each supplier's card in the cart has "Deliver to me / I'll collect", sent with that request. The supplier sees it; for a pickup the supplier's delivery question is replaced by "The restaurant will collect this".
+- A supplier can answer "I can't deliver this order"; the buyer is then told they would collect it.
+
 ### [phase6/mobile-bulk-orders] - Ordering for an event
 #### Changed
 - **Cart quantities can be typed** (50 kg without 50 taps). It saves when typing ends; emptying the box to type a new number no longer removes the line, and minus is still how a line is taken away.

@@ -13,6 +13,7 @@ import {
   prepareDirectOrder,
   removeIntentItem,
   sendBasket,
+  setDeliveryPreference,
   updateIntentItem,
 } from '@/services/intent';
 import {
@@ -99,6 +100,14 @@ export default function BasketScreen() {
     await invalidate();
   });
   const { flush } = edits;
+
+  const preference = useMutation({
+    mutationFn: ({ intentId, value }: { intentId: number; value: 'DELIVERY' | 'PICKUP' }) =>
+      setDeliveryPreference(accessToken as string, intentId, value),
+    onSuccess: () => void invalidate(),
+    onError: (caught) =>
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not change that.', 'error'),
+  });
 
   const remove = useMutation({
     mutationFn: ({ itemId }: { itemId: number; supplierSkuId: number; quantity: string }) =>
@@ -353,6 +362,7 @@ export default function BasketScreen() {
           shownQuantity={edits.valueFor}
           onChangeQuantity={changeQuantity}
           onRemove={removeLine}
+          onChangeDeliveryPreference={(value) => preference.mutate({ intentId: draft.id, value })}
           onSend={() => send.mutate({ acceptPriceChanges: false, intentId: draft.id })}
           onOrderDirectly={() =>
             orderDirectly.mutate({ intentId: draft.id, acceptPriceChanges: false })}

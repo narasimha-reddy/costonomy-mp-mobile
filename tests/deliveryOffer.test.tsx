@@ -20,14 +20,19 @@ const policy = (over: Partial<DeliveryPolicy> = {}): DeliveryPolicy => ({
 });
 
 describe('what a supplier can offer', () => {
-  it('always lets the supplier deliver free; charging needs a store fee, and riders need Costonomy delivery on', () => {
-    expect(deliveryOffersFor(policy())).toEqual(['SELF_FREE', 'SELF', 'COSTONOMY']);
-    expect(deliveryOffersFor(policy({ ownDeliveryFee: '0.00' }))).toEqual(['SELF_FREE', 'COSTONOMY']);
+  it("always lets the supplier deliver free or say they can't; charging needs a store fee, and riders need Costonomy delivery on", () => {
+    expect(deliveryOffersFor(policy())).toEqual(['SELF_FREE', 'SELF', 'COSTONOMY', 'NONE']);
+    expect(deliveryOffersFor(policy({ ownDeliveryFee: '0.00' }))).toEqual(['SELF_FREE', 'COSTONOMY', 'NONE']);
     // Own delivery switched off in settings does not stop them saying "I will deliver this one".
-    expect(deliveryOffersFor(policy({ ownDeliveryEnabled: false }))).toEqual(['SELF_FREE', 'SELF', 'COSTONOMY']);
+    expect(deliveryOffersFor(policy({ ownDeliveryEnabled: false }))).toEqual(['SELF_FREE', 'SELF', 'COSTONOMY', 'NONE']);
     expect(deliveryOffersFor(policy({ ownDeliveryEnabled: false, costonomyDeliveryEnabled: false })))
-      .toEqual(['SELF_FREE', 'SELF']);
+      .toEqual(['SELF_FREE', 'SELF', 'NONE']);
     expect(deliveryOffersFor(undefined)).toEqual([]);
+  });
+
+  it("offers 'I can't deliver this order' last, so it is never the default", () => {
+    const offers = deliveryOffersFor(policy());
+    expect(offers[offers.length - 1]).toBe('NONE');
   });
 
   it('says riders are requested after Ready, and picks the chosen offer', () => {
@@ -127,6 +132,25 @@ describe('where the picker starts', () => {
   it('starts on pickup for an older answer that did not say', () => {
     const onSelect = start(null, 'PICKUP,SUPPLIER_DELIVERY', null);
     expect(onSelect).toHaveBeenCalledWith('PICKUP', '0', undefined);
+  });
+});
+
+describe('a supplier who cannot deliver', () => {
+  it('tells the buyer they would collect it', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <DeliveryModePicker
+          request={{ id: 5, supplierStoreId: 1, deliveryPreference: 'DELIVERY',
+            acceptance: { deliveryModes: 'PICKUP', deliveryFee: null, deliveryOffer: 'NONE' } } as unknown as Intent}
+          selected="PICKUP"
+          onSelect={jest.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("This supplier can't deliver this order, so you would collect it.")).toBeTruthy();
+    expect(screen.queryByText('Supplier delivers')).toBeNull();
   });
 });
 

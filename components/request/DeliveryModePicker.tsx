@@ -94,6 +94,11 @@ export function DeliveryModePicker({
   return (
     <MandiCard>
       <MandiText variant="bodyEmphasis">How should this reach you?</MandiText>
+      {request.deliveryPreference === 'DELIVERY' && request.acceptance?.deliveryOffer === 'NONE' && (
+        <MandiText variant="caption" color={Colors.textSecondary}>
+          This supplier can&apos;t deliver this order, so you would collect it.
+        </MandiText>
+      )}
       <View style={styles.options}>
         {available.map((mode) => {
           const active = selected === mode;

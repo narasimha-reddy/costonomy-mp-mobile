@@ -219,6 +219,7 @@ export default function SupplierRequestScreen() {
                   {request.items.length} item{request.items.length === 1 ? '' : 's'} requested
                 </MandiText>
                 <MandiText variant="caption" color={Colors.textSecondary}>
+                  {request.deliveryPreference === 'PICKUP' ? 'Will collect · ' : 'Delivery wanted · '}
                   {request.preferredDeliveryDate != null
                     ? `Wanted ${describeDeliveryDay(request.preferredDeliveryDate)}`
                     : 'Wanted immediately'}
@@ -285,7 +286,16 @@ export default function SupplierRequestScreen() {
             ))}
           </MandiCard>
 
-          {answerable && deliveryPolicy.data != null && (
+          {answerable && request.deliveryPreference === 'PICKUP' && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">The restaurant will collect this</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                No delivery is needed, so there is nothing to offer for delivery.
+              </MandiText>
+            </MandiCard>
+          )}
+
+          {answerable && request.deliveryPreference !== 'PICKUP' && deliveryPolicy.data != null && (
             <DeliveryOfferChoice
               policy={deliveryPolicy.data}
               value={deliveryOffer}

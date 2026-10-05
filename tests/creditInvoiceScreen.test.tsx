@@ -18,6 +18,12 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: '55' }),
   usePathname: () => '/restaurant/credit/invoice/55',
 }));
+jest.mock('@/contexts/OutletProvider', () => ({ useOutlet: () => ({ outletId: 7, outlet: { id: 7, restaurantId: 1 } }) }));
+let mockMayRepay = true;
+jest.mock('@/hooks/usePermissions', () => ({
+  usePermissions: () => ({ canForOutlet: () => mockMayRepay }),
+}));
+afterEach(() => { mockMayRepay = true; });
 let mockOffline = false;
 jest.mock('@/hooks/useNetworkStatus', () => ({
   useNetworkStatus: () => ({ online: !mockOffline, offline: mockOffline }),

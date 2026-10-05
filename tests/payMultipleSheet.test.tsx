@@ -107,14 +107,14 @@ describe('PayMultipleSheet list', () => {
     expect(await screen.findByText('Wallet ₹77,541.69')).toBeTruthy();
   });
 
-  it('cannot select a supplier whose amount is under ₹1', () => {
+  it('a supplier whose total is under ₹1 is selectable at its exact amount', () => {
     renderSheet([
       agreement({ id: 1, supplierName: 'One', due: '0.5000', overdue: '0.5000' }),
       agreement({ id: 2, supplierName: 'Two', due: '1000.0000', overdue: '1000.0000' }),
     ]);
-    expect(screen.getByTestId('multi-row-1').props.accessibilityState.checked).toBe(false);
-    expect(screen.getByTestId('multi-row-1').props.accessibilityState.disabled).toBe(true);
-    expect(screen.getByTestId('multi-total')).toHaveTextContent('Total ₹1,000.00');
+    expect(screen.getByTestId('multi-row-1').props.accessibilityState.checked).toBe(true);
+    expect(screen.getByTestId('multi-row-1').props.accessibilityState.disabled).toBe(false);
+    expect(screen.getByTestId('multi-total')).toHaveTextContent('Total ₹1,000.50');
   });
 
   it('total is the sum of the checked rows and follows the checkboxes', () => {

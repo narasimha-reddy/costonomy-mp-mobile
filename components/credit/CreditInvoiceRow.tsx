@@ -45,7 +45,7 @@ export function CreditInvoiceRow({
       accessibilityLabel={label}
     >
       <View style={styles.row}>
-        <MandiText variant="bodyEmphasis" style={styles.flex}>{invoice.invoiceNumber}</MandiText>
+        <MandiText variant="bodyEmphasis" style={styles.flex} numberOfLines={1}>{invoice.invoiceNumber}</MandiText>
         {chip != null && (
           <MandiStatusChip label={chip.label} tone={chip.tone} size="sm" testID={`credit-invoice-chip-${invoice.id}`} />
         )}

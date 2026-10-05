@@ -1,6 +1,7 @@
 import type { ClaimMethod } from '@/models/credit';
 import { formatMoney, type Money } from '@/utils/money';
 import { scaledToAmount, toScaled } from '@/lib/wallet/amount';
+import { sameAmount } from '@/lib/credit/sum';
 import { methodLabel } from '@/lib/credit/payments';
 
 /** The ways a restaurant can have paid a supplier outside the app, in the order shown. */
@@ -66,8 +67,16 @@ export function referenceRequired(method: ClaimMethod): boolean {
  *
  * @param today the India day now
  * @param issuedOn the invoice's issue day in India, when known
+ * @param reportable the server's `reportableAmount` for the invoice, when known:
+ *   an amount below ₹1 is accepted only when it is exactly this (the server's
+ *   sub-₹1 rule); otherwise the minimum is ₹1.00.
  */
-export function checkClaim(draft: ClaimDraft, today: string, issuedOn: string | null): ClaimCheck {
+export function checkClaim(
+  draft: ClaimDraft,
+  today: string,
+  issuedOn: string | null,
+  reportable?: number | string | null,
+): ClaimCheck {
   const errors: ClaimFieldErrors = {};
   let amount: string | null = null;
 
@@ -75,7 +84,9 @@ export function checkClaim(draft: ClaimDraft, today: string, issuedOn: string | 
   if (text !== '') {
     const scaled = toScaled(text, 2);
     if (scaled == null) errors.amount = 'Use at most 2 decimal places.';
-    else if (scaled < MIN_SCALED) errors.amount = 'Enter at least ₹1.00.';
+    else if (scaled < MIN_SCALED && !(scaled > 0 && sameAmount(text, reportable))) {
+      errors.amount = 'Enter at least ₹1.00.';
+    }
     else amount = scaledToAmount(scaled);
   }
 

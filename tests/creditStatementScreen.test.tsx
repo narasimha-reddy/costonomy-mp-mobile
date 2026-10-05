@@ -138,6 +138,15 @@ describe('Credit statement screen', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it('D13: an ADJUSTMENT line with no order renders its label and is not a link', async () => {
+    renderScreen();
+    await screen.findByTestId('statement-list');
+    const adjustment = screen.getAllByTestId('statement-row')[2];
+    expect(adjustment).toHaveTextContent(/Adjustment/);
+    expect(adjustment?.props.accessibilityRole).not.toBe('button');
+    expect(adjustment?.props.accessibilityLabel).not.toMatch(/Open$/);
+  });
+
   it('says so when there is no activity', async () => {
     respond({ ...STATEMENT, lines: [] });
     renderScreen();

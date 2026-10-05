@@ -25,6 +25,11 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'tok' }) }));
 jest.mock('@/contexts/OutletProvider', () => ({ useOutlet: () => ({ outletId: 7 }) }));
+let mockMayRepay = true;
+jest.mock('@/hooks/usePermissions', () => ({
+  usePermissions: () => ({ canForOutlet: () => mockMayRepay }),
+}));
+afterEach(() => { mockMayRepay = true; });
 let mockOffline = false;
 jest.mock('@/hooks/useNetworkStatus', () => ({
   useNetworkStatus: () => ({ online: !mockOffline, offline: mockOffline }),

@@ -20,6 +20,9 @@ import { CreditPaymentRow } from '@/components/credit/CreditPaymentRow';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { useCreditInvoice, useWalletRepayEnabled } from '@/hooks/useCreditInvoice';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useOutlet } from '@/contexts/OutletProvider';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useSingleNavigation } from '@/hooks/useSingleNavigation';
 import { useWithdrawClaim } from '@/hooks/useWithdrawClaim';
 import { canReportPayment, waitingClaimsTotal } from '@/lib/credit/claims';
 import { dueChip } from '@/lib/credit/dueChip';
@@ -61,17 +64,23 @@ export default function CreditInvoiceScreen() {
   const query = useCreditInvoice(invoiceId);
   const repayEnabled = useWalletRepayEnabled();
   const { offline } = useNetworkStatus();
+  const { outlet } = useOutlet();
+  const { canForOutlet } = usePermissions();
+  const go = useSingleNavigation();
+  // Paying and reporting a payment both need CREDIT_REPAY; the server refuses them otherwise.
+  const mayRepay = canForOutlet('CREDIT_REPAY', outlet);
   const [sheetOpen, setSheetOpen] = useState(false);
   const withdrawal = useWithdrawClaim(Number(query.data?.agreementId));
 
   const invoice = query.data;
   const goBack = () => (router.canGoBack?.() === false ? router.replace('/restaurant/credit') : router.back());
-  const notFound = query.error instanceof ApiError && query.error.status === 404;
+  const notFound = !Number.isFinite(invoiceId)
+    || (query.error instanceof ApiError && query.error.status === 404);
 
-  const openClaim = () => router.push({
+  const openClaim = () => go('claim', () => router.push({
     pathname: '/restaurant/credit/claim',
     params: { agreementId: String(invoice?.agreementId), invoiceId: String(invoiceId) },
-  });
+  }));
 
   const header = (
     <MandiHeader title={invoice?.invoiceNumber ?? 'Invoice'} subtitle={invoice?.supplierName ?? undefined} back />
@@ -117,9 +126,9 @@ export default function CreditInvoiceScreen() {
   const settled = invoice.status === 'PAID' || invoice.status === 'WRITTEN_OFF'
     || invoice.dueState === 'PAID' || invoice.dueState === 'WRITTEN_OFF';
   const owes = Number(invoice.outstanding) > 0;
-  const canPay = !settled && owes && repayEnabled;
+  const canPay = mayRepay && !settled && owes && repayEnabled;
   // Reporting a payment made elsewhere does not depend on wallet repayment being on.
-  const canClaim = !settled && owes && canReportPayment(invoice.reportableAmount);
+  const canClaim = mayRepay && !settled && owes && canReportPayment(invoice.reportableAmount);
   const orderLabel = invoice.orderNumber ?? (invoice.supplierOrderId != null ? String(invoice.supplierOrderId) : null);
   const issued = formatDay(invoice.issuedAt);
   const due = formatDay(invoice.dueDate);
@@ -170,7 +179,7 @@ export default function CreditInvoiceScreen() {
             invoice.supplierOrderId != null ? (
               <Pressable
                 style={styles.orderLink}
-                onPress={() => router.push(`/restaurant/orders/${invoice.supplierOrderId}`)}
+                onPress={() => go('order', () => router.push(`/restaurant/orders/${invoice.supplierOrderId}`))}
                 accessibilityRole="link"
                 accessibilityLabel={`Order #${orderLabel}. Opens the order`}
                 testID="invoice-order-link"
@@ -214,7 +223,7 @@ export default function CreditInvoiceScreen() {
                 payment={payment}
                 supplierName={invoice.supplierName}
                 // History opens a ledger movement by its numeric id, so does this.
-                onOpenWallet={(entryId) => router.push(`/restaurant/wallet/transaction/${entryId}`)}
+                onOpenWallet={(entryId) => go(`wallet-${entryId}`, () => router.push(`/restaurant/wallet/transaction/${entryId}`))}
               />
             ))}
           </MandiCard>

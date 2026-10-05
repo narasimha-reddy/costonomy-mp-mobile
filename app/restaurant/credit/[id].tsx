@@ -6,6 +6,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useSingleNavigation } from '@/hooks/useSingleNavigation';
 import {
   acceptAgreement,
   fetchAgreement,
@@ -21,6 +23,7 @@ import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices
 import {
   MandiButton,
   MandiCard,
+  MandiEmptyState,
   MandiErrorState,
   MandiHeader,
   MandiScreen,
@@ -54,8 +57,12 @@ export default function CreditAgreementScreen() {
   const agreementId = Number(id);
   const toast = useToast();
   const router = useRouter();
-  const { outletId } = useOutlet();
+  const { outletId, outlet } = useOutlet();
   const { offline } = useNetworkStatus();
+  const { canForOutlet } = usePermissions();
+  const go = useSingleNavigation();
+  // Paying and reporting a payment both need CREDIT_REPAY; the server refuses them otherwise.
+  const mayRepay = canForOutlet('CREDIT_REPAY', outlet);
   const [tab, setTab] = useState<InvoiceTab>('open');
   const [shown, setShown] = useState(PAGE_SIZE);
   const [payOpen, setPayOpen] = useState(false);
@@ -89,13 +96,20 @@ export default function CreditAgreementScreen() {
   );
 
   const accept = useMutation({
-    mutationFn: () => acceptAgreement(accessToken as string, agreementId),
+    mutationFn: () => acceptAgreement(accessToken as string, agreementId, agreement.data?.termsVersion),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['credit-agreement', agreementId] });
       toast.show('Terms accepted', 'success');
     },
-    onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not accept.', 'error'),
+    onError: (caught) => {
+      if (caught instanceof ApiError && caught.code === 'CREDIT_TERMS_CHANGED') {
+        // The supplier changed the terms after this screen loaded: show what they are now.
+        void queryClient.refetchQueries({ queryKey: ['credit-agreement', agreementId] });
+        toast.show('The supplier changed the terms. Please review them again.', 'error');
+        return;
+      }
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not accept.', 'error');
+    },
   });
 
   const data = agreement.data;
@@ -142,17 +156,26 @@ export default function CreditAgreementScreen() {
           <CreditStickyPayBar
             due={data.due}
             disabled={offline}
-            showPay={walletRepayEnabled}
+            showPay={walletRepayEnabled && mayRepay}
             onPress={() => setPayOpen(true)}
-            onClaim={!canReportPayment(data.reportableAmount) ? undefined : () => router.push({
+            onClaim={!mayRepay || !canReportPayment(data.reportableAmount) ? undefined : () => go('claim', () => router.push({
               pathname: '/restaurant/credit/claim',
               params: { agreementId: String(agreementId) },
-            })}
+            }))}
           />
         ) : undefined
       }
     >
-      {agreement.isPending ? (
+      {!Number.isFinite(agreementId) ? (
+        <MandiEmptyState
+          icon="document-text-outline"
+          title="This credit line isn't available"
+          description="The link may be wrong. Go back and open it from your credit list."
+          actionLabel="Go back"
+          onAction={() => (router.canGoBack?.() === false ? router.replace('/restaurant/credit') : router.back())}
+          testID="credit-not-found"
+        />
+      ) : agreement.isPending ? (
         <MandiSkeletonList count={3} />
       ) : agreement.error || data == null ? (
         <MandiErrorState message="Couldn't load this credit line." onRetry={() => agreement.refetch()} />
@@ -332,7 +355,7 @@ export default function CreditAgreementScreen() {
                         <CreditInvoiceRow
                           key={invoice.id}
                           invoice={invoice}
-                          onPress={() => router.push(`/restaurant/credit/invoice/${invoice.id}` as never)}
+                          onPress={() => go(`invoice-${invoice.id}`, () => router.push(`/restaurant/credit/invoice/${invoice.id}` as never))}
                         />
                       ))}
                       {list.length > shown && (
@@ -367,10 +390,10 @@ export default function CreditAgreementScreen() {
             <View style={styles.section}>
               <Pressable
                 testID="credit-statement-row"
-                onPress={() => router.push({
+                onPress={() => go('statement', () => router.push({
                   pathname: '/restaurant/credit/statement',
                   params: { agreementId: String(agreementId) },
-                })}
+                }))}
                 accessibilityRole="button"
                 accessibilityLabel="Statement"
                 accessibilityHint="Every order and repayment, with what you owed after each"
@@ -384,7 +407,7 @@ export default function CreditAgreementScreen() {
               </MandiText>
             </View>
           )}
-          {data.due != null && (
+          {mayRepay && data.due != null && (
             <PayFromWalletSheet
               visible={payOpen}
               onClose={() => setPayOpen(false)}

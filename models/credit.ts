@@ -196,7 +196,11 @@ export interface CreditInvoiceDetail {
 }
 
 export type ClaimMethod = 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CHEQUE' | 'CARD';
-export type ClaimStatus = 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
+/**
+ * SUPERSEDED: the invoice was settled before the supplier confirmed this report,
+ * so it is not needed any more (its `decisionNote` says so). Never "waiting".
+ */
+export type ClaimStatus = 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN' | 'SUPERSEDED';
 
 /** A restaurant's report that it paid a supplier outside the app. */
 export interface ClaimResponse {

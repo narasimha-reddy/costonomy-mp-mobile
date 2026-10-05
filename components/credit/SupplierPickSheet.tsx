@@ -41,7 +41,7 @@ export function SupplierPickSheet({
               onPress={() => onPick(a)}
               style={styles.row}
             >
-              <MandiText variant="bodyEmphasis">{name}</MandiText>
+              <MandiText variant="bodyEmphasis" numberOfLines={1}>{name}</MandiText>
               <MandiText variant="caption" color={Colors.textSecondary}>
                 {`Owed ${formatMoney(a.due)}`}
               </MandiText>

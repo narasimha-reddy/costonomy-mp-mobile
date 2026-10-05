@@ -53,12 +53,19 @@ export function requestCredit(token: string, input: CreditRequestInput): Promise
  *
  * <p>Doc 04 §13: a supplier modification is explicit and versioned, and the
  * credit is not usable until the restaurant accepts it. This is that acceptance —
- * it must never be sent automatically on the restaurant's behalf.
+ * it must never be sent automatically on the restaurant's behalf. `termsVersion` is
+ * the version on screen; the server refuses (CREDIT_TERMS_CHANGED) if the terms moved on.
  */
-export function acceptAgreement(token: string, agreementId: number): Promise<CreditAgreement> {
+export function acceptAgreement(
+  token: string,
+  agreementId: number,
+  termsVersion?: number | null,
+): Promise<CreditAgreement> {
   return apiRequest<CreditAgreement>(`/api/v1/credit/agreements/${agreementId}/accept`, {
     method: 'POST',
     token,
+    // The version the restaurant saw: the server answers CREDIT_TERMS_CHANGED if the supplier has moved on.
+    ...(termsVersion != null ? { body: { termsVersion } } : {}),
   });
 }
 

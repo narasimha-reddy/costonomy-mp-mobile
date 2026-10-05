@@ -89,7 +89,7 @@ export function MandiBottomSheet({
           >
             <View style={styles.titleRow}>
               {title ? (
-                <MandiText variant="subtitle" style={styles.flex}>{title}</MandiText>
+                <MandiText variant="subtitle" style={styles.flex} numberOfLines={2}>{title}</MandiText>
               ) : <View style={styles.flex} />}
               <Pressable
                 onPress={onClose}

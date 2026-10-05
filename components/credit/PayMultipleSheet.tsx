@@ -8,7 +8,7 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { usePayMultiple, type PayItem, type PayItemResult } from '@/hooks/usePayMultiple';
-import type { PayError } from '@/hooks/usePayFromWallet';
+import { SIGN_IN_AGAIN_TEXT, idempotencyText, type PayError } from '@/hooks/usePayFromWallet';
 import { agreementName } from '@/lib/credit/overview';
 import { PAY_ANYWAY_LABEL, doublePayWarning, overlapsWaitingReports } from '@/lib/credit/doublePay';
 import { DoublePayWarning } from './DoublePayWarning';
@@ -20,12 +20,14 @@ import { fetchWallet } from '@/services/wallet';
 import { formatMoney, type Money } from '@/utils/money';
 import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
 
-const MIN_SCALED = 10_000; // ₹1.00, as in the single-supplier sheet
-
-/** A server amount as the two-decimal string the API takes, or null below ₹1. */
+/**
+ * A server amount as the two-decimal string the API takes, or null below a paisa.
+ * A supplier's total below ₹1 is selectable: the server takes a sub-₹1 payment
+ * only when it clears exactly what it targets, and this is exactly that.
+ */
 function amountOf(value: Money | number): string | null {
   const scaled = toScaled(value, 4);
-  return scaled == null || scaled < MIN_SCALED ? null : scaledToAmount(scaled);
+  return scaled == null || scaled < 100 ? null : scaledToAmount(scaled);
 }
 
 interface Row {
@@ -57,6 +59,9 @@ function reasonOf(error: PayError): string {
     case 'short': return `Wallet is ${formatMoney(error.shortBy)} short`;
     case 'overpayment': return 'You owe less than that now';
     case 'forbidden': return 'Not available yet';
+    case 'hold': return 'Your wallet is on hold. Please contact support.';
+    case 'auth': return SIGN_IN_AGAIN_TEXT;
+    case 'reuse': case 'processing': case 'failed': return idempotencyText(error.kind);
     default: return error.message;
   }
 }
@@ -100,7 +105,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
   const selectedRows = rows.filter((r) => checked.has(r.agreement.id) && r.amount != null);
   const total = sumAmounts(selectedRows.map((r) => r.amount as string));
   const overlapping = selectedRows.filter((r) => r.overlaps);
-  const canPay = selectedRows.length > 0 && total != null && !payment.running && !offline;
+  const canPay = selectedRows.length > 0 && total != null && !payment.running && !payment.checking && !offline;
 
   function toggle(id: number) {
     setChecked((previous) => {
@@ -124,13 +129,14 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
     if (!canPay) return;
     const items: PayItem[] = selectedRows.map((r) => ({
       agreementId: r.agreement.id, supplierName: r.name, amount: r.amount as string,
+      stamp: `${r.agreement.due}|${r.agreement.overdue}`,
     }));
     setAttempted(items);
     void runItems(items);
   }
 
   function tryAgain() {
-    if (attempted == null || offline) return;
+    if (attempted == null || offline || payment.checking) return;
     const failed = attempted.filter((i) => payment.results[i.agreementId]?.status === 'failed');
     if (failed.length > 0) void runItems(failed);
   }
@@ -192,7 +198,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
                     color={on ? Colors.primary : Colors.textTertiary}
                   />
                   <View style={styles.flex}>
-                    <MandiText variant="bodyEmphasis">{r.name}</MandiText>
+                    <MandiText variant="bodyEmphasis" numberOfLines={1}>{r.name}</MandiText>
                     {r.overdue ? (
                       <MandiText variant="captionEmphasis" color={Colors.danger}>Overdue</MandiText>
                     ) : (
@@ -272,7 +278,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
               variant="secondary"
               icon="refresh"
               label="Try again"
-              disabled={!answered || offline}
+              disabled={!answered || offline || payment.checking}
               loading={payment.running}
               onPress={tryAgain}
             />
@@ -300,7 +306,7 @@ function ResultRow({
       <View style={styles.row} testID={base}>
         <Ionicons name="time-outline" size={IconSize.lg} color={Colors.textTertiary} />
         <View style={styles.flex}>
-          <MandiText variant="bodyEmphasis">{item.supplierName}</MandiText>
+          <MandiText variant="bodyEmphasis" numberOfLines={1}>{item.supplierName}</MandiText>
           <MandiText variant="caption" color={Colors.textSecondary}>Waiting for the answer</MandiText>
         </View>
       </View>
@@ -311,7 +317,7 @@ function ResultRow({
       <View style={styles.row} testID={base}>
         <Ionicons name="checkmark-circle" size={IconSize.lg} color={Colors.success} />
         <View style={styles.flex}>
-          <MandiText variant="bodyEmphasis">{item.supplierName}</MandiText>
+          <MandiText variant="bodyEmphasis" numberOfLines={1}>{item.supplierName}</MandiText>
           <MandiText variant="caption" color={Colors.success}>
             {`Paid ${formatMoney(result.response.amount)}`}
           </MandiText>
@@ -323,7 +329,7 @@ function ResultRow({
     <View style={styles.row} testID={base}>
       <Ionicons name="close-circle" size={IconSize.lg} color={Colors.danger} />
       <View style={styles.flex}>
-        <MandiText variant="bodyEmphasis">{item.supplierName}</MandiText>
+        <MandiText variant="bodyEmphasis" numberOfLines={1}>{item.supplierName}</MandiText>
         <MandiText variant="caption" color={Colors.danger}>
           {`Not paid: ${reasonOf(result.error)}`}
         </MandiText>

@@ -15,6 +15,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/credit-h4-mobile-hardening]
+#### Fixed
+- Paying twice after an unclear result: the idempotency key of a repayment or "I paid" report is now kept outside the sheet or screen (`lib/credit/attemptKeys.ts`), so closing and reopening it after a dropped connection or a 5xx and paying the same amount again reuses the same key; it is dropped only after success, a definitive refusal, changed figures on screen, or 30 minutes.
+- `IDEMPOTENCY_KEY_REUSE` no longer lets the next tap debit again: the wallet, credit summary, agreement and invoices are refreshed first ("Your earlier payment may have gone through..."), and Pay/Send/Try again stay off until that finishes. `IDEMPOTENT_PREVIOUS_ATTEMPT_FAILED` gives "That didn't go through" and a new key; `IDEMPOTENT_REQUEST_IN_PROGRESS` keeps the key, shows "Still processing" and looks again after a few seconds.
+- An "I paid" report's key now changes when only the note changes (the server hashes the note).
+- Pay, Pay all overdue, "I paid" and "I paid outside the app" (overview, supplier bar, invoice, claim form) are hidden without CREDIT_REPAY; the claim route says "You don't have permission to pay or report payments for this outlet. Ask the owner."
+- `scaledToAmount` floors to whole paise instead of rounding without a carry (never sends more than typed or owed).
+- A wallet on hold (`WALLET_ON_HOLD`) says "Your wallet is on hold. Please contact support." with no Add money, distinct from "isn't available yet".
+- A balance or supplier total below ₹1 can be paid in full; "Other amount" that would leave under ₹1 offers "Pay full amount"; "I paid" accepts under ₹1 only when it equals the reportable amount.
+- Accepting changed terms sends the terms version; `CREDIT_TERMS_CHANGED` refetches and says "The supplier changed the terms. Please review them again."
+- Claim status SUPERSEDED shows "Not needed: invoice already settled" (neutral, no Withdraw, never counted as waiting).
+- Bad route ids show a friendly page instead of a skeleton, double taps push once, long supplier names are cut to one line, no state updates or navigation after leaving mid-request, and a 401 says "Please sign in again" without losing the form.
+
 ### [feat/credit-m14-phone-and-walk-fixes]
 #### Fixed
 - "I paid" form is keyboard-safe: `MandiScreen` has a new `avoidKeyboard` prop (KeyboardAvoidingView around content and footer, focused field scrolled above the keyboard via `MandiFormField` or `useScrollFieldIntoView`, drag dismisses the keyboard); on only for the claim screen, and its "Scroll for..." cue hides while the keyboard is open.

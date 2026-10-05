@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useSingleNavigation } from '@/hooks/useSingleNavigation';
 import { fetchCreditSummary } from '@/services/credit';
 import { CreditDuesRow } from '@/components/credit/CreditDuesRow';
 import { CreditLineRow } from '@/components/credit/CreditLineRow';
@@ -42,6 +44,10 @@ export default function CreditOverviewScreen() {
   const { accessToken } = useSession();
   const { outletId, outlet } = useOutlet();
   const { offline } = useNetworkStatus();
+  const { canForOutlet } = usePermissions();
+  const go = useSingleNavigation();
+  // Paying and reporting a payment both need CREDIT_REPAY; the server refuses them otherwise.
+  const mayRepay = canForOutlet('CREDIT_REPAY', outlet);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickFor, setPickFor] = useState<'pay' | 'claim'>('pay');
   const [multiOpen, setMultiOpen] = useState(false);
@@ -54,11 +60,11 @@ export default function CreditOverviewScreen() {
   });
 
   const summary = query.data;
-  const open = (id: number) => router.push(`/restaurant/credit/${id}`);
-  const request = () => router.push('/restaurant/credit/request');
+  const open = (id: number) => go(`credit-${id}`, () => router.push(`/restaurant/credit/${id}`));
+  const request = () => go('request', () => router.push('/restaurant/credit/request'));
 
   const groups = summary ? groupAgreements(summary.agreements) : { dues: [], lines: [] };
-  const showPay = summary?.walletRepayEnabled === true && Number(summary.due) > 0 && groups.dues.length > 0;
+  const showPay = mayRepay && summary?.walletRepayEnabled === true && Number(summary.due) > 0 && groups.dues.length > 0;
 
   const onPay = () => {
     setPickFor('pay');
@@ -66,10 +72,10 @@ export default function CreditOverviewScreen() {
     else setMultiOpen(true);
   };
 
-  const showClaim = summary != null && Number(summary.due) > 0 && groups.dues.length > 0
+  const showClaim = mayRepay && summary != null && Number(summary.due) > 0 && groups.dues.length > 0
     && canReportPayment(summary.reportableAmount);
   const claimFor = (id: number) =>
-    router.push({ pathname: '/restaurant/credit/claim', params: { agreementId: String(id) } });
+    go(`claim-${id}`, () => router.push({ pathname: '/restaurant/credit/claim', params: { agreementId: String(id) } }));
   const onClaim = () => {
     const only = groups.dues[0];
     if (groups.dues.length === 1 && only != null) claimFor(only.id);
@@ -176,7 +182,7 @@ export default function CreditOverviewScreen() {
               else setTarget(a);
             }}
           />
-          {multiOpen && (
+          {mayRepay && multiOpen && (
             <PayMultipleSheet
               visible
               onClose={() => setMultiOpen(false)}
@@ -188,7 +194,7 @@ export default function CreditOverviewScreen() {
               }}
             />
           )}
-          {target != null && (
+          {mayRepay && target != null && (
             <PayFromWalletSheet
               visible
               onClose={() => setTarget(null)}

@@ -62,3 +62,49 @@ first use). Agreement 1 (demo data) is never written to.
   is skipped; the other-tenant user is covered in S9.
 * S6 depends on the hourly `costonomy.mp.credit.overdue-interval`. Restart the API with a short interval
   (for example `COSTONOMY_MP_CREDIT_OVERDUE_INTERVAL=PT20S`) if the invoice is not marked within the wait.
+
+## UI walkthrough (`ui-walk.js`): every Credit screen in a real browser at phone size
+
+`ui-walk.js` (steps and walkthrough) and `ui-core.js` (Chrome DevTools Protocol over the `ws` package, same idea as
+`tools/webcheck/cdp.js`, plus the in-page layout checks) drive headless Chrome as a phone (390x844 at 2x with touch;
+the read-only key screens again at 360x740 and 412x915). It signs in as the restaurant `+919876500004` and later the
+supplier `+919876511001` with a session of its own (OTP 123456; an existing session in the browser is reused, because
+OTP requests are rate limited per hour), then **taps** through Home, the Credit overview, the pay sheets, supplier lines,
+invoices, the report form, the statement, wallet History, Request credit and the supplier's Credit tab. After every step
+it saves a screenshot and runs automatic checks in the page:
+
+| check | what it flags |
+|---|---|
+| overlap | two interactive elements, or an interactive element and a non-ancestor text block, intersecting by more than 2 px; an interactive element whose pixels are covered by something else (hit test at five points) |
+| clipping | horizontal page scroll, text or controls outside the viewport, text cut by `overflow: hidden` (warning) |
+| tap targets | interactive elements under 44x44 px (warning; `hitSlop` is not counted) |
+| console | `console.error`, page errors, `/api` calls answered 4xx/5xx or failing (a message is reported once, on the step where it first appears) |
+| raw | raw codes in the visible text (`CREDIT_OVERPAYMENT`, `undefined`, `NaN`, `[object Object]`, ...) |
+| clearance | scrolled to the end, the last item must sit above the sticky bar |
+
+It also hit-tests every tap (`TAP BLOCKED` if the element's centre is covered by something else), asserts what each screen
+should show (totals, labels, button states, messages), and approximates a soft keyboard by shrinking the window to 62% height
+with the field focused.
+
+```
+export PATH=$HOME/.local/opt/node/bin:$PATH
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=9444 \
+  --user-data-dir=<fresh temp dir> --window-size=390,844 about:blank &      # note the PID, kill only that PID afterwards
+node tools/credit-e2e/ui-walk.js                       # everything (about 12 minutes)
+ONLY=2,4a VIEWS=0 node tools/credit-e2e/ui-walk.js    # a subset, 390 only; the other steps' earlier results are kept
+WEB=http://localhost:7073 SHOTS=/some/dir node tools/credit-e2e/ui-walk.js
+node tools/credit-e2e/ui-walk.js --report              # rebuild REPORT-auto.md from results.json
+```
+
+Output goes to `SHOTS` (default `../../../ui-shots` relative to the repo, so outside it; never commit it): numbered PNGs
+(`name.png`, `name-end.png` = scrolled to the end, `name@360.png` for the other phone sizes), `texts.json` (the visible text of
+each screen, for wording review), `results.json` (every check with evidence) and `REPORT-auto.md`.
+
+Notes
+* Needs the web app (`WEB`, default `http://localhost:7072`) on a **fresh dev bundle**: a long-running Expo server that missed a
+  branch switch serves old screens (check that "Pay from wallet" on the overview opens the "Pay overdue to" sheet).
+* Some steps really move local test money: "Pay overdue" (only when something is overdue, or with `PAY_ANYWAY=1`, which pays the
+  smallest supplier and so uses the data up) and a 1.00 Cash report that is then withdrawn. Never run it against anything but
+  the local stack. It picks its invoices from what exists, so other testers or earlier runs changing the data do not break it.
+* A desktop browser cannot show the Android soft keyboard (the shrunken-window step only approximates it), OS font scaling
+  (130%), safe-area insets and the system navigation bar, or native touch/overscroll behaviour.

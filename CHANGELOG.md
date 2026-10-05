@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-suppliers] - Paged supplier directory, honest empty state (API D-138, D-139)
+#### Changed
+- **Supplier search** loads the next page on "Load more" (the API now returns the nearest 50 and a `nextOffset`), and the count is the server's total.
+- **Credit request** supplier search sends `reach=all`, so a supplier who does not deliver to the outlet can still be asked for credit.
+- **Suppliers screen** with no suppliers says "Nobody delivers here yet" instead of "No suppliers yet".
+
 ### [phase6/mobile-cart] - The cart no longer loses lines (API D-137)
 #### Fixed
 - **Quantity taps** in the cart are held briefly and sent as one write of the last value, in order per line; a tap still waiting is sent when the screen is left, and sending or ordering waits for it first.

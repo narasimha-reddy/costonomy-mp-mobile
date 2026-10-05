@@ -116,9 +116,18 @@ export function searchSuppliers(
   outletId?: number,
   radiusKm?: number,
   signal?: AbortSignal,
+  options: {
+    /** `all` skips the serviceability filter, for a screen that needs every supplier (a credit request). */
+    reach?: 'all';
+    /** The page to fetch: the previous page's `nextOffset`. */
+    offset?: number;
+    limit?: number;
+  } = {},
 ): Promise<SupplierSearchPage> {
   return apiRequest<SupplierSearchPage>(
-    `/api/v1/search/suppliers${queryString({ q: term, outletId, radiusKm })}`,
+    `/api/v1/search/suppliers${queryString({
+      q: term, outletId, radiusKm, reach: options.reach, offset: options.offset, limit: options.limit,
+    })}`,
     { token, signal },
   );
 }

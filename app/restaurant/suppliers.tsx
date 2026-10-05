@@ -105,10 +105,10 @@ export default function SuppliersScreen() {
       ) : rows.length === 0 ? (
         <MandiEmptyState
           icon="storefront-outline"
-          title={category == null ? 'No suppliers yet' : `Nobody stocks ${tabName} here`}
+          title={category == null ? 'Nobody delivers here yet' : `Nobody stocks ${tabName} here`}
           description={
             category == null
-              ? 'Suppliers who can serve this outlet will appear here.'
+              ? 'No supplier has said they deliver to this outlet yet. They will appear here as they do.'
               : 'Try another aisle, or search for the item itself.'
           }
           actionLabel={category == null ? undefined : 'Show all suppliers'}

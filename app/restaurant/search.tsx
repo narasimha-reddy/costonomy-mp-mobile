@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useInfiniteQuery, useQuery, type InfiniteData, type UseInfiniteQueryResult,
+} from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
@@ -84,10 +86,14 @@ export default function SearchScreen() {
     enabled: tab === 'skus' && searching && accessToken != null,
   });
 
-  const suppliers = useQuery({
+  // Paged: the directory returns the nearest 50 and says where the next page starts (API D-139).
+  const suppliers = useInfiniteQuery({
     queryKey: ['search', 'suppliers', query, outletId, radiusKm],
-    queryFn: ({ signal }) =>
-      searchSuppliers(accessToken as string, query, outletId ?? undefined, radiusKm, signal),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      searchSuppliers(accessToken as string, query, outletId ?? undefined, radiusKm, signal,
+        { offset: pageParam }),
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
     enabled: tab === 'suppliers' && searching && accessToken != null,
   });
 
@@ -211,7 +217,7 @@ function Suppliers({
   onWiden,
   onOpen,
 }: {
-  query: UseQueryResult<SupplierSearchPage>;
+  query: UseInfiniteQueryResult<InfiniteData<SupplierSearchPage>>;
   term: string;
   onWiden: () => void;
   onOpen: (storeId: number) => void;
@@ -221,9 +227,10 @@ function Suppliers({
     return <MandiErrorState message="Couldn't load suppliers." onRetry={() => query.refetch()} />;
   }
 
-  const page = query.data;
-  const list = page?.suppliers ?? [];
-  const beyond = page?.beyondRadius ?? 0;
+  const pages = query.data?.pages ?? [];
+  const list = pages.flatMap((page) => page.suppliers);
+  const beyond = pages[0]?.beyondRadius ?? 0;
+  const total = pages[pages.length - 1]?.total ?? list.length;
 
   if (list.length === 0) {
     return (
@@ -240,7 +247,7 @@ function Suppliers({
 
   return (
     <View style={styles.section}>
-      <MandiSectionHeader title="Matching suppliers" count={list.length} />
+      <MandiSectionHeader title="Matching suppliers" count={total} />
       <View style={styles.list}>
         {list.map((supplier) => (
           <SupplierRow
@@ -250,6 +257,19 @@ function Suppliers({
           />
         ))}
       </View>
+      {query.hasNextPage && (
+        <Pressable
+          onPress={() => void query.fetchNextPage()}
+          disabled={query.isFetchingNextPage}
+          accessibilityRole="button"
+          accessibilityLabel="Load more suppliers"
+          style={styles.widen}
+        >
+          <MandiText variant="captionEmphasis" color={Colors.primary}>
+            {query.isFetchingNextPage ? 'Loading…' : 'Load more'}
+          </MandiText>
+        </Pressable>
+      )}
       {/* Nothing serviceable is hidden — it is one tap away and says how many. */}
       {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
     </View>

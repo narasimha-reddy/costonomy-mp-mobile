@@ -143,6 +143,8 @@ export interface SupplierSearchResult {
 export interface SupplierSearchPage {
   suppliers: SupplierSearchResult[];
   beyondRadius: number;
+  total?: number;
+  nextOffset?: number | null;
 }
 
 /**

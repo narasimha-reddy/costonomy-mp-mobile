@@ -5,7 +5,7 @@ import { StyleSheet } from 'react-native';
 import CreditClaimScreen from '@/app/restaurant/credit/claim';
 import { ApiError } from '@/lib/api/errors';
 import { istDay, shiftDay } from '@/lib/credit/claims';
-import { fetchAgreement, fetchInvoices, submitClaim } from '@/services/credit';
+import { fetchAgreement, fetchCreditInvoice, fetchInvoices, submitClaim } from '@/services/credit';
 import { Colors } from '@/theme';
 
 jest.mock('@expo/vector-icons', () => {
@@ -38,12 +38,14 @@ jest.mock('@/services/credit', () => ({
   ...jest.requireActual('@/services/credit'),
   fetchAgreement: jest.fn(),
   fetchInvoices: jest.fn(),
+  fetchCreditInvoice: jest.fn(),
   submitClaim: jest.fn(),
 }));
 
 const agreementM = fetchAgreement as jest.Mock;
 const invoicesM = fetchInvoices as jest.Mock;
 const submitM = submitClaim as jest.Mock;
+const detailM = fetchCreditInvoice as jest.Mock;
 
 const inv = (id: number, o: Record<string, unknown> = {}) => ({
   id, invoiceNumber: `INV-${id}`, creditAgreementId: 3, supplierOrderId: 100 + id, status: 'ISSUED',
@@ -94,6 +96,7 @@ beforeEach(() => {
   agreementM.mockResolvedValue({ id: 3, supplierName: 'Acme Foods', storeName: 'Acme Main' });
   invoicesM.mockResolvedValue(LIST);
   submitM.mockResolvedValue({ id: 1, status: 'SUBMITTED' });
+  detailM.mockResolvedValue({ id: 11, claims: [] });
 });
 
 describe('invoice choice', () => {
@@ -379,5 +382,99 @@ describe('loading', () => {
     expect(await screen.findByTestId('claim-load-error')).toBeTruthy();
     fireEvent.press(screen.getByText('Try Again'));
     expect(await screen.findByTestId('claim-send')).toBeTruthy();
+  });
+});
+
+
+describe('reporting the same payment twice', () => {
+  const waiting = (o: Record<string, unknown> = {}) => ({
+    id: 90, invoiceId: 11, status: 'SUBMITTED', amount: '1000.0000', method: 'BANK_TRANSFER',
+    paidOn: istDay(), ...o,
+  });
+
+  it('prefills with the reportable amount, not what is still owed', async () => {
+    invoicesM.mockResolvedValue([inv(11, { outstanding: '6500.0000', reportableAmount: 4000 })]);
+    await ready('11');
+    expect(screen.getByTestId('claim-amount').props.value).toBe('4000.00');
+  });
+
+  it('falls back to outstanding when the field is absent', async () => {
+    invoicesM.mockResolvedValue([inv(11, { outstanding: '6500.0000' })]);
+    await ready('11');
+    expect(screen.getByTestId('claim-amount').props.value).toBe('6500.00');
+  });
+
+  it('tells the person what is already reported and waiting', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 4000 })]);
+    detailM.mockResolvedValue({ id: 11, claims: [
+      waiting({ amount: '1000.0000' }), waiting({ id: 91, amount: '500.5000' }),
+      waiting({ id: 92, status: 'CONFIRMED', amount: '9999.0000' }),
+    ] });
+    await ready('11');
+    expect(await screen.findByTestId('claim-waiting-info'))
+      .toHaveTextContent(/₹1,500\.50\ already\ reported\ and\ waiting\ for\ Acme\ Foods\./);
+  });
+
+  it('shows no info line when nothing is waiting', async () => {
+    await ready('11');
+    await waitFor(() => expect(detailM).toHaveBeenCalled());
+    expect(screen.queryByTestId('claim-waiting-info')).toBeNull();
+  });
+
+  it('warns and says Send anyway when a waiting report has the same amount, method and day', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 1000 })]);
+    detailM.mockResolvedValue({ id: 11, claims: [waiting()] });
+    await ready('11');
+    expect(await screen.findByTestId('claim-duplicate-warning'))
+      .toHaveTextContent(/You\ already\ reported\ this\ payment\.\ Sending\ it\ again\ may\ be\ a\ duplicate\./);
+    expect(sendButton()).toHaveTextContent('Send anyway');
+    type('claim-reference', 'UTR1');
+    expect(sendDisabled()).toBe(false);
+    await act(async () => { fireEvent.press(sendButton()); });
+    expect(submitM).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not warn when the amount, the method or the day differs', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 1000 })]);
+    detailM.mockResolvedValue({ id: 11, claims: [waiting()] });
+    await ready('11');
+    await screen.findByTestId('claim-duplicate-warning');
+    type('claim-amount', '999');
+    expect(screen.queryByTestId('claim-duplicate-warning')).toBeNull();
+    expect(sendButton()).toHaveTextContent('Send to supplier');
+    type('claim-amount', '1000');
+    expect(screen.getByTestId('claim-duplicate-warning')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('claim-method-UPI'));
+    expect(screen.queryByTestId('claim-duplicate-warning')).toBeNull();
+    fireEvent.press(screen.getByTestId('claim-method-BANK_TRANSFER'));
+    fireEvent.press(screen.getByTestId('claim-date-prev'));
+    expect(screen.queryByTestId('claim-duplicate-warning')).toBeNull();
+  });
+
+  it('ignores reports that are no longer waiting', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 1000 })]);
+    detailM.mockResolvedValue({ id: 11, claims: [waiting({ status: 'WITHDRAWN' })] });
+    await ready('11');
+    await waitFor(() => expect(detailM).toHaveBeenCalled());
+    expect(screen.queryByTestId('claim-duplicate-warning')).toBeNull();
+  });
+
+  it('at reportable 0 says everything is reported and disables sending', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 0 })]);
+    await ready('11');
+    expect(screen.getByTestId('claim-all-reported'))
+      .toHaveTextContent(/Everything\ you\ owe\ on\ this\ invoice\ is\ already\ reported\.\ Your\ supplier\ will\ confirm\ it\./);
+    type('claim-amount', '100');
+    type('claim-reference', 'UTR1');
+    expect(sendDisabled()).toBe(true);
+  });
+
+  it('phrases an overpayment refusal as up to the reportable amount more', async () => {
+    invoicesM.mockResolvedValue([inv(11, { reportableAmount: 4000 })]);
+    submitM.mockRejectedValue(apiError('CREDIT_OVERPAYMENT', 422, { outstanding: 250 }));
+    await ready('11');
+    type('claim-reference', 'UTR1');
+    await act(async () => { fireEvent.press(sendButton()); });
+    expect(await screen.findByTestId('claim-error-overpayment')).toHaveTextContent(/up to ₹250\.00 more/);
   });
 });

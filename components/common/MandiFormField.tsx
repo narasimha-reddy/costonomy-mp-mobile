@@ -4,6 +4,7 @@ import {
   TextInput,
   View,
   type KeyboardTypeOptions,
+  type ReturnKeyTypeOptions,
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +30,8 @@ interface MandiFormFieldProps {
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   secureTextEntry?: boolean;
   maxLength?: number;
+  returnKeyType?: ReturnKeyTypeOptions;
+  onSubmitEditing?: () => void;
   leadingIcon?: keyof typeof Ionicons.glyphMap;
   /** e.g. "+91" on a phone field. */
   prefix?: string;
@@ -51,6 +54,8 @@ export function MandiFormField({
   autoCapitalize = 'sentences',
   secureTextEntry = false,
   maxLength,
+  returnKeyType,
+  onSubmitEditing,
   leadingIcon,
   prefix,
   style,
@@ -93,6 +98,8 @@ export function MandiFormField({
           autoCapitalize={autoCapitalize}
           secureTextEntry={secureTextEntry}
           maxLength={maxLength}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
           accessibilityLabel={label}
           accessibilityHint={hint}
           // Screen readers announce the field as invalid rather than relying on

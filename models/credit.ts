@@ -87,6 +87,11 @@ export interface CreditAgreement {
   canFund: boolean;
   activatedAt: string | null;
   latestRequest: CreditRequest | null;
+  /**
+   * What can still be reported with "I paid": still owed minus reports already
+   * waiting for the supplier. Absent on older payloads.
+   */
+  reportableAmount?: number;
 }
 
 /** The outlet's whole position across every supplier. §23A.24, doc 05 §19. */
@@ -100,6 +105,11 @@ export interface CreditSummary {
   overdue: Money;
   /** Whether repaying from the wallet is switched on. Absent means off. */
   walletRepayEnabled?: boolean;
+  /**
+   * What can still be reported with "I paid": still owed minus reports already
+   * waiting for the supplier. Absent on older payloads.
+   */
+  reportableAmount?: number;
   agreements: CreditAgreement[];
 }
 
@@ -133,6 +143,11 @@ export interface CreditInvoice {
   dueState?: CreditDueState;
   /** Negative once past due, null when settled. The app never computes it. */
   daysToDue?: number | null;
+  /**
+   * What can still be reported with "I paid": still owed minus reports already
+   * waiting for the supplier. Absent on older payloads.
+   */
+  reportableAmount?: number;
 }
 
 /** Whether anything needs attention. Deliberately no amounts. */
@@ -173,6 +188,11 @@ export interface CreditInvoiceDetail {
   payments: CreditInvoicePayment[];
   /** The restaurant's "I paid" reports on this invoice, newest first. Absent on older payloads. */
   claims?: ClaimResponse[];
+  /**
+   * What can still be reported with "I paid": still owed minus reports already
+   * waiting for the supplier. Absent on older payloads.
+   */
+  reportableAmount?: number;
 }
 
 export type ClaimMethod = 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CHEQUE' | 'CARD';

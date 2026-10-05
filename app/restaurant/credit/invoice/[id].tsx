@@ -21,6 +21,7 @@ import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { useCreditInvoice, useWalletRepayEnabled } from '@/hooks/useCreditInvoice';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useWithdrawClaim } from '@/hooks/useWithdrawClaim';
+import { canReportPayment } from '@/lib/credit/claims';
 import { dueChip } from '@/lib/credit/dueChip';
 import { ApiError } from '@/lib/api/errors';
 import type { CreditInvoiceStatus } from '@/models/credit';
@@ -118,7 +119,7 @@ export default function CreditInvoiceScreen() {
   const owes = Number(invoice.outstanding) > 0;
   const canPay = !settled && owes && repayEnabled;
   // Reporting a payment made elsewhere does not depend on wallet repayment being on.
-  const canClaim = !settled && owes;
+  const canClaim = !settled && owes && canReportPayment(invoice.reportableAmount);
   const orderLabel = invoice.orderNumber ?? (invoice.supplierOrderId != null ? String(invoice.supplierOrderId) : null);
   const issued = formatDay(invoice.issuedAt);
   const due = formatDay(invoice.dueDate);

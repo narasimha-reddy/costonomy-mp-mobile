@@ -23,6 +23,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `fetchCreditStatement` takes an optional range and sends no query string without one; the workaround in `useCreditStatement` is gone.
 - The credit overview, supplier and statement screen tests clear their query clients so each file exits by itself.
 
+### [feat/credit-m9-phone-test-fixes]
+#### Fixed
+- Credit phone-test fixes: sheets with an input (`MandiBottomSheet` `avoidKeyboard`) lift above the keyboard and scroll so the pay amount, its error and the Pay button stay visible; the overview hero no longer crowds its buttons (12dp gaps, bar-only utilisation, no repeated Reserved/Utilized/Available figures); "I paid" prefills the reportable amount, shows what is already waiting, warns before a duplicate ("Send anyway"), and is hidden when `reportableAmount` is 0.
+
 ---
 
 ## [Procurement & Open Requests]

@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useCreditInvoice } from '@/hooks/useCreditInvoice';
 import { useSubmitClaim, type ClaimError } from '@/hooks/useSubmitClaim';
 import { fetchAgreement, fetchInvoices } from '@/services/credit';
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
@@ -31,6 +32,7 @@ import {
   issuedDay,
   referenceRequired,
   shiftDay,
+  waitingClaimsTotal,
 } from '@/lib/credit/claims';
 import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import { scaledToAmount, toScaled } from '@/lib/wallet/amount';
@@ -42,6 +44,9 @@ import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
 function overpaymentText(outstanding: number): string {
   return `You can report up to ${formatMoney(outstanding)} more on this invoice (other reports are waiting for your supplier).`;
 }
+
+const DUPLICATE_TEXT = 'You already reported this payment. Sending it again may be a duplicate.';
+const ALL_REPORTED_TEXT = 'Everything you owe on this invoice is already reported. Your supplier will confirm it.';
 
 const STATE_TEXT = 'This invoice changed. Go back and try again.';
 
@@ -105,6 +110,15 @@ export default function CreditClaimScreen() {
   const selectedId = presetInvoiceId ?? pickedId ?? open[0]?.id ?? null;
   const invoice = open.find((i) => i.id === selectedId) ?? null;
 
+  // The reports already waiting on this invoice come from its detail. Without them
+  // (old API, still loading, offline) the form simply shows no info line and no
+  // duplicate warning; the server still refuses anything over the reportable amount.
+  const detail = useCreditInvoice(invoice?.id ?? Number.NaN);
+  const waitingClaims = (detail.data?.claims ?? []).filter((c) => c.status === 'SUBMITTED');
+  const waitingTotal = waitingClaimsTotal(waitingClaims);
+  const reportable = invoice?.reportableAmount ?? detail.data?.reportableAmount;
+  const nothingToReport = reportable != null && Number(reportable) <= 0;
+
   const [amountText, setAmountText] = useState('');
   const [method, setMethod] = useState<ClaimMethod>('BANK_TRANSFER');
   const [reference, setReference] = useState('');
@@ -116,7 +130,8 @@ export default function CreditClaimScreen() {
   useEffect(() => {
     if (invoice != null && prefilledFor.current !== invoice.id) {
       prefilledFor.current = invoice.id;
-      setAmountText(prefill(invoice.outstanding));
+      setAmountText(Number(invoice.reportableAmount ?? invoice.outstanding) > 0
+        ? prefill(invoice.reportableAmount ?? invoice.outstanding) : '');
     }
   }, [invoice]);
 
@@ -125,7 +140,11 @@ export default function CreditClaimScreen() {
   const check = checkClaim({ amountText, method, reference, paidOn, note }, today, issuedOn);
   const needsReference = referenceRequired(method);
   const referenceMissing = needsReference && reference.trim() === '';
-  const canSend = invoice != null && check.valid && !claim.pending && !offline;
+  const canSend = invoice != null && check.valid && !claim.pending && !offline && !nothingToReport;
+  // The same amount, method and day as a report that is still waiting: very likely the same payment.
+  const duplicate = check.amount != null && waitingClaims.some((c) => (
+    Number(c.amount) === Number(check.amount) && c.method === method && c.paidOn === paidOn
+  ));
 
   const goBack = () => (router.canGoBack?.() === false ? router.replace('/restaurant/credit') : router.back());
 
@@ -186,7 +205,7 @@ export default function CreditClaimScreen() {
     );
   }
 
-  const sendLabel = claim.pending ? 'Sending…' : 'Send to supplier';
+  const sendLabel = claim.pending ? 'Sending…' : duplicate ? 'Send anyway' : 'Send to supplier';
 
   return (
     <MandiScreen
@@ -251,6 +270,22 @@ export default function CreditClaimScreen() {
         </View>
       ) : null}
 
+      {waitingTotal > 0 && (
+        <View style={styles.info} accessibilityLiveRegion="polite" testID="claim-waiting-info">
+          <Ionicons name="information-circle" size={IconSize.md} color={Colors.primary} />
+          <MandiText variant="body" style={styles.infoText}>
+            {`${formatMoney(waitingTotal)} already reported and waiting for ${supplierName}.`}
+          </MandiText>
+        </View>
+      )}
+
+      {nothingToReport && (
+        <View style={styles.info} accessibilityLiveRegion="polite" testID="claim-all-reported">
+          <Ionicons name="checkmark-circle" size={IconSize.md} color={Colors.primary} />
+          <MandiText variant="body" style={styles.infoText}>{ALL_REPORTED_TEXT}</MandiText>
+        </View>
+      )}
+
       <MandiFormField
         label="Amount"
         value={amountText}
@@ -265,6 +300,13 @@ export default function CreditClaimScreen() {
         required
         testID="claim-amount"
       />
+
+      {duplicate && (
+        <View style={styles.warning} accessibilityLiveRegion="polite" testID="claim-duplicate-warning">
+          <Ionicons name="warning" size={IconSize.md} color={Colors.warning} />
+          <MandiText variant="body" style={styles.infoText}>{DUPLICATE_TEXT}</MandiText>
+        </View>
+      )}
 
       <View style={styles.section}>
         <MandiText variant="captionEmphasis" muted>How did you pay?</MandiText>
@@ -367,6 +409,23 @@ export default function CreditClaimScreen() {
 const styles = StyleSheet.create({
   section: { gap: Spacing.sm },
   note: { gap: Spacing.sm },
+  info: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryLight,
+  },
+  warning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.warningLight,
+  },
+  infoText: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   chip: {
     flexDirection: 'row',

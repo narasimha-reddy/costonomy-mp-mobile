@@ -241,6 +241,21 @@ describe('sticky pay bar', () => {
     expect(screen.getByTestId('credit-i-paid-bar-button')).toBeTruthy();
   });
 
+  it('hides I paid when this supplier has nothing reportable, and keeps Pay', async () => {
+    agreementM.mockResolvedValue(agreement({ reportableAmount: 0 }));
+    summaryM.mockResolvedValue({ walletRepayEnabled: true });
+    renderScreen();
+    await screen.findByTestId('credit-pay-bar-button');
+    expect(screen.queryByTestId('credit-i-paid-bar-button')).toBeNull();
+  });
+
+  it('shows I paid when this supplier has something reportable', async () => {
+    agreementM.mockResolvedValue(agreement({ reportableAmount: 100 }));
+    summaryM.mockResolvedValue({ walletRepayEnabled: true });
+    renderScreen();
+    expect(await screen.findByTestId('credit-i-paid-bar-button')).toBeTruthy();
+  });
+
   it('is hidden when nothing is owed', async () => {
     agreementM.mockResolvedValue(agreement({ due: '0' }));
     renderScreen();

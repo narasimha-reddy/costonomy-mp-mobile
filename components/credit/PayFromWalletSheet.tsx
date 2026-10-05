@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -101,6 +101,7 @@ export function PayFromWalletSheet({
 
   function select(next: Choice) {
     setChoice(next);
+    if (next !== 'other') Keyboard.dismiss();
     payment.reset();
   }
 
@@ -179,6 +180,8 @@ export function PayFromWalletSheet({
             prefix="₹"
             keyboardType="decimal-pad"
             maxLength={12}
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
             disabled={payment.pending}
             error={typed.message}
             testID="other-amount"

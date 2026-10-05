@@ -1,5 +1,5 @@
 import React from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
 import { DEVICE_WIDTH } from './DeviceFrame';
@@ -39,7 +39,12 @@ export function MandiBottomSheet({
   title?: string;
   /** What the close button announces, e.g. "Close the filter". */
   closeLabel?: string;
-  /** Lift the sheet above the keyboard (iOS; Android resizes the window itself). For sheets with inputs. */
+  /**
+   * For sheets with inputs. Lifts the sheet above the keyboard (padding on both
+   * platforms: with edge-to-edge Android the window no longer resizes itself)
+   * and puts the body in a scroll view so everything stays reachable when it
+   * does not fit above the keyboard.
+   */
   avoidKeyboard?: boolean;
   testID?: string;
   children: React.ReactNode;
@@ -68,8 +73,9 @@ export function MandiBottomSheet({
         <KeyboardAvoidingView
           style={styles.column}
           pointerEvents="box-none"
-          behavior={avoidKeyboard && Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={avoidKeyboard ? 'padding' : undefined}
           enabled={avoidKeyboard}
+          testID={avoidKeyboard && testID ? `${testID}-keyboard-avoiding` : undefined}
         >
           {/* A View that claims the touch, not a Pressable.
               The sheet has to swallow taps so they do not reach the scrim and
@@ -98,7 +104,16 @@ export function MandiBottomSheet({
                 <Ionicons name="close" size={20} color={Colors.textSecondary} />
               </Pressable>
             </View>
-            {children}
+            {avoidKeyboard ? (
+              <ScrollView
+                style={styles.scrollBody}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                testID={testID ? `${testID}-scroll` : undefined}
+              >
+                {children}
+              </ScrollView>
+            ) : children}
           </View>
         </KeyboardAvoidingView>
       </Pressable>
@@ -118,7 +133,9 @@ const styles = StyleSheet.create({
     // The cap is web-only: on a device the frame is the screen, and a maxWidth
     // would letterbox the sheet on anything wider than 390pt.
     maxWidth: Platform.OS === 'web' ? DEVICE_WIDTH : undefined,
+    maxHeight: '100%',
   },
+  scrollBody: { flexGrow: 0, flexShrink: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   flex: { flex: 1 },
   close: { padding: Spacing.xs, margin: -Spacing.xs },
@@ -128,5 +145,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: Radius.xl,
     padding: Spacing.xl,
     gap: Spacing.xs,
+    flexShrink: 1,
   },
 });

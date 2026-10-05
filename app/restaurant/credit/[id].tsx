@@ -16,7 +16,7 @@ import { CreditPosition } from '@/components/credit/CreditPosition';
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
 import { CreditStickyPayBar } from '@/components/credit/CreditStickyPayBar';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
-import { reportedLine } from '@/lib/credit/claims';
+import { canReportPayment, reportedLine } from '@/lib/credit/claims';
 import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import {
   MandiButton,
@@ -144,7 +144,7 @@ export default function CreditAgreementScreen() {
             disabled={offline}
             showPay={walletRepayEnabled}
             onPress={() => setPayOpen(true)}
-            onClaim={() => router.push({
+            onClaim={!canReportPayment(data.reportableAmount) ? undefined : () => router.push({
               pathname: '/restaurant/credit/claim',
               params: { agreementId: String(agreementId) },
             })}

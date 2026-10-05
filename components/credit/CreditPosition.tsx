@@ -31,6 +31,7 @@ export function CreditPosition({
   due,
   overdue,
   compact = false,
+  barOnly = false,
 }: {
   approvedLimit: string;
   reserved: string;
@@ -39,6 +40,8 @@ export function CreditPosition({
   due: string;
   overdue: string;
   compact?: boolean;
+  /** Only the thin utilisation bar: the host screen already says the figures in words. */
+  barOnly?: boolean;
 }) {
   const isOverdue = Number(overdue) > 0;
 
@@ -53,6 +56,20 @@ export function CreditPosition({
   const limit = Number(approvedLimit);
   const committed = Number(reserved) + Number(utilized);
   const fraction = limit > 0 ? Math.min(1, Math.max(0, committed / limit)) : 0;
+
+  if (barOnly) {
+    return limit > 0 ? (
+      <View
+        style={styles.track}
+        accessibilityRole="progressbar"
+        accessibilityLabel="Credit used"
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(fraction * 100) }}
+        testID="credit-utilisation-bar"
+      >
+        <View style={[styles.fill, { width: `${fraction * 100}%` }]} />
+      </View>
+    ) : null;
+  }
 
   return (
     <View style={[styles.panel, compact && styles.panelCompact]}>

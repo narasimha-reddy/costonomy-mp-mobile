@@ -23,6 +23,7 @@ import {
   MandiSkeletonList,
   MandiText,
 } from '@/components/common';
+import { canReportPayment } from '@/lib/credit/claims';
 import { agreementName, allSuspended, groupAgreements } from '@/lib/credit/overview';
 import type { CreditAgreement } from '@/models/credit';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
@@ -62,7 +63,8 @@ export default function CreditOverviewScreen() {
     else setPickerOpen(true);
   };
 
-  const showClaim = summary != null && Number(summary.due) > 0 && groups.dues.length > 0;
+  const showClaim = summary != null && Number(summary.due) > 0 && groups.dues.length > 0
+    && canReportPayment(summary.reportableAmount);
   const claimFor = (id: number) =>
     router.push({ pathname: '/restaurant/credit/claim', params: { agreementId: String(id) } });
   const onClaim = () => {

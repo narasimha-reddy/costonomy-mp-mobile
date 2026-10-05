@@ -93,3 +93,22 @@ export function reportedLine(openClaimsAmount: Money | number | null | undefined
     ? `Payment reported: ${formatMoney(openClaimsAmount as Money)} · waiting for supplier`
     : null;
 }
+
+/**
+ * Whether "I paid outside the app" is worth offering: unless the server says
+ * nothing more can be reported. An absent figure (older API) keeps it shown.
+ */
+export function canReportPayment(reportable: number | string | null | undefined): boolean {
+  if (reportable == null) return true;
+  const n = Number(reportable);
+  return !Number.isFinite(n) || n > 0;
+}
+
+/** Sum of the amounts of the reports still waiting for the supplier. Display only. */
+export function waitingClaimsTotal(
+  claims: readonly { status: string; amount: number | string }[] | null | undefined,
+): number {
+  return (claims ?? [])
+    .filter((c) => c.status === 'SUBMITTED')
+    .reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+}

@@ -1,5 +1,6 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { Keyboard, KeyboardAvoidingView } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { ApiError } from '@/lib/api/errors';
@@ -241,5 +242,52 @@ describe('PayFromWalletSheet errors', () => {
     press('pay-button');
     expect(await screen.findByText('server said')).toBeTruthy();
     expect(screen.getByLabelText('Retry')).toBeTruthy();
+  });
+});
+
+describe('PayFromWalletSheet with the keyboard open', () => {
+  it('keeps the whole body in a scroll container that persists taps, inside a keyboard-avoiding wrapper', () => {
+    renderSheet();
+    press('choice-other');
+    const avoiding = screen.getByTestId('pay-from-wallet-sheet-keyboard-avoiding');
+    const wrapper = screen.UNSAFE_getByType(KeyboardAvoidingView);
+    expect(wrapper.props.behavior).toBe('padding');
+    expect(wrapper.props.enabled).toBe(true);
+    const scroll = screen.getByTestId('pay-from-wallet-sheet-scroll');
+    expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+    // The amount, the helper text and the Pay button are all inside what scrolls.
+    expect(within(scroll).getByTestId('other-amount')).toBeTruthy();
+    expect(within(scroll).getByText(/oldest invoices first/)).toBeTruthy();
+    expect(within(scroll).getByTestId('pay-button')).toBeTruthy();
+    // And the scroll container is inside the avoiding wrapper.
+    expect(within(avoiding).getByTestId('pay-from-wallet-sheet-scroll')).toBeTruthy();
+  });
+
+  it('shows the amount error inside the scroll container too', () => {
+    renderSheet();
+    press('choice-other');
+    fireEvent.changeText(screen.getByTestId('other-amount'), '0.5');
+    expect(within(screen.getByTestId('pay-from-wallet-sheet-scroll')).getByText('Enter at least ₹1.00.')).toBeTruthy();
+  });
+
+  it('uses a Done key that closes the keyboard', () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+    renderSheet();
+    press('choice-other');
+    const input = screen.getByTestId('other-amount');
+    expect(input.props.returnKeyType).toBe('done');
+    fireEvent(input, 'submitEditing');
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    dismiss.mockRestore();
+  });
+
+  it('dismisses the keyboard when the choice moves away from Other amount, not when it moves to it', () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+    renderSheet();
+    press('choice-other');
+    expect(dismiss).not.toHaveBeenCalled();
+    press('choice-full');
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    dismiss.mockRestore();
   });
 });

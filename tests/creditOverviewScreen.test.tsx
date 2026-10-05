@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CreditOverviewScreen from '@/app/restaurant/credit/index';
 import { fetchCreditSummary } from '@/services/credit';
-import { Colors } from '@/theme';
+import { Colors, Spacing } from '@/theme';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
@@ -291,5 +291,54 @@ describe('Credit overview', () => {
     const control = screen.UNSAFE_getByType(RefreshControl);
     control.props.onRefresh();
     await waitFor(() => expect(fetchSummary).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('Credit overview hero layout and entry points', () => {
+  it('shows only what is owed, the overdue line, available to order and the bar: no duplicated figures', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    await screen.findByTestId('credit-hero-summary');
+    expect(screen.getByText('₹30,000.00 available to order')).toBeTruthy();
+    expect(screen.getByTestId('credit-utilisation-bar')).toBeTruthy();
+    const hero = screen;
+    expect(hero.queryByText('Reserved')).toBeNull();
+    expect(hero.queryByText('Utilized')).toBeNull();
+    expect(hero.queryByText('Available to spend')).toBeNull();
+    expect(hero.queryByText(/approved/)).toBeNull();
+  });
+
+  it('puts the buttons in a normal-flow container, at least 12dp from the figures and from each other', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    const actions = StyleSheet.flatten((await screen.findByTestId('credit-hero-actions')).props.style);
+    expect(actions.gap).toBe(Spacing.md);
+    expect(Spacing.md).toBeGreaterThanOrEqual(12);
+    expect(actions.position).toBeUndefined();
+    for (const key of ['marginTop', 'marginBottom', 'margin', 'top', 'bottom', 'height'] as const) {
+      expect(actions[key]).toBeUndefined();
+    }
+    for (const id of ['pay-from-wallet', 'i-paid']) {
+      const style = StyleSheet.flatten(screen.getByTestId(id).props.style) ?? {};
+      expect(style.position).toBeUndefined();
+      expect(style.marginTop ?? 0).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('hides I paid when the summary says nothing more can be reported, and keeps Pay', async () => {
+    fetchSummary.mockResolvedValue({ ...OWING, reportableAmount: 0 });
+    renderScreen();
+    await screen.findByTestId('pay-from-wallet');
+    expect(screen.queryByTestId('i-paid')).toBeNull();
+  });
+
+  it('shows I paid when something is reportable or the field is absent (old API)', async () => {
+    fetchSummary.mockResolvedValue({ ...OWING, reportableAmount: 250 });
+    const first = renderScreen();
+    expect(await screen.findByTestId('i-paid')).toBeTruthy();
+    first.unmount();
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    expect(await screen.findByTestId('i-paid')).toBeTruthy();
   });
 });

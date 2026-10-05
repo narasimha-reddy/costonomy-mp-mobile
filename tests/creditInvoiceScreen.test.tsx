@@ -188,6 +188,14 @@ describe('credit invoice detail', () => {
     expect(screen.queryByTestId('invoice-i-paid')).toBeNull();
   });
 
+  it('hides I paid at reportable 0 but keeps Pay; shows it when positive or absent', () => {
+    show({ reportableAmount: 0 });
+    expect(screen.queryByTestId('invoice-i-paid')).toBeNull();
+    expect(screen.getByTestId('invoice-pay')).toBeTruthy();
+    show({ reportableAmount: 40 });
+    expect(screen.getAllByTestId('invoice-i-paid').length).toBeGreaterThan(0);
+  });
+
   it('disables I paid offline', () => {
     mockOffline = true;
     show();

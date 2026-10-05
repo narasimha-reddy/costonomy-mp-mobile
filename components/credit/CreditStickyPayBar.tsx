@@ -61,6 +61,6 @@ export function CreditStickyPayBar({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: Spacing.sm },
+  row: { flexDirection: 'row', gap: Spacing.md },
   cell: { flex: 1 },
 });

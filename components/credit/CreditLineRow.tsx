@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { MandiCard, MandiStatusChip, MandiText } from '@/components/common';
+import { MandiStatusChip, MandiText } from '@/components/common';
+import { CreditListRow } from '@/components/credit/CreditListRow';
 import type { StatusTone } from '@/components/common/MandiStatusChip';
 import { agreementName, rejectionReason } from '@/lib/credit/overview';
 import type { CreditAgreement } from '@/models/credit';
@@ -27,14 +28,19 @@ function describe(a: CreditAgreement): { chip: string; tone: StatusTone; caption
 }
 
 /** A credit line that owes nothing right now. */
-export function CreditLineRow({ agreement, onPress }: { agreement: CreditAgreement; onPress: () => void }) {
+export function CreditLineRow({ agreement, onPress, last = false }: {
+  agreement: CreditAgreement;
+  onPress: () => void;
+  /** The last row of a group has no rule under it. */
+  last?: boolean;
+}) {
   const name = agreementName(agreement);
   const { chip, tone, caption } = describe(agreement);
   return (
-    <MandiCard
+    <CreditListRow
       testID={`line-row-${agreement.id}`}
       onPress={onPress}
-      outlined
+      last={last}
       accessibilityLabel={[name, chip, caption].filter(Boolean).join(', ')}
     >
       <View style={styles.row}>
@@ -42,7 +48,7 @@ export function CreditLineRow({ agreement, onPress }: { agreement: CreditAgreeme
         <MandiStatusChip label={chip} tone={tone} size="sm" />
       </View>
       {caption ? <MandiText variant="caption" color={Colors.textSecondary}>{caption}</MandiText> : null}
-    </MandiCard>
+    </CreditListRow>
   );
 }
 

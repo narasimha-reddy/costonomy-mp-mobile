@@ -36,6 +36,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - Android blank cards hardened (`MandiCard` un-collapsable body, accent as a separate stripe instead of a one-sided border, credit list rows use the outlined card) and the "I paid" form now shows one invoice card with "Change invoice" (sheet), hides its fields when everything is already reported, shows a "Scroll for reference, date and note" cue (`MandiMoreBelow`) and why Send is off; `PayMultipleSheet` keeps the total and Pay buttons fixed while only the supplier list scrolls.
 
+### [feat/credit-m13-wallet-style-hero]
+#### Changed
+- The Credit overview now looks like the Wallet: an orange hero ("You owe", overdue pill, a bar of the limit in use with "Available to order" and "Limit"), round Pay / I paid / Get credit actions under it, and the dues and credit lines in grouped cards. Shared `GradientHero` (`components/common`) now also draws the Wallet's balance card; `RoundAction` gains `disabled`; the footer "Request credit from another supplier" button is gone (Get credit replaces it).
+
 ---
 
 ## [Procurement & Open Requests]

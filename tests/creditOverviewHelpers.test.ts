@@ -1,4 +1,4 @@
-import { allSuspended, compareDues, groupAgreements, owesAnything, rejectionReason } from '@/lib/credit/overview';
+import { allSuspended, compareDues, creditMeter, groupAgreements, owesAnything, rejectionReason } from '@/lib/credit/overview';
 import type { CreditAgreement } from '@/models/credit';
 
 const ag = (o: Partial<CreditAgreement>): CreditAgreement => ({
@@ -38,5 +38,25 @@ describe('credit overview helpers', () => {
   it('rejectionReason reads the latest request note', () => {
     expect(rejectionReason(ag({}))).toBeNull();
     expect(rejectionReason(ag({ latestRequest: { responseNote: 'Too new' } as never }))).toBe('Too new');
+  });
+});
+
+describe('creditMeter', () => {
+  it('is the share of the limit in use', () => {
+    expect(creditMeter('50000', '30000')).toEqual({ percent: 40 });
+    expect(creditMeter('50000.0000', '50000.0000')).toEqual({ percent: 0 });
+    expect(creditMeter(50000, 0)).toEqual({ percent: 100 });
+  });
+  it('clamps: more available than the limit is empty, negative available is full', () => {
+    expect(creditMeter('1000', '1500')).toEqual({ percent: 0 });
+    expect(creditMeter('1000', '-200')).toEqual({ percent: 100 });
+  });
+  it('a limit of zero is empty, and unreadable numbers give no meter', () => {
+    expect(creditMeter('0', '0')).toEqual({ percent: 0 });
+    expect(creditMeter('0', '-5')).toEqual({ percent: 0 });
+    expect(creditMeter(null, '5')).toBeNull();
+    expect(creditMeter('100', undefined)).toBeNull();
+    expect(creditMeter('abc', '5')).toBeNull();
+    expect(creditMeter('', '5')).toBeNull();
   });
 });

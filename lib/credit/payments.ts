@@ -26,8 +26,18 @@ export function paymentTitle(source: CreditPaymentSource | string, supplierName:
   }
 }
 
-/** The second line of a payment row: method and reference, when there are any. */
-export function paymentDetail(method: string | null | undefined, reference: string | null | undefined): string | null {
+/**
+ * The second line of a payment row: method and reference, when there are any.
+ *
+ * <p>A wallet payment has none: "From wallet" says it all, and its method ("WALLET") and
+ * reference ("credit-repayment-13") are internal.
+ */
+export function paymentDetail(
+  method: string | null | undefined,
+  reference: string | null | undefined,
+  source?: CreditPaymentSource | string,
+): string | null {
+  if (source === 'WALLET') return null;
   const parts: string[] = [];
   const label = methodLabel(method);
   if (label != null) parts.push(label);

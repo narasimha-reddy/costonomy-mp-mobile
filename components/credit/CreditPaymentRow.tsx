@@ -19,7 +19,7 @@ export function CreditPaymentRow({
   onOpenWallet?: (walletEntryId: number) => void;
 }) {
   const title = paymentTitle(payment.source, supplierName);
-  const detail = paymentDetail(payment.method, payment.reference);
+  const detail = paymentDetail(payment.method, payment.reference, payment.source);
   const day = formatDay(payment.paidAt) ?? '';
   const amount = formatMoney(payment.amount);
   const open = payment.source === 'WALLET' && payment.walletEntryId != null && onOpenWallet != null

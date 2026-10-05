@@ -15,6 +15,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/credit-m14-phone-and-walk-fixes]
+#### Fixed
+- "I paid" form is keyboard-safe: `MandiScreen` has a new `avoidKeyboard` prop (KeyboardAvoidingView around content and footer, focused field scrolled above the keyboard via `MandiFormField` or `useScrollFieldIntoView`, drag dismisses the keyboard); on only for the claim screen, and its "Scroll for..." cue hides while the keyboard is open.
+- Paying from the wallet warns before a double payment: when you reported a payment that your supplier has not confirmed and the amount overlaps it, the Pay sheet and Pay overdue sheet show a warning, list the waiting reports per supplier, and the button reads "Pay anyway".
+- Bottom sheets no longer close when you tap their content (the backdrop is now a sibling layer), so "Other amount" can be typed on web.
+- Wallet transaction page for a Credit repayment: the Copy reference button no longer overlaps the amount or the "Invoices settled" block.
+- Invoice Payments: a wallet payment reads "From wallet" with the amount and date only, no method label and no internal reference.
+- "Pay overdue to" sheet says "Nothing is overdue. Tick the suppliers you want to pay." when no supplier is overdue.
+
 ### [feat/credit-m12-statement-filters]
 #### Changed
 - Credit statement filters now match the wallet History: search bar with filter button and active-filter chips (with Clear all) at the top, a shared Filters screen (`components/filters/`) with Period, Type and Paid by kept in the route; the old "Change period" link and sheet are gone.

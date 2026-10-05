@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useContext, useRef } from 'react';
 import {
   StyleSheet,
   TextInput,
   View,
+  type TextInputProps,
   type KeyboardTypeOptions,
   type ReturnKeyTypeOptions,
   type ViewStyle,
@@ -10,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ControlHeight, IconSize, Radius, Spacing, TextStyles } from '@/theme';
 import { MandiText } from './MandiText';
+import { ScreenScrollContext } from './screenKeyboard';
 
 interface MandiFormFieldProps {
   label: string;
@@ -35,6 +37,7 @@ interface MandiFormFieldProps {
   leadingIcon?: keyof typeof Ionicons.glyphMap;
   /** e.g. "+91" on a phone field. */
   prefix?: string;
+  onFocus?: TextInputProps['onFocus'];
   style?: ViewStyle;
   testID?: string;
 }
@@ -58,13 +61,17 @@ export function MandiFormField({
   onSubmitEditing,
   leadingIcon,
   prefix,
+  onFocus,
   style,
   testID,
 }: MandiFormFieldProps) {
+  // Inside `MandiScreen avoidKeyboard` focusing the field scrolls it above the keyboard.
+  const screenScroll = useContext(ScreenScrollContext);
+  const wrapper = useRef<View>(null);
   const invalid = error != null && error !== '';
 
   return (
-    <View style={[styles.field, style]}>
+    <View ref={wrapper} style={[styles.field, style]} testID={testID ? `${testID}-field` : undefined}>
       <MandiText variant="captionEmphasis" muted>
         {label}
         {required && <MandiText variant="captionEmphasis" color={Colors.danger}> *</MandiText>}
@@ -100,6 +107,7 @@ export function MandiFormField({
           maxLength={maxLength}
           returnKeyType={returnKeyType}
           onSubmitEditing={onSubmitEditing}
+          onFocus={(e) => { onFocus?.(e); screenScroll?.reveal(wrapper.current); }}
           accessibilityLabel={label}
           accessibilityHint={hint}
           // Screen readers announce the field as invalid rather than relying on

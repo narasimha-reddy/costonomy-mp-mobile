@@ -59,17 +59,21 @@ export function MandiBottomSheet({
       // navigation bar rather than stopping short of it.
       statusBarTranslucent
     >
-      {/* The scrim closes on a tap but is not announced as a button.
-          As a button it wrapped every control in the sheet — an option inside a
-          button inside a button, which is invalid on web and gives a screen
-          reader nested controls where there is one surface. Tapping away stays a
-          sighted convenience; the close button below is the announced way out. */}
-      <Pressable
-        style={styles.scrim}
-        onPress={onClose}
-        accessible={false}
-        importantForAccessibility="no"
-      >
+      <View style={styles.scrim}>
+        {/* The backdrop is a SIBLING layer behind the sheet, not its parent.
+            As the parent, every press inside the sheet that was not claimed by a
+            control (the Amount field, plain text) bubbled up to it and closed the
+            sheet; on web that made typing an amount impossible. Only a tap on the
+            dimmed area now reaches it. It is not announced as a button: the close
+            button below is the announced way out, tapping away is a sighted
+            convenience. */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessible={false}
+          importantForAccessibility="no"
+          testID={testID ? `${testID}-backdrop` : 'sheet-backdrop'}
+        />
         <KeyboardAvoidingView
           style={styles.column}
           pointerEvents="box-none"
@@ -77,15 +81,8 @@ export function MandiBottomSheet({
           enabled={avoidKeyboard}
           testID={avoidKeyboard && testID ? `${testID}-keyboard-avoiding` : undefined}
         >
-          {/* A View that claims the touch, not a Pressable.
-              The sheet has to swallow taps so they do not reach the scrim and
-              close it — but a Pressable inside a Pressable renders as a button
-              inside a button, which is invalid HTML on web and gives a screen
-              reader two nested controls where there is one surface. Claiming the
-              responder stops the bubble without pretending to be a control. */}
           <View
             style={styles.sheet}
-            onStartShouldSetResponder={() => true}
             accessibilityViewIsModal
             accessibilityLabel={title}
             testID={testID}
@@ -116,7 +113,7 @@ export function MandiBottomSheet({
             ) : children}
           </View>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 }

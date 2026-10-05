@@ -128,6 +128,21 @@ describe('credit invoice detail', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it('a wallet payment shows only From wallet, the amount and the date: no method label, no internal reference', () => {
+    show({
+      payments: [
+        { id: 1, amount: '100.0000', source: 'WALLET', method: 'WALLET', reference: 'credit-repayment-13', paidAt: '2026-09-02', walletEntryId: 192 },
+      ],
+    });
+    expect(screen.getByText('From wallet')).toBeTruthy();
+    expect(screen.queryByText(/WALLET/)).toBeNull();
+    expect(screen.queryByText(/credit-repayment/)).toBeNull();
+    expect(screen.queryByText(/ref /)).toBeNull();
+    expect(screen.getByTestId('payment-1').props.accessibilityLabel).toBe('From wallet, 2nd Sep 2026, ₹100.00. Opens the wallet transaction');
+    fireEvent.press(screen.getByTestId('payment-1'));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/wallet/transaction/192');
+  });
+
   it('says so when there are no payments', () => {
     show();
     expect(screen.getByText('No payments yet.')).toBeTruthy();

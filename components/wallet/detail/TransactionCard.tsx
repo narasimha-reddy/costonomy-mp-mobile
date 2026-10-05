@@ -127,10 +127,18 @@ export function TransactionCard({
           </View>
 
           {refs.map((r) => (
-            <View key={r.key} style={styles.refRow}>
+            <View
+              key={r.key}
+              style={[styles.refRow, screen && credit != null && styles.refRowContained]}
+              testID="detail-ref-row"
+            >
               <Text style={styles.refText} selectable>{r.text}</Text>
               {screen && r.copyable && (
-                <CopyButton label="Copy reference" onPress={() => onCopy?.(r.value, 'Reference')} />
+                <CopyButton
+                  label="Copy reference"
+                  contained={credit != null}
+                  onPress={() => onCopy?.(r.value, 'Reference')}
+                />
               )}
             </View>
           ))}
@@ -139,7 +147,7 @@ export function TransactionCard({
 
       {credit != null && (
         <View testID="credit-repayment-block">
-          <Text style={[styles.label, styles.labelNext]}>Invoices settled</Text>
+          <Text style={[styles.label, screen && expanded && refs.some((r) => r.copyable) ? styles.labelAfterCopy : styles.labelNext]}>Invoices settled</Text>
           {credit.invoices.map((number) => (
             <Text key={number} style={[styles.value, styles.invoiceLine]} selectable>{number}</Text>
           ))}
@@ -167,13 +175,19 @@ export function TransactionCard({
   );
 }
 
-function CopyButton({ label, onPress }: { label: string; onPress: () => void }) {
+/**
+ * `contained` keeps the 48 dp tap area inside its own row. The default sits a 48 dp box
+ * on a 14 dp row with negative margins, which is invisible until something is directly
+ * above or below it: on a credit repayment it then covered the amount and the "Invoices
+ * settled" block. The credit layout gives the row the full 48 dp instead.
+ */
+function CopyButton({ label, onPress, contained = false }: { label: string; onPress: () => void; contained?: boolean }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={styles.copy}
+      style={[styles.copy, contained && styles.copyContained]}
       android_ripple={{ color: WalletColors.orangePale, radius: 24, borderless: true }}
     >
       <CopyGlyph width={DetailLayout.copyWidth} height={DetailLayout.copyHeight} color={WalletColors.orange} />
@@ -283,6 +297,10 @@ const styles = StyleSheet.create({
     marginTop: DetailLayout.refTop,
     minHeight: 14,
   },
+  // The 48 dp copy button is the row: no negative margins, so nothing above or below it is covered.
+  refRowContained: { marginTop: 0, minHeight: DetailLayout.copyTap },
+  copyContained: { marginVertical: 0 },
+  labelAfterCopy: { marginTop: 0 },
   invoiceLine: { marginLeft: DetailLayout.cardInset, marginTop: DetailLayout.valueTop, color: DetailColors.value },
   refText: { ...DetailType.value, flex: 1, color: DetailColors.secondary },
 });

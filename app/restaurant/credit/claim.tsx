@@ -222,6 +222,7 @@ export default function CreditClaimScreen() {
 
   return (
     <MandiScreen
+      avoidKeyboard
       header={header}
       moreBelow={nothingToReport ? undefined : MORE_BELOW_TEXT}
       footer={nothingToReport && claim.error == null ? undefined : (

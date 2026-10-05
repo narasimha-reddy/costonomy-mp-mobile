@@ -24,5 +24,8 @@ describe('credit payment copy', () => {
     expect(paymentDetail('UPI', null)).toBe('UPI');
     expect(paymentDetail(null, 'R1')).toBe('ref R1');
     expect(paymentDetail(null, null)).toBeNull();
+    expect(paymentDetail('UPI', 'UTR9', 'SUPPLIER_RECORDED')).toBe('UPI · ref UTR9');
+    expect(paymentDetail('BANK_TRANSFER', 'UTR1', 'CLAIM_CONFIRMED')).toBe('Bank transfer · ref UTR1');
+    expect(paymentDetail('WALLET', 'credit-repayment-13', 'WALLET')).toBeNull();
   });
 });

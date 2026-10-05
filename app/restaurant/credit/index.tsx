@@ -196,6 +196,8 @@ export default function CreditOverviewScreen() {
               supplierName={agreementName(target)}
               due={target.due}
               overdue={target.overdue}
+              openClaimsAmount={target.openClaimsAmount}
+              reportableAmount={target.reportableAmount}
               onPaid={() => setTarget(null)}
             />
           )}

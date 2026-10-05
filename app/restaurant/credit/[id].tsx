@@ -392,6 +392,8 @@ export default function CreditAgreementScreen() {
               supplierName={data.supplierName ?? 'the supplier'}
               due={data.due}
               overdue={data.overdue}
+              openClaimsAmount={data.openClaimsAmount}
+              reportableAmount={data.reportableAmount}
               onPaid={() => setPayOpen(false)}
             />
           )}

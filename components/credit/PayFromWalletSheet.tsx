@@ -8,6 +8,8 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { usePayFromWallet, type PayError } from '@/hooks/usePayFromWallet';
+import { PAY_ANYWAY_LABEL, doublePayWarning, overlapsWaitingReports } from '@/lib/credit/doublePay';
+import { DoublePayWarning } from './DoublePayWarning';
 import { walletKey } from '@/lib/queryKeys';
 import { scaledToAmount, toScaled } from '@/lib/wallet/amount';
 import type { WalletRepayment } from '@/models/credit';
@@ -27,7 +29,19 @@ export interface PayFromWalletSheetProps {
   /** The overdue part of it, from the server. May be 0. */
   overdue: Money | number;
   /** Set when paying a single invoice from its own screen. */
-  invoice?: { id: number; invoiceNumber: string; outstanding: Money | number };
+  invoice?: {
+    id: number;
+    invoiceNumber: string;
+    outstanding: Money | number;
+    /** What can still be reported on this invoice (server). Absent: no double-pay warning. */
+    reportableAmount?: Money | number;
+    /** The sum of this invoice's reports waiting for the supplier (display only). */
+    waitingAmount?: Money | number;
+  };
+  /** Reports waiting for the supplier, whole agreement (server). Absent: no double-pay warning. */
+  openClaimsAmount?: Money | number;
+  /** What can still be reported on the agreement: owed minus waiting reports (server). */
+  reportableAmount?: Money | number;
   onPaid: (response: WalletRepayment) => void;
 }
 
@@ -61,7 +75,7 @@ function isPositive(value: Money | number): boolean {
  * server sent; the server decides which invoices an amount settles.
  */
 export function PayFromWalletSheet({
-  visible, onClose, agreementId, supplierName, due, overdue, invoice, onPaid,
+  visible, onClose, agreementId, supplierName, due, overdue, invoice, openClaimsAmount, reportableAmount, onPaid,
 }: PayFromWalletSheetProps) {
   const router = useRouter();
   const { accessToken } = useSession();
@@ -97,6 +111,9 @@ export function PayFromWalletSheet({
   const typed = typedAmount(text);
   const amount = choice === 'full' ? amountOf(fullValue)
     : choice === 'overdue' ? amountOf(overdue) : typed.amount;
+  const waiting = invoice != null ? invoice.waitingAmount : openClaimsAmount;
+  const reportable = invoice != null ? invoice.reportableAmount : reportableAmount;
+  const overlap = amount != null && overlapsWaitingReports(waiting, reportable, amount);
   const canPay = amount != null && !payment.pending && !offline;
 
   function select(next: Choice) {
@@ -202,10 +219,14 @@ export function PayFromWalletSheet({
           />
         )}
 
+        {overlap && <DoublePayWarning text={doublePayWarning(waiting)} />}
+
         <MandiButton
           testID="pay-button"
           variant="primary"
-          label={amount != null ? `Pay ${formatMoney(amount)} from wallet` : 'Pay from wallet'}
+          label={amount != null
+            ? (overlap ? PAY_ANYWAY_LABEL(amount) : `Pay ${formatMoney(amount)} from wallet`)
+            : 'Pay from wallet'}
           loading={payment.pending}
           disabled={!canPay}
           onPress={() => { void submit(); }}

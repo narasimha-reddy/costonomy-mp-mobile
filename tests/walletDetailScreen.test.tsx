@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import DetailScreen from '@/app/restaurant/wallet/transaction/[id]';
@@ -326,6 +327,27 @@ describe('Credit repayment detail', () => {
     expect(screen.queryByLabelText('Pay again')).toBeNull();
     expect(screen.queryByText(/bill/i)).toBeNull();
     expect(screen.getByLabelText('Share Receipt')).toBeTruthy();
+  });
+
+  it('keeps the 48 dp Copy reference button inside its own row, clear of the amount and the invoices block', async () => {
+    (fetchWalletTransaction as jest.Mock).mockResolvedValue(repayment());
+    setup();
+    await screen.findByText('Green Farms');
+    const copy = StyleSheet.flatten(screen.getAllByLabelText('Copy reference')[0].props.style);
+    expect(copy.height).toBe(48);
+    expect(copy.marginVertical).toBe(0);
+    const row = StyleSheet.flatten(screen.getAllByTestId('detail-ref-row')[0].props.style);
+    expect(row.minHeight).toBe(48);
+    expect(row.marginTop).toBe(0);
+  });
+
+  it('other kinds keep the compact reference row', async () => {
+    (fetchWalletTransaction as jest.Mock).mockResolvedValue(detail());
+    setup();
+    await screen.findByText('Sri Ram Tea Stall');
+    const copy = StyleSheet.flatten(screen.getAllByLabelText('Copy reference')[0].props.style);
+    expect(copy.marginVertical).toBe(-17);
+    expect(StyleSheet.flatten(screen.getAllByTestId('detail-ref-row')[0].props.style).minHeight).toBe(14);
   });
 
   it('hides View in Credit when the server gave no credit line', async () => {

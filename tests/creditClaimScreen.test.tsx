@@ -1,7 +1,7 @@
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StyleSheet } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, ScrollView, StyleSheet } from 'react-native';
 import CreditClaimScreen from '@/app/restaurant/credit/claim';
 import { ApiError } from '@/lib/api/errors';
 import { istDay, shiftDay } from '@/lib/credit/claims';
@@ -580,5 +580,33 @@ describe('first screen and cues', () => {
     type('claim-reference', 'UTR1');
     expect(screen.queryByTestId('claim-disabled-reason')).toBeNull();
     expect(sendDisabled()).toBe(false);
+  });
+});
+
+describe('keyboard', () => {
+  it('lifts the scroll area and the footer button together, and the form scrolls with taps kept', async () => {
+    await ready();
+    const avoiding = screen.getByTestId('mandi-screen-keyboard-avoiding');
+    expect(screen.UNSAFE_getByType(KeyboardAvoidingView).props.behavior).toBe('padding');
+    expect(within(avoiding).getByTestId('claim-send')).toBeTruthy();
+    expect(within(avoiding).getByTestId('claim-note')).toBeTruthy();
+    const scroll = screen.UNSAFE_getByType(ScrollView);
+    expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(scroll.props.keyboardDismissMode).toBe('on-drag');
+  });
+
+  it('hides the scroll cue while the keyboard is open', async () => {
+    let show: ((e: unknown) => void) | undefined;
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((name: string, cb: (e: unknown) => void) => {
+      if (name === 'keyboardDidShow') show = cb;
+      return { remove: () => {} };
+    }) as never);
+    await ready();
+    fireEvent(screen.getByTestId('mandi-screen-scroll'), 'layout', { nativeEvent: { layout: { height: 300 } } });
+    fireEvent(screen.getByTestId('mandi-screen-scroll'), 'contentSizeChange', 300, 1200);
+    expect(screen.queryByTestId('more-below')).not.toBeNull();
+    act(() => { show?.({ endCoordinates: { height: 883 } }); });
+    expect(screen.queryByTestId('more-below')).toBeNull();
+    jest.restoreAllMocks();
   });
 });

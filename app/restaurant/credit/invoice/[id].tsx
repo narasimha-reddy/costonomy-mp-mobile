@@ -21,7 +21,7 @@ import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { useCreditInvoice, useWalletRepayEnabled } from '@/hooks/useCreditInvoice';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useWithdrawClaim } from '@/hooks/useWithdrawClaim';
-import { canReportPayment } from '@/lib/credit/claims';
+import { canReportPayment, waitingClaimsTotal } from '@/lib/credit/claims';
 import { dueChip } from '@/lib/credit/dueChip';
 import { ApiError } from '@/lib/api/errors';
 import type { CreditInvoiceStatus } from '@/models/credit';
@@ -240,7 +240,13 @@ export default function CreditInvoiceScreen() {
           supplierName={invoice.supplierName ?? 'Supplier'}
           due={invoice.outstanding}
           overdue={invoice.dueState === 'OVERDUE' ? invoice.outstanding : 0}
-          invoice={{ id: invoice.id, invoiceNumber: invoice.invoiceNumber, outstanding: invoice.outstanding }}
+          invoice={{
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            outstanding: invoice.outstanding,
+            reportableAmount: invoice.reportableAmount,
+            waitingAmount: waitingClaimsTotal(invoice.claims),
+          }}
           onPaid={() => { setSheetOpen(false); void query.refresh(); }}
         />
       )}

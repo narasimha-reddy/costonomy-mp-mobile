@@ -10,6 +10,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { usePayMultiple, type PayItem, type PayItemResult } from '@/hooks/usePayMultiple';
 import type { PayError } from '@/hooks/usePayFromWallet';
 import { agreementName } from '@/lib/credit/overview';
+import { PAY_ANYWAY_LABEL, doublePayWarning, overlapsWaitingReports } from '@/lib/credit/doublePay';
+import { DoublePayWarning } from './DoublePayWarning';
 import { sumAmounts } from '@/lib/credit/sum';
 import { walletKey } from '@/lib/queryKeys';
 import { scaledToAmount, toScaled } from '@/lib/wallet/amount';
@@ -31,15 +33,22 @@ interface Row {
   name: string;
   overdue: boolean;
   amount: string | null;
+  /** Reports waiting for the supplier, when the server said so and there are any. */
+  waiting: Money | number | null;
+  overlaps: boolean;
 }
 
 function rowOf(agreement: CreditAgreement): Row {
   const overdue = Number(agreement.overdue) > 0;
+  const amount = amountOf(overdue ? agreement.overdue : agreement.due);
+  const waiting = Number(agreement.openClaimsAmount) > 0 ? (agreement.openClaimsAmount as Money) : null;
   return {
     agreement,
     name: agreementName(agreement),
     overdue,
-    amount: amountOf(overdue ? agreement.overdue : agreement.due),
+    amount,
+    waiting,
+    overlaps: amount != null && overlapsWaitingReports(agreement.openClaimsAmount, agreement.reportableAmount, amount),
   };
 }
 
@@ -90,6 +99,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
 
   const selectedRows = rows.filter((r) => checked.has(r.agreement.id) && r.amount != null);
   const total = sumAmounts(selectedRows.map((r) => r.amount as string));
+  const overlapping = selectedRows.filter((r) => r.overlaps);
   const canPay = selectedRows.length > 0 && total != null && !payment.running && !offline;
 
   function toggle(id: number) {
@@ -154,6 +164,11 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
     >
       {attempted == null ? (
         <View style={styles.body}>
+          {!rows.some((r) => r.overdue) && (
+            <MandiText variant="body" color={Colors.textSecondary} testID="multi-nothing-overdue">
+              Nothing is overdue. Tick the suppliers you want to pay.
+            </MandiText>
+          )}
           {/* Only the supplier list scrolls; the total, the wallet line and the Pay
               buttons below it stay on screen however many suppliers are owed. */}
           <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} testID="multi-list">
@@ -183,6 +198,11 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
                     ) : (
                       <MandiText variant="caption" color={Colors.textSecondary}>not overdue</MandiText>
                     )}
+                    {r.waiting != null && (
+                      <MandiText variant="caption" color={Colors.textSecondary} testID={`multi-waiting-${r.agreement.id}`}>
+                        {`${formatMoney(r.waiting)} reported, waiting for supplier`}
+                      </MandiText>
+                    )}
                   </View>
                   <MandiText variant="bodyEmphasis">{formatMoney(r.amount ?? r.agreement.due)}</MandiText>
                 </Pressable>
@@ -199,10 +219,21 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
             </MandiText>
           </View>
 
+          {overlapping.length > 0 && (
+            <DoublePayWarning
+              testID="multi-double-pay-warning"
+              text={overlapping.length === 1 && overlapping[0] != null
+                ? `${doublePayWarning(overlapping[0].waiting)} (${overlapping[0].name})`
+                : `You reported payments outside the app to ${overlapping.map((r) => r.name).join(', ')} that they haven't confirmed yet. If you also pay from your wallet, you may pay twice.`}
+            />
+          )}
+
           <MandiButton
             testID="multi-pay"
             variant="primary"
-            label={selectedRows.length > 0 && total != null ? `Pay ${formatMoney(total)} from wallet` : 'Pay from wallet'}
+            label={selectedRows.length > 0 && total != null
+              ? (overlapping.length > 0 ? PAY_ANYWAY_LABEL(total) : `Pay ${formatMoney(total)} from wallet`)
+              : 'Pay from wallet'}
             disabled={!canPay}
             loading={payment.running}
             onPress={pay}

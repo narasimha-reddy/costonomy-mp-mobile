@@ -276,3 +276,69 @@ describe('PayMultipleSheet paying', () => {
     expect(repay).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('PayMultipleSheet waiting reports (pay twice)', () => {
+  const WARNING_START = /You reported ₹4,000\.00 paid outside the app and your supplier hasn't confirmed it yet\. If you also pay from your wallet, you may pay twice\./;
+  const D = agreement({
+    id: 4, supplierName: 'Greens', due: '5000.0000', overdue: '5000.0000',
+    openClaimsAmount: '4000.0000', reportableAmount: 1000,
+  });
+  const E = agreement({
+    id: 5, supplierName: 'Spice Hub', due: '6000.0000', overdue: '3000.0000',
+    openClaimsAmount: '500.0000', reportableAmount: 5500,
+  });
+
+  it('warns, names the supplier and relabels the button when a checked row overlaps', () => {
+    renderSheet([D, B]);
+    expect(screen.getByTestId('multi-waiting-4')).toHaveTextContent('₹4,000.00 reported, waiting for supplier');
+    expect(screen.queryByTestId('multi-waiting-2')).toBeNull();
+    expect(screen.getByTestId('multi-double-pay-warning')).toHaveTextContent(WARNING_START);
+    expect(screen.getByTestId('multi-double-pay-warning')).toHaveTextContent(/Greens/);
+    expect(payBtn().props.accessibilityLabel).toBe('Pay anyway ₹10,500.00 from wallet');
+  });
+
+  it('shows the waiting line but no warning when the payment does not exceed what can still be reported', () => {
+    renderSheet([E, B]);
+    expect(screen.getByTestId('multi-waiting-5')).toHaveTextContent('₹500.00 reported, waiting for supplier');
+    expect(screen.queryByTestId('multi-double-pay-warning')).toBeNull();
+    expect(payBtn().props.accessibilityLabel).toBe('Pay ₹8,500.00 from wallet');
+  });
+
+  it('only a CHECKED overlapping row counts', () => {
+    renderSheet([D, B]);
+    press('multi-row-4');
+    expect(screen.queryByTestId('multi-double-pay-warning')).toBeNull();
+    expect(payBtn().props.accessibilityLabel).toBe('Pay ₹5,500.00 from wallet');
+  });
+
+  it('shows nothing extra when the server sent no reports data (old API)', () => {
+    renderSheet();
+    expect(screen.queryByTestId('multi-double-pay-warning')).toBeNull();
+    expect(screen.queryByTestId('multi-waiting-1')).toBeNull();
+    expect(payBtn().props.accessibilityLabel).toBe('Pay ₹12,700.00 from wallet');
+  });
+
+  it('Pay anyway still pays each supplier in turn with the same amounts', async () => {
+    repay.mockResolvedValue(ok('5000.00', '100.0000'));
+    renderSheet([D]);
+    press('multi-pay');
+    await waitFor(() => expect(repay).toHaveBeenCalledTimes(1));
+    expect(repay.mock.calls[0][2]).toMatchObject({ amount: 5000 });
+  });
+});
+
+describe('PayMultipleSheet when nothing is overdue', () => {
+  it('says so under the title and keeps Pay disabled until a supplier is ticked', () => {
+    renderSheet([C]);
+    expect(screen.getByTestId('multi-nothing-overdue')).toHaveTextContent('Nothing is overdue. Tick the suppliers you want to pay.');
+    expect(screen.getByTestId('multi-total')).toHaveTextContent('Total ₹0.00');
+    expect(payBtn().props.accessibilityState.disabled).toBe(true);
+    press('multi-row-3');
+    expect(payBtn().props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('does not say it when something is overdue', () => {
+    renderSheet();
+    expect(screen.queryByTestId('multi-nothing-overdue')).toBeNull();
+  });
+});

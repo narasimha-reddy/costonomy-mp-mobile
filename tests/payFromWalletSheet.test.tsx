@@ -291,3 +291,59 @@ describe('PayFromWalletSheet with the keyboard open', () => {
     dismiss.mockRestore();
   });
 });
+
+describe('PayFromWalletSheet waiting reports (pay twice)', () => {
+  const WARNING = "You reported ₹500.00 paid outside the app and your supplier hasn't confirmed it yet. If you also pay from your wallet, you may pay twice.";
+  const reported = { openClaimsAmount: '500.0000', reportableAmount: 700 };
+
+  it('agreement: warns and relabels when the amount exceeds what can still be reported', () => {
+    renderSheet(reported);
+    // Overdue only 500 <= 700 can still be reported: no overlap.
+    expect(screen.queryByTestId('double-pay-warning')).toBeNull();
+    expect(payButton().props.accessibilityLabel).toBe('Pay ₹500.00 from wallet');
+    press('choice-full');
+    expect(screen.getByTestId('double-pay-warning')).toBeTruthy();
+    expect(screen.getByText(WARNING)).toBeTruthy();
+    expect(payButton().props.accessibilityLabel).toBe('Pay anyway ₹1,200.00 from wallet');
+  });
+
+  it('agreement: no warning without waiting reports, or without the data', () => {
+    renderSheet({ openClaimsAmount: '0.0000', reportableAmount: 0 });
+    press('choice-full');
+    expect(screen.queryByTestId('double-pay-warning')).toBeNull();
+    expect(payButton().props.accessibilityLabel).toBe('Pay ₹1,200.00 from wallet');
+  });
+
+  it('agreement: absent data (old API) shows no warning', () => {
+    renderSheet();
+    press('choice-full');
+    expect(screen.queryByTestId('double-pay-warning')).toBeNull();
+  });
+
+  it('invoice: compares with the invoice reportable amount and shows the invoice waiting total', () => {
+    renderSheet({
+      invoice: { id: 5, invoiceNumber: 'INV-5', outstanding: '900.0000', reportableAmount: 400, waitingAmount: 500 },
+    });
+    expect(screen.getByTestId('double-pay-warning')).toBeTruthy();
+    expect(screen.getByText(WARNING)).toBeTruthy();
+    expect(payButton().props.accessibilityLabel).toBe('Pay anyway ₹900.00 from wallet');
+  });
+
+  it('invoice: no warning when nothing is waiting on it', () => {
+    renderSheet({
+      invoice: { id: 5, invoiceNumber: 'INV-5', outstanding: '900.0000', reportableAmount: 900, waitingAmount: 0 },
+    });
+    expect(screen.queryByTestId('double-pay-warning')).toBeNull();
+    expect(payButton().props.accessibilityLabel).toBe('Pay ₹900.00 from wallet');
+  });
+
+  it('Pay anyway pays the same amount and closes as before', async () => {
+    repay.mockResolvedValue(RESPONSE);
+    renderSheet(reported);
+    press('choice-full');
+    press('pay-button');
+    await waitFor(() => expect(repay).toHaveBeenCalledTimes(1));
+    expect(repay.mock.calls[0][2]).toMatchObject({ amount: 1200 });
+    await waitFor(() => expect(onPaid).toHaveBeenCalledWith(RESPONSE));
+  });
+});

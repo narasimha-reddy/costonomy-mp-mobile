@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Search]
+
+### [feat/search-rotating-hints] - Rotating search hint
+#### Added
+- The Home and Search bars now rotate their hint by themselves, one item at a time with a slide-and-fade: Search "paneer", "rice", "eggs", "milk", "sugar", "curd", then round again (`lib/search/hints.ts`, `components/common/RotatingHint.tsx`, new optional `rotatingHints` prop on `MandiSearchBar`).
+- The hint runs only while the screen is focused and the app is in the foreground, shows instantly (no animation) with Reduce Motion, disappears on the first typed character, and is hidden from screen readers (the bar keeps one stable "Search for products" label). Bars without `rotatingHints` are unchanged.
+
+---
+
 ## [Procurement & Open Requests]
 
 ### [PR #17] [feat/edit-open-request-quantities]

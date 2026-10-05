@@ -32,12 +32,14 @@ import { PopularSuppliersCarousel } from '@/components/restaurant/PopularSupplie
 import type { Intent } from '@/models/intent';
 import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
+import { searchHints } from '@/lib/search/hints';
 import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
 import { useCreditAttention } from '@/hooks/useCreditAttention';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
+const SEARCH_HINTS = searchHints();
 
 /**
  * REST-HOME-01. Doc 05 §5.
@@ -67,6 +69,7 @@ export default function RestaurantHome() {
           router.push('/restaurant/search');
         }}
         placeholder="Search paneer, rice, oil…"
+        rotatingHints={SEARCH_HINTS}
       />
 
       <QuickActions outletId={outletId} />

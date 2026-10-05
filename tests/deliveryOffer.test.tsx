@@ -90,3 +90,43 @@ describe('what the buyer is told', () => {
     expect(screen.getByText(/30/)).toBeTruthy();
   });
 });
+
+describe('where the picker starts', () => {
+  const requestWith = (offer: string | null, modes: string, fee: string | null) => ({
+    id: 5, supplierStoreId: 1,
+    acceptance: { deliveryModes: modes, deliveryFee: fee, deliveryOffer: offer },
+  }) as unknown as Intent;
+
+  function start(offer: string | null, modes: string, fee: string | null) {
+    const onSelect = jest.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <DeliveryModePicker request={requestWith(offer, modes, fee)} selected={null} onSelect={onSelect} />
+      </QueryClientProvider>,
+    );
+    return onSelect;
+  }
+
+  it('starts on the supplier\'s free delivery, with pickup still available', () => {
+    const onSelect = start('SELF_FREE', 'PICKUP,SUPPLIER_DELIVERY', '0');
+    expect(onSelect).toHaveBeenCalledWith('SUPPLIER_DELIVERY', '0', undefined);
+    expect(screen.getByText('I will collect')).toBeTruthy();
+  });
+
+  it('starts on the supplier\'s own delivery at a fee, showing the fee', () => {
+    const onSelect = start('SELF', 'PICKUP,SUPPLIER_DELIVERY', '30.00');
+    expect(onSelect).toHaveBeenCalledWith('SUPPLIER_DELIVERY', '30.00', undefined);
+  });
+
+  it('starts on pickup when the supplier offered only Costonomy delivery', async () => {
+    const onSelect = start('COSTONOMY', 'PICKUP,COSTONOMY_DELIVERY', null);
+    expect(onSelect).toHaveBeenCalledWith('PICKUP', '0', undefined);
+  });
+
+  it('starts on pickup for an older answer that did not say', () => {
+    const onSelect = start(null, 'PICKUP,SUPPLIER_DELIVERY', null);
+    expect(onSelect).toHaveBeenCalledWith('PICKUP', '0', undefined);
+  });
+});
+

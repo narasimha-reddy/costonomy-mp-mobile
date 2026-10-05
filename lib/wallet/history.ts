@@ -16,6 +16,9 @@ import { formatMoney } from '@/utils/money';
 import { relative } from '@/utils/dateRange';
 import { toScaled, scaledToAmount } from '@/lib/wallet/amount';
 
+/** How long typing must pause before a history or statement list is searched. */
+export const SEARCH_DEBOUNCE_MS = 250;
+
 /** India's offset from UTC. There is no daylight saving to get wrong. */
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
 

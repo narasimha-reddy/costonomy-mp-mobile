@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CreditStatementScreen from '@/app/restaurant/credit/statement';
@@ -13,10 +13,12 @@ jest.mock('@expo/vector-icons', () => {
 jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null, PROVIDER_GOOGLE: 'google' }));
 jest.mock('@/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
 const mockPush = jest.fn();
+const mockSetParams = jest.fn();
+let mockParams: Record<string, string> = { agreementId: '3' };
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), setParams: mockSetParams }),
   usePathname: () => '/restaurant/credit/statement',
-  useLocalSearchParams: () => ({ agreementId: '3' }),
+  useLocalSearchParams: () => mockParams,
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'tok' }) }));
 jest.mock('@/contexts/OutletProvider', () => ({ useOutlet: () => ({ outletId: 7 }) }));
@@ -53,6 +55,16 @@ function respond(statement: unknown) {
     return Promise.resolve({ id: 3, supplierName: 'Acme Foods' });
   });
 }
+/** Types into the search box and lets the debounce settle, without waiting on the real clock. */
+function typeSearch(text: string) {
+  jest.useFakeTimers();
+  try {
+    fireEvent.changeText(screen.getByTestId('history-search-input'), text);
+    act(() => { jest.advanceTimersByTime(300); });
+  } finally {
+    jest.useRealTimers();
+  }
+}
 const statementCalls = () => api.mock.calls.filter(([p]) => String(p).includes('/statement'));
 
 // Cached queries keep a garbage-collection timer alive; clearing them lets jest exit by itself.
@@ -72,7 +84,11 @@ function renderScreen() {
   );
 }
 
-beforeEach(() => { jest.clearAllMocks(); respond(STATEMENT); });
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockParams = { agreementId: '3' };
+  respond(STATEMENT);
+});
 
 describe('Credit statement screen', () => {
   it('loads with no range and shows the range the server chose', async () => {
@@ -151,15 +167,187 @@ describe('Credit statement screen', () => {
     expect(screen.queryByTestId('statement-list')).toBeNull();
   });
 
-  it('refetches with from and to when a range is chosen', async () => {
+  it('no longer has the old period link or bottom sheet', async () => {
     renderScreen();
-    await screen.findByText('5 Jul to 3 Oct');
-    fireEvent.press(screen.getByTestId('statement-filter'));
-    fireEvent.changeText(screen.getByTestId('custom-from'), '2026-09-01');
-    fireEvent.changeText(screen.getByTestId('custom-to'), '2026-09-30');
-    fireEvent.press(screen.getByTestId('custom-apply'));
+    await screen.findByTestId('statement-list');
+    expect(screen.queryByText('Change period')).toBeNull();
+    expect(screen.queryByTestId('statement-filter')).toBeNull();
+    expect(screen.queryByTestId('custom-from')).toBeNull();
+  });
+
+  it('labels the summary as for this period', async () => {
+    renderScreen();
+    expect(await screen.findByText('for this period')).toBeTruthy();
+    expect(screen.queryByTestId('statement-balances-note')).toBeNull();
+  });
+
+  describe('layout', () => {
+    type Node = { type: string; props?: Record<string, unknown>; children?: (Node | string)[] | null };
+    function flatten(node: Node | Node[] | null, trail: string[] = [], out: { id: string; type: string; trail: string[] }[] = []) {
+      if (node == null) return out;
+      if (Array.isArray(node)) { node.forEach((n) => flatten(n, trail, out)); return out; }
+      const id = typeof node.props?.testID === 'string' ? node.props.testID : '';
+      out.push({ id, type: node.type, trail });
+      (node.children ?? []).forEach((c) => { if (typeof c !== 'string') flatten(c, [...trail, node.type], out); });
+      return out;
+    }
+
+    it('puts the search bar, then the chips, then the summary, all before the rows and outside any sheet', async () => {
+      mockParams = { agreementId: '3', types: 'REPAYMENTS' };
+      renderScreen();
+      await screen.findByTestId('statement-opening');
+      const nodes = flatten(screen.toJSON() as Node | Node[]);
+      const at = (id: string) => nodes.findIndex((n) => n.id === id);
+      expect(at('history-search')).toBeGreaterThan(-1);
+      expect(at('history-search')).toBeLessThan(at('active-filters'));
+      expect(at('active-filters')).toBeLessThan(at('statement-opening'));
+      expect(at('history-search')).toBeLessThan(at('statement-list'));
+      expect(at('statement-opening')).toBeLessThan(at('statement-row'));
+      const search = nodes[at('history-search')] as { trail: string[] };
+      expect(search.trail).not.toContain('Modal');
+      expect(screen.getByTestId('history-search').props.accessibilityLabel).toBeUndefined();
+      expect(screen.getByPlaceholderText('Search invoice, order or reference')).toBeTruthy();
+    });
+
+    it('shows the search bar even while loading and on an error', async () => {
+      api.mockImplementation(() => new Promise(() => undefined));
+      renderScreen();
+      expect(screen.getByTestId('history-search')).toBeTruthy();
+      screen.unmount();
+      respond(new ApiError({ code: 'X', message: 'boom', status: 500 }));
+      renderScreen();
+      await screen.findByText('Could not load your statement.');
+      expect(screen.getByTestId('history-search')).toBeTruthy();
+    });
+  });
+
+  describe('filters', () => {
+    it('the filter button opens the Filters screen with the current filters and the agreement', async () => {
+      mockParams = { agreementId: '3', period: 'd30', paidBy: 'UPI' };
+      renderScreen();
+      await screen.findByTestId('statement-list');
+      const button = screen.getByTestId('open-filters');
+      expect(button.props.accessibilityLabel).toBe('Filters, 2 applied');
+      fireEvent.press(button);
+      expect(mockPush).toHaveBeenLastCalledWith({
+        pathname: '/restaurant/credit/statement-filters',
+        params: { agreementId: '3', period: 'd30', paidBy: 'UPI' },
+      });
+    });
+
+    it('sends nothing for the default period and from/to for a preset or for months', async () => {
+      mockParams = { agreementId: '3', months: '2026-09' };
+      renderScreen();
+      await screen.findByTestId('statement-list');
+      expect(statementCalls()[0][0]).toBe(
+        '/api/v1/credit/agreements/3/statement?from=2026-09-01&to=2026-09-30');
+      screen.unmount();
+      api.mockClear();
+      mockParams = { agreementId: '3', period: 'd30' };
+      renderScreen();
+      await screen.findByTestId('statement-list');
+      expect(statementCalls()[0][0]).toMatch(
+        /statement\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('Type narrows the loaded lines and says the balances cover the whole period', async () => {
+      mockParams = { agreementId: '3', types: 'REPAYMENTS' };
+      renderScreen();
+      await screen.findByTestId('statement-list');
+      expect(screen.getAllByTestId('statement-row')).toHaveLength(1);
+      expect(screen.getByText('Paid from wallet')).toBeTruthy();
+      expect(screen.queryByText('Order #55')).toBeNull();
+      expect(screen.getByText('Opening and closing balances cover the whole period')).toBeTruthy();
+      // The server's balances are not recomputed.
+      expect(screen.getByTestId('statement-opening').props.children).toBe('₹300.00');
+      expect(screen.getByTestId('statement-closing').props.children).toBe('₹900.00');
+    });
+
+    it('Paid by narrows to the matching repayments', async () => {
+      mockParams = { agreementId: '3', paidBy: 'UPI' };
+      renderScreen();
+      expect(await screen.findByText('Nothing matches these filters')).toBeTruthy();
+      screen.unmount();
+      mockParams = { agreementId: '3', paidBy: 'WALLET' };
+      renderScreen();
+      await waitFor(() => expect(screen.getAllByTestId('statement-row')).toHaveLength(1));
+    });
+
+    it('shows one removable chip per filter, removes one, and clears all', async () => {
+      mockParams = { agreementId: '3', period: 'd180', types: 'ORDERS', paidBy: 'CASH' };
+      renderScreen();
+      await screen.findByTestId('statement-list');
+      expect(screen.getByLabelText('Remove filter Last 6 months')).toBeTruthy();
+      expect(screen.getByLabelText('Remove filter Orders on credit')).toBeTruthy();
+      fireEvent.press(screen.getByLabelText('Remove filter Paid by Cash'));
+      expect(mockSetParams).toHaveBeenLastCalledWith(
+        { period: 'd180', months: '', types: 'ORDERS', paidBy: '' });
+      fireEvent.press(screen.getByTestId('clear-all-chips'));
+      expect(mockSetParams).toHaveBeenLastCalledWith({ period: '', months: '', types: '', paidBy: '' });
+      // removable by an accessibility action too
+      const chip = screen.getByLabelText('Remove filter Orders on credit');
+      expect(chip.props.accessibilityActions).toEqual([{ name: 'delete', label: 'Remove Orders on credit' }]);
+    });
+
+    it('searches invoice, order number, reference and label after the debounce', async () => {
+      renderScreen();
+      await screen.findByTestId('statement-list');
+      jest.useFakeTimers();
+      fireEvent.changeText(screen.getByTestId('history-search-input'), 'adjust');
+      act(() => { jest.advanceTimersByTime(100); });
+      expect(screen.getAllByTestId('statement-row')).toHaveLength(3); // still typing
+      act(() => { jest.advanceTimersByTime(300); });
+      jest.useRealTimers();
+      expect(screen.getAllByTestId('statement-row')).toHaveLength(1);
+      expect(screen.getByText('Adjustment')).toBeTruthy();
+      expect(screen.getByText('Opening and closing balances cover the whole period')).toBeTruthy();
+      typeSearch('INV-9');
+      expect(screen.getAllByTestId('statement-row')).toHaveLength(2);
+    });
+  });
+
+  describe('empty states', () => {
+    it('no activity in the period, with no Clear filters offered when none are on', async () => {
+      respond({ ...STATEMENT, lines: [] });
+      renderScreen();
+      expect(await screen.findByText('No credit activity in this period.')).toBeTruthy();
+      expect(screen.queryByText('Clear filters')).toBeNull();
+    });
+
+    it('no results for a search offers to clear it', async () => {
+      renderScreen();
+      await screen.findByTestId('statement-list');
+      typeSearch('zzzz');
+      expect(screen.getByText('No matches')).toBeTruthy();
+      jest.useFakeTimers();
+      fireEvent.press(screen.getByText('Clear search'));
+      act(() => { jest.advanceTimersByTime(300); });
+      jest.useRealTimers();
+      expect(screen.getAllByTestId('statement-row')).toHaveLength(3);
+    });
+
+    it('no results for the filters offers Clear filters, which empties them', async () => {
+      mockParams = { agreementId: '3', paidBy: 'CHEQUE' };
+      renderScreen();
+      expect(await screen.findByText('Nothing matches these filters')).toBeTruthy();
+      fireEvent.press(screen.getByText('Clear filters'));
+      expect(mockSetParams).toHaveBeenLastCalledWith({ period: '', months: '', types: '', paidBy: '' });
+    });
+
+    it('a period with no lines and a filter on offers Clear filters', async () => {
+      mockParams = { agreementId: '3', period: 'd30' };
+      respond({ ...STATEMENT, lines: [] });
+      renderScreen();
+      expect(await screen.findByText('No credit activity in this period.')).toBeTruthy();
+      expect(screen.getByText('Clear filters')).toBeTruthy();
+    });
+  });
+
+  it('refetches on pull to refresh', async () => {
+    renderScreen();
+    const list = await screen.findByTestId('statement-list');
+    const { onRefresh } = list.props.refreshControl.props;
+    onRefresh();
     await waitFor(() => expect(statementCalls()).toHaveLength(2));
-    expect(statementCalls()[1][0]).toBe(
-      '/api/v1/credit/agreements/3/statement?from=2026-09-01&to=2026-09-30');
   });
 });

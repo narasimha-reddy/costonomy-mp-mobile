@@ -56,7 +56,7 @@ function sentence(raw: string): string {
 
 const METHOD_LABELS: Record<string, string> = { UPI: 'UPI', NEFT: 'NEFT', RTGS: 'RTGS', IMPS: 'IMPS' };
 
-function methodLabel(method: string): string {
+export function methodLabel(method: string): string {
   return METHOD_LABELS[method.toUpperCase()] ?? sentence(method);
 }
 

@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/credit-m12-statement-filters]
+#### Changed
+- Credit statement filters now match the wallet History: search bar with filter button and active-filter chips (with Clear all) at the top, a shared Filters screen (`components/filters/`) with Period, Type and Paid by kept in the route; the old "Change period" link and sheet are gone.
+
 ### [feat/credit-m1-foundation-and-home-tile]
 #### Added
 - Home "Credit" tile after Quick Scan and Wallet (shown with CREDIT_VIEW), with a red dot and "Credit, payment overdue" label when `GET /outlets/{id}/credit/attention` reports overdue (`hooks/useCreditAttention.ts`).

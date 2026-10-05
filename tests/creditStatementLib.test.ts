@@ -1,6 +1,6 @@
 import {
   groupStatementByMonth, isDay, presetRange, rangeText, signedAmount, statementDetail,
-  statementErrorMessage, walletEntryRoute, orderRoute, lineDay,
+  statementErrorMessage, walletEntryRoute, orderRoute, lineDay, methodLabel,
 } from '@/lib/credit/statement';
 import { ApiError } from '@/lib/api/errors';
 import type { CreditStatementLine } from '@/models/credit';
@@ -80,5 +80,12 @@ describe('ranges and routes', () => {
   it('builds the wallet and order routes', () => {
     expect(walletEntryRoute(192)).toBe('/restaurant/wallet/transaction/192');
     expect(orderRoute(5)).toBe('/restaurant/orders/5');
+  });
+});
+
+describe('methodLabel', () => {
+  it('words the known methods and sentence-cases the rest', () => {
+    expect(methodLabel('upi')).toBe('UPI');
+    expect(methodLabel('BANK_TRANSFER')).toBe('Bank transfer');
   });
 });

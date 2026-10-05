@@ -27,6 +27,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - Credit phone-test fixes: sheets with an input (`MandiBottomSheet` `avoidKeyboard`) lift above the keyboard and scroll so the pay amount, its error and the Pay button stay visible; the overview hero no longer crowds its buttons (12dp gaps, bar-only utilisation, no repeated Reserved/Utilized/Available figures); "I paid" prefills the reportable amount, shows what is already waiting, warns before a duplicate ("Send anyway"), and is hidden when `reportableAmount` is 0.
 
+### [feat/credit-m10-pay-all-and-request-polish]
+#### Added
+- Pay all overdue: with several suppliers owed, "Pay from wallet" opens `PayMultipleSheet` (overdue suppliers pre-checked, a paise-safe display total, one repayment per supplier run one after another under its own idempotency key, a per-supplier result with "Try again" for the failed ones); "Pay one supplier instead" keeps the single-supplier path.
+- Request credit polish: the keyboard no longer hides the field or the Send button, the supplier list shows existing credit per supplier (active, waiting, terms ready, paused), every server refusal reads in plain English and keeps the form filled, a double tap sends once, and a confirmation ("Request sent to ...") replaces the toast.
+
 ---
 
 ## [Procurement & Open Requests]

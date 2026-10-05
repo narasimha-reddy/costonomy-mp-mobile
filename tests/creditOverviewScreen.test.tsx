@@ -24,6 +24,7 @@ jest.mock('@/services/credit', () => ({
   ...jest.requireActual('@/services/credit'),
   fetchCreditSummary: jest.fn(),
 }));
+jest.mock('@/services/wallet', () => ({ fetchWallet: jest.fn().mockResolvedValue({ balance: '5000.0000' }) }));
 const mockSheetProps = jest.fn();
 jest.mock('@/components/credit/PayFromWalletSheet', () => {
   const { Text } = jest.requireActual('react-native');
@@ -122,11 +123,15 @@ describe('Credit overview', () => {
     }));
   });
 
-  it('shows the picker first when several are owed, then the chosen supplier sheet', async () => {
+  it('opens the pay-several sheet when several are owed, and Pay one supplier instead reaches the picker then the supplier sheet', async () => {
     fetchSummary.mockResolvedValue(OWING);
     renderScreen();
     fireEvent.press(await screen.findByText('Pay from wallet'));
     expect(screen.queryByTestId('pay-sheet')).toBeNull();
+    expect(screen.getByText('Pay overdue to')).toBeTruthy();
+    expect(screen.queryByText('Pay which supplier?')).toBeNull();
+    fireEvent.press(screen.getByTestId('multi-one-instead'));
+    expect(screen.queryByText('Pay overdue to')).toBeNull();
     expect(screen.getByText('Pay which supplier?')).toBeTruthy();
     fireEvent.press(screen.getByTestId('pick-supplier-1'));
     expect(screen.getByTestId('pay-sheet')).toBeTruthy();
@@ -250,6 +255,13 @@ describe('Credit overview', () => {
     expect(mockPush).toHaveBeenLastCalledWith('/restaurant/credit/4');
     fireEvent.press(screen.getByText('Request credit from another supplier'));
     expect(mockPush).toHaveBeenLastCalledWith('/restaurant/credit/request');
+  });
+
+  it('has exactly one visible Request credit entry per state', async () => {
+    fetchSummary.mockResolvedValue(OWING);
+    renderScreen();
+    await screen.findByText('Dues by supplier');
+    expect(screen.getAllByText(/Request credit|Get credit from another supplier/)).toHaveLength(1);
   });
 
   it('shows the rejection reason on a declined line', async () => {

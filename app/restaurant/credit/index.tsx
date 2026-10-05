@@ -10,6 +10,7 @@ import { fetchCreditSummary } from '@/services/credit';
 import { CreditDuesRow } from '@/components/credit/CreditDuesRow';
 import { CreditLineRow } from '@/components/credit/CreditLineRow';
 import { CreditOverviewHero } from '@/components/credit/CreditOverviewHero';
+import { PayMultipleSheet } from '@/components/credit/PayMultipleSheet';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { SupplierPickSheet } from '@/components/credit/SupplierPickSheet';
 import {
@@ -42,6 +43,7 @@ export default function CreditOverviewScreen() {
   const { offline } = useNetworkStatus();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickFor, setPickFor] = useState<'pay' | 'claim'>('pay');
+  const [multiOpen, setMultiOpen] = useState(false);
   const [target, setTarget] = useState<CreditAgreement | null>(null);
 
   const query = useQuery({
@@ -60,7 +62,7 @@ export default function CreditOverviewScreen() {
   const onPay = () => {
     setPickFor('pay');
     if (groups.dues.length === 1) setTarget(groups.dues[0] ?? null);
-    else setPickerOpen(true);
+    else setMultiOpen(true);
   };
 
   const showClaim = summary != null && Number(summary.due) > 0 && groups.dues.length > 0
@@ -154,6 +156,18 @@ export default function CreditOverviewScreen() {
               else setTarget(a);
             }}
           />
+          {multiOpen && (
+            <PayMultipleSheet
+              visible
+              onClose={() => setMultiOpen(false)}
+              agreements={groups.dues}
+              onPayOne={() => {
+                setMultiOpen(false);
+                setPickFor('pay');
+                setPickerOpen(true);
+              }}
+            />
+          )}
           {target != null && (
             <PayFromWalletSheet
               visible

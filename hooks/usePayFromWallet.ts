@@ -24,7 +24,7 @@ export interface PayTarget {
   invoiceId?: number;
 }
 
-function classify(caught: unknown): PayError {
+export function classifyPayError(caught: unknown): PayError {
   const short = isShortBalanceError(caught);
   if (short != null) return { kind: 'short', ...short };
   const over = isOverpaymentError(caught);
@@ -96,7 +96,7 @@ export function usePayFromWallet(target: PayTarget) {
         void queryClient.invalidateQueries({ queryKey: ['outlet', outletId, 'credit'] });
         void queryClient.invalidateQueries({ queryKey: ['credit-agreement', agreementId] });
       }
-      setError(classify(caught));
+      setError(classifyPayError(caught));
       return null;
     } finally {
       inFlight.current = false;

@@ -20,6 +20,7 @@ const TONE: Record<ClaimStatus, StatusTone> = {
   CONFIRMED: 'success',
   REJECTED: 'danger',
   WITHDRAWN: 'neutral',
+  SUPERSEDED: 'neutral',
 };
 
 function statusText(claim: ClaimResponse, supplierName: string): string {
@@ -27,6 +28,7 @@ function statusText(claim: ClaimResponse, supplierName: string): string {
     case 'SUBMITTED': return `Waiting for ${supplierName}`;
     case 'CONFIRMED': return `Confirmed by ${supplierName}`;
     case 'REJECTED': return `Not confirmed. Check with ${supplierName}`;
+    case 'SUPERSEDED': return 'Not needed: invoice already settled';
     default: return 'Withdrawn';
   }
 }
@@ -80,7 +82,7 @@ export function CreditClaimsSection({
                 <MandiText variant="bodyEmphasis" style={styles.flex}>{formatMoney(claim.amount)}</MandiText>
                 <MandiStatusChip
                   label={statusText(claim, supplierName)}
-                  tone={TONE[claim.status]}
+                  tone={TONE[claim.status] ?? 'neutral'}
                   size="sm"
                   testID={`claim-status-${claim.id}`}
                 />

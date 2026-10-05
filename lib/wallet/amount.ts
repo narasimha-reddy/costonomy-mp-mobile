@@ -46,10 +46,19 @@ function whyUnreadable(text: string): string {
   return 'Enter an amount like 500 or 500.50.';
 }
 
-/** Scaled units back to the two-decimal string the API takes: "500.00". */
+/**
+ * Scaled units back to the two-decimal string the API takes: "500.00".
+ *
+ * <p><b>Floors, never rounds.</b> Rounding paise up could carry past 99 (giving
+ * "100.100") or send more than the person typed or the server owes; truncating
+ * to whole paise can only ever send less. The fields refuse a third decimal, so
+ * for typed amounts this is exact; the floor makes the helper safe for any other
+ * input too.
+ */
 export function scaledToAmount(scaled: number): string {
-  const rupees = Math.floor(scaled / SCALE);
-  const paise = Math.round((scaled % SCALE) / 100);
+  const whole = Math.max(0, Math.floor(scaled));
+  const rupees = Math.floor(whole / SCALE);
+  const paise = Math.floor((whole % SCALE) / 100);
   return `${rupees}.${String(paise).padStart(2, '0')}`;
 }
 
@@ -120,6 +129,6 @@ export function addChip(text: string, chipRupees: number): string {
   const next = current + chipRupees * SCALE;
   if (next >= 10 ** MAX_WHOLE_DIGITS * SCALE) return text;
   const whole = Math.floor(next / SCALE);
-  const paise = Math.round((next % SCALE) / 100);
+  const paise = Math.floor((next % SCALE) / 100);
   return paise === 0 ? String(whole) : `${whole}.${String(paise).padStart(2, '0')}`;
 }

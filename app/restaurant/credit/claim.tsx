@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { usePermissions } from '@/hooks/usePermissions';
+import { idempotencyText, SIGN_IN_AGAIN_TEXT } from '@/hooks/usePayFromWallet';
 import { useCreditInvoice } from '@/hooks/useCreditInvoice';
 import { useSubmitClaim, type ClaimError } from '@/hooks/useSubmitClaim';
 import { fetchAgreement, fetchInvoices } from '@/services/credit';
@@ -56,6 +58,8 @@ function errorText(error: ClaimError): string {
     case 'overpayment': return overpaymentText(error.outstanding);
     case 'state': return STATE_TEXT;
     case 'invalid': return error.message;
+    case 'auth': return SIGN_IN_AGAIN_TEXT;
+    case 'reuse': case 'processing': case 'failed': return idempotencyText(error.kind);
     default: return "Couldn't send that. Check your connection and try again.";
   }
 }
@@ -80,8 +84,11 @@ function prefill(outstanding: string | number): string {
 export default function CreditClaimScreen() {
   const router = useRouter();
   const { accessToken } = useSession();
-  const { outletId } = useOutlet();
+  const { outletId, outlet } = useOutlet();
   const { offline } = useNetworkStatus();
+  const { canForOutlet } = usePermissions();
+  // Reporting a payment needs CREDIT_REPAY; the server refuses it otherwise.
+  const mayRepay = canForOutlet('CREDIT_REPAY', outlet);
   const params = useLocalSearchParams<{ agreementId?: string | string[]; invoiceId?: string | string[] }>();
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const agreementId = Number(first(params.agreementId));
@@ -91,12 +98,12 @@ export default function CreditClaimScreen() {
   const agreement = useQuery({
     queryKey: ['credit-agreement', agreementId],
     queryFn: () => fetchAgreement(accessToken as string, agreementId),
-    enabled: Number.isFinite(agreementId) && accessToken != null,
+    enabled: Number.isFinite(agreementId) && accessToken != null && mayRepay,
   });
   const invoices = useQuery({
     queryKey: ['outlet', outletId, 'credit', 'agreement', agreementId, 'invoices'],
     queryFn: () => fetchInvoices(accessToken as string, agreementId),
-    enabled: Number.isFinite(agreementId) && accessToken != null,
+    enabled: Number.isFinite(agreementId) && accessToken != null && mayRepay,
   });
 
   const supplierName = agreement.data?.supplierName ?? agreement.data?.storeName ?? 'your supplier';
@@ -140,13 +147,13 @@ export default function CreditClaimScreen() {
 
   const today = istDay();
   const issuedOn = issuedDay(invoice?.issuedAt);
-  const check = checkClaim({ amountText, method, reference, paidOn, note }, today, issuedOn);
+  const check = checkClaim({ amountText, method, reference, paidOn, note }, today, issuedOn, reportable);
   const needsReference = referenceRequired(method);
   const referenceMissing = needsReference && reference.trim() === '';
   const otherReportable = invoice != null && open.some(
     (i) => i.id !== invoice.id && Number(i.reportableAmount ?? i.outstanding) > 0);
   const canChoose = presetInvoiceId == null && open.length > 1;
-  const canSend = invoice != null && check.valid && !claim.pending && !offline && !nothingToReport;
+  const canSend = invoice != null && check.valid && !claim.pending && !claim.checking && !offline && !nothingToReport;
   // The same amount, method and day as a report that is still waiting: very likely the same payment.
   const duplicate = check.amount != null && waitingClaims.some((c) => (
     Number(c.amount) === Number(check.amount) && c.method === method && c.paidOn === paidOn
@@ -172,10 +179,26 @@ export default function CreditClaimScreen() {
       paidOn,
       ...(trimmedNote !== '' ? { note: trimmedNote } : {}),
     });
-    if (response != null) goBack();
+    // Back during the request: the screen is gone, the queries are refreshed; do not navigate again.
+    if (response != null && claim.isMounted()) goBack();
   }
 
   const header = <MandiHeader title="Paid the supplier directly" subtitle={agreement.data?.supplierName ?? undefined} back />;
+
+  if (!mayRepay) {
+    return (
+      <MandiScreen header={header}>
+        <MandiEmptyState
+          icon="lock-closed-outline"
+          title="Not available for you"
+          description="You don't have permission to pay or report payments for this outlet. Ask the owner."
+          actionLabel="Go back"
+          onAction={goBack}
+          testID="claim-no-permission"
+        />
+      </MandiScreen>
+    );
+  }
 
   if (!Number.isFinite(agreementId)) {
     return (

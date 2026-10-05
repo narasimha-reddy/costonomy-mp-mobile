@@ -39,7 +39,7 @@ export function CreditDuesRow({
       accessibilityLabel={[name, owed, status, next, reported].filter(Boolean).join(', ')}
     >
       <View style={styles.row}>
-        <MandiText variant="bodyEmphasis" style={styles.name}>{name}</MandiText>
+        <MandiText variant="bodyEmphasis" style={styles.name} numberOfLines={1}>{name}</MandiText>
         {status != null && <MandiStatusChip label={status} tone="danger" size="sm" />}
       </View>
       <MandiText variant="caption" color={Colors.textSecondary}>{owed}</MandiText>

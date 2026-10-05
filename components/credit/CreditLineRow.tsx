@@ -44,7 +44,7 @@ export function CreditLineRow({ agreement, onPress, last = false }: {
       accessibilityLabel={[name, chip, caption].filter(Boolean).join(', ')}
     >
       <View style={styles.row}>
-        <MandiText variant="bodyEmphasis" style={styles.name}>{name}</MandiText>
+        <MandiText variant="bodyEmphasis" style={styles.name} numberOfLines={1}>{name}</MandiText>
         <MandiStatusChip label={chip} tone={tone} size="sm" />
       </View>
       {caption ? <MandiText variant="caption" color={Colors.textSecondary}>{caption}</MandiText> : null}

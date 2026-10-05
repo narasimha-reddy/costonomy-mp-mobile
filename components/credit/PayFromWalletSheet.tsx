@@ -7,9 +7,10 @@ import { MandiBottomSheet, MandiButton, MandiFormField, MandiText } from '@/comp
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
-import { usePayFromWallet, type PayError } from '@/hooks/usePayFromWallet';
+import { SIGN_IN_AGAIN_TEXT, idempotencyText, usePayFromWallet, type PayError } from '@/hooks/usePayFromWallet';
 import { PAY_ANYWAY_LABEL, doublePayWarning, overlapsWaitingReports } from '@/lib/credit/doublePay';
 import { DoublePayWarning } from './DoublePayWarning';
+import { sameAmount, sliverLeft } from '@/lib/credit/sum';
 import { walletKey } from '@/lib/queryKeys';
 import { scaledToAmount, toScaled } from '@/lib/wallet/amount';
 import type { WalletRepayment } from '@/models/credit';
@@ -47,18 +48,27 @@ export interface PayFromWalletSheetProps {
 
 const MIN_SCALED = 10_000; // ₹1.00
 
-/** A server amount as the two-decimal string the API takes, or null if it is below ₹1. */
+/**
+ * A server amount as the two-decimal string the API takes, or null if there is
+ * less than a paisa. A balance below ₹1 IS payable here: the server accepts a
+ * payment under ₹1 only when it clears exactly what it targets.
+ */
 function amountOf(value: Money | number): string | null {
   const scaled = toScaled(value, 4);
-  return scaled == null || scaled < MIN_SCALED ? null : scaledToAmount(scaled);
+  return scaled == null || scaled < 100 ? null : scaledToAmount(scaled);
 }
 
-/** What the person typed: valid only at ₹1.00 or more with at most 2 decimals. */
-function typedAmount(text: string): { amount: string | null; message: string | null } {
+/**
+ * What the person typed: valid at ₹1.00 or more with at most 2 decimals, or below
+ * ₹1 only when it is exactly `exact` (what a full payment would be).
+ */
+function typedAmount(text: string, exact: Money | number): { amount: string | null; message: string | null } {
   if (text.trim() === '') return { amount: null, message: null };
   const scaled = toScaled(text, 2);
   if (scaled == null) return { amount: null, message: 'Use at most 2 decimal places.' };
-  if (scaled < MIN_SCALED) return { amount: null, message: 'Enter at least ₹1.00.' };
+  if (scaled < MIN_SCALED && !(scaled > 0 && sameAmount(text, exact))) {
+    return { amount: null, message: 'Enter at least ₹1.00.' };
+  }
   return { amount: scaledToAmount(scaled), message: null };
 }
 
@@ -86,7 +96,15 @@ export function PayFromWalletSheet({
 
   const [choice, setChoice] = useState<Choice>(defaultChoice);
   const [text, setText] = useState('');
-  const payment = usePayFromWallet({ agreementId, supplierName, invoiceId: invoice?.id });
+  const fullValue = invoice != null ? invoice.outstanding : due;
+  // What was on screen when an attempt was made: a held key is reused only while it is unchanged.
+  const stamp = invoice != null ? `${invoice.outstanding}` : `${due}|${overdue}`;
+  const payment = usePayFromWallet({ agreementId, supplierName, invoiceId: invoice?.id, stamp });
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const wallet = useQuery({
     queryKey: walletKey(outletId),
@@ -107,14 +125,15 @@ export function PayFromWalletSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  const fullValue = invoice != null ? invoice.outstanding : due;
-  const typed = typedAmount(text);
+  const typed = typedAmount(text, fullValue);
   const amount = choice === 'full' ? amountOf(fullValue)
     : choice === 'overdue' ? amountOf(overdue) : typed.amount;
   const waiting = invoice != null ? invoice.waitingAmount : openClaimsAmount;
   const reportable = invoice != null ? invoice.reportableAmount : reportableAmount;
   const overlap = amount != null && overlapsWaitingReports(waiting, reportable, amount);
-  const canPay = amount != null && !payment.pending && !offline;
+  const canPay = amount != null && !payment.pending && !payment.checking && !offline;
+  // A part payment that leaves a sliver under ₹1 cannot be topped up later: offer the whole.
+  const sliver = choice === 'other' && amount != null ? sliverLeft(fullValue, amount) : null;
 
   function select(next: Choice) {
     setChoice(next);
@@ -125,7 +144,7 @@ export function PayFromWalletSheet({
   async function submit() {
     if (amount == null || offline) return;
     const response = await payment.pay(amount);
-    if (response != null) {
+    if (response != null && mounted.current) {
       onClose();
       onPaid(response);
     }
@@ -205,6 +224,20 @@ export function PayFromWalletSheet({
           />
         )}
 
+        {sliver != null && (
+          <View style={styles.note} accessibilityLiveRegion="polite" testID="sliver-hint">
+            <MandiText variant="body" color={Colors.textSecondary}>
+              {`This would leave ${formatMoney(sliver)} owed. Pay the full ${formatMoney(fullValue)} instead?`}
+            </MandiText>
+            <MandiButton
+              testID="pay-full-instead"
+              variant="secondary"
+              label="Pay full amount"
+              onPress={() => select('full')}
+            />
+          </View>
+        )}
+
         <MandiText variant="caption" color={Colors.textSecondary}>
           {invoice != null
             ? `This pays invoice ${invoice.invoiceNumber}.`
@@ -259,7 +292,10 @@ function ErrorNote({
   }
   const message = error.kind === 'overpayment'
     ? `That's more than the ${formatMoney(error.outstanding)} you owe.`
-    : "Paying credit from your wallet isn't available yet.";
+    : error.kind === 'hold' ? 'Your wallet is on hold. Please contact support.'
+      : error.kind === 'auth' ? SIGN_IN_AGAIN_TEXT
+        : error.kind === 'forbidden' ? "Paying credit from your wallet isn't available yet."
+          : idempotencyText(error.kind);
   return (
     <View style={styles.note} accessibilityLiveRegion="polite" testID={`pay-error-${error.kind}`}>
       <MandiText variant="body" color={Colors.danger}>{message}</MandiText>

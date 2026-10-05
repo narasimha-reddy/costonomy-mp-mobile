@@ -108,6 +108,40 @@ describe('summary', () => {
     expect(screen.queryByTestId('credit-overdue')).toBeNull();
   });
 
+  describe('past due but inside grace', () => {
+    const NOTE = 'Some invoices are past their due date. Pay by 18th Oct 2026 to avoid being marked overdue.';
+    it('says so instead of "nothing overdue", with the earliest overdueAfter', async () => {
+      invoicesM.mockResolvedValue([
+        inv(1, { dueState: 'IN_GRACE', overdueAfter: '2026-10-22' }),
+        inv(2, { dueState: 'IN_GRACE', overdueAfter: '2026-10-18' }),
+        inv(3, { dueState: 'DUE_LATER', overdueAfter: '2026-10-01' }),
+      ]);
+      renderScreen();
+      const note = await screen.findByTestId('credit-past-due-note');
+      expect(note).toHaveTextContent(txt('icon:warning'));
+      expect(note).toHaveTextContent(txt(NOTE));
+      expect(screen.queryByText('nothing overdue')).toBeNull();
+    });
+
+    it('keeps "nothing overdue" when no invoice is in grace', async () => {
+      invoicesM.mockResolvedValue([inv(1, { dueState: 'DUE_SOON', overdueAfter: '2026-10-18' })]);
+      renderScreen();
+      await screen.findByTestId('credit-invoice-1');
+      expect(screen.getByText('nothing overdue')).toBeTruthy();
+      expect(screen.queryByTestId('credit-past-due-note')).toBeNull();
+    });
+
+    it('overdue wins: only the red overdue line, no grace note', async () => {
+      agreementM.mockResolvedValue(agreement({ due: '9200', overdue: '2500' }));
+      invoicesM.mockResolvedValue([inv(1, { dueState: 'IN_GRACE', overdueAfter: '2026-10-18' })]);
+      renderScreen();
+      await screen.findByTestId('credit-invoice-1');
+      expect(screen.getByTestId('credit-overdue')).toBeTruthy();
+      expect(screen.queryByTestId('credit-past-due-note')).toBeNull();
+      expect(screen.getByText('of which overdue')).toBeTruthy();
+    });
+  });
+
   it('words the terms with and without grace', async () => {
     renderScreen();
     expect(await screen.findByTestId('credit-terms-line')).toHaveTextContent(txt('30 days + 5 days grace'));

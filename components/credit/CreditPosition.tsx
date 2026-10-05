@@ -1,8 +1,9 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from '@/components/common';
 import { formatMoney } from '@/utils/money';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, IconSize, Radius, Spacing } from '@/theme';
 
 /**
  * A credit position — limit, reserved, utilized, available, due, overdue.
@@ -32,6 +33,7 @@ export function CreditPosition({
   overdue,
   compact = false,
   barOnly = false,
+  pastDueNote = null,
 }: {
   approvedLimit: string;
   reserved: string;
@@ -42,6 +44,8 @@ export function CreditPosition({
   compact?: boolean;
   /** Only the thin utilisation bar: the host screen already says the figures in words. */
   barOnly?: boolean;
+  /** Replaces "nothing overdue" when invoices are past due but inside grace (nothing overdue yet). */
+  pastDueNote?: string | null;
 }) {
   const isOverdue = Number(overdue) > 0;
 
@@ -106,6 +110,12 @@ export function CreditPosition({
           <MandiText variant="body" color={Colors.textSecondary}>Due</MandiText>
           <MandiText variant="bodyEmphasis">{formatMoney(due)}</MandiText>
         </View>
+        {!isOverdue && pastDueNote != null ? (
+          <View style={styles.noteRow} testID="credit-past-due-note" accessible accessibilityLabel={pastDueNote}>
+            <Ionicons name="warning" size={IconSize.sm} color={Colors.warning} />
+            <MandiText variant="caption" color={Colors.warning} style={styles.noteText}>{pastDueNote}</MandiText>
+          </View>
+        ) : (
         <View style={styles.row}>
           <MandiText variant="caption" color={isOverdue ? Colors.danger : Colors.textTertiary}>
             {isOverdue ? 'of which overdue' : 'nothing overdue'}
@@ -116,6 +126,7 @@ export function CreditPosition({
             </MandiText>
           )}
         </View>
+        )}
       </View>
       )}
     </View>
@@ -135,6 +146,8 @@ function Cell({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 const styles = StyleSheet.create({
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs },
+  noteText: { flex: 1 },
   track: {
     height: 6,
     borderRadius: Radius.full,

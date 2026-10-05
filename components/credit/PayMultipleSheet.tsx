@@ -206,7 +206,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
                     )}
                     {r.waiting != null && (
                       <MandiText variant="caption" color={Colors.textSecondary} testID={`multi-waiting-${r.agreement.id}`}>
-                        {`${formatMoney(r.waiting)} reported, waiting for supplier`}
+                        {`${formatMoney(r.waiting)} told to supplier, waiting for them to confirm`}
                       </MandiText>
                     )}
                   </View>
@@ -230,7 +230,7 @@ export function PayMultipleSheet({ visible, onClose, agreements, onPayOne }: Pay
               testID="multi-double-pay-warning"
               text={overlapping.length === 1 && overlapping[0] != null
                 ? `${doublePayWarning(overlapping[0].waiting)} (${overlapping[0].name})`
-                : `You reported payments outside the app to ${overlapping.map((r) => r.name).join(', ')} that they haven't confirmed yet. If you also pay from your wallet, you may pay twice.`}
+                : `You told these suppliers you paid directly: ${overlapping.map((r) => r.name).join(', ')}. They haven't confirmed yet. If you also pay from your wallet, you may pay twice.`}
             />
           )}
 

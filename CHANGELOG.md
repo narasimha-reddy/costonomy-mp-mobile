@@ -15,6 +15,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/credit-m16-final-polish]
+#### Fixed
+- Supplier detail no longer says "nothing overdue" while invoices show "Past due": when overdue is 0 and an invoice is in its grace period, an amber line says "Some invoices are past their due date. Pay by {earliest overdueAfter} to avoid being marked overdue." (overdue still wins).
+- Overview rows say "Due ₹X on 4th Oct" instead of "Next", true for past and future dates.
+- Pay-twice warnings and the waiting line use "Paid direct" wording: "You told your supplier you paid ₹X directly, and they haven't confirmed it yet..." and "₹X told to supplier, waiting for them to confirm".
+- Other leftover "reported" / "outside" wording on the claim screen, overview hint and payment rows now says "told your supplier" / "Paid direct".
+- Wallet transaction details for a credit repayment: the Copy transaction ID button now also keeps its 48 dp tap area inside its own row (no overlap with text).
+- Statement filters: test pins that rail items share one style (the rail is the wallet's own component, spacing already even).
+
 ### [feat/credit-h4-mobile-hardening]
 #### Fixed
 - Paying twice after an unclear result: the idempotency key of a repayment or "I paid" report is now kept outside the sheet or screen (`lib/credit/attemptKeys.ts`), so closing and reopening it after a dropped connection or a 5xx and paying the same amount again reuses the same key; it is dropped only after success, a definitive refusal, changed figures on screen, or 30 minutes.

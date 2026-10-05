@@ -25,7 +25,7 @@ export function CreditDuesRow({
   const suspended = !overdue && agreement.status === 'SUSPENDED';
   const next =
     agreement.nextDueDate != null && agreement.nextDueAmount != null
-      ? `Next ${formatMoney(agreement.nextDueAmount)} on ${formatDay(agreement.nextDueDate) ?? agreement.nextDueDate}`
+      ? `Due ${formatMoney(agreement.nextDueAmount)} on ${formatDay(agreement.nextDueDate) ?? agreement.nextDueDate}`
       : null;
   const owed = `Owed ${formatMoney(agreement.due)}`;
   const status = overdue ? 'Overdue' : suspended ? 'Suspended' : null;

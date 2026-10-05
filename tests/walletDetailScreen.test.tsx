@@ -339,6 +339,9 @@ describe('Credit repayment detail', () => {
     const row = StyleSheet.flatten(screen.getAllByTestId('detail-ref-row')[0].props.style);
     expect(row.minHeight).toBe(48);
     expect(row.marginTop).toBe(0);
+    const idCopy = StyleSheet.flatten(screen.getByLabelText('Copy transaction ID').props.style);
+    expect(idCopy.marginVertical).toBe(0);
+    expect(StyleSheet.flatten(screen.getByTestId('detail-id-row').props.style).minHeight).toBe(48);
   });
 
   it('other kinds keep the compact reference row', async () => {

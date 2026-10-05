@@ -27,5 +27,5 @@ export const PAY_ANYWAY_LABEL = (amount: string) => `Pay anyway ${formatMoney(am
 
 /** The warning shown above the Pay button. `waiting` is display only. */
 export function doublePayWarning(waiting: Amount): string {
-  return `You reported ${formatMoney(num(waiting) ?? 0)} paid outside the app and your supplier hasn't confirmed it yet. If you also pay from your wallet, you may pay twice.`;
+  return `You told your supplier you paid ${formatMoney(num(waiting) ?? 0)} directly, and they haven't confirmed it yet. If you also pay from your wallet, you may pay twice.`;
 }

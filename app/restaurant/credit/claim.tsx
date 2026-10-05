@@ -44,10 +44,10 @@ import { formatMoney } from '@/utils/money';
 import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
 
 function overpaymentText(outstanding: number): string {
-  return `You can report up to ${formatMoney(outstanding)} more on this invoice (other reports are waiting for your supplier).`;
+  return `You can tell your supplier about up to ${formatMoney(outstanding)} more on this invoice (other payments are waiting for them to confirm).`;
 }
 
-const DUPLICATE_TEXT = 'You already reported this payment. Sending it again may be a duplicate.';
+const DUPLICATE_TEXT = 'You already told your supplier about this payment. Sending it again may be a duplicate.';
 const MORE_BELOW_TEXT = 'Scroll for reference, date and note';
 const ALL_REPORTED_TEXT = "You've told your supplier about all of this invoice. They will confirm it.";
 
@@ -324,7 +324,7 @@ export default function CreditClaimScreen() {
         <View style={styles.info} accessibilityLiveRegion="polite" testID="claim-waiting-info">
           <Ionicons name="information-circle" size={IconSize.md} color={Colors.primary} />
           <MandiText variant="body" style={styles.infoText}>
-            {`${formatMoney(waitingTotal)} already reported and waiting for ${supplierName}.`}
+            {`${formatMoney(waitingTotal)} already told to ${supplierName}, waiting for them to confirm.`}
           </MandiText>
         </View>
       ) : null}

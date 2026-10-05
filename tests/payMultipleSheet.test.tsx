@@ -278,7 +278,7 @@ describe('PayMultipleSheet paying', () => {
 });
 
 describe('PayMultipleSheet waiting reports (pay twice)', () => {
-  const WARNING_START = /You reported ₹4,000\.00 paid outside the app and your supplier hasn't confirmed it yet\. If you also pay from your wallet, you may pay twice\./;
+  const WARNING_START = /You told your supplier you paid ₹4,000\.00 directly, and they haven't confirmed it yet\. If you also pay from your wallet, you may pay twice\./;
   const D = agreement({
     id: 4, supplierName: 'Greens', due: '5000.0000', overdue: '5000.0000',
     openClaimsAmount: '4000.0000', reportableAmount: 1000,
@@ -290,7 +290,7 @@ describe('PayMultipleSheet waiting reports (pay twice)', () => {
 
   it('warns, names the supplier and relabels the button when a checked row overlaps', () => {
     renderSheet([D, B]);
-    expect(screen.getByTestId('multi-waiting-4')).toHaveTextContent('₹4,000.00 reported, waiting for supplier');
+    expect(screen.getByTestId('multi-waiting-4')).toHaveTextContent('₹4,000.00 told to supplier, waiting for them to confirm');
     expect(screen.queryByTestId('multi-waiting-2')).toBeNull();
     expect(screen.getByTestId('multi-double-pay-warning')).toHaveTextContent(WARNING_START);
     expect(screen.getByTestId('multi-double-pay-warning')).toHaveTextContent(/Greens/);
@@ -299,7 +299,7 @@ describe('PayMultipleSheet waiting reports (pay twice)', () => {
 
   it('shows the waiting line but no warning when the payment does not exceed what can still be reported', () => {
     renderSheet([E, B]);
-    expect(screen.getByTestId('multi-waiting-5')).toHaveTextContent('₹500.00 reported, waiting for supplier');
+    expect(screen.getByTestId('multi-waiting-5')).toHaveTextContent('₹500.00 told to supplier, waiting for them to confirm');
     expect(screen.queryByTestId('multi-double-pay-warning')).toBeNull();
     expect(payBtn().props.accessibilityLabel).toBe('Pay ₹8,500.00 from wallet');
   });

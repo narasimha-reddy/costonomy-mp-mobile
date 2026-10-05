@@ -126,7 +126,7 @@ describe('credit invoice detail', () => {
     expect(screen.getByText('From wallet')).toBeTruthy();
     expect(screen.getByText('Recorded by Acme Foods')).toBeTruthy();
     expect(screen.getByText('Bank transfer · ref UTR1')).toBeTruthy();
-    expect(screen.getByText('You reported this · confirmed by Acme Foods')).toBeTruthy();
+    expect(screen.getByText('Paid direct · confirmed by Acme Foods')).toBeTruthy();
     expect(screen.getByText('UPI')).toBeTruthy();
     fireEvent.press(screen.getByTestId('payment-1'));
     expect(mockPush).toHaveBeenCalledWith('/restaurant/wallet/transaction/192');

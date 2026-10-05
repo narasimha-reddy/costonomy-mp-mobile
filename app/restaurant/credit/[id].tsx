@@ -19,7 +19,7 @@ import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
 import { CreditStickyPayBar } from '@/components/credit/CreditStickyPayBar';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { canReportPayment, reportedLine } from '@/lib/credit/claims';
-import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
+import { earliestGraceDeadline, splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import {
   MandiButton,
   MandiCard,
@@ -35,6 +35,7 @@ import {
 } from '@/components/common';
 import { CreditAgreementStatus, resolveStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
+import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
 
@@ -94,6 +95,18 @@ export default function CreditAgreementScreen() {
     () => splitInvoices((invoices.data ?? []) as CreditInvoiceListItem[]),
     [invoices.data],
   );
+
+  // Past the due date but inside grace: the agreement's overdue figure is still 0, so say
+  // so rather than "nothing overdue". The deadline is the server's `overdueAfter`.
+  const graceDeadline = useMemo(
+    () => earliestGraceDeadline((invoices.data ?? []) as CreditInvoiceListItem[]),
+    [invoices.data],
+  );
+  const pastDueNote = graceDeadline == null
+    ? null
+    : graceDeadline.date != null
+      ? `Some invoices are past their due date. Pay by ${formatDay(graceDeadline.date) ?? graceDeadline.date} to avoid being marked overdue.`
+      : 'Some invoices are past their due date. Pay soon to avoid being marked overdue.';
 
   const accept = useMutation({
     mutationFn: () => acceptAgreement(accessToken as string, agreementId, agreement.data?.termsVersion),
@@ -308,6 +321,7 @@ export default function CreditAgreementScreen() {
                 available={data.available}
                 due={data.due}
                 overdue={data.overdue}
+                pastDueNote={pastDueNote}
               />
             </>
           )}

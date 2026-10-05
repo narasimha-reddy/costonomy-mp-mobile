@@ -109,11 +109,12 @@ export function TransactionCard({
       {expanded && (
         <View testID="transfer-details-body">
           <Text style={styles.label}>Costonomy Transaction ID</Text>
-          <View style={styles.valueRow}>
+          <View style={[styles.valueRow, screen && credit != null && styles.valueRowContained]} testID="detail-id-row">
             <Text style={styles.value} selectable>{entry.transactionId}</Text>
             {screen && (
               <CopyButton
                 label="Copy transaction ID"
+                contained={credit != null}
                 onPress={() => onCopy?.(entry.transactionId, 'Transaction ID')}
               />
             )}
@@ -298,6 +299,7 @@ const styles = StyleSheet.create({
     minHeight: 14,
   },
   // The 48 dp copy button is the row: no negative margins, so nothing above or below it is covered.
+  valueRowContained: { marginTop: 0, minHeight: DetailLayout.copyTap },
   refRowContained: { marginTop: 0, minHeight: DetailLayout.copyTap },
   copyContained: { marginVertical: 0 },
   labelAfterCopy: { marginTop: 0 },

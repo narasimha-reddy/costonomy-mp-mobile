@@ -21,7 +21,7 @@ export function paymentTitle(source: CreditPaymentSource | string, supplierName:
   switch (source) {
     case 'WALLET': return 'From wallet';
     case 'SUPPLIER_RECORDED': return `Recorded by ${supplier}`;
-    case 'CLAIM_CONFIRMED': return `You reported this · confirmed by ${supplier}`;
+    case 'CLAIM_CONFIRMED': return `Paid direct · confirmed by ${supplier}`;
     default: return 'Payment';
   }
 }

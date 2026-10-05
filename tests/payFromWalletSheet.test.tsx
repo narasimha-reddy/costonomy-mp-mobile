@@ -293,7 +293,7 @@ describe('PayFromWalletSheet with the keyboard open', () => {
 });
 
 describe('PayFromWalletSheet waiting reports (pay twice)', () => {
-  const WARNING = "You reported ₹500.00 paid outside the app and your supplier hasn't confirmed it yet. If you also pay from your wallet, you may pay twice.";
+  const WARNING = "You told your supplier you paid ₹500.00 directly, and they haven't confirmed it yet. If you also pay from your wallet, you may pay twice.";
   const reported = { openClaimsAmount: '500.0000', reportableAmount: 700 };
 
   it('agreement: warns and relabels when the amount exceeds what can still be reported', () => {

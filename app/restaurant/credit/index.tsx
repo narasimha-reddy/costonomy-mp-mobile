@@ -124,7 +124,7 @@ export default function CreditOverviewScreen() {
                 icon={{ set: 'mci', name: 'cash-check' }}
                 label="Paid direct"
                 glyphTone="strong"
-                accessibilityHint="Tell your supplier about a payment you made outside Mandi. They will confirm it."
+                accessibilityHint="Tell your supplier about a payment you paid direct. They will confirm it."
                 primary={!showPay}
                 onPress={onClaim}
               />

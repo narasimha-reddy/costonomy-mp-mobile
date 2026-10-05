@@ -110,7 +110,7 @@ describe('Credit overview', () => {
     expect(rows).toEqual(['dues-row-2', 'dues-row-1']);
     expect(screen.getByText('Overdue')).toBeTruthy();
     expect(screen.getByText('Owed ₹600.00')).toBeTruthy();
-    expect(screen.getByText(/Next ₹600\.00 on 24th Sep/)).toBeTruthy();
+    expect(screen.getByText(/Due ₹600\.00 on 24th Sep/)).toBeTruthy();
     expect(screen.getByText('Paid direct')).toBeTruthy();
   });
 
@@ -471,7 +471,7 @@ describe('Credit overview action row wording and icons', () => {
     await screen.findByTestId('credit-actions');
     expect(screen.getByTestId('pay-from-wallet')).toHaveProp('accessibilityHint', 'Pays from your Mandi wallet');
     expect(screen.getByTestId('i-paid')).toHaveProp('accessibilityHint',
-      'Tell your supplier about a payment you made outside Mandi. They will confirm it.');
+      'Tell your supplier about a payment you paid direct. They will confirm it.');
     expect(screen.getByTestId('get-credit')).toHaveProp('accessibilityHint', 'Ask another supplier for credit');
     const caption = screen.getByText('Paid direct');
     expect(caption).toHaveProp('numberOfLines', 2);

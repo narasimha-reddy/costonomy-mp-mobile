@@ -40,3 +40,19 @@ export function splitInvoices<T extends CreditInvoice>(invoices: readonly T[]): 
   paid.sort((a, b) => compareText(b.settledAt, a.settledAt));
   return { open, paid };
 }
+
+/**
+ * The earliest `overdueAfter` among invoices the server calls IN_GRACE (past the due date,
+ * inside the grace period), or null when there are none. Day strings are `YYYY-MM-DD`, so
+ * picking the smallest is a sort, not date arithmetic. `{ inGrace: true, date: null }`
+ * when some are in grace but none carries a date.
+ */
+export function earliestGraceDeadline(
+  invoices: readonly CreditInvoice[],
+): { date: string | null } | null {
+  const inGrace = invoices.filter((i) => i.dueState === 'IN_GRACE');
+  if (inGrace.length === 0) return null;
+  const dates = inGrace.map((i) => i.overdueAfter).filter((d): d is string => d != null && d !== '');
+  dates.sort();
+  return { date: dates[0] ?? null };
+}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import FiltersScreen from '@/app/restaurant/credit/statement-filters';
@@ -34,6 +35,18 @@ describe('Credit statement Filters screen', () => {
     expect(screen.getByTestId('rail-types')).toBeTruthy();
     expect(screen.getByTestId('rail-paidBy')).toBeTruthy();
     expect(screen.getAllByRole('tab')).toHaveLength(3);
+  });
+
+  it('rail items are evenly spaced: same style, no extra margin on any one', () => {
+    renderScreen();
+    const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style);
+    const { backgroundColor, borderLeftColor, ...rest } = flat('rail-types');
+    for (const id of ['rail-period', 'rail-paidBy']) {
+      const { backgroundColor: _b, borderLeftColor: _c, ...other } = flat(id);
+      expect(other).toEqual(rest);
+    }
+    expect(rest.marginTop).toBeUndefined();
+    expect(rest.marginBottom).toBeUndefined();
   });
 
   it('Period offers the quick choices with the default ticked, then months', () => {

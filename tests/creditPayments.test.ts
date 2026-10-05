@@ -17,7 +17,7 @@ describe('credit payment copy', () => {
   it('words the title by source', () => {
     expect(paymentTitle('WALLET', 'Acme')).toBe('From wallet');
     expect(paymentTitle('SUPPLIER_RECORDED', 'Acme')).toBe('Recorded by Acme');
-    expect(paymentTitle('CLAIM_CONFIRMED', 'Acme')).toBe('You reported this · confirmed by Acme');
+    expect(paymentTitle('CLAIM_CONFIRMED', 'Acme')).toBe('Paid direct · confirmed by Acme');
   });
   it('joins method and reference', () => {
     expect(paymentDetail('UPI', 'R1')).toBe('UPI · ref R1');

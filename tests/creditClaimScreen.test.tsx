@@ -374,7 +374,7 @@ describe('sending', () => {
     type('claim-reference', 'U1');
     fireEvent.press(sendButton());
     expect(await screen.findByText(
-      'You can report up to ₹400.00 more on this invoice (other reports are waiting for your supplier).',
+      'You can tell your supplier about up to ₹400.00 more on this invoice (other payments are waiting for them to confirm).',
     )).toBeTruthy();
     expect(mockToast).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
@@ -439,7 +439,7 @@ describe('reporting the same payment twice', () => {
     ] });
     await ready('11');
     expect(await screen.findByTestId('claim-waiting-info'))
-      .toHaveTextContent(/₹1,500\.50\ already\ reported\ and\ waiting\ for\ Acme\ Foods\./);
+      .toHaveTextContent(/₹1,500\.50\ already\ told\ to\ Acme\ Foods,\ waiting\ for\ them\ to\ confirm\./);
   });
 
   it('shows no info line when nothing is waiting', async () => {
@@ -453,7 +453,7 @@ describe('reporting the same payment twice', () => {
     detailM.mockResolvedValue({ id: 11, claims: [waiting()] });
     await ready('11');
     expect(await screen.findByTestId('claim-duplicate-warning'))
-      .toHaveTextContent(/You\ already\ reported\ this\ payment\.\ Sending\ it\ again\ may\ be\ a\ duplicate\./);
+      .toHaveTextContent(/You\ already\ told\ your\ supplier\ about\ this\ payment\.\ Sending\ it\ again\ may\ be\ a\ duplicate\./);
     expect(sendButton()).toHaveTextContent('Send anyway');
     type('claim-reference', 'UTR1');
     expect(sendDisabled()).toBe(false);
@@ -522,7 +522,7 @@ describe('reporting the same payment twice', () => {
     invoicesM.mockResolvedValue([inv(11, { reportableAmount: 4000 })]);
     detailM.mockResolvedValue({ id: 11, claims: [waiting()] });
     await ready('11');
-    expect(await screen.findByTestId('claim-waiting-info')).toHaveTextContent(/₹1,000\.00 already reported and waiting for Acme Foods\./);
+    expect(await screen.findByTestId('claim-waiting-info')).toHaveTextContent(/₹1,000\.00 already told to Acme Foods, waiting for them to confirm\./);
     expect(screen.queryByTestId('claim-all-reported')).toBeNull();
   });
 

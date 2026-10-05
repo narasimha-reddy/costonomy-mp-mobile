@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Credit]
+
+### [feat/credit-m1-foundation-and-home-tile]
+#### Added
+- Home "Credit" tile after Quick Scan and Wallet (shown with CREDIT_VIEW), with a red dot and "Credit, payment overdue" label when `GET /outlets/{id}/credit/attention` reports overdue (`hooks/useCreditAttention.ts`).
+- Credit data layer: invoice detail, statement and wallet-repayment types and services, `isShortBalanceError` / `isOverpaymentError` helpers, and `dueChip` (`lib/credit/dueChip.ts`) for the server's due state.
+- `MoneyAction.badge` on the Money Transfers tiles.
+
+---
+
 ## [Procurement & Open Requests]
 
 ### [PR #17] [feat/edit-open-request-quantities]

@@ -33,6 +33,8 @@ import type { Intent } from '@/models/intent';
 import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
 import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
+import { useCreditAttention } from '@/hooks/useCreditAttention';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
@@ -82,7 +84,7 @@ export default function RestaurantHome() {
 
 
 /**
- * The "Money Transfers" section: Quick Scan and Wallet in a row of four slots.
+ * The "Money Transfers" section: Quick Scan, Wallet and Credit in a row of four slots.
  *
  * <p><b>QuickScan is hidden rather than broken.</b> Loading and erroring both
  * leave it out: a feature the outlet cannot use yet, or that this call failed to
@@ -96,6 +98,10 @@ export default function RestaurantHome() {
 function QuickActions({ outletId }: { outletId: number | null }) {
   const router = useRouter();
   const { accessToken } = useSession();
+  const { outlet } = useOutlet();
+  const { canForOutlet } = usePermissions();
+  const attention = useCreditAttention();
+  const mayViewCredit = canForOutlet('CREDIT_VIEW', outlet);
 
   const config = useQuery({
     queryKey: ['outlet', outletId, 'quickscan-config'],
@@ -125,6 +131,18 @@ function QuickActions({ outletId }: { outletId: number | null }) {
       onPress: () => {
         track('open_wallet', { screen: SCREEN, outletId });
         router.push('/restaurant/wallet');
+      },
+    },
+    {
+      key: 'credit',
+      label: 'Credit',
+      icon: 'card-outline',
+      accessibilityLabel: attention.overdue ? 'Credit, payment overdue' : 'Credit',
+      visible: mayViewCredit,
+      badge: attention.overdue,
+      onPress: () => {
+        track('open_credit', { screen: SCREEN, outletId });
+        router.push('/restaurant/credit');
       },
     },
   ];

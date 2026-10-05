@@ -14,6 +14,11 @@ export type CreditTransactionType =
 export type CreditInvoiceStatus =
   | 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'WRITTEN_OFF';
 
+export type CreditDueState =
+  | 'PAID' | 'WRITTEN_OFF' | 'OVERDUE' | 'IN_GRACE' | 'DUE_TODAY' | 'DUE_SOON' | 'DUE_LATER';
+
+export type CreditPaymentSource = 'SUPPLIER_RECORDED' | 'WALLET' | 'CLAIM_CONFIRMED';
+
 export interface CreditRequest {
   id: number;
   creditAgreementId: number | null;
@@ -66,6 +71,10 @@ export interface CreditAgreement {
   available: Money;
   due: Money;
   overdue: Money;
+  /** Earliest open due date, 'YYYY-MM-DD'. Absent on older payloads. */
+  nextDueDate?: string | null;
+  nextDueAmount?: Money | null;
+  openInvoices?: number;
   creditPeriodDays: number | null;
   gracePeriodDays: number | null;
   maxSingleOrderCredit: Money | null;
@@ -87,6 +96,8 @@ export interface CreditSummary {
   available: Money;
   due: Money;
   overdue: Money;
+  /** Whether repaying from the wallet is switched on. Absent means off. */
+  walletRepayEnabled?: boolean;
   agreements: CreditAgreement[];
 }
 
@@ -116,4 +127,95 @@ export interface CreditInvoice {
   overdueAfter: string | null;
   issuedAt: string | null;
   settledAt: string | null;
+  /** The server's due classification; absent on older payloads. */
+  dueState?: CreditDueState;
+  /** Negative once past due, null when settled. The app never computes it. */
+  daysToDue?: number | null;
+}
+
+/** Whether anything needs attention. Deliberately no amounts. */
+export interface CreditAttention {
+  overdue: boolean;
+  dueSoon: boolean;
+}
+
+export interface CreditInvoicePayment {
+  id: number;
+  amount: Money;
+  source: CreditPaymentSource;
+  method: string | null;
+  reference: string | null;
+  paidAt: string;
+  walletEntryId: number | null;
+}
+
+/** GET /api/v1/credit/invoices/{id}. */
+export interface CreditInvoiceDetail {
+  id: number;
+  invoiceNumber: string;
+  agreementId: number;
+  supplierOrderId: number | null;
+  status: CreditInvoiceStatus;
+  amount: Money;
+  paidAmount: Money;
+  outstanding: Money;
+  dueDate: string | null;
+  overdueAfter: string | null;
+  issuedAt: string | null;
+  settledAt: string | null;
+  dueState: CreditDueState;
+  daysToDue: number | null;
+  orderNumber: string | null;
+  supplierName: string | null;
+  storeName: string | null;
+  payments: CreditInvoicePayment[];
+}
+
+export interface CreditStatementLine {
+  at: string;
+  type: string;
+  label: string;
+  /** Signed. */
+  amount: Money;
+  owedAfter: Money;
+  supplierOrderId: number | null;
+  orderNumber: string | null;
+  creditInvoiceId: number | null;
+  invoiceNumber: string | null;
+  source: CreditPaymentSource | null;
+  method: string | null;
+  reference: string | null;
+  walletEntryId: number | null;
+}
+
+/** Newest line first. */
+export interface CreditStatement {
+  agreementId: number;
+  from: string;
+  to: string;
+  openingOwed: Money;
+  closingOwed: Money;
+  lines: CreditStatementLine[];
+}
+
+export interface WalletRepaymentRequest {
+  /** At most 2 decimals, at least 1. */
+  amount: number;
+  invoiceIds?: number[];
+}
+
+export interface WalletRepaymentAllocation {
+  invoiceId: number;
+  invoiceNumber: string;
+  amount: Money;
+  statusAfter: CreditInvoiceStatus;
+}
+
+export interface WalletRepayment {
+  repaymentId: number;
+  amount: Money;
+  walletEntryId: number;
+  walletBalanceAfter: Money;
+  allocations: WalletRepaymentAllocation[];
+  agreement: { due: Money; overdue: Money; available: Money; status: CreditAgreementStatus };
 }

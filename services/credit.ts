@@ -1,6 +1,12 @@
 import { apiRequest } from '@/lib/api/client';
+import { ApiError } from '@/lib/api/errors';
 import type {
   CreditAgreement,
+  CreditAttention,
+  CreditInvoiceDetail,
+  CreditStatement,
+  WalletRepayment,
+  WalletRepaymentRequest,
   CreditInvoice,
   CreditLedgerEntry,
   CreditSummary,
@@ -11,6 +17,11 @@ import type {
 /** The outlet's whole credit position across every supplier. Doc 05 §19. */
 export function fetchCreditSummary(token: string, outletId: number): Promise<CreditSummary> {
   return apiRequest<CreditSummary>(`/api/v1/outlets/${outletId}/credit/summary`, { token });
+}
+
+/** Whether anything is overdue or due soon. No amounts, by design. */
+export function fetchCreditAttention(token: string, outletId: number): Promise<CreditAttention> {
+  return apiRequest<CreditAttention>(`/api/v1/outlets/${outletId}/credit/attention`, { token });
 }
 
 export function fetchOutletAgreements(token: string, outletId: number): Promise<CreditAgreement[]> {
@@ -177,4 +188,53 @@ export function recordPayment(
     idempotencyKey,
     body,
   });
+}
+
+export function fetchCreditInvoice(token: string, invoiceId: number): Promise<CreditInvoiceDetail> {
+  return apiRequest<CreditInvoiceDetail>(`/api/v1/credit/invoices/${invoiceId}`, { token });
+}
+
+/** Newest line first. `from` and `to` are 'YYYY-MM-DD'. */
+export function fetchCreditStatement(
+  token: string,
+  agreementId: number,
+  range: { from: string; to: string },
+): Promise<CreditStatement> {
+  const query = `from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+  return apiRequest<CreditStatement>(
+    `/api/v1/credit/agreements/${agreementId}/statement?${query}`, { token });
+}
+
+/** Repay from the wallet. Moves money, so it needs an idempotency key. */
+export function repayFromWallet(
+  token: string,
+  agreementId: number,
+  body: WalletRepaymentRequest,
+  idempotencyKey: string,
+): Promise<WalletRepayment> {
+  return apiRequest<WalletRepayment>(
+    `/api/v1/credit/agreements/${agreementId}/wallet-repayments`,
+    { method: 'POST', token, idempotencyKey, body },
+  );
+}
+
+// ── Error helpers ─────────────────────────────────────────────────────
+
+function numberDetail(error: unknown, code: string, key: string): number | null {
+  if (!(error instanceof ApiError) || error.code !== code) return null;
+  const value = error.details?.[key];
+  return typeof value === 'number' ? value : null;
+}
+
+/** The wallet cannot cover the repayment: how much is missing, and what it holds. */
+export function isShortBalanceError(error: unknown): { shortBy: number; balance: number } | null {
+  const shortBy = numberDetail(error, 'WALLET_INSUFFICIENT_BALANCE', 'shortBy');
+  const balance = numberDetail(error, 'WALLET_INSUFFICIENT_BALANCE', 'balance');
+  return shortBy == null || balance == null ? null : { shortBy, balance };
+}
+
+/** The repayment is more than is owed: what is actually outstanding. */
+export function isOverpaymentError(error: unknown): { outstanding: number } | null {
+  const outstanding = numberDetail(error, 'CREDIT_OVERPAYMENT', 'outstanding');
+  return outstanding == null ? null : { outstanding };
 }

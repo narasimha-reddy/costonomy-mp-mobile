@@ -11,6 +11,9 @@ export const MONEY_TRANSFER_COLUMNS = 4;
 const DISC = 64;
 // Ionicons glyphs fill about 47 percent of their box at this size, as the QR glyph does.
 const GLYPH = 30;
+// The attention dot: 10dp, ringed in white so it reads against the orange disc.
+const BADGE = 10;
+const BADGE_RING = 2;
 
 export interface MoneyAction {
   key: string;
@@ -25,6 +28,11 @@ export interface MoneyAction {
   /** False leaves the action out and the rest close up, in order. */
   visible: boolean;
   accessibilityLabel?: string;
+  /**
+   * A small red dot on the disc. Never the only signal: the caller words it into
+   * `accessibilityLabel`, and this component appends nothing of its own.
+   */
+  badge?: boolean;
 }
 
 interface QuickActionTilesProps {
@@ -63,6 +71,7 @@ export function QuickActionTiles({ actions }: QuickActionTilesProps) {
                 {action.renderIcon != null
                   ? action.renderIcon(DISC)
                   : <Ionicons name={action.icon} size={GLYPH} color={Colors.white} />}
+                {action.badge === true && <View testID={`action-${action.key}-badge`} style={styles.badge} />}
               </View>
               <MandiText variant="captionEmphasis" center style={styles.label}>
                 {action.label}
@@ -109,6 +118,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.primary,
+  },
+  badge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: BADGE + BADGE_RING * 2,
+    height: BADGE + BADGE_RING * 2,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.danger,
+    borderWidth: BADGE_RING,
+    borderColor: Colors.white,
   },
   label: { alignSelf: 'stretch' },
 });

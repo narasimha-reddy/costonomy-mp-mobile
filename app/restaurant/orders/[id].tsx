@@ -27,6 +27,7 @@ import { DeliveryMode, orderStatusFor, resolveStatus, DeliveryStatus as Delivery
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine } from '@/utils/skuLabel';
+import { DetailRow as Row } from '@/components/restaurant/DetailRow';
 import { Colors, Spacing } from '@/theme';
 
 /**
@@ -536,32 +537,6 @@ export default function OrderDetailScreen() {
       </MandiStickyBar>
     );
   }
-}
-
-function Row({
-  label,
-  value,
-  emphasis,
-  hint,
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-  hint?: string;
-}) {
-  return (
-    <View style={styles.totalsRow}>
-      <View style={styles.flex}>
-        <MandiText variant={emphasis ? 'bodyEmphasis' : 'body'} color={Colors.textSecondary}>
-          {label}
-        </MandiText>
-        {hint && (
-          <MandiText variant="caption" color={Colors.textTertiary}>{hint}</MandiText>
-        )}
-      </View>
-      <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
-    </View>
-  );
 }
 
 const styles = StyleSheet.create({

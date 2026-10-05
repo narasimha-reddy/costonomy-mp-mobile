@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-order-rows] - Delivery addresses on the buyer's order screen
+#### Fixed
+- "Pickup" and "Destination" drew one letter per line down the screen: a long address took all the width and squeezed the label. The label now keeps its width (up to 45% of the row) and the address wraps beside it (`DetailRow`).
+
 ### [phase6/mobile-delivery-preference] - Deliver to me, or I'll collect, per supplier (API D-143)
 #### Added
 - Each supplier's card in the cart has "Deliver to me / I'll collect", sent with that request. The supplier sees it; for a pickup the supplier's delivery question is replaced by "The restaurant will collect this".

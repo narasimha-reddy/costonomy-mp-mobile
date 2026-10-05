@@ -4,14 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchAvailableSlots } from '@/services/delivery';
 import { MandiCard, MandiText, MandiSkeletonList } from '@/components/common';
-import type { AvailableSlot } from '@/models/delivery';
+import { istDay } from '@/lib/delivery/deliveryDay';
 import { Colors, Radius, Spacing } from '@/theme';
 
 interface DeliverySlotPickerProps {
   supplierStoreId: number;
   selectedSlotId: number | null;
-  selectedDate: string;
-  onSelect: (slotId: number | null, scheduledDate: string) => void;
+  /** The chosen day, or null for as soon as possible (no slot, no day). */
+  selectedDate: string | null;
+  onSelect: (slotId: number | null, scheduledDate: string | null) => void;
 }
 
 export function DeliverySlotPicker({
@@ -22,18 +23,17 @@ export function DeliverySlotPicker({
 }: DeliverySlotPickerProps) {
   const { accessToken } = useSession();
 
-  // Helper date buttons: Today, Tomorrow, Day After
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const dayAfter = new Date(Date.now() + 172800000).toISOString().slice(0, 10);
-
+  // India's days, as the server counts them: UTC's date is still yesterday in the early morning.
   const dateOptions = [
-    { label: 'Today', value: today },
-    { label: 'Tomorrow', value: tomorrow },
-    { label: 'In 2 days', value: dayAfter },
+    { label: 'Today', value: istDay(0) },
+    { label: 'Tomorrow', value: istDay(1) },
+    { label: 'In 2 days', value: istDay(2) },
   ];
 
-  const [date, setDate] = useState<string>(selectedDate || tomorrow);
+  // As soon as possible is no day and no slot, and is what "Immediate" in the cart means.
+  const asap = selectedDate == null;
+
+  const [date, setDate] = useState<string>(selectedDate || istDay(1));
 
   // The parent may change the day after this has mounted (the day the buyer asked for when sending).
   useEffect(() => {
@@ -47,15 +47,15 @@ export function DeliverySlotPicker({
     enabled: accessToken != null && Boolean(supplierStoreId),
   });
 
-  // Auto-select first available slot if none selected
+  // Start a chosen day on its first available slot. Not while as soon as possible is chosen: that has no slot.
   useEffect(() => {
-    if (slots.length > 0) {
+    if (!asap && slots.length > 0) {
       const firstAvailable = slots.find((s) => s.available);
       if (firstAvailable && (!selectedSlotId || !slots.some((s) => s.id === selectedSlotId && s.available))) {
         onSelect(firstAvailable.id, date);
       }
     }
-  }, [slots, date]);
+  }, [slots, date, asap]);
 
   const handleDateChange = (newDate: string) => {
     setDate(newDate);
@@ -64,15 +64,26 @@ export function DeliverySlotPicker({
 
   return (
     <MandiCard>
-      <MandiText variant="bodyEmphasis">Choose Delivery Slot</MandiText>
-      <MandiText variant="caption" color={Colors.textSecondary}>
-        Pick when you would like the supplier to deliver your order
+      <MandiText variant="bodyEmphasis">When should it arrive?</MandiText>
+      <Pressable
+        onPress={() => onSelect(null, null)}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: asap }}
+        style={[styles.option, asap && styles.optionActive, styles.asap]}
+      >
+        <MandiText variant="bodyEmphasis">As soon as possible</MandiText>
+        <MandiText variant="caption" color={Colors.textSecondary}>
+          Sent out as soon as the order is ready, with no fixed time
+        </MandiText>
+      </Pressable>
+      <MandiText variant="caption" color={Colors.textSecondary} style={styles.orPick}>
+        Or pick a day and a time slot
       </MandiText>
 
       {/* Date Tabs */}
       <View style={styles.dateTabs}>
         {dateOptions.map((opt) => {
-          const active = date === opt.value;
+          const active = !asap && date === opt.value;
           return (
             <Pressable
               key={opt.value}
@@ -163,4 +174,6 @@ const styles = StyleSheet.create({
   optionActive: { borderColor: Colors.primary, borderWidth: 2 },
   optionDisabled: { opacity: 0.5 },
   empty: { marginTop: Spacing.sm, fontStyle: 'italic' },
+  asap: { marginTop: Spacing.sm },
+  orPick: { marginTop: Spacing.sm },
 });

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-delivery-time] - As soon as possible, and a day's first slot (API D-142)
+#### Changed
+- The delivery time picker offers "As soon as possible" (selected when the request was sent as Immediate); a request sent for a day starts on that day's first available slot, skipping one that has started. The day buttons use India's date, not UTC's.
+
 ### [phase6/mobile-delivery-offer] - Free delivery, and the supplier's delivery choice (API D-141)
 #### Added
 - **Supplier answer:** a "How will this be delivered?" choice (I deliver free, I deliver at my fee, Costonomy delivery), limited to what the store's settings allow. At a fee, the supplier can enter a lower charge for that order (never above their store fee).

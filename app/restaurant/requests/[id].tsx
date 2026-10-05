@@ -110,12 +110,13 @@ export default function RequestDetailScreen() {
     quoteReference?: string;
   } | null>(null);
 
+  // No slot and no day is as soon as possible, which is where it starts unless the request was sent for a day.
   const [slot, setSlot] = React.useState<{
     slotId: number | null;
-    scheduledDate: string;
+    scheduledDate: string | null;
   }>({
     slotId: null,
-    scheduledDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+    scheduledDate: null,
   });
 
   // Start the slot picker on the day the buyer asked for when sending, unless that day has gone by.
@@ -179,7 +180,7 @@ export default function RequestDetailScreen() {
       deliveryMode: (delivery?.mode ?? 'PICKUP') as DeliveryMode,
       deliveryQuoteReference: delivery?.quoteReference,
       deliverySlotId: slot.slotId ?? undefined,
-      scheduledDeliveryDate: slot.scheduledDate,
+      scheduledDeliveryDate: slot.scheduledDate ?? undefined,
       paymentMethod: method ?? 'PREPAID',
     }, key),
     onSettled: () => {

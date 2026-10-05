@@ -1,4 +1,4 @@
-import { accountLine, instrumentName, rowLabel, rowTitle } from '@/lib/wallet/entryCopy';
+import { accountLine, entryLabel, instrumentName, rowLabel, rowTitle } from '@/lib/wallet/entryCopy';
 import { formatRupees, monthNet } from '@/lib/wallet/history';
 import type { WalletEntry } from '@/models/wallet';
 
@@ -18,6 +18,7 @@ describe('rowLabel', () => {
     ['WITHDRAWAL', 'DEBIT', 'Withdrawal to'],
     ['WITHDRAWAL_REVERSAL', 'CREDIT', 'Received from'],
     ['QUICKSCAN_RETURN', 'CREDIT', 'Received from'],
+    ['CREDIT_REPAYMENT', 'DEBIT', 'Paid to'],
     ['SOMETHING_NEW', 'CREDIT', 'Received from'],
     ['SOMETHING_NEW', 'DEBIT', 'Paid to'],
   ])('%s %s reads "%s"', (kind, direction, text) => {
@@ -128,5 +129,25 @@ describe('monthNet', () => {
     expect(monthNet('2025-01', totals)).toBeNull();
     expect(monthNet('m', [{ month: 'm', added: 'x', spent: '1' }])).toBeNull();
     expect(monthNet('2026-10', totals, true)).toBeNull();
+  });
+});
+
+describe('CREDIT_REPAYMENT copy', () => {
+  it('is labelled "Credit repayment" and titled with the server reason, else the same words', () => {
+    expect(entryLabel(entry({ kind: 'CREDIT_REPAYMENT' }))).toBe('Credit repayment');
+    expect(rowTitle(entry({ kind: 'CREDIT_REPAYMENT', reason: 'Credit repayment' }))).toBe('Credit repayment');
+    expect(rowTitle(entry({ kind: 'CREDIT_REPAYMENT', reason: null }))).toBe('Credit repayment');
+    expect(accountLine(entry({ kind: 'CREDIT_REPAYMENT' }))).toBe('Debited from wallet');
+  });
+
+  it('an unknown future kind still uses the direction fallback', () => {
+    expect(entryLabel(entry({ kind: 'SOMETHING_NEW', direction: 'DEBIT' }))).toBe('Money out');
+    expect(entryLabel(entry({ kind: 'SOMETHING_NEW', direction: 'CREDIT' }))).toBe('Money in');
+    expect(rowTitle(entry({ kind: 'SOMETHING_NEW', direction: 'DEBIT', reason: null }))).toBe('Money out');
+  });
+
+  it('month net counts the server total as money out, like any other debit', () => {
+    const totals = [{ month: '2026-09', added: '1000.0000', spent: '1500.0000' }];
+    expect(monthNet('2026-09', totals)).toMatchObject({ label: '− ₹500', credit: false, moneyOut: '₹1,500' });
   });
 });

@@ -21,7 +21,7 @@ import { DetailColors, DetailLayout, DetailType } from '@/theme';
  * route passes the handlers.
  */
 export function TransactionDetailView({
-  entry, onBack, onCopy, onPayAgain, onWallet, onHistory, onSupport, onError, onAddBill, onInvoice, mayChangeBill = false,
+  entry, onBack, onCopy, onPayAgain, onWallet, onHistory, onSupport, onError, onViewCredit, onAddBill, onInvoice, mayChangeBill = false,
   onWaiveBill, onUndoWaiver, billBusy = false,
 }: {
   entry: WalletTransactionDetail;
@@ -32,6 +32,8 @@ export function TransactionDetailView({
   onHistory: () => void;
   onSupport: () => void;
   onError: (message: string) => void;
+  /** "View in Credit" on a credit repayment, with the credit line's agreement id. */
+  onViewCredit?: (agreementId: string) => void;
   onAddBill?: () => void;
   onInvoice?: () => void;
   /** The user holds QUICKSCAN_PAY: without it "Add bill" is not offered. */
@@ -45,6 +47,8 @@ export function TransactionDetailView({
 }) {
   const insets = useSafeAreaInsets();
   const header = detailHeader(entry.status);
+  // A credit repayment never takes a bill and is not a payment to repeat, whatever the server sends.
+  const repayment = entry.kind === 'CREDIT_REPAYMENT';
   const [expanded, setExpanded] = useState(true);
   const [sharing, setSharing] = useState(false);
   const receiptRef = useRef<View>(null);
@@ -79,6 +83,7 @@ export function TransactionDetailView({
           expanded={expanded}
           onToggle={() => setExpanded((v) => !v)}
           onCopy={onCopy}
+          onViewCredit={onViewCredit}
           invoiceRow={(
             <BillStatusSection
               entry={entry}
@@ -91,11 +96,11 @@ export function TransactionDetailView({
           )}
           footer={(
             <DetailActions
-              canAddBill={entry.actions.canAddBill === true && mayChangeBill}
-              hasInvoice={entry.invoice != null}
+              canAddBill={!repayment && entry.actions.canAddBill === true && mayChangeBill}
+              hasInvoice={!repayment && entry.invoice != null}
               onAddBill={onAddBill}
               onInvoice={onInvoice}
-              canPayAgain={entry.actions.canPayAgain}
+              canPayAgain={!repayment && entry.actions.canPayAgain}
               sharing={sharing}
               onPayAgain={onPayAgain}
               onWallet={onWallet}

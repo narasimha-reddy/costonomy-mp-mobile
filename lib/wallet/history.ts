@@ -191,6 +191,7 @@ export function categoryLabel(kind: WalletEntryKind | string): string {
     case 'WITHDRAWAL_REVERSAL': return 'Withdrawal';
     case 'QUICKSCAN_PAYMENT':
     case 'QUICKSCAN_RETURN': return 'Shop payment';
+    case 'CREDIT_REPAYMENT': return 'Credit repayment';
     default: return 'Wallet';
   }
 }
@@ -290,6 +291,7 @@ export const CATEGORY_OPTIONS: { key: WalletCategory; label: string; kinds: Wall
   { key: 'REFUND', label: 'Refund', kinds: ['ORDER_REFUND', 'REFUND', 'DISPUTE_REFUND'] },
   { key: 'WITHDRAWAL', label: 'Withdrawal', kinds: ['WITHDRAWAL', 'WITHDRAWAL_REVERSAL'] },
   { key: 'SHOP_PAYMENT', label: 'Shop payment (QuickScan)', kinds: ['QUICKSCAN_PAYMENT', 'QUICKSCAN_RETURN'] },
+  { key: 'CREDIT_REPAYMENT', label: 'Credit repayment', kinds: ['CREDIT_REPAYMENT'] },
 ];
 
 export const INSTRUMENT_OPTIONS: { key: WalletInstrument; label: string; prefixes: string[] }[] = [
@@ -323,7 +325,7 @@ export const BILL_FILTER_OPTIONS: { key: WalletBillStatus; label: string; chipLa
  * the Wallet instrument means. The refund kinds (ORDER_REFUND, REFUND, DISPUTE_REFUND,
  * QUICKSCAN_RETURN) are money coming back TO the wallet, not paid from it, so they stay out.
  */
-export const WALLET_PAID_KINDS: readonly WalletEntryKind[] = ['ORDER_PAYMENT', 'QUICKSCAN_PAYMENT'];
+export const WALLET_PAID_KINDS: readonly WalletEntryKind[] = ['ORDER_PAYMENT', 'QUICKSCAN_PAYMENT', 'CREDIT_REPAYMENT'];
 
 const isWalletPaid = (entry: WalletEntry) => WALLET_PAID_KINDS.includes(entry.kind);
 

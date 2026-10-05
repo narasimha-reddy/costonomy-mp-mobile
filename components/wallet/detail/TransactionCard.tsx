@@ -3,8 +3,9 @@ import { Animated, Easing, LayoutAnimation, Pressable, StyleSheet, Text, View } 
 import { Ionicons } from '@expo/vector-icons';
 import { ArrowGlyph, CopyGlyph, ListGlyph } from '@/components/wallet/detail/DetailIcons';
 import {
-  detailAvatar, detailLabel, detailName, referenceLines, spokenAmount, walletSideLabel,
+  creditRepaymentInfo, detailAvatar, detailLabel, detailName, referenceLines, spokenAmount, walletSideLabel,
 } from '@/lib/wallet/detail';
+import { entryLabel } from '@/lib/wallet/entryCopy';
 import { formatRupees } from '@/lib/wallet/history';
 import type { WalletTransactionDetail } from '@/models/wallet';
 import { DetailColors, DetailLayout, DetailType, WalletColors } from '@/theme';
@@ -18,13 +19,15 @@ import { DetailColors, DetailLayout, DetailType, WalletColors } from '@/theme';
  * there is none of that: the section is always open and nothing in it can be pressed.
  */
 export function TransactionCard({
-  entry, variant = 'screen', expanded = true, onToggle, onCopy, footer, invoiceRow,
+  entry, variant = 'screen', expanded = true, onToggle, onCopy, onViewCredit, footer, invoiceRow,
 }: {
   entry: WalletTransactionDetail;
   variant?: 'screen' | 'receipt';
   expanded?: boolean;
   onToggle?: () => void;
   onCopy?: (value: string, what: string) => void;
+  /** "View in Credit" on a credit repayment (screen only). */
+  onViewCredit?: (agreementId: string) => void;
   footer?: React.ReactNode;
   /** The Invoice row, shown under the transfer details (screen only). */
   invoiceRow?: React.ReactNode;
@@ -34,6 +37,7 @@ export function TransactionCard({
   const name = detailName(entry);
   const amount = formatRupees(entry.amount);
   const refs = referenceLines(entry.references);
+  const credit = creditRepaymentInfo(entry);
 
   const turn = useRef(new Animated.Value(expanded ? 0 : 1)).current;
   useEffect(() => {
@@ -73,7 +77,9 @@ export function TransactionCard({
         </View>
         <View style={styles.names}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
-          {entry.counterpartyDetail ? (
+          {credit != null ? (
+            <Text style={styles.sub} numberOfLines={1}>{entryLabel(entry)}</Text>
+          ) : entry.counterpartyDetail ? (
             <Text style={styles.sub} numberOfLines={1}>{entry.counterpartyDetail}</Text>
           ) : null}
         </View>
@@ -131,7 +137,30 @@ export function TransactionCard({
         </View>
       )}
 
-      {screen ? invoiceRow : null}
+      {credit != null && (
+        <View testID="credit-repayment-block">
+          <Text style={[styles.label, styles.labelNext]}>Invoices settled</Text>
+          {credit.invoices.map((number) => (
+            <Text key={number} style={[styles.value, styles.invoiceLine]} selectable>{number}</Text>
+          ))}
+          {screen && credit.agreementId != null && (
+            <Pressable
+              onPress={() => onViewCredit?.(credit.agreementId as string)}
+              accessibilityRole="link"
+              accessibilityLabel="View in Credit"
+              style={styles.walletRow}
+              testID="view-in-credit"
+            >
+              <Ionicons name="card-outline" size={DetailLayout.walletIcon} color={WalletColors.orange} />
+              <Text style={styles.walletName}>View in Credit</Text>
+              <Ionicons name="chevron-forward" size={DetailLayout.chevron} color={DetailColors.icon} />
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* A credit repayment never takes a bill. */}
+      {screen && credit == null ? invoiceRow : null}
 
       {footer}
     </View>
@@ -254,5 +283,6 @@ const styles = StyleSheet.create({
     marginTop: DetailLayout.refTop,
     minHeight: 14,
   },
+  invoiceLine: { marginLeft: DetailLayout.cardInset, marginTop: DetailLayout.valueTop, color: DetailColors.value },
   refText: { ...DetailType.value, flex: 1, color: DetailColors.secondary },
 });

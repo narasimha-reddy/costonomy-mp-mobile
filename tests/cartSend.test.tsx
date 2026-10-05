@@ -106,4 +106,18 @@ describe('the cart', () => {
     }));
     line.requestedQuantity = '3';
   });
+
+  it('sends immediate by default, and the chosen day when the buyer picks one', async () => {
+    setup();
+
+    fireEvent.press(screen.getByText('Send Request'));
+    await waitFor(() => expect(sendBasket).toHaveBeenCalledTimes(1));
+    expect((sendBasket as jest.Mock).mock.calls[0][2].preferredDeliveryDate).toBeUndefined();
+
+    fireEvent.press(screen.getByLabelText('Delivery: Tomorrow'));
+    fireEvent.press(screen.getByText('Send Request'));
+    await waitFor(() => expect(sendBasket).toHaveBeenCalledTimes(2));
+    expect((sendBasket as jest.Mock).mock.calls[1][2].preferredDeliveryDate)
+      .toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
 });

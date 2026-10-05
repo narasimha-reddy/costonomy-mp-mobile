@@ -6,6 +6,8 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useRequestBasket, useInvalidateBasket } from '@/hooks/useRequestBasket';
 import { useDebouncedEdits } from '@/hooks/useDebouncedEdits';
+import { DeliveryDayChoice } from '@/components/restaurant/DeliveryDayChoice';
+import { preferredDateFor } from '@/lib/delivery/deliveryDay';
 import {
   addIntentItem,
   prepareDirectOrder,
@@ -80,6 +82,8 @@ export default function BasketScreen() {
     direct?: boolean;
   } | null>(null);
   const [explaining, setExplaining] = useState(false);
+  /** Days from today the buyer wants delivery, or null for immediate. Sent with every request. */
+  const [dayOffset, setDayOffset] = useState<number | null>(null);
 
   /**
    * Quantity taps are held briefly and sent as one decision, so a burst of taps
@@ -192,8 +196,11 @@ export default function BasketScreen() {
       // What was tapped is what gets sent: a quantity still waiting its turn is
       // written first, or the request would go out with the old one.
       await flush();
-      return sendBasket(accessToken as string, outletId as number,
-        { acceptPriceChanges, intentId });
+      return sendBasket(accessToken as string, outletId as number, {
+        acceptPriceChanges,
+        intentId,
+        preferredDeliveryDate: preferredDateFor(dayOffset),
+      });
     },
     onSuccess: (result, variables) => {
       track('basket_sent', { screen: SCREEN, outletId }, { sent: result.sent.length });
@@ -310,6 +317,10 @@ export default function BasketScreen() {
         />,
       );
     }
+
+    nodes.push(
+      <DeliveryDayChoice key="delivery-day" value={dayOffset} onChange={setDayOffset} />,
+    );
 
     drafts.forEach((draft, index) => {
       const warning = sectionWarning(draft);

@@ -36,6 +36,7 @@ import type { IntentItem } from '@/models/intent';
 import type { DeliveryMode } from '@/models/procurement';
 import { DeliveryModePicker } from '@/components/request/DeliveryModePicker';
 import { DeliverySlotPicker } from '@/components/request/DeliverySlotPicker';
+import { istDay } from '@/lib/delivery/deliveryDay';
 import { PaymentMethodPicker, type PaymentMethod } from '@/components/request/PaymentMethodPicker';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
@@ -116,6 +117,16 @@ export default function RequestDetailScreen() {
     slotId: null,
     scheduledDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
   });
+
+  // Start the slot picker on the day the buyer asked for when sending, unless that day has gone by.
+  // Once, and only if they have not already picked a day here.
+  const askedDay = request?.preferredDeliveryDate ?? null;
+  const prefilled = React.useRef(false);
+  React.useEffect(() => {
+    if (askedDay == null || prefilled.current) return;
+    prefilled.current = true;
+    if (askedDay >= istDay(0)) setSlot({ slotId: null, scheduledDate: askedDay });
+  }, [askedDay]);
 
   /**
    * How this will be paid for. Chosen here, like the delivery mode, because

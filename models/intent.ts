@@ -125,6 +125,8 @@ export interface Intent {
   source: string;
   clonedFromId: number | null;
   requestedDeliveryTime: string | null;
+  /** The day the buyer asked for (`YYYY-MM-DD`); null is immediate. A preference, not a booking. */
+  preferredDeliveryDate: string | null;
   notes: string | null;
   sentAt: string | null;
   /**

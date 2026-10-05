@@ -73,6 +73,7 @@ describe('Store Minimum Order Value (MOV) & Free Delivery Rules', () => {
     source: 'DIRECT',
     clonedFromId: null,
     requestedDeliveryTime: null,
+    preferredDeliveryDate: null,
     notes: null,
     sentAt: null,
     responseDeadline: null,

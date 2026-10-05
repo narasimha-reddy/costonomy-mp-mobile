@@ -32,6 +32,7 @@ import { ApiError } from '@/lib/api/errors';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
+import { describeDeliveryDay } from '@/lib/delivery/deliveryDay';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -195,6 +196,11 @@ export default function SupplierRequestScreen() {
               <View style={styles.countColumn}>
                 <MandiText variant="bodyEmphasis">
                   {request.items.length} item{request.items.length === 1 ? '' : 's'} requested
+                </MandiText>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {request.preferredDeliveryDate != null
+                    ? `Wanted ${describeDeliveryDay(request.preferredDeliveryDate)}`
+                    : 'Wanted immediately'}
                 </MandiText>
                 {request.requestedDeliveryTime != null && (
                   <MandiText variant="caption" color={Colors.textSecondary}>

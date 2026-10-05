@@ -80,6 +80,8 @@ export function sendBasket(
   body: {
     acceptPriceChanges?: boolean;
     requestedDeliveryTime?: string;
+    /** `YYYY-MM-DD`; leave out for immediate. */
+    preferredDeliveryDate?: string;
     notes?: string;
     intentId?: number;
   } = {},
@@ -114,7 +116,7 @@ export function prepareDirectOrder(
 export function sendIntent(
   token: string,
   intentId: number,
-  body: { requestedDeliveryTime?: string; notes?: string } = {},
+  body: { requestedDeliveryTime?: string; preferredDeliveryDate?: string; notes?: string } = {},
 ): Promise<Intent> {
   return apiRequest<Intent>(`/api/v1/intents/${intentId}/send`, {
     method: 'POST',

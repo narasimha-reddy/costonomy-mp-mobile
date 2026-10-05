@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-delivery-day] - Immediate or a day, when sending (API D-140)
+#### Added
+- The cart has a Delivery choice for the whole basket (Immediate, Today, Tomorrow, In 2 days), sent with every request. Immediate is the default. Days are India's, not UTC's.
+- The supplier's request screen shows "Wanted immediately" or the day; the buyer's slot picker starts on the day they asked for.
+
 ### [phase6/mobile-suppliers] - Paged supplier directory, honest empty state (API D-138, D-139)
 #### Changed
 - **Supplier search** loads the next page on "Load more" (the API now returns the nearest 50 and a `nextOffset`), and the count is the server's total.

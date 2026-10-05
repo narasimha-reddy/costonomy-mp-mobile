@@ -35,6 +35,12 @@ export function DeliverySlotPicker({
 
   const [date, setDate] = useState<string>(selectedDate || tomorrow);
 
+  // The parent may change the day after this has mounted (the day the buyer asked for when sending).
+  useEffect(() => {
+    if (selectedDate && selectedDate !== date) setDate(selectedDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
+
   const { data: slots = [], isLoading } = useQuery({
     queryKey: ['available-slots', supplierStoreId, date],
     queryFn: () => fetchAvailableSlots(accessToken as string, supplierStoreId, date),

@@ -1,3 +1,38 @@
+# PR-007 – Delivery slots, recurring subscriptions & logistics gating
+
+## Objective
+
+Extend supplier and buyer logistics capabilities:
+- Support buyer choice between Store Pickup (`PICKUP`), Supplier Delivery (`SUPPLIER_DELIVERY`), and Costonomy Marketplace Delivery (`COSTONOMY_DELIVERY`).
+- Delivery slot scheduling with cutoffs and daily capacity.
+- BigBasket Daily-style recurring subscriptions with pause, resume, skip dates, and operational packing manifests.
+
+## Scope
+
+- Added delivery slots and subscriptions models and API services (`models/delivery.ts`, `models/subscription.ts`, `services/delivery.ts`, `services/subscription.ts`).
+- Created `DeliverySlotPicker` integrated into checkout and requests flow.
+- Created `SubscribeModal` and restaurant subscriptions management screen (`app/restaurant/subscriptions/index.tsx`).
+- Created supplier delivery slots management screen (`app/supplier/settings/slots.tsx`).
+- Created supplier operational daily manifest screen (`app/supplier/orders/manifest.tsx`) with aggregated packing list and slot dispatches.
+- Added slot and subscription information displays to buyer and supplier order detail screens.
+
+## Files Updated
+
+- `app/restaurant/requests/[id].tsx`
+- `app/restaurant/sku/[id].tsx`
+- `app/restaurant/orders/[id].tsx`
+- `app/restaurant/(tabs)/account.tsx`
+- `app/restaurant/subscriptions/index.tsx`
+- `app/supplier/settings/store/[id].tsx`
+- `app/supplier/settings/slots.tsx`
+- `app/supplier/orders/manifest.tsx`
+- `app/supplier/(tabs)/orders.tsx`
+- `app/supplier/orders/[id].tsx`
+- `components/request/DeliverySlotPicker.tsx`
+- `components/restaurant/SubscribeModal.tsx`
+
+---
+
 # PR-006 – Route / driver refinement
 
 ## Objective

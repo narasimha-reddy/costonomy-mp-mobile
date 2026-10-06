@@ -1,8 +1,11 @@
 import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { billingFailureMessage } from '@/lib/billing/messages';
+import { fetchTaxInvoice, fetchCreditNotes, generateTaxInvoice, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchSupplierOrder, newIdempotencyKey } from '@/services/procurement';
@@ -18,8 +21,11 @@ import {
   markOutForDelivery,
   markDelivered,
   supplierCancelOrder,
+  recordDispatchWeights,
+  type RecordDispatchWeightItem,
 } from '@/services/supplier';
 import {
+  MandiBottomSheet,
   MandiButton,
   MandiCard,
   MandiConfirm,
@@ -38,13 +44,18 @@ import { DeliveryMode, orderStatusFor, resolveStatus, SupplierOrderStatus as Sup
 import type { SupplierOrder, SupplierOrderStatus } from '@/models/procurement';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import {
+  buildWeighPayload, canWeigh, catchWeightLines, initialWeights, readyBlockedMessage, weighedLine,
+  weightAdjustmentCopy,
+} from '@/lib/orders/catchWeight';
 import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
-import { PaymentMethodPill } from '@/components/order';
+import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
+import { wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, FontSize, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'SUP-ORD-01';
 
@@ -96,6 +107,15 @@ export default function SupplierOrderScreen() {
   const [reason, setReason] = useState<string>('OUT_OF_STOCK');
   const [note, setNote] = useState('');
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [weighingModalOpen, setWeighingModalOpen] = useState(false);
+  const [actualWeights, setActualWeights] = useState<Record<number, string>>({});
+  // The server's refusal (or ours for an empty field), shown inside the sheet where the supplier is looking.
+  const [weighError, setWeighError] = useState<string | null>(null);
+
+  // ── Billing: statutory invoices & credit notes ──────────────────────
+  const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
+  const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
 
   const query = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -104,6 +124,23 @@ export default function SupplierOrderScreen() {
   });
 
   const order = query.data;
+
+  const recordWeightsMutation = useMutation({
+    mutationFn: (weights: RecordDispatchWeightItem[]) =>
+      recordDispatchWeights(accessToken as string, orderId, weights),
+    onSuccess: (updated) => {
+      // Weighing moves no money: the price is fixed when the order is marked ready (API D-128).
+      show('Weights saved. The price is fixed when you mark the order ready.', 'success');
+      queryClient.setQueryData(['supplier-order', orderId], updated);
+      invalidate();
+      setWeighingModalOpen(false);
+    },
+    // Inside the sheet, not a toast behind it: the refusal says which reading to check.
+    onError: (caught) => {
+      setWeighError(caught instanceof ApiError ? caught.message : 'Could not save the weights. Try again.');
+      invalidate();
+    },
+  });
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId] });
@@ -204,6 +241,55 @@ export default function SupplierOrderScreen() {
 
   const mode = order?.deliveryMode ?? null;
   const busy = advance.isPending || cancel.isPending;
+  const catchWeightItems = catchWeightLines(order);
+  const hasCatchWeight = catchWeightItems.length > 0;
+
+  const billingEligible = order != null && [
+    'DELIVERED', 'COMPLETED', 'SETTLED',
+  ].includes(order.status);
+
+  async function handleViewInvoice() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const inv = await fetchTaxInvoice(accessToken, orderId);
+      setInvoice(inv);
+    } catch (caught) {
+      Alert.alert('Invoice', billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function handleGenerateInvoice() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const inv = await generateTaxInvoice(accessToken, orderId);
+      setInvoice(inv);
+    } catch (caught) {
+      Alert.alert('Invoice', billingFailureMessage(caught, 'Could not generate tax invoice for this order.'));
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function handleViewCreditNotes() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const notes = await fetchCreditNotes(accessToken, orderId);
+      if (notes.length === 0) {
+        Alert.alert('Credit Notes', 'No credit notes have been issued for this order.');
+      } else {
+        setCreditNotes(notes);
+      }
+    } catch (caught) {
+      Alert.alert('Credit Notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
+    } finally {
+      setBillingLoading(false);
+    }
+  }
 
   return (
     <MandiScreen
@@ -302,6 +388,50 @@ export default function SupplierOrderScreen() {
               </View>
             )}
 
+            {(order.scheduledDeliveryDate || order.deliverySlotName) && (
+              <View style={styles.valueRow}>
+                <Ionicons name="time-outline" size={16} color={Colors.primary} />
+                <MandiText variant="captionEmphasis" color={Colors.primary}>
+                  Slot: {order.scheduledDeliveryDate ?? 'Today'} {order.deliverySlotName ? `(${order.deliverySlotName})` : ''}
+                </MandiText>
+                {order.isSubscriptionOrder && (
+                  <MandiStatusChip tone="info" label="Subscription" size="sm" />
+                )}
+              </View>
+            )}
+
+            {order.hasColdChainItems && (
+              <ColdChainBanner text="Cold chain: this order needs temperature-controlled transport. Only a carrier verified for chilled goods can be assigned." />
+            )}
+
+            {(() => {
+              const adjustment = weightAdjustmentCopy(order.weightAdjustmentAmount);
+              return adjustment == null ? null : (
+                <View style={styles.valueRow}>
+                  <Ionicons name="scale-outline" size={16} color={Colors.warning} />
+                  <MandiText variant="captionEmphasis" color={Colors.warning}>
+                    {adjustment.text}
+                  </MandiText>
+                </View>
+              );
+            })()}
+
+            {order.doorstepRefundAmount != null && parseFloat(order.doorstepRefundAmount) > 0 && (
+              <View style={styles.valueRow}>
+                <Ionicons name="receipt-outline" size={16} color={Colors.danger} />
+                <MandiText variant="captionEmphasis" color={Colors.danger}>
+                  Doorstep Rejection Refund: -{formatMoney(order.doorstepRefundAmount)}
+                </MandiText>
+              </View>
+            )}
+
+            {order.finalPayableAmount != null && (
+              <View style={styles.valueRow}>
+                <MandiText variant="caption" color={Colors.textSecondary}>Final Payable:</MandiText>
+                <MandiText variant="bodyEmphasis">{formatMoney(order.finalPayableAmount)}</MandiText>
+              </View>
+            )}
+
             {order.status === 'CANCELLED' && order.cancellationReason ? (
               <MandiText variant="caption" color={Colors.textSecondary}>
                 {order.cancelledBy === 'SUPPLIER' ? 'You cancelled' : 'Cancelled'}
@@ -315,7 +445,93 @@ export default function SupplierOrderScreen() {
             ) : null}
           </MandiCard>
 
-          {order.status === 'READY_FOR_PICKUP' && !delivery.data && (
+          {/* ── Statutory Billing Documents ────────────────────────── */}
+          {billingEligible && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">📄 GST Documents</MandiText>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : (invoice ? 'View Invoice' : 'Generate Invoice')}
+                  size="sm"
+                  variant="secondary"
+                  onPress={invoice ? handleViewInvoice : handleGenerateInvoice}
+                  disabled={billingLoading}
+                />
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : 'Credit Notes'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={handleViewCreditNotes}
+                  disabled={billingLoading}
+                />
+              </View>
+
+              {invoice != null && (
+                <View style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.primary}>
+                    {invoice.invoiceNumber} — {formatMoney(invoice.totalAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Issued {formatMomentWithRecency(invoice.issuedAt)} • {invoice.isInterState ? 'IGST' : 'CGST + SGST'}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Buyer: {invoice.buyerName} (GSTIN {invoice.buyerGstin ?? 'N/A'})
+                  </MandiText>
+                  {invoice.items.map((item) => (
+                    <View key={item.id} style={styles.valueRow}>
+                      <MandiText variant="caption">{item.productName} ({item.hsnCode})</MandiText>
+                      <MandiText variant="caption">{formatMoney(item.totalAmount)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {creditNotes != null && creditNotes.length > 0 && creditNotes.map((cn) => (
+                <View key={cn.id} style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.danger}>
+                    {cn.creditNoteNumber} — Refund {formatMoney(cn.totalRefundAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Reason: {cn.reasonCode} • Issued {formatMomentWithRecency(cn.issuedAt)}
+                  </MandiText>
+                  {cn.items.map((item) => (
+                    <View key={item.id} style={styles.valueRow}>
+                      <MandiText variant="caption">{item.productName}: {item.rejectedQuantity} rejected</MandiText>
+                      <MandiText variant="caption" color={Colors.danger}>-{formatMoney(item.totalRefund)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </MandiCard>
+          )}
+
+          {hasCatchWeight && canWeigh(order.status) && (
+            <MandiCard>
+              <View style={styles.deliveryRow}>
+                <View style={styles.flex}>
+                  <MandiText variant="bodyEmphasis">⚖️ Catch-Weight Perishables</MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    {catchWeightItems.every((i) => i.dispatchedWeight != null)
+                      ? 'All perishable items weighed. Dispatched scale weights verified.'
+                      : 'Weigh items on the packing scale before dispatch to ensure exact invoicing.'}
+                  </MandiText>
+                </View>
+                <MandiButton
+                  label={catchWeightItems.some((i) => i.dispatchedWeight != null) ? 'Re-weigh' : 'Weigh Items'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => {
+                    // Empty, or the reading already taken: never the accepted quantity, which nobody read off a scale.
+                    setActualWeights(initialWeights(catchWeightItems));
+                    setWeighError(null);
+                    setWeighingModalOpen(true);
+                  }}
+                />
+              </View>
+            </MandiCard>
+          )}
+
+          {order.status === 'READY_FOR_PICKUP' && !delivery.data && wantsDeliveryPartner(order.deliveryMode) && (
             <MandiCard>
               <View style={styles.deliveryRow}>
                 <MandiText variant="bodyEmphasis">Delivery Partner</MandiText>
@@ -326,6 +542,9 @@ export default function SupplierOrderScreen() {
               <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.sm }}>
                 Order is packed and ready. Request a delivery partner to dispatch via Pidge Smart Dispatch.
               </MandiText>
+              {order.hasColdChainItems && (
+                <ColdChainBanner text="Temperature-controlled: only a carrier verified for chilled goods can be assigned. If none can, the delivery fails and you will see why." />
+              )}
               <MandiButton
                 label="Request Delivery Partner"
                 size="md"
@@ -441,10 +660,95 @@ export default function SupplierOrderScreen() {
                       {formatMoney(item.lineTotal)}
                     </MandiText>
                   </View>
+
+                  {item.isCatchWeight && (
+                    <View style={styles.itemCatchWeightRow}>
+                      <Ionicons name="scale-outline" size={14} color={Colors.warning} />
+                      <MandiText variant="caption" color={Colors.warning}>
+                        {weighedLine(item) ?? 'Catch-weight: not weighed yet'}
+                      </MandiText>
+                      {(() => {
+                        const adjustment = weightAdjustmentCopy(item.weightDeltaAmount);
+                        return adjustment == null ? null : (
+                          <MandiText variant="caption" color={Colors.textSecondary}>
+                            · {adjustment.text}
+                          </MandiText>
+                        );
+                      })()}
+                    </View>
+                  )}
+
+                  {item.doorstepRejectedQty != null && parseFloat(item.doorstepRejectedQty) > 0 && (
+                    <View style={styles.itemDoorstepRow}>
+                      <Ionicons name="close-circle-outline" size={14} color={Colors.danger} />
+                      <MandiText variant="caption" color={Colors.danger}>
+                        Doorstep rejected: {item.doorstepRejectedQty} {item.unit} ({item.doorstepRejectionReason ?? 'Damaged'})
+                      </MandiText>
+                      {item.doorstepRefundAmount != null && (
+                        <MandiText variant="caption" color={Colors.danger}>
+                          · Refund: -{formatMoney(item.doorstepRefundAmount)}
+                        </MandiText>
+                      )}
+                    </View>
+                  )}
                 </View>
               ))}
             </MandiCard>
           )}
+
+          <MandiBottomSheet
+            visible={weighingModalOpen}
+            onClose={() => setWeighingModalOpen(false)}
+            title="Weigh Catch-Weight Items"
+          >
+            <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.md }}>
+              Enter the weight shown on the scale for each line. The buyer is billed the weighed amount, never more than was ordered; the price is fixed when you mark the order ready.
+            </MandiText>
+            {catchWeightItems.map((item) => (
+              <View key={item.id} style={styles.weighRow}>
+                <View style={styles.flex}>
+                  <MandiText variant="bodyEmphasis">{item.productName}</MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Ordered: {formatQuantity(item.acceptedQuantity ?? item.requestedQuantity)} {item.unit}
+                  </MandiText>
+                </View>
+                <View style={styles.weightInputBox}>
+                  <TextInput
+                    value={actualWeights[item.id] ?? ''}
+                    onChangeText={(val) => setActualWeights((prev) => ({ ...prev, [item.id]: val }))}
+                    placeholder="0.00"
+                    placeholderTextColor={Colors.textTertiary}
+                    keyboardType="decimal-pad"
+                    accessibilityLabel={`Scale weight for ${item.productName}, in ${item.unit}`}
+                    style={styles.weightInput}
+                  />
+                  <MandiText variant="caption" color={Colors.textSecondary}>{item.unit}</MandiText>
+                </View>
+              </View>
+            ))}
+            {weighError != null && (
+              <MandiText variant="caption" color={Colors.danger} accessibilityLiveRegion="polite" style={{ marginTop: Spacing.sm }}>
+                {weighError}
+              </MandiText>
+            )}
+            <MandiButton
+              label="Save weights"
+              size="md"
+              loading={recordWeightsMutation.isPending}
+              onPress={() => {
+                // An empty field is refused here; anything else (the band, the decimals) is the server's call.
+                const built = buildWeighPayload(catchWeightItems, actualWeights);
+                if (!built.ok) {
+                  setWeighError(built.message);
+                  return;
+                }
+                setWeighError(null);
+                const payload: RecordDispatchWeightItem[] = built.weights;
+                recordWeightsMutation.mutate(payload);
+              }}
+              style={{ marginTop: Spacing.lg }}
+            />
+          </MandiBottomSheet>
         </>
       )}
     </MandiScreen>
@@ -481,7 +785,7 @@ export default function SupplierOrderScreen() {
     }
 
     if (order.status === 'READY_FOR_PICKUP') {
-      if (delivery.data == null && order.deliveryMode !== 'PICKUP' && order.deliveryMode !== 'SUPPLIER_DELIVERY') {
+      if (delivery.data == null && wantsDeliveryPartner(order.deliveryMode)) {
         return (
           <MandiStickyBar>
             <MandiButton
@@ -554,13 +858,22 @@ export default function SupplierOrderScreen() {
       return null;
     }
 
+    // Weigh first: the server refuses "Mark ready" until every catch-weight line is weighed, so say so before the tap.
+    const blocked = next.to === 'READY_FOR_PICKUP' ? readyBlockedMessage(order) : null;
+
     return (
       <MandiStickyBar>
+        {blocked != null && (
+          <MandiText variant="caption" color={Colors.warning} accessibilityLiveRegion="polite">
+            {blocked}
+          </MandiText>
+        )}
         <MandiButton
           label={next.label}
           variant="primary"
           size="md"
           loading={busy}
+          disabled={blocked != null}
           onPress={() => advance.mutate({ to: next.to })}
         />
         {/* Only while the goods are still in the store. Doc 01 §13: once they
@@ -726,4 +1039,52 @@ const styles = StyleSheet.create({
   deliveryStatusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   trackingLink: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: Spacing.xs },
   partnerFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
+  itemCatchWeightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.sm,
+    marginTop: 4,
+  },
+  itemDoorstepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.sm,
+    marginTop: 4,
+  },
+  weighRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
+    gap: Spacing.md,
+  },
+  weightInputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm,
+    height: 40,
+    minWidth: 100,
+    backgroundColor: Colors.surface,
+    gap: 4,
+  },
+  weightInput: {
+    flex: 1,
+    fontSize: FontSize.base,
+    color: Colors.textPrimary,
+    paddingVertical: 0,
+    textAlign: 'right',
+  },
 });

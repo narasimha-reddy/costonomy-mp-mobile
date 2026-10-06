@@ -231,6 +231,17 @@ export interface SupplierOrderItem {
    */
   acceptedLineTotal: Money | null;
   status: string;
+  isCatchWeight?: boolean;
+  requiresColdChain?: boolean;
+  dispatchedWeight?: Money | null;
+  /** What a weighed catch-weight line is billed for: the lesser of the scale reading and what was accepted (API D-128). Null until weighed. */
+  billableQuantity?: Money | null;
+  weighedAt?: string | null;
+  weightDeltaAmount?: Money | null;
+  doorstepAcceptedQty?: Money | null;
+  doorstepRejectedQty?: Money | null;
+  doorstepRejectionReason?: string | null;
+  doorstepRefundAmount?: Money | null;
 }
 
 export interface SupplierOrder {
@@ -263,6 +274,9 @@ export interface SupplierOrder {
   /** `acceptedAmount` split the way the ordered total is, so the two can be shown side by side. */
   acceptedSubtotal: Money;
   acceptedGst: Money;
+  weightAdjustmentAmount?: Money | null;
+  doorstepRefundAmount?: Money | null;
+  finalPayableAmount?: Money | null;
   paymentMethod: PaymentMethod | null;
   /**
    * Read live. Beyond the card and wallet statuses it may be RETURNING, RETURNED
@@ -284,6 +298,12 @@ export interface SupplierOrder {
   /** How the goods travel, and what the carriage cost. D-091. */
   deliveryMode: DeliveryMode | null;
   deliveryFee: Money | null;
+  deliverySlotId?: number | null;
+  deliverySlotName?: string | null;
+  scheduledDeliveryDate?: string | null;
+  isSubscriptionOrder?: boolean | null;
+  subscriptionId?: number | null;
+  hasColdChainItems?: boolean | null;
   /** Set only on a cancelled order, and the reason it is not three statuses. */
   cancelledBy: CancelledBy | null;
   cancellationReason: string | null;
@@ -323,6 +343,7 @@ export interface IncomingOrder {
   /** What the store committed to. Zero before they answer, below the total after a partial. */
   acceptedAmount: Money;
   paymentMethod: PaymentMethod | null;
+  hasColdChainItems?: boolean | null;
   items: SupplierOrderItem[];
 }
 

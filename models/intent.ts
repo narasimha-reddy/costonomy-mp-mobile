@@ -94,6 +94,10 @@ export interface IntentAcceptance {
    * falls back to what the store's policy allows.
    */
   deliveryModes: string | null;
+  /** What the supplier chose for delivery on this answer; null on an older one (API D-141). */
+  deliveryOffer: 'SELF_FREE' | 'SELF' | 'COSTONOMY' | 'NONE' | null;
+  /** The supplier's own delivery charge is high for this order, so the restaurant is warned (API D-144). */
+  highDeliveryCharge?: boolean;
   notes: string | null;
   submittedAt: string | null;
   expiresAt: string | null;
@@ -125,6 +129,10 @@ export interface Intent {
   source: string;
   clonedFromId: number | null;
   requestedDeliveryTime: string | null;
+  /** The day the buyer asked for (`YYYY-MM-DD`); null is immediate. A preference, not a booking. */
+  preferredDeliveryDate: string | null;
+  /** What the restaurant asked for on this request: brought to them, or they will collect it (API D-143). */
+  deliveryPreference: 'DELIVERY' | 'PICKUP';
   notes: string | null;
   sentAt: string | null;
   /**
@@ -173,6 +181,8 @@ export interface Intent {
   acceptance: IntentAcceptance | null;
   supplierOrderId: number | null;
   supplierOrderNumber: string | null;
+  minOrderValue?: Money | null;
+  freeDeliveryThreshold?: Money | null;
 }
 
 /**
@@ -293,6 +303,8 @@ export interface OrderPreviewLine {
   lineValue: Money;
   lineGst: Money;
   lineTotal: Money;
+  isCatchWeight?: boolean;
+  requiresColdChain?: boolean;
 }
 
 export interface OrderBlocker {

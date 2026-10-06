@@ -15,6 +15,7 @@ import {
   suspendCredit,
 } from '@/services/credit';
 import { CreditPosition } from '@/components/credit/CreditPosition';
+import { RecordPaymentModal } from '@/components/credit/RecordPaymentModal';
 import {
   MandiButton,
   MandiCard,
@@ -69,6 +70,7 @@ export default function SupplierCreditAgreementScreen() {
   const [limit, setLimit] = useState<string | null>(null);
   const [days, setDays] = useState<number | null>(null);
   const [reason, setReason] = useState('');
+  const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
 
   const agreement = useQuery({
     queryKey: ['credit-agreement', agreementId],
@@ -492,19 +494,32 @@ export default function SupplierCreditAgreementScreen() {
                     Nothing invoiced on this line yet.
                   </MandiText>
                 ) : (
-                  (invoices.data ?? []).map((invoice) => (
-                    <MandiCard key={invoice.id} compact>
-                      <View style={styles.row}>
-                        <MandiText variant="body">{invoice.invoiceNumber}</MandiText>
-                        <MandiText variant="bodyEmphasis">
-                          {formatMoney(invoice.outstanding)}
-                        </MandiText>
-                      </View>
-                      <MandiText variant="caption" color={Colors.textTertiary}>
-                        {invoice.status.replace(/_/g, ' ').toLowerCase()} · due {invoice.dueDate ?? '—'}
-                      </MandiText>
-                    </MandiCard>
-                  ))
+                  (invoices.data ?? []).map((invoice) => {
+                    const isSettled = Number(invoice.outstanding) <= 0 || invoice.status === 'PAID';
+                    return (
+                      <MandiCard key={invoice.id} compact>
+                        <View style={styles.row}>
+                          <MandiText variant="body">{invoice.invoiceNumber}</MandiText>
+                          <MandiText variant="bodyEmphasis">
+                            {formatMoney(invoice.outstanding)}
+                          </MandiText>
+                        </View>
+                        <View style={[styles.row, styles.invoiceMetaRow]}>
+                          <MandiText variant="caption" color={Colors.textTertiary}>
+                            {invoice.status.replace(/_/g, ' ').toLowerCase()} · due {invoice.dueDate ?? '—'}
+                          </MandiText>
+                          {!isSettled && (
+                            <MandiButton
+                              label="Record Payment"
+                              variant="secondary"
+                              size="sm"
+                              onPress={() => setPayingInvoice(invoice)}
+                            />
+                          )}
+                        </View>
+                      </MandiCard>
+                    );
+                  })
                 )}
               </View>
 
@@ -537,6 +552,13 @@ export default function SupplierCreditAgreementScreen() {
           )}
         </>
       )}
+      <RecordPaymentModal
+        visible={payingInvoice != null}
+        onClose={() => setPayingInvoice(null)}
+        invoice={payingInvoice}
+        agreementId={agreementId}
+        storeId={storeId as number}
+      />
     </MandiScreen>
   );
 
@@ -716,6 +738,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   section: { gap: Spacing.listGap },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  invoiceMetaRow: { marginTop: Spacing.xs },
   totalsRow: {
     flexDirection: 'row',
     alignItems: 'center',

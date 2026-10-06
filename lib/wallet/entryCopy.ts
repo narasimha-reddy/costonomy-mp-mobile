@@ -14,6 +14,11 @@ export function entryLabel(entry: WalletEntry): string {
     case 'WITHDRAWAL_REVERSAL': return 'Withdrawal returned to your wallet';
     case 'QUICKSCAN_PAYMENT': return 'Paid a shop (QuickScan)';
     case 'QUICKSCAN_RETURN': return 'QuickScan payment returned';
+    // Worded as the API's WalletEntryCopy words it: a statement and this screen must not disagree.
+    case 'ORDER_ADJUSTMENT':
+      return entry.direction === 'CREDIT' ? 'Order adjusted · money back' : 'Order adjusted · extra charge';
+    case 'BANK_PAYOUT': return 'Transferred to verified bank account';
+    case 'BANK_PAYOUT_REVERSAL': return 'Bank transfer returned to wallet';
     // A kind this app does not know (a newer API): say only what the direction shows.
     default:
       if (entry.direction === 'CREDIT') return 'Money in';
@@ -65,8 +70,11 @@ export function rowLabel(entry: WalletEntry): string {
     case 'ORDER_REFUND':
     case 'REFUND':
     case 'DISPUTE_REFUND': return 'Refund from';
-    case 'WITHDRAWAL': return 'Withdrawal to';
+    case 'WITHDRAWAL':
+    case 'BANK_PAYOUT': return 'Withdrawal to';
+    case 'ORDER_ADJUSTMENT': return entry.direction === 'CREDIT' ? 'Refund from' : 'Paid to';
     case 'WITHDRAWAL_REVERSAL':
+    case 'BANK_PAYOUT_REVERSAL':
     case 'QUICKSCAN_RETURN': return 'Received from';
     default:
       if (entry.direction === 'CREDIT') return 'Received from';
@@ -107,6 +115,9 @@ export function rowTitle(entry: WalletEntry): string {
     case 'REFUND': return orderRef(entry) ?? reason ?? 'Refund';
     case 'DISPUTE_REFUND': return orderRef(entry) ?? reason ?? 'Dispute refund';
     case 'WITHDRAWAL': return instrumentName(entry.instrument) ?? 'Card or bank';
+    case 'ORDER_ADJUSTMENT': return orderRef(entry) ?? reason ?? 'Order adjusted';
+    case 'BANK_PAYOUT': return reason ?? 'Verified bank account';
+    case 'BANK_PAYOUT_REVERSAL': return 'Returned bank transfer';
     case 'WITHDRAWAL_REVERSAL': return 'Returned withdrawal';
     case 'QUICKSCAN_PAYMENT':
     case 'QUICKSCAN_RETURN': return reason ?? 'QuickScan payment';

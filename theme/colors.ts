@@ -109,6 +109,12 @@ export const Colors = {
   recommended: '#FF6000',
   recommendedLight: '#FFF7ED',
 
+  // ── Cold chain (API D-134) ──────────────────────────────────────────
+  /** Text and icon for chilled goods. 5.9:1 on `coldChainLight`. */
+  coldChain: '#0369A1',
+  /** The banner behind it. */
+  coldChainLight: '#E0F2FE',
+
   // ── Marketplace: delivery (PRD §15, §23A.21) ────────────────────────
   /** Delivery in progress with a fresh provider location. */
   deliveryLive: '#2563EB',

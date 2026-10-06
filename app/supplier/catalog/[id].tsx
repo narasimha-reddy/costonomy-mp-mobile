@@ -29,6 +29,7 @@ import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'SUP-CATALOG-02';
 const GST_RATES = ['0', '5', '12', '18'];
+const STANDARD_GRADES = ['Grade A', 'Grade B', 'Grade C', 'Premium', 'Standard'];
 
 /**
  * SUP-CATALOG-02, the full editor. Doc 05 §29.
@@ -73,6 +74,8 @@ export default function SkuEditorScreen() {
 
   const [name, setName] = useState<string | null>(null);
   const [brandName, setBrandName] = useState<string | null>(null);
+  const [grade, setGrade] = useState<string | null>(null);
+  const [mrp, setMrp] = useState<string | null>(null);
   const [sellingPrice, setSellingPrice] = useState<string | null>(null);
   const [gstRate, setGstRate] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -84,6 +87,8 @@ export default function SkuEditorScreen() {
   // Seeded from the server the first time it arrives, edited locally after.
   const nameValue = name ?? sku?.name ?? '';
   const brandValue = brandName ?? sku?.brandName ?? '';
+  const gradeValue = grade ?? sku?.grade ?? '';
+  const mrpValue = mrp ?? (sku?.mrp != null ? String(sku.mrp) : '');
   const priceValue = sellingPrice ?? (sku ? String(sku.sellingPrice) : '');
   const gstValue = gstRate ?? (sku ? String(Number(sku.gstRate)) : '5');
   const imageValue = imageUrl ?? sku?.imageUrl ?? '';
@@ -112,6 +117,8 @@ export default function SkuEditorScreen() {
   const detailsChanged = sku != null
     && (nameValue.trim() !== sku.name
       || brandValue.trim() !== (sku.brandName ?? '')
+      || gradeValue.trim() !== (sku.grade ?? '')
+      || mrpValue.trim() !== (sku.mrp != null ? String(sku.mrp) : '')
       || imageValue.trim() !== (sku.imageUrl ?? '')
       || packUnitValue !== sku.packUnit
       || Number(packSizeValue) !== Number(sku.packSize)
@@ -167,6 +174,8 @@ export default function SkuEditorScreen() {
               onPress={() => save.mutate({
                 name: nameValue.trim(),
                 brandName: brandValue.trim(),
+                grade: gradeValue.trim(),
+                mrp: mrpValue.trim(),
                 // Empty string, not undefined: the update applies any non-null
                 // field, so "" is how a supplier takes their own photo back down
                 // and returns the listing to the catalog picture.
@@ -204,6 +213,39 @@ export default function SkuEditorScreen() {
             onChangeText={setBrandName}
             placeholder="Amul"
           />
+
+          <View style={styles.gradeSection}>
+            <MandiText variant="label">Grade (optional)</MandiText>
+            <View style={styles.chips}>
+              {STANDARD_GRADES.map((g) => {
+                const active = gradeValue === g;
+                return (
+                  <Pressable
+                    key={g}
+                    onPress={() => setGrade(active ? '' : g)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    style={[styles.chip, active && styles.chipActive]}
+                  >
+                    <MandiText
+                      variant="captionEmphasis"
+                      color={active ? Colors.primary : Colors.textSecondary}
+                    >
+                      {g}
+                    </MandiText>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <MandiFormField
+              label="Custom grade (if other)"
+              value={STANDARD_GRADES.includes(gradeValue) ? '' : gradeValue}
+              onChangeText={setGrade}
+              placeholder="e.g. Export Grade"
+              hint="For loose commodities or brand tiers: Grade A, Grade B, etc."
+            />
+          </View>
+
           <PackFields
             packSize={packSizeValue}
             onPackSize={setPackSize}
@@ -215,6 +257,23 @@ export default function SkuEditorScreen() {
             onMeasureUnit={setMeasureUnit}
             units={units.data}
           />
+
+          <MandiFormField
+            label="MRP (optional for loose items)"
+            value={mrpValue}
+            onChangeText={(text) => setMrp(text.replace(/[^\d.]/g, ''))}
+            placeholder="500"
+            keyboardType="decimal-pad"
+            hint="Printed maximum retail price. Leave empty for loose commodities."
+          />
+          {Number(mrpValue) > Number(priceValue) && Number(priceValue) > 0 && (
+            <View style={styles.discountPreview}>
+              <Ionicons name="pricetag-outline" size={14} color="#E65100" />
+              <MandiText variant="captionEmphasis" color="#E65100">
+                Buyer savings: {Math.round(((Number(mrpValue) - Number(priceValue)) / Number(mrpValue)) * 100)}% OFF (Save ₹{(Number(mrpValue) - Number(priceValue)).toFixed(2)})
+              </MandiText>
+            </View>
+          )}
 
           <MandiFormField
             label="Selling price"
@@ -423,5 +482,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: Spacing.sm,
+  },
+  gradeSection: { gap: Spacing.xs },
+  discountPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.sm,
+    backgroundColor: '#FFF3E0',
+    alignSelf: 'flex-start',
+    marginTop: -Spacing.xs,
+    marginBottom: Spacing.xs,
   },
 });

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { quoteDelivery } from '@/services/intent';
+import { deliveryUnavailableMessage } from '@/lib/delivery/quoteMessages';
 import { MandiCard, MandiText } from '@/components/common';
 import type { Intent } from '@/models/intent';
 import type { DeliveryMode } from '@/models/procurement';
@@ -72,8 +73,14 @@ export function DeliveryModePicker({
   // Default to the cheapest thing that needs no explanation, once, so the bar
   // below can show a total. Never silently: the choice is rendered selected.
   useEffect(() => {
-    const first: DeliveryMode | undefined =
-      available.includes('PICKUP') ? 'PICKUP' : available[0];
+    // When the supplier offered to deliver this request themselves (free or at a fee), start on that: it is what they
+    // proposed, it is shown selected with its fee, and pickup is one tap away. Otherwise the choice that needs no
+    // explanation, as before: pickup. Costonomy delivery is never chosen on the buyer's behalf (it has a quoted fee).
+    const offeredOwn = available.includes('SUPPLIER_DELIVERY')
+      && (request.acceptance?.deliveryOffer === 'SELF_FREE' || request.acceptance?.deliveryOffer === 'SELF');
+    const first: DeliveryMode | undefined = offeredOwn
+      ? 'SUPPLIER_DELIVERY'
+      : available.includes('PICKUP') ? 'PICKUP' : available[0];
     if (selected == null && first != null) {
       const fee = feeFor(first);
       if (fee != null) {
@@ -87,6 +94,11 @@ export function DeliveryModePicker({
   return (
     <MandiCard>
       <MandiText variant="bodyEmphasis">How should this reach you?</MandiText>
+      {request.deliveryPreference === 'DELIVERY' && request.acceptance?.deliveryOffer === 'NONE' && (
+        <MandiText variant="caption" color={Colors.textSecondary}>
+          This supplier can&apos;t deliver this order, so you would collect it.
+        </MandiText>
+      )}
       <View style={styles.options}>
         {available.map((mode) => {
           const active = selected === mode;
@@ -107,11 +119,18 @@ export function DeliveryModePicker({
                 <MandiText variant="body">{LABELS[mode]}</MandiText>
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {unavailable
-                    ? "We can't deliver to this address yet"
+                    ? deliveryUnavailableMessage(quote.error)
                     : mode === 'COSTONOMY_DELIVERY' && quote.isPending
                       ? 'Checking the fee…'
-                      : DESCRIPTIONS[mode]}
+                      : mode === 'SUPPLIER_DELIVERY' && request.acceptance?.deliveryOffer != null && fee != null && Number(fee) === 0
+                        ? 'Free delivery by the supplier, in their own vehicle'
+                        : DESCRIPTIONS[mode]}
                 </MandiText>
+                {mode === 'SUPPLIER_DELIVERY' && request.acceptance?.highDeliveryCharge === true && fee != null && (
+                  <MandiText variant="captionEmphasis" color={Colors.warning}>
+                    High delivery charge: {formatMoney(fee)} on this order. You can collect it instead.
+                  </MandiText>
+                )}
               </View>
               {/* The figure, never a tick alone: §23A.48 forbids meaning carried
                   by colour, and the fee is the thing being decided on anyway. */}

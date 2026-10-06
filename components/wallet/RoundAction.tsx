@@ -16,7 +16,7 @@ export type RoundActionIcon =
  * screen is mostly for.
  */
 export function RoundAction({
-  icon, label, onPress, primary = false, disabled = false, testID, glyphTone = 'default', accessibilityHint,
+  icon, label, onPress, primary = false, disabled = false, testID, glyphTone = 'default', accessibilityHint, badge,
 }: {
   icon: RoundActionIcon;
   label: string;
@@ -31,6 +31,8 @@ export function RoundAction({
    */
   glyphTone?: 'default' | 'strong';
   accessibilityHint?: string;
+  /** A count on the circle (claims waiting, say). Hidden at zero; spoken after the label. */
+  badge?: number;
 }) {
   const glyphColor = primary
     ? Colors.textInverse
@@ -43,7 +45,7 @@ export function RoundAction({
       disabled={disabled}
       accessibilityState={disabled ? { disabled: true } : undefined}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={badge != null && badge > 0 ? `${label}, ${badge} waiting` : label}
       accessibilityHint={accessibilityHint}
       style={({ pressed }) => [styles.action, pressed && styles.pressed, disabled && styles.disabled]}
     >
@@ -52,6 +54,11 @@ export function RoundAction({
           <MaterialCommunityIcons name={spec.name} size={IconSize.lg} color={glyphColor} />
         ) : (
           <Ionicons name={spec.name} size={IconSize.lg} color={glyphColor} />
+        )}
+        {badge != null && badge > 0 && (
+          <View style={styles.badge} testID={testID ? `${testID}-badge` : undefined}>
+            <MandiText variant="label" color={Colors.textInverse}>{badge > 99 ? '99+' : String(badge)}</MandiText>
+          </View>
         )}
       </View>
       <MandiText variant="captionEmphasis" numberOfLines={2} style={styles.caption}>{label}</MandiText>
@@ -73,6 +80,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryLight,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryDark,
   },
   primaryCircle: { backgroundColor: Colors.primary, borderColor: Colors.primary },
 });

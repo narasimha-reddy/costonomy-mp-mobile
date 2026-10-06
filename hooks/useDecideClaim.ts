@@ -6,6 +6,7 @@ import { ApiError } from '@/lib/api/errors';
 import { isDefinitiveFailure, isKeyReuse, isPreviousAttemptFailed, isStillProcessing } from '@/lib/api/idempotency';
 import { attemptKey, settleAttempt } from '@/lib/credit/attemptKeys';
 import { confirmClaim, isClaimStateError, isOverpaymentError, rejectClaim } from '@/services/credit';
+import { receivablesRootKey } from '@/lib/queryKeys';
 import type { ClaimResponse } from '@/models/credit';
 
 export const SIGN_IN_AGAIN_TEXT = 'Your session ended. Please sign in again.';
@@ -67,6 +68,8 @@ export function useDecideClaim() {
   const refresh = useCallback(() => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['store', storeId, 'credit-claims'] }),
     queryClient.invalidateQueries({ queryKey: ['store', storeId, 'credit-agreements'] }),
+    // What the store is owed changes the moment a claim is confirmed.
+    queryClient.invalidateQueries({ queryKey: receivablesRootKey(storeId) }),
     // Every agreement's own screen and its invoices.
     queryClient.invalidateQueries({ queryKey: ['credit-agreement'] }),
   ]), [queryClient, storeId]);

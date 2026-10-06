@@ -284,3 +284,86 @@ export interface WalletRepayment {
   allocations: WalletRepaymentAllocation[];
   agreement: { due: Money; overdue: Money; available: Money; status: CreditAgreementStatus };
 }
+
+// ── Supplier receivables (M17). Mirrors CreditDtos "supplier's receivables". ──
+// Amounts arrive as JSON numbers; they are only ever formatted, never added.
+
+export type ReceivablesSort = 'overdue' | 'owed' | 'nextDue';
+export type ReceivablesStatus = 'ACTIVE' | 'SUSPENDED';
+export type PendingActionKind =
+  | 'CLAIMS_WAITING' | 'REQUESTS_PENDING' | 'OVERDUE_RESTAURANTS' | 'LINE_AT_LIMIT';
+
+export interface PendingAction {
+  kind: PendingActionKind;
+  count: number;
+}
+
+export interface Receivables {
+  asOf: string;
+  totalReceivable: number;
+  overdue: number;
+  inGrace: number;
+  dueToday: number;
+  dueThisWeek: number;
+  collectedThisMonth: number;
+  exposure: { extended: number; drawn: number; availableToLend: number };
+  counts: {
+    restaurants: number;
+    linesActive: number;
+    linesSuspended: number;
+    requestsPending: number;
+    claimsWaiting: number;
+    overdueRestaurants: number;
+  };
+  pendingActions: PendingAction[];
+}
+
+export interface ReceivableRestaurant {
+  agreementId: number;
+  outletId: number;
+  outletName: string | null;
+  restaurantName: string | null;
+  status: CreditAgreementStatus;
+  owed: number;
+  overdue: number;
+  nextDueAmount: number | null;
+  nextDueDate: string | null;
+  dueState: CreditDueState | null;
+  claimsWaiting: number;
+  limit: number;
+  utilized: number;
+  /** Percent of the limit drawn, one decimal; null when the limit is zero. */
+  utilization: number | null;
+}
+
+export interface ReceivablesPage {
+  items: ReceivableRestaurant[];
+  page: number;
+  size: number;
+  total: number;
+  hasNext: boolean;
+}
+
+export type AgeingBucketKey = 'CURRENT' | 'D1_7' | 'D8_30' | 'D30_PLUS';
+
+export interface AgeingBucketRestaurant {
+  agreementId: number;
+  outletName: string | null;
+  restaurantName: string | null;
+  amount: number;
+  invoiceCount: number;
+}
+
+export interface AgeingBucket {
+  bucket: AgeingBucketKey;
+  amount: number;
+  invoiceCount: number;
+  restaurantCount: number;
+  topRestaurants: AgeingBucketRestaurant[];
+}
+
+export interface Ageing {
+  asOf: string;
+  total: number;
+  buckets: AgeingBucket[];
+}

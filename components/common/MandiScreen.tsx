@@ -41,6 +41,7 @@ export function MandiScreen({
   stickyIndices,
   moreBelow,
   avoidKeyboard = false,
+  scrollTarget,
 }: {
   children: React.ReactNode;
   onRefresh?: () => void;
@@ -76,6 +77,11 @@ export function MandiScreen({
    * while the keyboard is up. Taps persist and a drag dismisses the keyboard.
    */
   avoidKeyboard?: boolean;
+  /**
+   * Scrolls to `y` whenever `token` changes (a chip that says "go to the list"). The
+   * token, not the offset, is the trigger, so asking twice for the same place works.
+   */
+  scrollTarget?: { y: number; token: number } | null;
   /** Pinned above the scroll area — a title bar, a search field. */
   header?: React.ReactNode;
   /** Pinned below it — a checkout summary bar. */
@@ -92,6 +98,12 @@ export function MandiScreen({
   const insets = useSafeAreaInsets();
   const more = useMoreBelow();
   const { keyboard, scrollRef, scrollProps, screenScroll } = useKeyboardScroll(avoidKeyboard);
+  const targetToken = scrollTarget?.token;
+  useEffect(() => {
+    if (scrollTarget != null) scrollRef.current?.scrollTo?.({ y: scrollTarget.y, animated: true });
+    // Only a new token scrolls; the offset alone changing (a re-layout) must not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetToken]);
 
   const body = (
     <View style={[styles.content, contentStyle]}>{children}</View>

@@ -131,3 +131,27 @@ export function receivableRestaurantsKey(
 export function ageingKey(storeId: number | null | undefined) {
   return [...receivablesRootKey(storeId), 'ageing'] as const;
 }
+
+// ── Supplier restaurant detail (M18) ──────────────────────────────────
+
+/** Everything of one credit line. Under the prefix `useDecideClaim` already refreshes after a claim. */
+export function agreementKey(agreementId: number) {
+  return ['credit-agreement', agreementId] as const;
+}
+
+/** The line's waiting "Paid direct" claims. */
+export function agreementClaimsKey(agreementId: number) {
+  return [...agreementKey(agreementId), 'claims', 'SUBMITTED'] as const;
+}
+
+/** Page-runs of the line's payments. */
+export function agreementPaymentsKey(agreementId: number) {
+  return [...agreementKey(agreementId), 'payments'] as const;
+}
+
+/** One line's statement for a range, read by the supplier. */
+export function supplierStatementKey(
+  storeId: number | null | undefined, agreementId: number, from: string | null, to: string | null,
+) {
+  return ['store', storeId, 'credit', 'statement', agreementId, from, to] as const;
+}

@@ -92,6 +92,15 @@ export interface CreditAgreement {
    * waiting for the supplier. Absent on older payloads.
    */
   reportableAmount?: number;
+  /**
+   * Who suspended the line. The API does not send these three yet, so they are optional
+   * and the screen shows them only when present: SYSTEM is the overdue sweep, SUPPLIER a
+   * person. `maxOverdueAmount` is the auto-pause threshold; `minLimit` is the lowest limit
+   * the server will accept (reserved + utilized).
+   */
+  suspensionSource?: 'SYSTEM' | 'SUPPLIER' | null;
+  maxOverdueAmount?: Money | null;
+  minLimit?: Money | null;
 }
 
 /** The outlet's whole position across every supplier. §23A.24, doc 05 §19. */

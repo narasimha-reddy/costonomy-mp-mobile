@@ -2745,3 +2745,10 @@ place — "we have submitted this to a supplier and are waiting" is genuinely no
 A requirement returns to `SOURCING` from `PARTIALLY_FULFILLED` when the shortfall
 is submitted to another supplier, which is the loop guardrail 14 exists to keep
 open.
+
+## D-M18 — Restaurant detail shows only what the API sends
+**Raised 2026-10-06 · Settled 2026-10-06**
+
+The plan's banners and terms editor want the suspension source, the auto-pause amount and the lowest allowed limit. `AgreementResponse` carries none of them yet.
+
+**Decision:** the model has them as optional fields (`suspensionSource`, `maxOverdueAmount`, `minLimit`). Each piece of UI that needs one appears only when the server sends it; nothing is guessed from other fields. Without `minLimit` the server's own message names the floor on a refused cut. Reinstate asks for a reason and sends it, though the endpoint stores none today. The modify endpoint overwrites the cap and the auto-pause amount with what it is sent, so the editor always sends the cap and grace it holds; the auto-pause amount cannot be preserved until the API returns it.

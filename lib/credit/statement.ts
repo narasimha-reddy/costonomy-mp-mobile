@@ -76,6 +76,7 @@ export function statementDetail(line: CreditStatementLine): string {
       if (line.reference) parts.push(`ref ${line.reference}`);
     }
   }
+  if (line.type === 'PAYMENT_REVERSED') parts.push('Payment cancelled, owed again');
   // "UPI · ref 123" reads as one phrase; the rest are separate facts.
   return parts.join(' · ');
 }

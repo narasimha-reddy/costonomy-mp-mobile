@@ -22,10 +22,13 @@ import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
 import { ClaimReviewSheet } from '@/components/credit/ClaimReviewSheet';
 import { LineReasonSheet } from '@/components/credit/LineReasonSheet';
 import { RecordPaymentSheet } from '@/components/credit/RecordPaymentSheet';
+import { ReminderHistory } from '@/components/credit/ReminderHistory';
+import { RemindSheet } from '@/components/credit/RemindSheet';
 import { SupplierLineActions, SupplierMoreSheet, type MoreEntry } from '@/components/credit/SupplierLineActions';
 import { SupplierLineHero } from '@/components/credit/SupplierLineHero';
 import { SupplierPaymentRow } from '@/components/credit/SupplierPaymentRow';
 import { TermsEditorSheet } from '@/components/credit/TermsEditorSheet';
+import { UndoPaymentSheet } from '@/components/credit/UndoPaymentSheet';
 import {
   MandiButton,
   MandiCard,
@@ -46,6 +49,7 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { usePermissions } from '@/hooks/usePermissions';
 import { mayDecideClaims } from '@/lib/credit/claimInbox';
 import { claimMethodLabel } from '@/lib/credit/claims';
+import { queuedText } from '@/lib/credit/remind';
 import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import {
   approveInputFrom, lineBanner, modifyInputFrom, reinstateNote, type TermsDraft,
@@ -55,7 +59,7 @@ import {
 } from '@/lib/queryKeys';
 import { serverNow } from '@/lib/server-clock';
 import { CreditAgreementStatus, resolveStatus } from '@/models/status';
-import type { ClaimResponse } from '@/models/credit';
+import type { ClaimResponse, Reminder, ReversalResult, StorePayment } from '@/models/credit';
 import { ApiError } from '@/lib/api/errors';
 import { formatDay, relative } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
@@ -116,6 +120,9 @@ export default function SupplierCreditAgreementScreen() {
   const [recordSession, setRecordSession] = useState(0);
   const [recordTargets, setRecordTargets] = useState<number[]>([]);
   const [previewNonce, setPreviewNonce] = useState(0);
+  // Undo and Remind: one sheet each, for the payment being undone and for the line.
+  const [undoing, setUndoing] = useState<StorePayment | null>(null);
+  const [remindOpen, setRemindOpen] = useState(false);
   const [picked, setPicked] = useState<number[]>([]);
   const enabled = Number.isFinite(agreementId) && accessToken != null;
 
@@ -315,6 +322,16 @@ export default function SupplierCreditAgreementScreen() {
   const recordTargetRows = openInvoices
     .filter((i) => recordTargets.includes(i.id))
     .map((i) => ({ id: i.id, invoiceNumber: i.invoiceNumber, outstanding: i.outstanding }));
+  function onUndone(result: ReversalResult) {
+    setUndoing(null);
+    track('credit_payment_reversed', { screen: SCREEN, entityId: agreementId });
+    toast.show(`Payment cancelled. They owe ${formatMoney(result.amount)} again.`, 'success');
+  }
+  function onReminded(reminder: Reminder) {
+    setRemindOpen(false);
+    track('credit_reminder_sent', { screen: SCREEN, entityId: agreementId });
+    toast.show(reminder.status === 'QUEUED' ? queuedText(reminder.sendAt) : 'Reminder sent', 'success');
+  }
   const notFound = agreement.error instanceof ApiError && agreement.error.status === 404;
 
   const pending = data?.status === 'REQUESTED';
@@ -418,6 +435,7 @@ export default function SupplierCreditAgreementScreen() {
               canCollect={canCollect}
               offline={offline}
               onRecord={mayRecord ? () => openRecord([]) : undefined}
+              onRemind={mayRecord ? () => setRemindOpen(true) : undefined}
               onStatement={() => router.push({
                 pathname: '/supplier/credit/statement', params: { agreementId: String(agreementId) },
               } as never)}
@@ -563,7 +581,13 @@ export default function SupplierCreditAgreementScreen() {
               ) : (
                 <MandiCard>
                   {paymentItems.map((p, i) => (
-                    <SupplierPaymentRow key={p.id} payment={p} last={i === paymentItems.length - 1} />
+                    <SupplierPaymentRow
+                      key={p.id}
+                      payment={p}
+                      last={i === paymentItems.length - 1}
+                      onUndo={canCollect ? (target) => setUndoing(target) : undefined}
+                      undoDisabled={offline}
+                    />
                   ))}
                 </MandiCard>
               )}
@@ -579,6 +603,8 @@ export default function SupplierCreditAgreementScreen() {
               )}
             </View>
           )}
+
+          {hasPosition && <ReminderHistory agreementId={agreementId} />}
 
           {hasPosition && split.paid.length > 0 && (
             <View style={styles.section}>
@@ -642,6 +668,26 @@ export default function SupplierCreditAgreementScreen() {
                 const target = waiting.find((c) => c.invoiceId === invoiceId);
                 if (target != null) { decide.reset(); setReview({ id: target.id, mode: 'review' }); }
               }}
+            />
+          )}
+
+          {mayRecord && (
+            <RemindSheet
+              visible={remindOpen}
+              onClose={() => setRemindOpen(false)}
+              agreementId={agreementId}
+              offline={offline}
+              onSent={onReminded}
+            />
+          )}
+
+          {canCollect && (
+            <UndoPaymentSheet
+              visible={undoing != null}
+              onClose={() => setUndoing(null)}
+              payment={undoing}
+              offline={offline}
+              onDone={(result) => onUndone(result)}
             />
           )}
 

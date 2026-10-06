@@ -149,6 +149,11 @@ export function agreementPaymentsKey(agreementId: number) {
   return [...agreementKey(agreementId), 'payments'] as const;
 }
 
+/** Page-runs of the reminders sent on the line. */
+export function agreementRemindersKey(agreementId: number) {
+  return [...agreementKey(agreementId), 'reminders'] as const;
+}
+
 /** One line's statement for a range, read by the supplier. */
 export function supplierStatementKey(
   storeId: number | null | undefined, agreementId: number, from: string | null, to: string | null,

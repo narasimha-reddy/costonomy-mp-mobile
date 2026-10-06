@@ -387,6 +387,14 @@ export interface StorePayment {
   source: StorePaymentSource;
   method: string | null;
   reference: string | null;
+  /** The receipt it was recorded in; undo goes through it. Null for other sources. */
+  receiptId?: number | null;
+  /** The server's verdict: the supplier may undo it today. Absent means no. */
+  reversible?: boolean;
+  /** The last India day ('YYYY-MM-DD') it can be undone. */
+  reversibleUntil?: string | null;
+  /** When it was undone; the row stays, marked cancelled. */
+  reversedAt?: string | null;
 }
 
 export interface StorePaymentList {
@@ -527,4 +535,75 @@ export interface RecordedPayment {
   paidOn: string;
   allocations: PaymentAllocation[];
   agreement: PaymentAgreementState;
+}
+
+// ── Undo a recorded payment (M26) ─────────────────────────────────────
+
+/** What an undo did: the invoices it reopened and the line as it stands now. */
+export interface ReversalResult {
+  receiptId: number | null;
+  paymentId: number | null;
+  amount: Money;
+  reason: string;
+  reversedAt: string;
+  allocations: PaymentAllocation[];
+  agreement: PaymentAgreementState;
+}
+
+// ── Reminders (M26) ───────────────────────────────────────────────────
+
+export type ReminderKind = 'MANUAL' | 'AUTO_T3' | 'AUTO_DUE' | 'AUTO_WEEKLY';
+export type ReminderStatus = 'SENT' | 'QUEUED';
+
+export interface ReminderSkipped {
+  invoiceId: number;
+  invoiceNumber: string;
+  reason: 'CLAIM_SUBMITTED' | 'NOT_DUE' | string;
+}
+
+export interface Reminder {
+  id: number;
+  agreementId: number;
+  kind: ReminderKind;
+  status: ReminderStatus;
+  channels: string[];
+  message: string;
+  note: string | null;
+  invoiceIds: number[];
+  skipped: ReminderSkipped[];
+  requestedAt: string;
+  sendAt: string | null;
+  sentAt: string | null;
+  createdBy: number | null;
+}
+
+export interface ReminderPreviewInvoice {
+  invoiceId: number;
+  invoiceNumber: string;
+  outstanding: Money;
+  dueDate: string | null;
+  dueState: string | null;
+  included: boolean;
+  skipReason: string | null;
+}
+
+export type ReminderBlock = 'NOTHING_DUE' | 'CLAIM_COVERED' | 'TOO_SOON' | 'WEEK_LIMIT' | 'STORE_DAY_LIMIT';
+
+export interface ReminderPreview {
+  canRemind: boolean;
+  reason: ReminderBlock | string | null;
+  nextAllowedAt: string | null;
+  message: string | null;
+  channels: string[];
+  status: ReminderStatus | null;
+  sendAt: string | null;
+  invoices: ReminderPreviewInvoice[];
+}
+
+export interface ReminderList {
+  items: Reminder[];
+  page: number;
+  size: number;
+  total: number;
+  hasNext: boolean;
 }

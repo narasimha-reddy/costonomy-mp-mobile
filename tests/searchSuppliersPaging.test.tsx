@@ -75,4 +75,69 @@ describe('the suppliers tab', () => {
     expect(offsets).toEqual([0, 2]);
     await waitFor(() => expect(screen.queryByLabelText('Load more suppliers')).toBeNull());
   });
+
+  it('renders filter controls and sends active filters and sort to searchSuppliers', async () => {
+    setup();
+    await openSuppliers();
+
+    expect(await screen.findByText('5 km')).toBeTruthy();
+    expect(screen.getByText('10 km')).toBeTruthy();
+    expect(screen.getByText('25 km')).toBeTruthy();
+    expect(screen.getByText('Open now')).toBeTruthy();
+    expect(screen.getByText('4+ stars')).toBeTruthy();
+    expect(screen.getByText('Nearest')).toBeTruthy();
+
+    // Toggle 10 km distance chip
+    fireEvent.press(screen.getByText('10 km'));
+    await waitFor(() => {
+      const lastCall = (searchSuppliers as jest.Mock).mock.calls.at(-1);
+      expect(lastCall[3]).toBe(10);
+    });
+
+    // Toggle Open now
+    fireEvent.press(screen.getByText('Open now'));
+    await waitFor(() => {
+      const lastCall = (searchSuppliers as jest.Mock).mock.calls.at(-1);
+      expect(lastCall[5]?.openNow).toBe(true);
+    });
+
+    // Toggle 4+ stars
+    fireEvent.press(screen.getByText('4+ stars'));
+    await waitFor(() => {
+      const lastCall = (searchSuppliers as jest.Mock).mock.calls.at(-1);
+      expect(lastCall[5]?.minRating).toBe(4);
+    });
+
+    // Toggle sort to Rating
+    fireEvent.press(screen.getByText('Nearest'));
+    await waitFor(() => {
+      const lastCall = (searchSuppliers as jest.Mock).mock.calls.at(-1);
+      expect(lastCall[5]?.sort).toBe('rating');
+    });
+  });
+
+  it('shows empty state naming active filters with Clear filters button that resets filters', async () => {
+    (searchSuppliers as jest.Mock).mockImplementation((_token, _term, _outlet, radius) =>
+      radius === 5
+        ? Promise.resolve({ suppliers: [], beyondRadius: 0, total: 0, nextOffset: null })
+        : Promise.resolve({ suppliers: [supplier(1)], beyondRadius: 0, total: 1, nextOffset: null }),
+    );
+
+    setup();
+    await openSuppliers();
+
+    // Select 5 km chip which yields empty list
+    fireEvent.press(screen.getByText('5 km'));
+
+    expect(await screen.findByText('No supplier has "sup"')).toBeTruthy();
+    expect(screen.getByText(/within 5 km/)).toBeTruthy();
+    expect(screen.getByText('Clear filters')).toBeTruthy();
+
+    // Press Clear filters
+    fireEvent.press(screen.getByText('Clear filters'));
+
+    // Returns to suppliers list with unfiltered data
+    expect(await screen.findByText('Supplier 1')).toBeTruthy();
+  });
 });
+

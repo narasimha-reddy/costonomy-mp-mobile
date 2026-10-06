@@ -6,6 +6,11 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchCategories, fetchPopularSuppliers } from '@/services/catalog';
 import { SupplierTile } from '@/components/restaurant/SupplierTile';
+import {
+  SupplierFilterBar,
+  activeFilterDescriptions,
+  type SupplierFilters,
+} from '@/components/restaurant/SupplierFilterBar';
 import { useOutletCredit } from '@/hooks/useOutletCredit';
 import {
   MandiEmptyState,
@@ -41,6 +46,9 @@ export default function SuppliersScreen() {
   const { outletId } = useOutlet();
   const { creditFor } = useOutletCredit();
   const [category, setCategory] = useState<number | null>(null);
+  const [filters, setFilters] = useState<SupplierFilters>({
+    sort: 'nearest',
+  });
 
   const categories = useQuery({
     queryKey: ['categories'],
@@ -51,8 +59,14 @@ export default function SuppliersScreen() {
   });
 
   const suppliers = useQuery({
-    queryKey: ['outlet', outletId, 'suppliers', category],
-    queryFn: () => fetchPopularSuppliers(accessToken as string, outletId as number, 50, category),
+    queryKey: ['outlet', outletId, 'suppliers', category, filters],
+    queryFn: () =>
+      fetchPopularSuppliers(accessToken as string, outletId as number, 50, category, {
+        radiusKm: filters.radiusKm,
+        openNow: filters.openNow,
+        minRating: filters.minRating,
+        sort: filters.sort,
+      }),
     enabled: outletId != null && accessToken != null,
     staleTime: 5 * 60_000,
   });
@@ -61,6 +75,9 @@ export default function SuppliersScreen() {
   const tabs = [{ id: null as number | null, name: 'All' }, ...(categories.data ?? [])
     .map((entry) => ({ id: entry.id, name: entry.name }))];
   const tabName = tabs.find((tab) => tab.id === category)?.name ?? 'All';
+
+  const activeFilters = activeFilterDescriptions(filters);
+  const hasActiveFilters = filters.radiusKm != null || Boolean(filters.openNow) || filters.minRating != null;
 
   return (
     <MandiScreen
@@ -95,6 +112,8 @@ export default function SuppliersScreen() {
         })}
       </ScrollView>
 
+      <SupplierFilterBar filters={filters} onChange={setFilters} />
+
       {suppliers.isPending ? (
         <MandiSkeletonList count={4} />
       ) : suppliers.error ? (
@@ -105,21 +124,27 @@ export default function SuppliersScreen() {
       ) : rows.length === 0 ? (
         <MandiEmptyState
           icon="storefront-outline"
-          title={category == null ? 'Nobody delivers here yet' : `Nobody stocks ${tabName} here`}
-          description={
+          title={
             category == null
-              ? 'No supplier has said they deliver to this outlet yet. They will appear here as they do.'
-              : 'Try another aisle, or search for the item itself.'
+              ? (hasActiveFilters ? 'No suppliers found' : 'Nobody delivers here yet')
+              : `Nobody stocks ${tabName} here`
           }
-          actionLabel={category == null ? undefined : 'Show all suppliers'}
-          onAction={category == null ? undefined : () => setCategory(null)}
+          description={
+            hasActiveFilters
+              ? `No suppliers match active filters: ${activeFilters.join(', ')}.`
+              : category == null
+                ? 'No supplier has said they deliver to this outlet yet. They will appear here as they do.'
+                : 'Try another aisle, or search for the item itself.'
+          }
+          actionLabel={hasActiveFilters ? 'Clear filters' : (category == null ? undefined : 'Show all suppliers')}
+          onAction={hasActiveFilters ? () => setFilters({ sort: 'nearest' }) : (category == null ? undefined : () => setCategory(null))}
         />
       ) : (
         <View style={styles.list}>
           <MandiSectionHeader
             title={category == null ? 'All Suppliers' : tabName}
             count={rows.length}
-            subtitle="Nearest first"
+            subtitle={filters.sort === 'rating' ? 'Highest rating first' : 'Nearest first'}
           />
           {rows.map((supplier) => (
             <SupplierTile

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-supplier-filters] - Filters and sort on buyer supplier lists (API D-147)
+#### Added
+- Filter bar on the Suppliers search tab and the Suppliers browse screen: 5, 10, and 25 km distance chips, "Open now" toggle, "4+ stars" toggle, and a sort toggle (`Nearest` vs `Rating`).
+- Empty states on both screens now name active filters and offer a "Clear filters" button. Changing any filter resets paging and fetches directly from the server.
+
 ### [phase6/mobile-free-delivery-nudge] - Free delivery is the supplier's (API D-146)
 #### Changed
 - The cart's free-delivery nudge now says "free delivery by the supplier", is hidden when the buyer will collect, and compares the goods before GST, as the server does. Costonomy riders are never free by threshold.

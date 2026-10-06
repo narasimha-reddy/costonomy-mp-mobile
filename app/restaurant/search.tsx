@@ -14,6 +14,11 @@ import { useAddToRequest } from '@/hooks/useAddToRequest';
 import { ProductCard } from '@/components/product/ProductCard';
 import { SkuRow } from '@/components/product/SkuRow';
 import { SupplierRow } from '@/components/product/SupplierRow';
+import {
+  SupplierFilterBar,
+  activeFilterDescriptions,
+  type SupplierFilters,
+} from '@/components/restaurant/SupplierFilterBar';
 import type { SupplierSearchPage } from '@/models/discovery';
 import {
   MandiEmptyState,
@@ -29,9 +34,6 @@ import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'REST-SEARCH-02';
 const MIN_TERM = 2;
-
-/** The default distance for the supplier directory, in kilometres. */
-const NEARBY_KM = 10;
 
 type Tab = 'products' | 'skus' | 'suppliers';
 
@@ -65,7 +67,9 @@ export default function SearchScreen() {
   const { outletId } = useOutlet();
   const [term, setTerm] = useState('');
   const [tab, setTab] = useState<Tab>('products');
-  const [radiusKm, setRadiusKm] = useState<number | undefined>(NEARBY_KM);
+  const [supplierFilters, setSupplierFilters] = useState<SupplierFilters>({
+    sort: 'nearest',
+  });
   const { recent, remember, clear } = useRecentSearches();
   const addToRequest = useAddToRequest();
 
@@ -87,12 +91,17 @@ export default function SearchScreen() {
   });
 
   // Paged: the directory returns the nearest 50 and says where the next page starts (API D-139).
+  // Changing a filter resets paging (TanStack Query resets pages on queryKey change).
   const suppliers = useInfiniteQuery({
-    queryKey: ['search', 'suppliers', query, outletId, radiusKm],
+    queryKey: ['search', 'suppliers', query, outletId, supplierFilters],
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
-      searchSuppliers(accessToken as string, query, outletId ?? undefined, radiusKm, signal,
-        { offset: pageParam }),
+      searchSuppliers(accessToken as string, query, outletId ?? undefined, supplierFilters.radiusKm, signal, {
+        offset: pageParam,
+        openNow: supplierFilters.openNow,
+        minRating: supplierFilters.minRating,
+        sort: supplierFilters.sort,
+      }),
     getNextPageParam: (last) => last.nextOffset ?? undefined,
     enabled: tab === 'suppliers' && searching && accessToken != null,
   });
@@ -168,7 +177,10 @@ export default function SearchScreen() {
         <Suppliers
           query={suppliers}
           term={query}
-          onWiden={() => setRadiusKm(undefined)}
+          filters={supplierFilters}
+          onFiltersChange={(updated) => setSupplierFilters(updated)}
+          onClearFilters={() => setSupplierFilters({ sort: 'nearest' })}
+          onWiden={() => setSupplierFilters((prev) => ({ ...prev, radiusKm: undefined }))}
           onOpen={openSupplier}
         />
       )}
@@ -214,64 +226,86 @@ function Results<T>({
 function Suppliers({
   query,
   term,
+  filters,
+  onFiltersChange,
+  onClearFilters,
   onWiden,
   onOpen,
 }: {
   query: UseInfiniteQueryResult<InfiniteData<SupplierSearchPage>>;
   term: string;
+  filters: SupplierFilters;
+  onFiltersChange: (filters: SupplierFilters) => void;
+  onClearFilters: () => void;
   onWiden: () => void;
   onOpen: (storeId: number) => void;
 }) {
-  if (query.isPending) return <MandiSkeletonList count={4} />;
-  if (query.error) {
-    return <MandiErrorState message="Couldn't load suppliers." onRetry={() => query.refetch()} />;
-  }
-
-  const pages = query.data?.pages ?? [];
-  const list = pages.flatMap((page) => page.suppliers);
-  const beyond = pages[0]?.beyondRadius ?? 0;
-  const total = pages[pages.length - 1]?.total ?? list.length;
-
-  if (list.length === 0) {
-    return (
-      <View style={styles.section}>
-        <MandiEmptyState
-          icon="storefront-outline"
-          title={`No supplier has "${term}"`}
-          description="Nobody delivering here stocks it, under that name or any other they use for it."
-        />
-        {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
-      </View>
-    );
-  }
+  const activeFilters = activeFilterDescriptions(filters);
+  const hasActiveFilters = filters.radiusKm != null || Boolean(filters.openNow) || filters.minRating != null;
 
   return (
     <View style={styles.section}>
-      <MandiSectionHeader title="Matching suppliers" count={total} />
-      <View style={styles.list}>
-        {list.map((supplier) => (
-          <SupplierRow
-            key={supplier.supplierStoreId}
-            supplier={supplier}
-            onPress={() => onOpen(supplier.supplierStoreId)}
-          />
-        ))}
-      </View>
-      {query.hasNextPage && (
-        <Pressable
-          onPress={() => void query.fetchNextPage()}
-          disabled={query.isFetchingNextPage}
-          accessibilityRole="button"
-          accessibilityLabel="Load more suppliers"
-          style={styles.widen}
-        >
-          <MandiText variant="captionEmphasis" color={Colors.primary}>
-            {query.isFetchingNextPage ? 'Loading…' : 'Load more'}
-          </MandiText>
-        </Pressable>
-      )}
-      {/* Nothing serviceable is hidden — it is one tap away and says how many. */}
-      {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
+      <SupplierFilterBar filters={filters} onChange={onFiltersChange} />
+
+      {query.isPending ? (
+        <MandiSkeletonList count={4} />
+      ) : query.error ? (
+        <MandiErrorState message="Couldn't load suppliers." onRetry={() => query.refetch()} />
+      ) : (() => {
+        const pages = query.data?.pages ?? [];
+        const list = pages.flatMap((page) => page.suppliers);
+        const beyond = pages[0]?.beyondRadius ?? 0;
+        const total = pages[pages.length - 1]?.total ?? list.length;
+
+        if (list.length === 0) {
+          const emptyDesc = hasActiveFilters
+            ? `No suppliers matching "${term}" with active filters: ${activeFilters.join(', ')}.`
+            : 'Nobody delivering here stocks it, under that name or any other they use for it.';
+
+          return (
+            <View style={styles.section}>
+              <MandiEmptyState
+                icon="storefront-outline"
+                title={`No supplier has "${term}"`}
+                description={emptyDesc}
+                actionLabel={hasActiveFilters ? 'Clear filters' : undefined}
+                onAction={hasActiveFilters ? onClearFilters : undefined}
+              />
+              {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
+            </View>
+          );
+        }
+
+        return (
+          <>
+            <MandiSectionHeader title="Matching suppliers" count={total} />
+            <View style={styles.list}>
+              {list.map((supplier) => (
+                <SupplierRow
+                  key={supplier.supplierStoreId}
+                  supplier={supplier}
+                  onPress={() => onOpen(supplier.supplierStoreId)}
+                />
+              ))}
+            </View>
+            {query.hasNextPage && (
+              <Pressable
+                onPress={() => void query.fetchNextPage()}
+                disabled={query.isFetchingNextPage}
+                accessibilityRole="button"
+                accessibilityLabel="Load more suppliers"
+                style={styles.widen}
+              >
+                <MandiText variant="captionEmphasis" color={Colors.primary}>
+                  {query.isFetchingNextPage ? 'Loading…' : 'Load more'}
+                </MandiText>
+              </Pressable>
+            )}
+            {/* Nothing serviceable is hidden — it is one tap away and says how many. */}
+            {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
+          </>
+        );
+      })()}
     </View>
   );
 }

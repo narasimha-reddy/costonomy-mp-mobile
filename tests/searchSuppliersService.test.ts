@@ -1,4 +1,4 @@
-import { searchSuppliers } from '@/services/catalog';
+import { searchSuppliers, fetchPopularSuppliers } from '@/services/catalog';
 import { apiRequest } from '@/lib/api/client';
 
 jest.mock('@/lib/api/client', () => ({
@@ -20,4 +20,37 @@ describe('searchSuppliers', () => {
     expect(urlOfLastCall()).not.toContain('reach');
     expect(urlOfLastCall()).not.toContain('offset');
   });
+
+  it('passes openNow, minRating, and sort to the query string', async () => {
+    await searchSuppliers('t', 'abc', 9, 10, undefined, {
+      openNow: true,
+      minRating: 4,
+      sort: 'rating',
+    });
+    const url = urlOfLastCall();
+    expect(url).toContain('radiusKm=10');
+    expect(url).toContain('openNow=true');
+    expect(url).toContain('minRating=4');
+    expect(url).toContain('sort=rating');
+  });
 });
+
+describe('fetchPopularSuppliers', () => {
+  it('passes radiusKm, openNow, minRating, and sort options', async () => {
+    await fetchPopularSuppliers('t', 9, 20, 5, {
+      radiusKm: 15,
+      openNow: true,
+      minRating: 3,
+      sort: 'rating',
+    });
+    const url = urlOfLastCall();
+    expect(url).toContain('/api/v1/outlets/9/suppliers/popular');
+    expect(url).toContain('limit=20');
+    expect(url).toContain('categoryId=5');
+    expect(url).toContain('radiusKm=15');
+    expect(url).toContain('openNow=true');
+    expect(url).toContain('minRating=3');
+    expect(url).toContain('sort=rating');
+  });
+});
+

@@ -52,6 +52,7 @@ import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
+import { wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
@@ -530,7 +531,7 @@ export default function SupplierOrderScreen() {
             </MandiCard>
           )}
 
-          {order.status === 'READY_FOR_PICKUP' && !delivery.data && (
+          {order.status === 'READY_FOR_PICKUP' && !delivery.data && wantsDeliveryPartner(order.deliveryMode) && (
             <MandiCard>
               <View style={styles.deliveryRow}>
                 <MandiText variant="bodyEmphasis">Delivery Partner</MandiText>
@@ -784,7 +785,7 @@ export default function SupplierOrderScreen() {
     }
 
     if (order.status === 'READY_FOR_PICKUP') {
-      if (delivery.data == null && order.deliveryMode !== 'PICKUP' && order.deliveryMode !== 'SUPPLIER_DELIVERY') {
+      if (delivery.data == null && wantsDeliveryPartner(order.deliveryMode)) {
         return (
           <MandiStickyBar>
             <MandiButton

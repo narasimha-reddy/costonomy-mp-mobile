@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-no-riders-for-own-delivery] - Delivery partner button
+#### Fixed
+- "Request Delivery Partner" (the card and the bottom button) appeared for pickups and for orders the supplier delivers themselves. It now shows only for orders sold with Costonomy delivery (API D-145).
+
 ### [phase6/mobile-high-charge] - Warning on a high delivery charge (API D-144)
 #### Added
 - The buyer's delivery picker warns "High delivery charge: ₹X on this order. You can collect it instead." under the supplier's delivery when the server flags the charge as high (at least 10% of the goods and at least ₹100). A prompt, not a limit.

@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.
 
+### [phase6/mobile-pay-another-way] - Pay another way, or cancel, on an unpaid card order (API D-152)
+#### Added
+- The "Pay for this order" screen offers wallet or credit and "Cancel order" while the order is unpaid.
+
 ### [phase6/mobile-delivery-fallback] - Still looking, then "I'll deliver it myself" (API D-151)
 #### Added
 - While no partner is found the order screen says it keeps looking until a time, and after the offer shows "I'll deliver it myself" with a confirmation.

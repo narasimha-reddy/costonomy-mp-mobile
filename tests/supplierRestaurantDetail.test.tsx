@@ -5,7 +5,8 @@ import SupplierCreditAgreementScreen from '@/app/supplier/credit/[id]';
 import { ApiError } from '@/lib/api/errors';
 import {
   approveCredit, confirmClaim, fetchAgreement, fetchAgreementClaims, fetchAgreementPayments, fetchInvoices,
-  fetchLedger, modifyCredit, rejectClaim, rejectCredit, reinstateCredit, suspendCredit,
+  fetchLedger, modifyCredit, rejectClaim, rejectCredit, reinstateCredit, suspendCredit, closeCredit,
+  previewPayment, recordSupplierPayment,
 } from '@/services/credit';
 
 jest.mock('@expo/vector-icons', () => {
@@ -55,6 +56,9 @@ jest.mock('@/services/credit', () => ({
   reinstateCredit: jest.fn(),
   confirmClaim: jest.fn(),
   rejectClaim: jest.fn(),
+  closeCredit: jest.fn(),
+  previewPayment: jest.fn(),
+  recordSupplierPayment: jest.fn(),
 }));
 
 const agreementM = fetchAgreement as jest.Mock;
@@ -69,6 +73,9 @@ const suspendM = suspendCredit as jest.Mock;
 const reinstateM = reinstateCredit as jest.Mock;
 const confirmM = confirmClaim as jest.Mock;
 const rejectClaimM = rejectClaim as jest.Mock;
+const closeM = closeCredit as jest.Mock;
+const previewM = previewPayment as jest.Mock;
+const recordM = recordSupplierPayment as jest.Mock;
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
 const agreement = (over: Record<string, unknown> = {}) => ({
@@ -130,6 +137,17 @@ beforeEach(() => {
   rejectCreditM.mockResolvedValue(agreement({ status: 'REJECTED' }));
   confirmM.mockResolvedValue(claim(1, { status: 'CONFIRMED', confirmedAmount: '5000.0000' }));
   rejectClaimM.mockResolvedValue(claim(1, { status: 'REJECTED' }));
+  closeM.mockResolvedValue(agreement({ status: 'CLOSED' }));
+  previewM.mockResolvedValue({
+    amount: '1000.0000',
+    allocations: [{ invoiceId: 1, invoiceNumber: 'INV-1', amount: '1000.0000', statusAfter: 'PARTIALLY_PAID' }],
+    agreement: { due: '8888.0000', overdue: '0.0000', available: '1.0000', status: 'ACTIVE' },
+    pendingClaims: [],
+  });
+  recordM.mockResolvedValue({
+    receiptId: 1, amount: '1000.0000', method: 'CASH', reference: null, paidOn: '2026-10-06',
+    allocations: [], agreement: { due: '8888.0000', overdue: '0.0000', available: '1.0000', status: 'ACTIVE' },
+  });
 });
 
 async function openMore() {
@@ -232,12 +250,12 @@ describe('banners by status', () => {
 });
 
 describe('action bar (extension points)', () => {
-  it('renders Record and Remind disabled with "Coming soon" until they are wired', async () => {
+  it('Record is live (opens the sheet) while Remind still shows disabled "Coming soon"', async () => {
     renderScreen();
     await screen.findByTestId('line-hero');
-    expect(screen.getByTestId('action-record').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByTestId('action-record').props.accessibilityState).not.toMatchObject({ disabled: true });
+    expect(screen.queryByTestId('action-record-soon')).toBeNull();
     expect(screen.getByTestId('action-remind').props.accessibilityState).toMatchObject({ disabled: true });
-    expect(screen.getByTestId('action-record-soon')).toBeTruthy();
     expect(screen.getByTestId('action-remind-soon')).toBeTruthy();
   });
 
@@ -256,13 +274,13 @@ describe('action bar (extension points)', () => {
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/supplier/credit/statement', params: { agreementId: '3' } });
   });
 
-  it('lists Edit terms and Suspend in More for an active line, and not Close or Write off yet', async () => {
+  it('lists Edit terms, Suspend and Close line in More for an active line, and not Write off yet', async () => {
     renderScreen();
     await openMore();
     expect(screen.getByTestId('more-terms')).toBeTruthy();
     expect(screen.getByTestId('more-suspend')).toBeTruthy();
+    expect(screen.getByTestId('more-close')).toBeTruthy();
     expect(screen.queryByTestId('more-reinstate')).toBeNull();
-    expect(screen.queryByTestId('more-close')).toBeNull();
     expect(screen.queryByTestId('more-writeoff')).toBeNull();
   });
 
@@ -687,5 +705,202 @@ describe('states', () => {
     expect(ledgerM).not.toHaveBeenCalled();
     fireEvent.press(screen.getByTestId('activity-toggle'));
     expect(await screen.findByText('Repayment')).toBeTruthy();
+  });
+});
+
+
+describe('record a payment (M19)', () => {
+  const type = (id: string, text: string) => fireEvent.changeText(screen.getByTestId(id), text);
+  const press = (id: string) => fireEvent.press(screen.getByTestId(id));
+  async function openRecord() {
+    const view = renderScreen();
+    fireEvent.press(await screen.findByTestId('action-record'));
+    await screen.findByTestId('record-sheet');
+    return view;
+  }
+
+  it('Record opens the sheet starting at the line total the server sent, chips from the server figures', async () => {
+    agreementM.mockResolvedValue(agreement({ due: '12000.0000', overdue: '4000.0000' }));
+    await openRecord();
+    expect(screen.getByTestId('record-amount').props.value).toBe('12000');
+    expect(screen.getByTestId('record-chip-full')).toHaveTextContent('Full ₹12,000.00');
+    expect(screen.getByTestId('record-chip-overdue')).toHaveTextContent('Overdue only ₹4,000.00');
+  });
+
+  it('records with no invoiceIds when nothing is ticked, and refreshes the line, lists and receivables', async () => {
+    const { invalidate } = await openRecord();
+    press('record-method-UPI');
+    type('record-reference', 'UTR12345');
+    press('record-submit');
+    await waitFor(() => expect(recordM).toHaveBeenCalledTimes(1));
+    expect(recordM.mock.calls[0][2]).not.toHaveProperty('invoiceIds');
+    expect(recordM.mock.calls[0][2]).toMatchObject({ amount: '12000.00', method: 'UPI', reference: 'UTR12345' });
+    expect(await screen.findByTestId('record-success')).toBeTruthy();
+    const keys = invalidate.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+    expect(keys).toEqual(expect.arrayContaining([
+      JSON.stringify(['store', 5, 'credit']), JSON.stringify(['credit-agreement', 3]),
+      JSON.stringify(['store', 5, 'credit-claims']), JSON.stringify(['credit-invoice']),
+    ]));
+  });
+
+  it('hides Record, the checkboxes and Record for selected from people who may not collect', async () => {
+    mockGranted = [];
+    renderScreen();
+    await screen.findByTestId('line-hero');
+    expect(screen.queryByTestId('action-record')).toBeNull();
+    expect(screen.queryByTestId('pick-invoice-1')).toBeNull();
+    expect(screen.queryByTestId('record-sheet')).toBeNull();
+  });
+
+  it('CREDIT_COLLECT alone can record', async () => {
+    mockGranted = ['CREDIT_COLLECT'];
+    renderScreen();
+    expect(await screen.findByTestId('action-record')).toBeTruthy();
+    expect(screen.getByTestId('pick-invoice-1')).toBeTruthy();
+  });
+
+  it('does not offer Record on a closed line', async () => {
+    agreementM.mockResolvedValue(agreement({ status: 'CLOSED' }));
+    renderScreen();
+    await screen.findByTestId('line-hero');
+    expect(screen.getByTestId('action-record').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.queryByTestId('pick-invoice-1')).toBeNull();
+  });
+
+  describe('Record for selected', () => {
+    it('ticking invoices shows the button, and the sheet previews and records with exactly those invoiceIds', async () => {
+      renderScreen();
+      await screen.findByText('INV-1');
+      expect(screen.queryByTestId('record-for-selected')).toBeNull();
+      press('pick-invoice-1');
+      press('pick-invoice-2');
+      expect(screen.getByTestId('pick-invoice-1').props.accessibilityState).toMatchObject({ checked: true });
+      expect(screen.getByTestId('pick-invoice-1').props.accessibilityLabel).toBe('Select INV-1 to record a payment');
+      expect(screen.getAllByText('Selected')).toHaveLength(2);
+      expect(screen.getByTestId('record-for-selected')).toHaveTextContent(/Record for 2 selected/);
+      press('record-for-selected');
+      await screen.findByTestId('record-sheet');
+      // The server has no total for two invoices, so nothing is prefilled or added up.
+      expect(screen.getByTestId('record-amount').props.value).toBe('');
+      type('record-amount', '1000');
+      await waitFor(() => expect(previewM).toHaveBeenCalledWith('tok', 3, { amount: '1000.00', invoiceIds: [2, 1] }));
+      press('record-submit');
+      await waitFor(() => expect(recordM).toHaveBeenCalledTimes(1));
+      expect(recordM.mock.calls[0][2].invoiceIds).toEqual([2, 1]);
+    });
+
+    it('one ticked invoice starts at what it owes, and unticking removes the button', async () => {
+      renderScreen();
+      await screen.findByText('INV-1');
+      press('pick-invoice-2');
+      press('record-for-selected');
+      await screen.findByTestId('record-sheet');
+      expect(screen.getByTestId('record-amount').props.value).toBe('4000');
+      expect(screen.queryByTestId('record-chip-overdue')).toBeNull();
+    });
+
+    it('opening an invoice row goes to its detail', async () => {
+      renderScreen();
+      fireEvent.press(await screen.findByTestId('credit-invoice-1'));
+      expect(mockPush).toHaveBeenCalledWith('/supplier/credit/invoice/1');
+    });
+  });
+
+  it('a waiting claim on a targeted invoice is flagged, and Review opens the claim sheet, keeping what was typed', async () => {
+    claimsM.mockResolvedValue([claim(1, { invoiceId: 2, invoiceNumber: 'INV-2' })]);
+    previewM.mockResolvedValue({
+      amount: '4000.0000',
+      allocations: [{ invoiceId: 2, invoiceNumber: 'INV-2', amount: '4000.0000', statusAfter: 'PAID' }],
+      agreement: { due: '8000.0000', overdue: '0.0000', available: '1.0000', status: 'ACTIVE' },
+      pendingClaims: [{ invoiceId: 2, invoiceNumber: 'INV-2', amount: '5000.0000' }],
+    });
+    renderScreen();
+    await screen.findByTestId('detail-claim-1');
+    fireEvent.press(screen.getByTestId('action-record'));
+    type('record-amount', '4000');
+    expect(await screen.findByTestId('record-pending-claim-2')).toHaveTextContent(/₹5,000.00 on INV-2/);
+    press('record-review-claim-2');
+    expect(await screen.findByTestId('claim-review-sheet')).toBeTruthy();
+    expect(recordM).not.toHaveBeenCalled();
+    // Back from the claim sheet the receipt form is as it was left.
+    fireEvent.press(screen.getByLabelText('Close'));
+    await waitFor(() => expect(screen.queryByTestId('claim-review-sheet')).toBeNull());
+    expect(screen.getByTestId('record-amount').props.value).toBe('4000');
+  });
+});
+
+describe('close line (M25)', () => {
+  async function openClose() {
+    const view = renderScreen();
+    await openMore();
+    fireEvent.press(screen.getByTestId('more-close'));
+    await screen.findByTestId('close-sheet');
+    return view;
+  }
+  const type = (id: string, text: string) => fireEvent.changeText(screen.getByTestId(id), text);
+
+  it('is a More entry only for CREDIT_MODIFY', async () => {
+    mockGranted = ['CREDIT_COLLECT'];
+    renderScreen();
+    await screen.findByTestId('line-hero');
+    expect(screen.queryByTestId('action-more')).toBeNull();
+  });
+
+  it('needs a reason, sends it, closes the sheet and refreshes', async () => {
+    const { invalidate } = await openClose();
+    expect(screen.getByTestId('close-sheet-confirm').props.accessibilityState).toMatchObject({ disabled: true });
+    type('close-sheet-reason', 'Relationship ended');
+    fireEvent.press(screen.getByTestId('close-sheet-confirm'));
+    await waitFor(() => expect(closeM).toHaveBeenCalledWith('tok', 3, 'Relationship ended'));
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Credit line closed', 'info'));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['credit-agreement', 3] });
+    expect(screen.queryByTestId('close-sheet-error')).toBeNull();
+  });
+
+  it('shows the server refusal as sent, with the next step, and keeps the sheet open', async () => {
+    closeM.mockRejectedValue(apiError('INVALID_STATE_TRANSITION', 409, 'They still owe ₹12,000.00 and ₹2,000.00 is on hold for open orders.'));
+    await openClose();
+    type('close-sheet-reason', 'Relationship ended');
+    fireEvent.press(screen.getByTestId('close-sheet-confirm'));
+    const error = await screen.findByTestId('close-sheet-error');
+    expect(error).toHaveTextContent('They still owe ₹12,000.00 and ₹2,000.00 is on hold for open orders. Suspend it to stop new orders, close it once it is paid.');
+    expect(screen.getByTestId('close-sheet')).toBeTruthy();
+  });
+
+  it('a double tap closes once', async () => {
+    const d = deferred<unknown>();
+    closeM.mockReturnValue(d.promise);
+    await openClose();
+    type('close-sheet-reason', 'Relationship ended');
+    fireEvent.press(screen.getByTestId('close-sheet-confirm'));
+    fireEvent.press(screen.getByTestId('close-sheet-confirm'));
+    await act(async () => { d.resolve(agreement({ status: 'CLOSED' })); });
+    expect(closeM).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('offer wording (EXPIRED, offerExpiresOn)', () => {
+  it('EXPIRED reads "Offer expired", with no position and no actions', async () => {
+    agreementM.mockResolvedValue(agreement({ status: 'EXPIRED', canFund: false }));
+    renderScreen();
+    expect((await screen.findAllByText('Offer expired')).length).toBeGreaterThan(0);
+    expect(screen.getByText('They did not accept in time. They can ask for credit again.')).toBeTruthy();
+    expect(screen.queryByTestId('line-hero')).toBeNull();
+  });
+
+  it('an APPROVED offer says how long it is valid', async () => {
+    agreementM.mockResolvedValue(agreement({
+      status: 'APPROVED', canFund: false, termsVersion: 3, offerExpiresOn: '2026-10-20',
+      latestRequest: { requestedLimit: '50000', requestedPeriodDays: 30, respondedAt: daysAgo(2) },
+    }));
+    renderScreen();
+    expect(await screen.findByText(/Offer valid until 20th Oct 2026\./)).toBeTruthy();
+  });
+
+  it('an APPROVED offer without an expiry says nothing about validity', async () => {
+    agreementM.mockResolvedValue(agreement({ status: 'APPROVED', canFund: false, termsVersion: 3 }));
+    renderScreen();
+    await screen.findByText(/not accepted yet/);
+    expect(screen.queryByText(/Offer valid until/)).toBeNull();
   });
 });

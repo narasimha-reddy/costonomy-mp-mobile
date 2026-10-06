@@ -21,7 +21,7 @@ function describe(a: CreditAgreement): { chip: string; tone: StatusTone; caption
     case 'SUSPENDED':
       return { chip: 'Suspended', tone: 'danger', caption: a.suspensionReason };
     case 'EXPIRED':
-      return { chip: 'Expired', tone: 'neutral', caption: 'This credit line has expired.' };
+      return { chip: 'Offer expired', tone: 'neutral', caption: 'The offer was not accepted in time. You can ask again.' };
     default:
       return { chip: 'Closed', tone: 'neutral', caption: null };
   }

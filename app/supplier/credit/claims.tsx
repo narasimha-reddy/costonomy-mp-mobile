@@ -23,7 +23,9 @@ import {
 import { useDecideClaim } from '@/hooks/useDecideClaim';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { usePermissions } from '@/hooks/usePermissions';
-import { groupClaimsByRestaurant, mayDecideClaims } from '@/lib/credit/claimInbox';
+import {
+  STALE_GROUP_TITLE, duplicateWarning, groupClaimsByRestaurant, mayDecideClaims, splitStale, waitingText,
+} from '@/lib/credit/claimInbox';
 import { claimMethodLabel } from '@/lib/credit/claims';
 import { claimsKey } from '@/lib/queryKeys';
 import { serverNow } from '@/lib/server-clock';
@@ -35,8 +37,9 @@ import { Colors, IconSize, Spacing } from '@/theme';
  * Claims inbox: payments a restaurant says it made straight to this supplier.
  *
  * <p>A claim changes nothing until the supplier confirms it. Every amount and
- * date shown is the server's; "Sent 3 days ago" is read off the server's own
- * timestamp. The server sends no "stale" flag, so none is invented here.
+ * date shown is the server's. "Waiting 3 days" is the server's `ageDays`, and the
+ * "Waiting 7+ days" group is the server's `stale` flag: the app counts nothing.
+ * The invoice's outstanding and the same-amount-and-reference warning are the server's too.
  */
 export default function ClaimsInboxScreen() {
   const toast = useToast();
@@ -55,7 +58,8 @@ export default function ClaimsInboxScreen() {
   });
 
   const claims = query.data ?? [];
-  const groups = groupClaimsByRestaurant(claims);
+  const { stale, rest } = splitStale(claims);
+  const groups = groupClaimsByRestaurant(rest);
   // Looked up by id so a refetch that drops the claim closes the sheet.
   const open = claims.find((c) => c.id === openId) ?? null;
 
@@ -98,14 +102,24 @@ export default function ClaimsInboxScreen() {
           description="When a restaurant says it paid you directly, it shows here for you to confirm."
         />
       ) : (
-        groups.map((group) => (
+        <>
+        {stale.length > 0 && (
+          <View testID="claim-group-stale" style={styles.group}>
+            <MandiSectionHeader title={STALE_GROUP_TITLE} count={stale.length} />
+            {stale.map((claim) => (
+              <ClaimRow key={claim.id} claim={claim} onPress={() => { decide.reset(); setOpenId(claim.id); }} />
+            ))}
+          </View>
+        )}
+        {groups.map((group) => (
           <View key={group.name} testID={`claim-group-${group.name}`} style={styles.group}>
             <MandiSectionHeader title={group.name} />
             {group.claims.map((claim) => (
               <ClaimRow key={claim.id} claim={claim} onPress={() => { decide.reset(); setOpenId(claim.id); }} />
             ))}
           </View>
-        ))
+        ))}
+        </>
       )}
 
       <ClaimReviewSheet
@@ -126,6 +140,8 @@ export default function ClaimsInboxScreen() {
 
 function ClaimRow({ claim, onPress }: { claim: ClaimResponse; onPress: () => void }) {
   const sent = relative(new Date(claim.createdAt), new Date(serverNow()));
+  const waiting = waitingText(claim);
+  const duplicate = duplicateWarning(claim);
   const how = [claimMethodLabel(claim.method), claim.reference].filter((p) => p != null && p !== '').join(' · ');
   return (
     <MandiCard onPress={onPress} testID={`claim-row-${claim.id}`}>
@@ -139,7 +155,17 @@ function ClaimRow({ claim, onPress }: { claim: ClaimResponse; onPress: () => voi
           {claim.note != null && claim.note !== '' && (
             <MandiText variant="caption" color={Colors.textSecondary}>{claim.note}</MandiText>
           )}
-          <MandiText variant="caption" color={Colors.warning}>{`Sent ${sent}`}</MandiText>
+          <MandiText variant="caption" color={Colors.warning} testID={`claim-waiting-${claim.id}`}>
+            {waiting ?? `Sent ${sent}`}
+          </MandiText>
+          {claim.invoiceOutstanding != null && (
+            <MandiText variant="caption" color={Colors.textSecondary} testID={`claim-outstanding-${claim.id}`}>
+              {`Invoice still owes ${formatMoney(claim.invoiceOutstanding)}`}
+            </MandiText>
+          )}
+          {duplicate != null && (
+            <MandiText variant="caption" color={Colors.warning} testID={`claim-duplicate-${claim.id}`}>{duplicate}</MandiText>
+          )}
         </View>
       </View>
     </MandiCard>

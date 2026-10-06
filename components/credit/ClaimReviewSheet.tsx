@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiBottomSheet, MandiButton, MandiFormField, MandiText } from '@/components/common';
-import { REJECT_REASONS, checkConfirmAmount, rejectReasonText, type RejectReason } from '@/lib/credit/claimInbox';
+import {
+  REJECT_REASONS, checkConfirmAmount, duplicateWarning, rejectReasonText, waitingText, type RejectReason,
+} from '@/lib/credit/claimInbox';
 import { claimMethodLabel } from '@/lib/credit/claims';
 import type { ClaimResponse } from '@/models/credit';
 import { formatDay, relative } from '@/utils/dateRange';
@@ -65,6 +67,8 @@ export function ClaimReviewSheet({
   const rejectText = rejectReasonText(reason, reasonText);
   const busy = pending || offline;
   const sent = relative(new Date(claim.createdAt), new Date(serverNow()));
+  const waiting = waitingText(claim);
+  const duplicate = duplicateWarning(claim);
 
   return (
     <MandiBottomSheet
@@ -86,8 +90,20 @@ export function ClaimReviewSheet({
           {claim.reference != null && claim.reference !== '' && <Fact label="Reference" value={claim.reference} />}
           <Fact label="Paid on" value={formatDay(claim.paidOn) ?? claim.paidOn} />
           {claim.note != null && claim.note !== '' && <Fact label="Note" value={claim.note} />}
-          <Fact label="Sent" value={sent} />
+          <Fact label="Sent" value={waiting ?? sent} />
+          {claim.invoiceOutstanding != null && (
+            <Fact label="Invoice still owes" value={formatMoney(claim.invoiceOutstanding)} />
+          )}
+          {claim.invoiceOtherOpenClaimsAmount != null && Number(claim.invoiceOtherOpenClaimsAmount) > 0 && (
+            <Fact label="Other reports waiting" value={formatMoney(claim.invoiceOtherOpenClaimsAmount)} />
+          )}
         </View>
+
+        {duplicate != null && (
+          <View style={styles.warning} accessibilityLiveRegion="polite" testID="claim-duplicate-warning">
+            <MandiText variant="body" color={Colors.textPrimary}>{duplicate}</MandiText>
+          </View>
+        )}
 
         <MandiText variant="caption" color={Colors.textSecondary}>
           Nothing changes on their account until you confirm. Check your bank, UPI or cash first.
@@ -214,6 +230,7 @@ const styles = StyleSheet.create({
   fact: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.md },
   factValue: { flexShrink: 1, textAlign: 'right' },
   note: { gap: Spacing.sm },
+  warning: { padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.warningLight },
   options: { gap: Spacing.sm },
   option: {
     flexDirection: 'row',

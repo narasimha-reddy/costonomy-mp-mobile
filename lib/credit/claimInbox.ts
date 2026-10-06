@@ -77,3 +77,33 @@ export function mayDecideClaims(
   return store != null
     && (canForStore('CREDIT_COLLECT', store) || canForStore('CREDIT_MODIFY', store));
 }
+
+/** The group heading for claims the server flags `stale` (waiting 7 days or more). */
+export const STALE_GROUP_TITLE = 'Waiting 7+ days';
+
+/**
+ * Splits the inbox on the SERVER's `stale` flag, never on a count of days the app works out.
+ * Each part keeps the order the server sent.
+ */
+export function splitStale(claims: readonly ClaimResponse[]): { stale: ClaimResponse[]; rest: ClaimResponse[] } {
+  return {
+    stale: claims.filter((c) => c.stale === true),
+    rest: claims.filter((c) => c.stale !== true),
+  };
+}
+
+/** "Waiting 3 days", from the server's own count; null on an older API that sends none. */
+export function waitingText(claim: Pick<ClaimResponse, 'ageDays'>): string | null {
+  const n = claim.ageDays;
+  if (typeof n !== 'number') return null;
+  if (n <= 0) return 'Waiting since today';
+  return n === 1 ? 'Waiting 1 day' : `Waiting ${n} days`;
+}
+
+/** The warning when the server finds the same amount and reference already on record; null otherwise. */
+export function duplicateWarning(claim: Pick<ClaimResponse, 'possibleDuplicateOf' | 'possibleDuplicateKind'>): string | null {
+  if (claim.possibleDuplicateOf == null) return null;
+  return claim.possibleDuplicateKind === 'CLAIM'
+    ? 'Looks like another report you already have (same amount and reference)'
+    : 'Looks like a payment you already have (same amount and reference)';
+}

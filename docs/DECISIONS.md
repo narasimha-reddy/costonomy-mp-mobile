@@ -2752,3 +2752,10 @@ open.
 The plan's banners and terms editor want the suspension source, the auto-pause amount and the lowest allowed limit. `AgreementResponse` carries none of them yet.
 
 **Decision:** the model has them as optional fields (`suspensionSource`, `maxOverdueAmount`, `minLimit`). Each piece of UI that needs one appears only when the server sends it; nothing is guessed from other fields. Without `minLimit` the server's own message names the floor on a refused cut. Reinstate asks for a reason and sends it, though the endpoint stores none today. The modify endpoint overwrites the cap and the auto-pause amount with what it is sent, so the editor always sends the cap and grace it holds; the auto-pause amount cannot be preserved until the API returns it.
+
+## D-M19 — Recording a payment shows only what the server sends
+**Raised 2026-10-06 · Settled 2026-10-06**
+
+The sheet needs a starting amount and the invoice split. The preview's allocations carry the amount applied and `statusAfter`, but not what each invoice will still owe.
+
+**Decision:** the app adds and subtracts nothing. The starting amount is the line's `due` (nothing chosen) or the one chosen invoice's `outstanding`; with two or more invoices chosen there is no server total, so the amount starts empty and each invoice's outstanding is listed. "Overdue only" is the line's `overdue` and is offered only when no invoice is chosen. A part payment reads "It will still owe the rest" (no figure); the position after is the preview's `agreement.due`/`overdue`. There is no date picker in the app, so the day is the stepper the restaurant's claim form uses; "before the invoice was issued" is left to the server's message. The duplicate-reference question is an in-sheet panel (not a second modal) and its "Record anyway" keeps the key because the server checks the reference before it claims the key. The preview and Record sheet stay mounted while a waiting claim is reviewed, so nothing typed is lost.

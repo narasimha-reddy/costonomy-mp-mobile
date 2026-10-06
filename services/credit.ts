@@ -22,6 +22,10 @@ import type {
   ReceivablesPage,
   ReceivablesSort,
   ReceivablesStatus,
+  ExtendDueResponse,
+  PaymentPreview,
+  RecordPaymentBody,
+  RecordedPayment,
 } from '@/models/credit';
 
 // ── Restaurant side ───────────────────────────────────────────────────
@@ -330,6 +334,63 @@ export function repayFromWallet(
     `/api/v1/credit/agreements/${agreementId}/wallet-repayments`,
     { method: 'POST', token, idempotencyKey, body },
   );
+}
+
+// ── Supplier records a payment, extends a due date, closes a line (M19, M25) ──
+
+/** What a payment of this amount would do. A pure read: nothing is written. */
+export function previewPayment(
+  token: string,
+  agreementId: number,
+  body: { amount: string; invoiceIds?: number[] },
+): Promise<PaymentPreview> {
+  return apiRequest<PaymentPreview>(`/api/v1/credit/agreements/${agreementId}/payments/preview`, {
+    method: 'POST', token, body,
+  });
+}
+
+/**
+ * The supplier records money received for a line: one receipt, split over its open invoices
+ * by the server. Moves debt, so it needs an idempotency key.
+ */
+export function recordSupplierPayment(
+  token: string,
+  agreementId: number,
+  body: RecordPaymentBody,
+  idempotencyKey: string,
+): Promise<RecordedPayment> {
+  return apiRequest<RecordedPayment>(`/api/v1/credit/agreements/${agreementId}/payments`, {
+    method: 'POST', token, idempotencyKey, body,
+  });
+}
+
+/** Move an invoice's due date later. `newDueDate` is 'YYYY-MM-DD'. Needs an idempotency key. */
+export function extendInvoiceDue(
+  token: string,
+  invoiceId: number,
+  body: { newDueDate: string; reason: string },
+  idempotencyKey: string,
+): Promise<ExtendDueResponse> {
+  return apiRequest<ExtendDueResponse>(`/api/v1/credit/invoices/${invoiceId}/extend-due`, {
+    method: 'POST', token, idempotencyKey, body,
+  });
+}
+
+/** Close a line for good. The server refuses while anything is owed or on hold, in plain words. */
+export function closeCredit(token: string, agreementId: number, reason: string): Promise<CreditAgreement> {
+  return apiRequest<CreditAgreement>(`/api/v1/credit/agreements/${agreementId}/close`, {
+    method: 'POST', token, body: { reason },
+  });
+}
+
+/** The server says the reference was already recorded; its own details of the earlier one. */
+export function isDuplicateReference(error: unknown): { paidOn: string | null; amount: string | null } | null {
+  if (!(error instanceof ApiError) || error.code !== 'CREDIT_DUPLICATE_REFERENCE') return null;
+  const d = error.details ?? {};
+  return {
+    paidOn: typeof d.paidOn === 'string' ? d.paidOn : null,
+    amount: typeof d.amount === 'string' || typeof d.amount === 'number' ? String(d.amount) : null,
+  };
 }
 
 // ── Supplier receivables (M17) ────────────────────────────────────────

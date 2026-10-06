@@ -7,6 +7,7 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import {
   approveCredit,
+  closeCredit,
   fetchAgreement,
   fetchAgreementClaims,
   fetchAgreementPayments,
@@ -20,6 +21,7 @@ import {
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
 import { ClaimReviewSheet } from '@/components/credit/ClaimReviewSheet';
 import { LineReasonSheet } from '@/components/credit/LineReasonSheet';
+import { RecordPaymentSheet } from '@/components/credit/RecordPaymentSheet';
 import { SupplierLineActions, SupplierMoreSheet, type MoreEntry } from '@/components/credit/SupplierLineActions';
 import { SupplierLineHero } from '@/components/credit/SupplierLineHero';
 import { SupplierPaymentRow } from '@/components/credit/SupplierPaymentRow';
@@ -49,7 +51,7 @@ import {
   approveInputFrom, lineBanner, modifyInputFrom, reinstateNote, type TermsDraft,
 } from '@/lib/credit/supplierLine';
 import {
-  agreementClaimsKey, agreementKey, agreementPaymentsKey, receivablesRootKey,
+  agreementClaimsKey, agreementKey, agreementPaymentsKey, receivablesRootKey, supplierWriteKeys,
 } from '@/lib/queryKeys';
 import { serverNow } from '@/lib/server-clock';
 import { CreditAgreementStatus, resolveStatus } from '@/models/status';
@@ -63,10 +65,13 @@ import { Colors, IconSize, Spacing, TouchTarget } from '@/theme';
 const SCREEN = 'SUP-CREDIT-02';
 const PAYMENTS_PAGE = 20;
 
-type Sheet = null | 'more' | 'terms' | 'approveTerms' | 'suspend' | 'reinstate' | 'decline';
+type Sheet = null | 'more' | 'terms' | 'approveTerms' | 'suspend' | 'reinstate' | 'decline' | 'close';
+
+/** The next step when a close is refused because something is still owed or on hold. */
+const CLOSE_NEXT_STEP = 'Suspend it to stop new orders, close it once it is paid.';
 
 /** Statuses where the line carries a position (what is owed, held, available). */
-const HAS_POSITION = new Set(['ACTIVE', 'SUSPENDED', 'CLOSED', 'EXPIRED']);
+const HAS_POSITION = new Set(['ACTIVE', 'SUSPENDED', 'CLOSED']);
 
 /**
  * One credit line, from the supplier's side. Doc 05 §32, plan S2, S10.
@@ -105,6 +110,13 @@ export default function SupplierCreditAgreementScreen() {
   const [activityOpen, setActivityOpen] = useState(false);
   const [review, setReview] = useState<{ id: number; mode: 'review' | 'reject' } | null>(null);
   const busy = useRef(false);
+  // Recording a payment: one sheet per opening (`recordSession` is its key); `picked` are the
+  // invoices ticked for "Record for selected".
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [recordSession, setRecordSession] = useState(0);
+  const [recordTargets, setRecordTargets] = useState<number[]>([]);
+  const [previewNonce, setPreviewNonce] = useState(0);
+  const [picked, setPicked] = useState<number[]>([]);
   const enabled = Number.isFinite(agreementId) && accessToken != null;
 
   const agreement = useQuery({
@@ -166,6 +178,18 @@ export default function SupplierCreditAgreementScreen() {
     busy.current = true;
     return run().finally(() => { busy.current = false; });
   }
+
+  const close = useMutation({
+    mutationFn: (reason: string) => closeCredit(accessToken as string, agreementId, reason),
+    onSuccess: () => {
+      track('credit_closed', { screen: SCREEN, entityId: agreementId });
+      void Promise.all(supplierWriteKeys(storeId, agreementId).map((queryKey) =>
+        queryClient.invalidateQueries({ queryKey: [...queryKey] })));
+      setSheet(null);
+      toast.show('Credit line closed', 'info');
+    },
+    onError: onFailure,
+  });
 
   const modify = useMutation({
     mutationFn: (draft: TermsDraft) =>
@@ -231,10 +255,18 @@ export default function SupplierCreditAgreementScreen() {
   });
 
   function openSheet(next: Sheet) {
-    modify.reset(); approve.reset(); suspend.reset(); reinstate.reset(); decline.reset();
+    modify.reset(); approve.reset(); suspend.reset(); reinstate.reset(); decline.reset(); close.reset();
     setSheet(next);
   }
   function closeSheet() { setSheet(null); }
+
+  /** The server's refusal as sent; when it is about what is owed or held, the next step is added. */
+  function closeError(caught: unknown): string | null {
+    if (caught == null) return null;
+    const text = messageOf(caught, 'Could not close this line.');
+    return caught instanceof ApiError && caught.code === 'INVALID_STATE_TRANSITION'
+      ? `${text} ${CLOSE_NEXT_STEP}` : text;
+  }
 
   const errorOf = (m: { error: unknown }, fallback: string) =>
     m.error == null ? null : messageOf(m.error, fallback);
@@ -242,7 +274,12 @@ export default function SupplierCreditAgreementScreen() {
   // The claims waiting on this line; looked up by id so a refetch that drops one closes the sheet.
   const waiting = claims.data ?? [];
   const reviewed = review == null ? null : waiting.find((c) => c.id === review.id) ?? null;
-  function closeReview() { setReview(null); decide.reset(); }
+  function closeReview() {
+    setReview(null);
+    decide.reset();
+    // Back to the receipt form it was opened from; what the claim did changes the preview.
+    if (recordOpen) setPreviewNonce((n) => n + 1);
+  }
 
   async function confirmClaimFor(claim: ClaimResponse, amount: string | null) {
     const response = await decide.confirm(claim, amount);
@@ -261,6 +298,23 @@ export default function SupplierCreditAgreementScreen() {
 
   const split = splitInvoices<CreditInvoiceListItem>(invoices.data ?? []);
   const paymentItems = (payments.data?.pages ?? []).flatMap((p) => p.items);
+  const openInvoices = split.open;
+  // Ticks only count while the invoice is still open: a refetch that settles one drops it.
+  const chosen = openInvoices.filter((i) => picked.includes(i.id));
+  const mayRecord = canCollect && data != null && (data.status === 'ACTIVE' || data.status === 'SUSPENDED');
+  function openRecord(ids: number[]) {
+    setRecordTargets(ids);
+    setRecordSession((n) => n + 1);
+    setPreviewNonce(0);
+    setRecordOpen(true);
+  }
+  function closeRecord() {
+    setRecordOpen(false);
+    setPicked([]);
+  }
+  const recordTargetRows = openInvoices
+    .filter((i) => recordTargets.includes(i.id))
+    .map((i) => ({ id: i.id, invoiceNumber: i.invoiceNumber, outstanding: i.outstanding }));
   const notFound = agreement.error instanceof ApiError && agreement.error.status === 404;
 
   const pending = data?.status === 'REQUESTED';
@@ -281,7 +335,13 @@ export default function SupplierCreditAgreementScreen() {
     if (data.status === 'SUSPENDED') {
       moreEntries.push({ key: 'reinstate', label: 'Reinstate', hint: 'Allow new orders again', onPress: () => openSheet('reinstate') });
     }
-    // 'Close line' and 'Write off' join this list when their sheets exist.
+    if (data.status === 'ACTIVE' || data.status === 'SUSPENDED') {
+      moreEntries.push({
+        key: 'close', label: 'Close line', hint: 'End this line for good', destructive: true,
+        onPress: () => openSheet('close'),
+      });
+    }
+    // 'Write off' joins this list when its sheet exists.
   }
 
   return (
@@ -357,6 +417,7 @@ export default function SupplierCreditAgreementScreen() {
             <SupplierLineActions
               canCollect={canCollect}
               offline={offline}
+              onRecord={mayRecord ? () => openRecord([]) : undefined}
               onStatement={() => router.push({
                 pathname: '/supplier/credit/statement', params: { agreementId: String(agreementId) },
               } as never)}
@@ -443,7 +504,49 @@ export default function SupplierCreditAgreementScreen() {
               ) : split.open.length === 0 ? (
                 <MandiText variant="caption" color={Colors.textTertiary}>Nothing is open. They are all paid up.</MandiText>
               ) : (
-                split.open.map((invoice) => <CreditInvoiceRow key={invoice.id} invoice={invoice} />)
+                <>
+                  {split.open.map((invoice) => {
+                    const ticked = picked.includes(invoice.id);
+                    return (
+                      <View key={invoice.id} style={styles.pickRow}>
+                        {mayRecord && (
+                          <Pressable
+                            testID={`pick-invoice-${invoice.id}`}
+                            onPress={() => setPicked((p) => (p.includes(invoice.id)
+                              ? p.filter((x) => x !== invoice.id) : [...p, invoice.id]))}
+                            accessibilityRole="checkbox"
+                            accessibilityLabel={`Select ${invoice.invoiceNumber} to record a payment`}
+                            accessibilityState={{ checked: ticked }}
+                            style={styles.check}
+                          >
+                            <Ionicons
+                              name={ticked ? 'checkbox' : 'square-outline'}
+                              size={IconSize.lg}
+                              color={ticked ? Colors.primary : Colors.textTertiary}
+                            />
+                          </Pressable>
+                        )}
+                        <View style={styles.flex}>
+                          <CreditInvoiceRow
+                            invoice={invoice}
+                            selected={mayRecord ? ticked : undefined}
+                            onPress={() => router.push(`/supplier/credit/invoice/${invoice.id}` as never)}
+                          />
+                        </View>
+                      </View>
+                    );
+                  })}
+                  {mayRecord && chosen.length > 0 && (
+                    <MandiButton
+                      testID="record-for-selected"
+                      label={`Record for ${chosen.length} selected`}
+                      icon="cash-outline"
+                      size="md"
+                      disabled={offline}
+                      onPress={() => openRecord(chosen.map((i) => i.id))}
+                    />
+                  )}
+                </>
               )}
             </View>
           )}
@@ -523,6 +626,25 @@ export default function SupplierCreditAgreementScreen() {
             </View>
           )}
 
+          {mayRecord && (
+            <RecordPaymentSheet
+              key={recordSession}
+              visible={recordOpen && review == null}
+              onClose={closeRecord}
+              agreementId={agreementId}
+              due={data.due}
+              overdue={data.overdue}
+              targets={recordTargetRows}
+              offline={offline}
+              previewNonce={previewNonce}
+              reviewableInvoiceIds={waiting.map((c) => c.invoiceId)}
+              onReviewClaim={(invoiceId) => {
+                const target = waiting.find((c) => c.invoiceId === invoiceId);
+                if (target != null) { decide.reset(); setReview({ id: target.id, mode: 'review' }); }
+              }}
+            />
+          )}
+
           <SupplierMoreSheet visible={sheet === 'more'} onClose={closeSheet} entries={moreEntries} />
 
           {canModify && (
@@ -576,6 +698,21 @@ export default function SupplierCreditAgreementScreen() {
                 error={errorOf(reinstate, 'Could not reinstate this line.')}
                 offline={offline}
                 onSubmit={(reason) => { void once(() => reinstate.mutateAsync(reason).catch(() => undefined)); }}
+              />
+              <LineReasonSheet
+                testID="close-sheet"
+                visible={sheet === 'close'}
+                onClose={closeSheet}
+                title="Close this line"
+                intro="No new order can use it and it cannot be reopened. They can ask you for credit again later."
+                reasonLabel="Reason"
+                placeholder="Relationship ended"
+                confirmLabel="Close This Line"
+                destructive
+                pending={close.isPending}
+                error={closeError(close.error)}
+                offline={offline}
+                onSubmit={(reason) => { void once(() => close.mutateAsync(reason).catch(() => undefined)); }}
               />
               <LineReasonSheet
                 testID="decline-sheet"
@@ -693,6 +830,8 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
   },
   actions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  pickRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  check: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   spacedTop: { marginTop: Spacing.sm },
   fold: {
     flexDirection: 'row',

@@ -72,6 +72,8 @@ export function useDecideClaim() {
     queryClient.invalidateQueries({ queryKey: receivablesRootKey(storeId) }),
     // Every agreement's own screen and its invoices.
     queryClient.invalidateQueries({ queryKey: ['credit-agreement'] }),
+    // And every supplier invoice detail (its claims and what it owes).
+    queryClient.invalidateQueries({ queryKey: ['credit-invoice'] }),
   ]), [queryClient, storeId]);
 
   const run = useCallback(async (

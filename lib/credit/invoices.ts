@@ -17,7 +17,7 @@ const UNKNOWN_URGENCY = 5;
  * Settled means the server says so: classification is by `dueState` (or, on
  * older payloads without it, by `status`), never by comparing amounts or dates.
  */
-export function isSettled(invoice: CreditInvoice): boolean {
+export function isSettled(invoice: Pick<CreditInvoice, 'dueState' | 'status'>): boolean {
   const state: CreditDueState | string | undefined = invoice.dueState ?? invoice.status;
   return state === 'PAID' || state === 'WRITTEN_OFF';
 }

@@ -155,3 +155,28 @@ export function supplierStatementKey(
 ) {
   return ['store', storeId, 'credit', 'statement', agreementId, from, to] as const;
 }
+
+// ── Supplier writes (M19, M25) ────────────────────────────────────────
+
+/** One invoice as the supplier reads it. Not under the line's key: its screen opens before the line is known. */
+export function supplierInvoiceKey(invoiceId: number) {
+  return ['credit-invoice', invoiceId] as const;
+}
+
+/**
+ * Everything a supplier write can change: invalidate all of these after recording a payment,
+ * moving a due date or closing a line. The store's receivables, restaurant list, ageing and
+ * statements (all under `['store', id, 'credit']`), the claims inbox, the payments feed, the
+ * agreements list, the line itself (its invoices, payments, claims, previews) and every
+ * invoice detail.
+ */
+export function supplierWriteKeys(storeId: number | null | undefined, agreementId: number | null) {
+  return [
+    ['store', storeId, 'credit'],
+    ['store', storeId, 'credit-claims'],
+    ['store', storeId, 'credit-payments'],
+    ['store', storeId, 'credit-agreements'],
+    ...(agreementId != null ? [agreementKey(agreementId)] : []),
+    ['credit-invoice'],
+  ] as const;
+}

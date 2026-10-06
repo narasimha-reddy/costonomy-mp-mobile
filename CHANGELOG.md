@@ -15,6 +15,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/sup-m19-record-payment]
+#### Added
+- Supplier "Record" a payment (`components/credit/RecordPaymentSheet.tsx`, `hooks/useRecordPayment.ts`, `lib/credit/recordPayment.ts`, plan S4): amount (starts at what the server says is owed; Full and Overdue only chips use the server's figures; the amount is kept as the typed string), method (Cash, UPI, Bank transfer, Cheque, Card), reference (required for UPI, bank and cheque, 4 to 64 characters), India-day stepper with Today and Yesterday, note. A debounced server preview words what the payment settles and the position after it, and warns when the restaurant already told the supplier it paid (with a button to review that claim). The idempotency key is held per attempt so a dropped connection retries with the same key; a duplicate reference asks "Record anyway" and resends the same body with the flag and the same key; after `IDEMPOTENT_PREVIOUS_ATTEMPT_FAILED` the next try gets a new key. Open invoices on the restaurant detail have checkboxes and "Record for N selected".
+- Supplier invoice detail (`app/supplier/credit/invoice/[id].tsx`, plan S3): figures and due chip, payments, the restaurant's claims with Confirm and Reject, the history of moved due dates, "Record payment for this invoice" and "Extend due date" (`ExtendDueSheet`, reason required, server messages shown as sent).
+- "Close line" in the More menu (CREDIT_MODIFY), with the server's refusal and the next step.
+- Claims inbox: "Waiting N days", a "Waiting 7+ days" group from the server's `stale` flag, "Invoice still owes" and a same-amount-and-reference warning (inbox row and review sheet).
+#### Changed
+- `EXPIRED` credit lines read "Offer expired" (supplier and restaurant); an approved offer shows "Offer valid until ..." from `offerExpiresOn`.
+
 ### [feat/sup-m18-restaurant-detail]
 #### Added
 - Supplier restaurant detail reworked (`app/supplier/credit/[id].tsx`, plan S2): header with the terms summary, an orange hero with the server's owed, overdue, available-to-them and on-hold figures, banners (automatic pause, supplier pause with its reason, approved offer not accepted yet), "Payments to confirm" with inline Confirm/Reject on the Claims inbox sheet, Open invoices with due chips, Recent payments with a source badge (You recorded / Confirmed claim / Through Mandi), Settled invoices and Activity collapsed. Action row Record / Remind / Statement / More: Record and Remind show disabled "Coming soon" until their handlers are passed (`SupplierLineActions`); the More menu lists only wired entries.

@@ -70,7 +70,7 @@ export function SupplierLineActions({
             icon="ellipsis-horizontal"
             label="More"
             glyphTone="strong"
-            accessibilityHint="Edit terms, suspend or reinstate"
+            accessibilityHint="Edit terms, suspend, reinstate or close"
             onPress={onMore}
           />
         </Slot>

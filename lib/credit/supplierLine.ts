@@ -1,6 +1,7 @@
 import type { ApproveCreditInput, ModifyCreditInput } from '@/services/credit';
 import type { CreditAgreement } from '@/models/credit';
 import { toScaled } from '@/lib/wallet/amount';
+import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 
 /** The payment periods offered as one tap; anything from 1 to 180 days can be typed. */
@@ -147,7 +148,7 @@ export function approveInputFrom(draft: TermsDraft): ApproveCreditInput {
 }
 
 export interface LineBanner {
-  kind: 'SYSTEM_SUSPENDED' | 'SUPPLIER_SUSPENDED' | 'SUSPENDED' | 'OFFER_PENDING';
+  kind: 'SYSTEM_SUSPENDED' | 'SUPPLIER_SUSPENDED' | 'SUSPENDED' | 'OFFER_PENDING' | 'OFFER_EXPIRED';
   tone: 'warning' | 'info';
   title: string;
   body: string | null;
@@ -188,11 +189,20 @@ export function lineBanner(a: CreditAgreement, sentAgo: string | null): LineBann
     };
   }
   if (a.status === 'APPROVED') {
+    const until = formatDay(a.offerExpiresOn);
     return {
       kind: 'OFFER_PENDING',
       tone: 'info',
       title: `Offer v${a.termsVersion ?? 1} sent${sentAgo != null ? ` ${sentAgo}` : ''}; not accepted yet`,
-      body: 'Nothing can be drawn until the restaurant accepts these terms.',
+      body: `${until != null ? `Offer valid until ${until}. ` : ''}Nothing can be drawn until the restaurant accepts these terms.`,
+    };
+  }
+  if (a.status === 'EXPIRED') {
+    return {
+      kind: 'OFFER_EXPIRED',
+      tone: 'info',
+      title: 'Offer expired',
+      body: 'They did not accept in time. They can ask for credit again.',
     };
   }
   return null;

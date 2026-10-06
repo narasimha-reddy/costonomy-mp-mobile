@@ -101,6 +101,9 @@ export interface CreditAgreement {
   suspensionSource?: 'SYSTEM' | 'SUPPLIER' | null;
   maxOverdueAmount?: Money | null;
   minLimit?: Money | null;
+  /** Only while APPROVED: when the offer was made and the last day it can be accepted ('YYYY-MM-DD'). */
+  offerMadeAt?: string | null;
+  offerExpiresOn?: string | null;
 }
 
 /** The outlet's whole position across every supplier. §23A.24, doc 05 §19. */
@@ -202,6 +205,25 @@ export interface CreditInvoiceDetail {
    * waiting for the supplier. Absent on older payloads.
    */
   reportableAmount?: number;
+  /** Every time the supplier moved the due date, newest first. Absent on older payloads. */
+  extensions?: DueExtension[];
+}
+
+/** One move of an invoice's due date. */
+export interface DueExtension {
+  id: number;
+  oldDueDate: string;
+  newDueDate: string;
+  reason: string;
+  extendedBy: number | null;
+  createdAt: string;
+}
+
+/** POST /credit/invoices/{id}/extend-due. */
+export interface ExtendDueResponse {
+  invoice: CreditInvoiceDetail;
+  extension: DueExtension;
+  agreementStatus: CreditAgreementStatus;
 }
 
 export type ClaimMethod = 'BANK_TRANSFER' | 'UPI' | 'CASH' | 'CHEQUE' | 'CARD';
@@ -232,6 +254,17 @@ export interface ClaimResponse {
   creditPaymentId: number | null;
   createdAt: string;
   decidedAt: string | null;
+  /** Whole days since it was sent: the server's count. Absent on older payloads. */
+  ageDays?: number;
+  /** The server's flag: SUBMITTED for 7 days or more. */
+  stale?: boolean;
+  /** What the invoice still owes now, and what other reports are waiting on it. Server figures. */
+  invoiceOutstanding?: Money | null;
+  invoiceOpenClaimsAmount?: Money | null;
+  invoiceOtherOpenClaimsAmount?: Money | null;
+  /** The id of a claim or payment with the same amount and reference, when the server finds one. */
+  possibleDuplicateOf?: number | null;
+  possibleDuplicateKind?: 'CLAIM' | 'PAYMENT' | null;
 }
 
 export interface SubmitClaimRequest {
@@ -446,4 +479,52 @@ export interface Ageing {
   asOf: string;
   total: number;
   buckets: AgeingBucket[];
+}
+
+// ── Supplier records a payment (M19) ──────────────────────────────────
+
+export type SupplierPaymentMethod = 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'CARD';
+
+/** What the supplier sends to record money received: `amount` stays a string, never a float. */
+export interface RecordPaymentBody {
+  amount: string;
+  method: SupplierPaymentMethod;
+  reference?: string;
+  /** 'YYYY-MM-DD', India day. */
+  paidOn: string;
+  note?: string;
+  invoiceIds?: number[];
+  allowDuplicateReference?: boolean;
+}
+
+export interface PaymentAllocation {
+  invoiceId: number;
+  invoiceNumber: string;
+  amount: Money;
+  statusAfter: 'PAID' | 'PARTIALLY_PAID' | 'OVERDUE' | string;
+}
+
+/** The line as it stands after the payment (a preview shows the position it would leave). */
+export interface PaymentAgreementState {
+  due: Money;
+  overdue: Money;
+  available: Money;
+  status: CreditAgreementStatus;
+}
+
+export interface PaymentPreview {
+  amount: Money;
+  allocations: PaymentAllocation[];
+  agreement: PaymentAgreementState;
+  pendingClaims: { invoiceId: number; invoiceNumber: string; amount: Money }[];
+}
+
+export interface RecordedPayment {
+  receiptId: number;
+  amount: Money;
+  method: string;
+  reference: string | null;
+  paidOn: string;
+  allocations: PaymentAllocation[];
+  agreement: PaymentAgreementState;
 }

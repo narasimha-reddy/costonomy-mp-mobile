@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
-import { approveCredit, fetchStoreAgreements } from '@/services/credit';
+import { approveCredit, fetchStoreAgreements, fetchStoreClaims } from '@/services/credit';
+import { claimsKey } from '@/lib/queryKeys';
 import type { CreditAgreement } from '@/models/credit';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import { CreditPosition } from '@/components/credit/CreditPosition';
@@ -25,7 +26,7 @@ import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
 import { formatDistance } from '@/utils/orders';
 import { track } from '@/analytics';
-import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
+import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'SUP-CREDIT-01';
 
@@ -51,6 +52,14 @@ export default function SupplierCreditScreen() {
     queryFn: () => fetchStoreAgreements(accessToken as string, storeId as number),
     enabled: storeId != null && accessToken != null,
   });
+
+  // Only the count is used here; the list lives on the claims screen. A failure hides the row, not the tab.
+  const claims = useQuery({
+    queryKey: claimsKey(storeId),
+    queryFn: () => fetchStoreClaims(accessToken as string, storeId as number, 'SUBMITTED'),
+    enabled: storeId != null && accessToken != null,
+  });
+  const waitingClaims = claims.data?.length ?? 0;
 
   const all = useMemo(() => query.data ?? [], [query.data]);
   const pending = useMemo(
@@ -83,6 +92,8 @@ export default function SupplierCreditScreen() {
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
     >
+      {waitingClaims > 0 && <ClaimsWaitingRow count={waitingClaims} />}
+
       {tab === 'portfolio' && portfolio.length > 0 && (
         <MandiCard>
           <MandiText variant="bodyEmphasis">Your exposure</MandiText>
@@ -120,6 +131,29 @@ export default function SupplierCreditScreen() {
         )
       )}
     </MandiScreen>
+  );
+}
+
+/** "Paid direct" claims waiting for this supplier to confirm: opens the claims inbox. */
+function ClaimsWaitingRow({ count }: { count: number }) {
+  const router = useRouter();
+  return (
+    <MandiCard
+      onPress={() => router.push('/supplier/credit/claims')}
+      testID="credit-claims-waiting"
+      accessibilityLabel={`Claims waiting, ${count}. Restaurants say they paid you directly.`}
+    >
+      <View style={styles.row}>
+        <MaterialCommunityIcons name="cash-check" size={IconSize.md} color={Colors.primary} />
+        <View style={styles.flex}>
+          <MandiText variant="bodyEmphasis">{`Claims waiting (${count})`}</MandiText>
+          <MandiText variant="caption" color={Colors.textSecondary}>
+            Restaurants say they paid you directly. Confirm or reject.
+          </MandiText>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+      </View>
+    </MandiCard>
   );
 }
 

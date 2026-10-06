@@ -90,3 +90,8 @@ export function invoiceLookupKey(
 ) {
   return ['outlet', outletId, 'invoice-lookups', kind, q, supplierId] as const;
 }
+
+/** The supplier store's waiting "Paid direct" claims: the Credit tab's count and the claims inbox share it. */
+export function claimsKey(storeId: number | null | undefined) {
+  return ['store', storeId, 'credit-claims', 'SUBMITTED'] as const;
+}

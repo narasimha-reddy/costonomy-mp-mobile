@@ -258,6 +258,48 @@ export function fetchAgreementClaims(
     `/api/v1/credit/agreements/${agreementId}/claims${query}`, { token });
 }
 
+/**
+ * The supplier store's inbox of "I paid" reports, newest first. `status` narrows it:
+ * SUBMITTED is what is waiting for the supplier.
+ */
+export function fetchStoreClaims(
+  token: string,
+  storeId: number,
+  status?: ClaimStatus,
+): Promise<ClaimResponse[]> {
+  const query = status == null ? '' : `?status=${encodeURIComponent(status)}`;
+  return apiRequest<ClaimResponse[]>(
+    `/api/v1/supplier-stores/${storeId}/credit/claims${query}`, { token });
+}
+
+/**
+ * The supplier says the money arrived. Leave `amount` out to confirm what was
+ * claimed, which the server caps at what is outstanding now; an explicit amount
+ * can be lower, never higher (`CREDIT_OVERPAYMENT`). Needs an idempotency key.
+ */
+export function confirmClaim(
+  token: string,
+  claimId: number,
+  idempotencyKey: string,
+  amount?: string,
+): Promise<ClaimResponse> {
+  return apiRequest<ClaimResponse>(`/api/v1/credit/claims/${claimId}/confirm`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    ...(amount != null ? { body: { amount } } : {}),
+  });
+}
+
+/** The supplier says the money did not arrive. A reason of 3 to 500 characters; no money moves. */
+export function rejectClaim(token: string, claimId: number, reason: string): Promise<ClaimResponse> {
+  return apiRequest<ClaimResponse>(`/api/v1/credit/claims/${claimId}/reject`, {
+    method: 'POST',
+    token,
+    body: { reason },
+  });
+}
+
 /** Repay from the wallet. Moves money, so it needs an idempotency key. */
 export function repayFromWallet(
   token: string,

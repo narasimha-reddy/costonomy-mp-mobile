@@ -66,7 +66,7 @@ async function notifs(token, eventType, targetId, { min = 1, timeout = 30000, af
 const countNotifs = async (token, eventType, targetId, after = 0) =>
   (await inbox(token)).filter((x) => x.eventType === eventType && x.id > after && (targetId == null || x.targetId === targetId)).length;
 
-const skuOf = (storeId) => dbNum(`select id from supplier_sku where supplier_store_id=${storeId} and name='Paneer' and status='ACTIVE' order by id limit 1`);
+const skuOf = (storeId) => dbNum(`select id from supplier_sku where supplier_store_id=${storeId} and name like '%Paneer' and status='ACTIVE' order by id limit 1`);
 
 /**
  * The real purchase sequence: add to the outlet's draft for the store, send, the supplier answers in full.
@@ -1584,7 +1584,7 @@ async function s12() {
   const noteOn = (id, key, body, t = tok) => P(`/credit/invoices/${id}/credit-notes`, t, body, key);
   const woInv = (id, body, k, t = tok) => P(`/credit/invoices/${id}/write-off`, t, body, k);
   const woLine = (a, body, k, t = tok) => P(`/credit/agreements/${a}/write-off`, t, body, k);
-  const noteRows = (invoiceId) => dbNum(`select count(*) from credit_note where credit_invoice_id=${invoiceId}`);
+  const noteRows = (invoiceId) => dbNum(`select count(*) from credit_invoice_note where credit_invoice_id=${invoiceId}`);
   const money0 = () => ({
     pay: dbNum('select count(*) from credit_payment'), payout: dbNum('select count(*) from credit_repayment_payout'),
     comm: dbNum('select count(*) from commission_calculation') });
@@ -1608,7 +1608,7 @@ async function s12() {
     const n1 = await noteOn(X.invoiceId, KN, body);
     expectStatus('credit note of 100.25 (SHORT_SUPPLY) issued (201)', n1, 201);
     const d = n1.data || {};
-    ok('credit note number looks like CN-yymmdd-nnnnnn', /^CN-\d{6}-\d{6}$/.test(d.creditNoteNumber), d.creditNoteNumber);
+    ok('credit note number looks like CLN-yymmdd-nnnnnn', /^CLN-\d{6}-\d{6}$/.test(d.creditNoteNumber), d.creditNoteNumber);
     eq('note: amount, reason, kind MANUAL, written by a person, on invoice X', [n(d.amount), d.reasonCode, d.kind, d.createdBy != null, d.invoiceId, d.invoiceNumber, d.agreementId], [100.25, 'SHORT_SUPPLY', 'MANUAL', true, X.invoiceId, X.invoiceNumber, aid]);
     eq('note response: the invoice afterwards (PARTIALLY_PAID, credited 100.25, nothing paid, outstanding down)', [d.invoice.status, n(d.invoice.creditedAmount), n(d.invoice.paidAmount), n(d.invoice.outstanding)], ['PARTIALLY_PAID', 100.25, 0, money(X.amount - 100.25)]);
     const postAg = await F.snap(aid, buyer);
@@ -1628,7 +1628,7 @@ async function s12() {
     eq('statement: closingOwed fell by the note', n(stN.closingOwed), money(n(st0.closingOwed) - 100.25));
     await checkStatementIdentity('statement after the note (restaurant)', aid, buyer);
     eq('ledger: one CREDIT_NOTE movement tied to the note', dbNum(`select count(*) from credit_transaction where credit_agreement_id=${aid} and transaction_type='CREDIT_NOTE' and credit_note_id=${d.id}`), 1);
-    const row = db(`select kind, reason_code, amount, created_by, outlet_id, supplier_store_id, note from credit_note where id=${d.id}`)[0] || [];
+    const row = db(`select kind, reason_code, amount, created_by, outlet_id, supplier_store_id, note from credit_invoice_note where id=${d.id}`)[0] || [];
     eq('credit_note row: MANUAL, SHORT_SUPPLY, amount, author set, outlet 2, store 1, note', [row[0], row[1], n(row[2]), row[3] !== 'NULL', n(row[4]), n(row[5]), row[6]], ['MANUAL', 'SHORT_SUPPLY', 100.25, true, 2, 1, '2 kg short on delivery']);
     ok('audit: CREDIT_NOTE_ISSUED written for the note', dbNum(`select count(*) from audit_log where action='CREDIT_NOTE_ISSUED' and entity_id=${d.id}`) >= 1, 'no audit row');
     const nt = await notifs(buyer, 'CreditNoteIssued', null, { after: mRest });
@@ -1680,7 +1680,7 @@ async function s12() {
       eq('the order is CANCELLED', dbVal(`select status from supplier_order where id=${Y.orderId}`), 'CANCELLED');
       const yi = await inv(Y.invoiceId);
       eq('the invoice: nothing owed any more, credited the whole amount, PAID, nothing paid', [yi.status, n(yi.outstanding), n(yi.creditedAmount), n(yi.paidAmount)], ['PAID', 0, Y.amount, 0]);
-      const row = db(`select kind, reason_code, amount, created_by, idempotency_key from credit_note where credit_invoice_id=${Y.invoiceId}`);
+      const row = db(`select kind, reason_code, amount, created_by, idempotency_key from credit_invoice_note where credit_invoice_id=${Y.invoiceId}`);
       eq('one credit_note row: SYSTEM_CANCEL, CANCELLED, the whole amount, no author, key cancel:<order>', row.map((r) => [r[0], r[1], n(r[2]), r[3], r[4]]), [['SYSTEM_CANCEL', 'CANCELLED', Y.amount, 'NULL', `cancel:${Y.orderId}`]]);
       const sB = await F.snap(aid, buyer);
       eq('the line is back exactly where it was before the order (utilized, available, due)', [sB.utilized, sB.available, sB.due], [preB.utilized, preB.available, preB.due]);
@@ -1761,7 +1761,7 @@ async function s12() {
     const wi = await inv(W1.invoiceId);
     eq('invoice: credited 100, outstanding down, status NOT changed by a partial write-off', [n(wi.creditedAmount), n(wi.outstanding), ['ISSUED', 'OVERDUE', 'PARTIALLY_PAID'].includes(wi.status)], [100, money(W1.amount - 100), true]);
     eq('the waiting claim stays (money may still be owed)', dbVal(`select status from credit_payment_claim where id=${wc1.data?.id}`), 'SUBMITTED');
-    const wn = db(`select kind, reason_code, amount, created_by from credit_note where credit_invoice_id=${W1.invoiceId}`)[0] || [];
+    const wn = db(`select kind, reason_code, amount, created_by from credit_invoice_note where credit_invoice_id=${W1.invoiceId}`)[0] || [];
     eq('credit_note row: WRITE_OFF, GOODWILL (the quick reason), 100, author set', [wn[0], wn[1], n(wn[2]), wn[3] !== 'NULL'], ['WRITE_OFF', 'GOODWILL', 100, true]);
     eq('the line owes 100 less, still ACTIVE and able to fund', [(await F.snap(aid, buyer)).utilized, (await F.agr(aid, buyer)).canFund], [money(preW.utilized - 100), true]);
     const stW = await checkStatementIdentity('statement after the partial write-off', aid, tok);
@@ -1832,7 +1832,7 @@ async function s12() {
       expectStatus('line write-off of a stated amount (the older invoice in full and 50 of the next), keepLineOpen true', l1, 200);
       eq('  ...oldest due date first: P1 written off in full, P2 only 50 (its status unchanged), the rest untouched', (l1.data?.items || []).map((x) => [x.invoiceId, n(x.amount), x.invoiceStatus]), [[P1.invoiceId, P1.amount, 'WRITTEN_OFF'], [P2.invoiceId, 50, p2Status]]);
       eq('  ...total written off, the line stays ACTIVE', [n(l1.data?.writtenOff), l1.data?.lineStatus, l1.data?.lineSuspended], [part, 'ACTIVE', false]);
-      eq('  ...one credit note and one audit row per invoice', [dbNum(`select count(*) from credit_note where credit_invoice_id in (${P1.invoiceId},${P2.invoiceId}) and kind='WRITE_OFF'`), dbNum(`select count(*) from audit_log where action='CREDIT_WRITTEN_OFF' and entity_id in (${P1.invoiceId},${P2.invoiceId})`)], [2, 2]);
+      eq('  ...one credit note and one audit row per invoice', [dbNum(`select count(*) from credit_invoice_note where credit_invoice_id in (${P1.invoiceId},${P2.invoiceId}) and kind='WRITE_OFF'`), dbNum(`select count(*) from audit_log where action='CREDIT_WRITTEN_OFF' and entity_id in (${P1.invoiceId},${P2.invoiceId})`)], [2, 2]);
       eq('  ...the line owes what is left', (await F.snap(aid5, buyer)).due, money(pre5.due - part));
       const l2 = await woLine(aid5, { reason: 'e2e: the rest of the line' }, L.key('wo'), SUP[3]);
       expectStatus('line write-off of everything left (no amount), default keepLineOpen', l2, 200);
@@ -1910,7 +1910,7 @@ async function s13() {
       return api(path, { method, token, body, headers: key ? { 'Idempotency-Key': L.key('perm') } : {} });
     };
     const tables = () => ({
-      pay: dbNum('select count(*) from credit_payment'), rep: dbNum('select count(*) from credit_repayment'), notes: dbNum('select count(*) from credit_note'),
+      pay: dbNum('select count(*) from credit_payment'), rep: dbNum('select count(*) from credit_repayment'), notes: dbNum('select count(*) from credit_invoice_note'),
       refunds: dbNum("select count(*) from credit_refund_due where status='REFUNDED'"), rem: dbNum('select count(*) from credit_reminder'), rev: dbNum('select count(*) from credit_payment_reversal'),
       ext: dbNum('select count(*) from credit_due_extension'), exports: dbNum("select count(*) from audit_log where action='CREDIT_EXPORT'"),
       claims: dbNum("select count(*) from credit_payment_claim where status<>'SUBMITTED'"), owed: db(`select utilized_amount from credit_agreement where id=${aid}`)[0][0],

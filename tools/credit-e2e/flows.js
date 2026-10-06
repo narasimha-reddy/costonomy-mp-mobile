@@ -73,7 +73,7 @@ module.exports = function flows(T, SUP) {
   const snap = async (aid, token) => snapOf(await agr(aid, token));
 
   // ── the order flow (draft, send, supplier answers, order on credit) ─────────────
-  const skuOf = (storeId) => dbNum(`select id from supplier_sku where supplier_store_id=${storeId} and name='Paneer' and status='ACTIVE' order by id limit 1`);
+  const skuOf = (storeId) => dbNum(`select id from supplier_sku where supplier_store_id=${storeId} and name like '%Paneer' and status='ACTIVE' order by id limit 1`);
   async function answeredIntent({ storeId, outlet = OUTLET, qty = 1 }) {
     const buyer = buyerOf(outlet);
     const skuId = skuOf(storeId);

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
-import { useOutlet } from '@/contexts/OutletProvider';
+import { useOptionalOutlet } from '@/contexts/OutletProvider';
 import { useRealtime } from '@/contexts/RealtimeProvider';
 import { fetchDelivery, reassignDelivery, switchToOwnDelivery } from '@/services/delivery';
 import { fetchSupplierOrder } from '@/services/procurement';
@@ -54,7 +54,8 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
   const { show } = useToast();
   const insets = useSafeAreaInsets();
   const { accessToken } = useSession();
-  const { outlet } = useOutlet();
+  // The supplier's routes have no OutletProvider; only the buyer's map needs the outlet.
+  const outlet = useOptionalOutlet()?.outlet;
   const { transport } = useRealtime();
   const nowMs = useServerNow();
   const buyer = audience === 'buyer';

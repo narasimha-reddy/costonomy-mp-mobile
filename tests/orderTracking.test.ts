@@ -84,7 +84,7 @@ describe('orderTrackingView, every delivery status x mode x audience', () => {
     // Track only in the partner phase, and only when trackable.
     expect(view.showTrack).toBe(PARTNER_PHASE.includes(status) && dMode === 'COSTONOMY');
     expect(view.showMap).toBe(view.showTrack);
-    expect(view.showPartner).toBe(PARTNER_PHASE.includes(status));
+    expect(view.showPartner).toBe(PARTNER_PHASE.includes(status) && dMode === 'COSTONOMY');
     // Nothing the buyer reads may carry the raw failure reason or a provider name.
     if (audience === 'buyer') {
       expect(`${view.headline} ${view.subline}`).not.toContain(REASON);
@@ -335,5 +335,33 @@ describe('stepTimesFromTimeline', () => {
     ]);
     expect(times).toEqual({ partner: '10:05 AM', on_the_way: '1:30 PM' });
     expect(stepTimesFromTimeline(null)).toEqual({});
+  });
+});
+
+describe('a supplier delivering it themselves (found by the delivery e2e run)', () => {
+  // The API gives a SUPPLIER_OWN delivery row from the moment the order is ready, already DRIVER_ASSIGNED with the
+  // store's contact as the "driver". It must not read as a Costonomy partner on the way to the supplier.
+  const own = (audience: 'buyer' | 'supplier', oStatus: any, dStatus: DeliveryStatus) =>
+    orderTrackingView({
+      audience, order: order('SUPPLIER_DELIVERY', oStatus), delivery: delivery(dStatus, { etaMinutes: 20 }, 'SUPPLIER_OWN'), nowMs: NOW,
+    });
+
+  it('ready: no partner, no ETA tag, the own-delivery copy', () => {
+    const buyer = own('buyer', 'READY_FOR_PICKUP', 'DRIVER_ASSIGNED');
+    expect(buyer.headline).toBe('Packed and ready');
+    expect(buyer.subline).toBe('Fresh Farms is delivering this themselves. No live tracking.');
+    expect(buyer.showPartner).toBe(false);
+    expect(buyer.showTrack).toBe(false);
+    expect(buyer.tag).toBeNull();
+    expect(own('supplier', 'READY_FOR_PICKUP', 'DRIVER_ASSIGNED').headline).toBe('Ready to send');
+  });
+
+  it('out for delivery: On the way with no live tracking, and the supplier is told to mark it delivered', () => {
+    const buyer = own('buyer', 'OUT_FOR_DELIVERY', 'PICKED_UP');
+    expect(buyer.headline).toBe('On the way');
+    expect(buyer.subline).toContain('No live tracking');
+    expect(buyer.showPartner).toBe(false);
+    expect(buyer.etaText).toBeNull();
+    expect(own('supplier', 'OUT_FOR_DELIVERY', 'PICKED_UP').subline).toBe('Mark it delivered once it arrives.');
   });
 });

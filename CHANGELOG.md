@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.
 
+### [phase6/mobile-tracking-e2e-fixes] - Fixes from the end-to-end run (API D-153)
+#### Fixed
+- The supplier tracking screen crashed on open (it needed the restaurant's outlet).
+- A supplier's own delivery was shown to the restaurant as a delivery partner with an ON TIME tag; it now reads 'delivering this themselves. No live tracking.'
+#### Added
+- tools/delivery-e2e: the end-to-end driver (API, database, Pidge sandbox stages, screenshots).
+
 ### [phase6/mobile-map-first-tracking] - Map-first order tracking, as approved in the design mockup (API D-151)
 #### Changed
 - Tracking screen and both order screens: an illustration band until a partner is assigned, then the map; a sheet with one big headline and ETA, an on-time / late / searching / delivered tag and five progress segments; a bigger partner card with call; amber banners for a delay or a changed partner; a green delivered state with Check in delivery and Report an issue; supplier search, Try again and I will deliver it myself cards.

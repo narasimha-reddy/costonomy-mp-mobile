@@ -263,7 +263,9 @@ export function orderTrackingView(input: {
   const completed = oStatus === 'COMPLETED';
   const failed = dStatus === 'DELIVERY_FAILED';
   const retryable = canRetryPartner(delivery?.mode, dStatus);
-  const partnerPhase = dStatus != null && PARTNER_PHASE.has(dStatus);
+  // A supplier delivering it themselves has a delivery row too (the supplier is the "driver"), but no partner to
+  // introduce, no ETA to promise and no map: those are Costonomy-delivery things.
+  const partnerPhase = kind !== 'own' && dStatus != null && PARTNER_PHASE.has(dStatus);
   const searching = dStatus != null && SEARCHING.has(dStatus);
   // The partner fell through after being found. The restaurant is told calmly; the supplier sees the usual stop.
   const partnerChanged = buyer && (dStatus === 'DRIVER_CANCELLED' || dStatus === 'PICKUP_FAILED');

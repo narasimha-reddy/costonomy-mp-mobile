@@ -126,6 +126,11 @@ export function DeliveryModePicker({
                         ? 'Free delivery by the supplier, in their own vehicle'
                         : DESCRIPTIONS[mode]}
                 </MandiText>
+                {mode === 'SUPPLIER_DELIVERY' && request.acceptance?.highDeliveryCharge === true && fee != null && (
+                  <MandiText variant="captionEmphasis" color={Colors.warning}>
+                    High delivery charge: {formatMoney(fee)} on this order. You can collect it instead.
+                  </MandiText>
+                )}
               </View>
               {/* The figure, never a tick alone: §23A.48 forbids meaning carried
                   by colour, and the fee is the thing being decided on anyway. */}

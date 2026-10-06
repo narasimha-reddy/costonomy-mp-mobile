@@ -96,6 +96,8 @@ export interface IntentAcceptance {
   deliveryModes: string | null;
   /** What the supplier chose for delivery on this answer; null on an older one (API D-141). */
   deliveryOffer: 'SELF_FREE' | 'SELF' | 'COSTONOMY' | 'NONE' | null;
+  /** The supplier's own delivery charge is high for this order, so the restaurant is warned (API D-144). */
+  highDeliveryCharge?: boolean;
   notes: string | null;
   submittedAt: string | null;
   expiresAt: string | null;

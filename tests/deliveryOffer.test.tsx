@@ -173,3 +173,35 @@ describe('a supplier who cannot deliver', () => {
   });
 });
 
+describe('a high delivery charge', () => {
+  function showWith(high: boolean | undefined, fee: string) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <DeliveryModePicker
+          request={{ id: 5, supplierStoreId: 1, deliveryPreference: 'DELIVERY',
+            acceptance: { deliveryModes: 'PICKUP,SUPPLIER_DELIVERY', deliveryFee: fee, deliveryOffer: 'SELF',
+              highDeliveryCharge: high } } as unknown as Intent}
+          selected="SUPPLIER_DELIVERY"
+          onSelect={jest.fn()}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('warns the buyer, with the amount, and says they can collect instead', () => {
+    showWith(true, '300.00');
+    expect(screen.getByText(/High delivery charge: .*300.* on this order\. You can collect it instead\./)).toBeTruthy();
+  });
+
+  it('says nothing for a normal charge, or when the server did not flag it', () => {
+    showWith(false, '45.00');
+    expect(screen.queryByText(/High delivery charge/)).toBeNull();
+  });
+
+  it('says nothing when the flag is missing (an older server)', () => {
+    showWith(undefined, '300.00');
+    expect(screen.queryByText(/High delivery charge/)).toBeNull();
+  });
+});
+

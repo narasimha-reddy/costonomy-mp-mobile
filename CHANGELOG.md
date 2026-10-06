@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-high-charge] - Warning on a high delivery charge (API D-144)
+#### Added
+- The buyer's delivery picker warns "High delivery charge: ₹X on this order. You can collect it instead." under the supplier's delivery when the server flags the charge as high (at least 10% of the goods and at least ₹100). A prompt, not a limit.
+
 ### [phase6/mobile-delivery-charge] - One "I will deliver it" with a charge box
 #### Changed
 - The supplier's answer has one "I will deliver it" option with a "Delivery charge for this order (₹)" box. 0 (or empty) is free delivery and the restaurant is told so; any other amount is what the restaurant is shown before ordering. It no longer depends on a store fee or the own-delivery setting, and an amount that is not a number blocks Accept.

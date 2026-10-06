@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-comparison-choices] - Sort and filters on a product's supplier comparison (API D-149)
+#### Added
+- An "I need [qty]" box and chips on the comparison: sort by best value, lowest price, nearest or top rated; "Covers my quantity" and "Open now"; 5, 10 and 25 km only when six or more suppliers could serve the outlet. The empty state names the filters and offers Clear filters; "N more hidden by your filters" shows when some were left out. Nothing is sorted or filtered on the device. Under another sort the first card is not badged "recommended".
+
 ### [phase6/mobile-supplier-filters-fixes] - Review fixes for the supplier filters (API D-147)
 #### Fixed
 - The search Suppliers tab starts within 10 km again, as the directory always did, so the "N more deliver here, show them" row works by default (it had become "no distance limit").

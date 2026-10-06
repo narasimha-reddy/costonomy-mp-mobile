@@ -1,4 +1,4 @@
-import { searchSuppliers, fetchPopularSuppliers } from '@/services/catalog';
+import { searchSuppliers, fetchPopularSuppliers, fetchRecommendations } from '@/services/catalog';
 import { apiRequest } from '@/lib/api/client';
 
 jest.mock('@/lib/api/client', () => ({
@@ -51,6 +51,22 @@ describe('fetchPopularSuppliers', () => {
     expect(url).toContain('openNow=true');
     expect(url).toContain('minRating=3');
     expect(url).toContain('sort=rating');
+  });
+});
+
+describe('fetchRecommendations', () => {
+  it('sends the quantity, sort and filters, and nothing for what was not chosen', async () => {
+    await fetchRecommendations('t', 7, 9, '20', { sort: 'price', coversQuantity: true, radiusKm: 10 });
+    const url = urlOfLastCall();
+    expect(url).toContain('outletId=9');
+    expect(url).toContain('quantity=20');
+    expect(url).toContain('sort=price');
+    expect(url).toContain('coversQuantity=true');
+    expect(url).toContain('radiusKm=10');
+    expect(url).not.toContain('openNow');
+
+    await fetchRecommendations('t', 7, 9, '1');
+    expect(urlOfLastCall()).not.toContain('sort=');
   });
 });
 

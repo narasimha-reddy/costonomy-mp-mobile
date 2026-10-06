@@ -92,9 +92,22 @@ export function fetchRecommendations(
   productId: number,
   outletId: number,
   quantity?: string,
+  options: {
+    sort?: 'best_value' | 'price' | 'nearest' | 'rating';
+    coversQuantity?: boolean;
+    openNow?: boolean;
+    radiusKm?: number;
+  } = {},
 ): Promise<ProductRecommendation> {
   return apiRequest<ProductRecommendation>(
-    `/api/v1/products/${productId}/recommendations${queryString({ outletId, quantity })}`,
+    `/api/v1/products/${productId}/recommendations${queryString({
+      outletId,
+      quantity,
+      sort: options.sort,
+      coversQuantity: options.coversQuantity,
+      openNow: options.openNow,
+      radiusKm: options.radiusKm,
+    })}`,
     { token },
   );
 }

@@ -11,6 +11,11 @@ import { addIntentItem, removeIntentItem, updateIntentItem } from '@/services/in
 import type { IntentItem } from '@/models/intent';
 import { draftsKey } from '@/lib/queryKeys';
 import { OfferCard } from '@/components/supplier/OfferCard';
+import {
+  ComparisonChoicesBar, DEFAULT_COMPARISON, comparisonIsFiltered, describeComparisonFilters,
+  type ComparisonChoices,
+} from '@/components/restaurant/ComparisonChoices';
+import { useDebounced } from '@/hooks/useDebounced';
 import { CartBar } from '@/components/restaurant/CartBar';
 import {
   MandiEmptyState,
@@ -62,10 +67,22 @@ export default function ProductScreen() {
     enabled: Number.isFinite(productId) && accessToken != null,
   });
 
+  // What the buyer needs and how they want the suppliers shown. Both go to the server; the list is never sorted or
+  // filtered here (API D-149).
+  const [choices, setChoices] = useState<ComparisonChoices>(DEFAULT_COMPARISON);
+  const [need, setNeed] = useState('1');
+  const settledNeed = useDebounced(need, 400);
+  const quantityAsked = Number(settledNeed) > 0 ? settledNeed : '1';
+
   const recommendations = useQuery({
-    queryKey: ['product', productId, 'recommendations', outletId],
+    queryKey: ['product', productId, 'recommendations', outletId, quantityAsked, choices],
     queryFn: () =>
-      fetchRecommendations(accessToken as string, productId, outletId as number, '1'),
+      fetchRecommendations(accessToken as string, productId, outletId as number, quantityAsked, {
+        sort: choices.sort,
+        coversQuantity: choices.coversQuantity,
+        openNow: choices.openNow,
+        radiusKm: choices.radiusKm,
+      }),
     enabled: Number.isFinite(productId) && outletId != null && accessToken != null,
   });
 
@@ -189,6 +206,20 @@ export default function ProductScreen() {
         subtitle="Prices exclude delivery, which is quoted when you order."
       />
 
+      <ComparisonChoicesBar
+        choices={choices}
+        onChange={setChoices}
+        need={need}
+        onNeedChange={setNeed}
+        unit={recommendations.data?.unit ?? null}
+        supplierCount={offers.length + (recommendations.data?.hiddenByFilters ?? 0)}
+      />
+      {(recommendations.data?.hiddenByFilters ?? 0) > 0 && offers.length > 0 && (
+        <MandiText variant="caption" color={Colors.textSecondary} style={styles.hidden}>
+          {recommendations.data?.hiddenByFilters} more hidden by your filters
+        </MandiText>
+      )}
+
       {recommendations.isPending ? (
         <MandiSkeletonList count={3} />
       ) : recommendations.error ? (
@@ -200,13 +231,17 @@ export default function ProductScreen() {
         // §23A.15: an unmet need is explained, never silently empty.
         <MandiEmptyState
           icon="storefront-outline"
-          title="No supplier has this right now"
+          title={comparisonIsFiltered(choices) ? 'No supplier matches' : 'No supplier has this right now'}
           description={
-            recommendations.data?.unservedReason ??
-            'Nobody delivering to this outlet is stocking it at the moment.'
+            comparisonIsFiltered(choices)
+              ? `No supplier matches: ${describeComparisonFilters(choices).join(', ')}.`
+              : recommendations.data?.unservedReason ??
+                'Nobody delivering to this outlet is stocking it at the moment.'
           }
-          actionLabel="Search something else"
-          onAction={() => router.push('/restaurant/search')}
+          actionLabel={comparisonIsFiltered(choices) ? 'Clear filters' : 'Search something else'}
+          onAction={comparisonIsFiltered(choices)
+            ? () => setChoices({ sort: choices.sort })
+            : () => router.push('/restaurant/search')}
         />
       ) : (
         offers.map((offer, index) => {
@@ -218,7 +253,9 @@ export default function ProductScreen() {
               // The server ranks; the first is the recommendation. The client
               // must never re-sort — doing so would quietly substitute its own
               // ranking for the one doc 07 specifies and tests.
-              recommended={index === 0}
+              // Only when the list is in the server's own ranking: under another sort the first card is the cheapest
+              // or nearest, not the recommendation.
+              recommended={index === 0 && choices.sort === 'best_value'}
               quantity={desired[offer.supplierSkuId] ?? (line ? Number(line.requestedQuantity) : 0)}
               // `agreedLineTotal`, not `lineTotal`: the second is the
               // supplier's answer and is null on a draft, so the figure never
@@ -290,6 +327,7 @@ function Header({ title, subtitle }: { title?: string; subtitle?: string | null 
 }
 
 const styles = StyleSheet.create({
+  hidden: { paddingHorizontal: Spacing.screenHorizontal },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

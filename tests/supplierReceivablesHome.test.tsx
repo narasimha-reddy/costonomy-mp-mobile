@@ -419,6 +419,52 @@ describe('Receivables home: new requests still work', () => {
     fireEvent.press(screen.getAllByText('Approve As Asked')[0] as never);
     await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Not allowed', 'error'));
     fireEvent.press(screen.getAllByText('Review')[1] as never);
-    expect(mockPush).toHaveBeenCalledWith('/supplier/credit/32');
+    expect(mockPush).toHaveBeenCalledWith('/supplier/credit/request/32');
   });
 });
+
+describe('Receivables home: request cards', () => {
+  const dated = (id: number, createdAt: string | null, over: Record<string, unknown> = {}) => ({
+    ...request(id), latestRequest: { purpose: 'Veg', requestedLimit: '50000.0000', requestedPeriodDays: 30, createdAt }, ...over,
+  });
+  const pending = () => base({
+    counts: { ...base().counts, requestsPending: 2 }, pendingActions: [{ kind: 'REQUESTS_PENDING', count: 2 }],
+  });
+
+  it('puts the oldest request first and says how long it has waited, from the server timestamp', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    jest.setSystemTime(new Date('2026-10-06T10:00:00Z'));
+    receivablesM.mockResolvedValue(pending());
+    agreementsM.mockResolvedValue([
+      dated(41, '2026-10-05T10:00:00Z'), dated(42, '2026-10-01T10:00:00Z'), dated(43, null),
+    ]);
+    renderTab();
+    await screen.findByText('Asker 41');
+    const names = screen.getAllByText(/^Asker \d+/).map((n) => n.props.children);
+    expect(names).toEqual(['Asker 42', 'Asker 41', 'Asker 43']);
+    expect(screen.getByText('Waiting 5 days')).toBeTruthy();
+    expect(screen.getByText('Waiting 1 day')).toBeTruthy();
+    jest.useRealTimers();
+  });
+
+  it('words an offer waiting for the restaurant, with no actions on it', async () => {
+    receivablesM.mockResolvedValue(pending());
+    agreementsM.mockResolvedValue([
+      request(31),
+      { ...request(32), status: 'APPROVED', offerExpiresOn: '2026-10-20', offerMadeAt: '2026-10-06T00:00:00Z' },
+    ]);
+    renderTab();
+    expect(await screen.findByText('Offer sent, waiting for the restaurant (valid until 20th Oct 2026)')).toBeTruthy();
+    expect(screen.getAllByText('Approve As Asked')).toHaveLength(1);
+    expect(screen.getAllByText('Review')).toHaveLength(1);
+  });
+
+  it('says an offer expired, with no actions', async () => {
+    receivablesM.mockResolvedValue(pending());
+    agreementsM.mockResolvedValue([request(31), { ...request(32), status: 'EXPIRED' }]);
+    renderTab();
+    expect(await screen.findByText('Offer expired')).toBeTruthy();
+    expect(screen.getAllByText('Approve As Asked')).toHaveLength(1);
+  });
+});
+

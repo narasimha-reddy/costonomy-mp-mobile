@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/sup-m23-requests-context]
+#### Added
+- Request review screen (`app/supplier/credit/request/[id].tsx`, plan S9/S10): what they asked, the server's context for this store only (orders in 90 days, first and last order, cancellations, earlier overdue, how an earlier line ended, line history; no arithmetic in the app; a 404 shows a quiet line, other errors a Retry), and Approve as asked, Approve at my usual terms (store policy defaults, exact preview first, hidden without defaults), Change terms (the existing terms editor) and Decline (quick reasons, reason required). Each sheet says what happens next. Needs CREDIT_MODIFY to act, CREDIT_REQUEST_VIEW for the context.
+- Requests on the credit home: oldest first with "Waiting N days"; offers sent show "Offer sent, waiting for the restaurant (valid until ...)", lapsed ones "Offer expired", neither with actions. "Review" opens the new screen.
+
 ### [feat/sup-m19-record-payment]
 #### Added
 - Supplier "Record" a payment (`components/credit/RecordPaymentSheet.tsx`, `hooks/useRecordPayment.ts`, `lib/credit/recordPayment.ts`, plan S4): amount (starts at what the server says is owed; Full and Overdue only chips use the server's figures; the amount is kept as the typed string), method (Cash, UPI, Bank transfer, Cheque, Card), reference (required for UPI, bank and cheque, 4 to 64 characters), India-day stepper with Today and Yesterday, note. A debounced server preview words what the payment settles and the position after it, and warns when the restaurant already told the supplier it paid (with a button to review that claim). The idempotency key is held per attempt so a dropped connection retries with the same key; a duplicate reference asks "Record anyway" and resends the same body with the flag and the same key; after `IDEMPOTENT_PREVIOUS_ATTEMPT_FAILED` the next try gets a new key. Open invoices on the restaurant detail have checkboxes and "Record for N selected".

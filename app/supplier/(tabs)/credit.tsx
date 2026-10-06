@@ -36,6 +36,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { ApiError } from '@/lib/api/errors';
 import { dueChip } from '@/lib/credit/dueChip';
 import { barPercent, pendingActionView, restaurantLabel } from '@/lib/credit/receivables';
+import { offerWording, oldestFirst, waitingWording } from '@/lib/credit/requestContext';
+import { serverNow } from '@/lib/server-clock';
 import { splitBalance } from '@/lib/wallet/display';
 import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
@@ -110,8 +112,13 @@ export default function SupplierCreditScreen() {
   });
 
   const data = totals.data;
+  // Waiting requests, the one that has waited longest first; then offers sent and offers that lapsed.
   const requests = useMemo(
-    () => (agreements.data ?? []).filter((a) => a.status === 'REQUESTED'),
+    () => oldestFirst((agreements.data ?? []).filter((a) => a.status === 'REQUESTED'), (a) => a.latestRequest?.createdAt),
+    [agreements.data],
+  );
+  const offers = useMemo(
+    () => (agreements.data ?? []).filter((a) => a.status === 'APPROVED' || a.status === 'EXPIRED'),
     [agreements.data],
   );
   const rows = useMemo(
@@ -211,6 +218,9 @@ export default function SupplierCreditScreen() {
             <View style={styles.section} onLayout={mark('requests')} testID="new-requests">
               <MandiSectionHeader title="New requests" count={requests.length} />
               {requests.map((agreement) => (
+                <RequestCard key={agreement.id} agreement={agreement} offline={offline} />
+              ))}
+              {offers.map((agreement) => (
                 <RequestCard key={agreement.id} agreement={agreement} offline={offline} />
               ))}
             </View>
@@ -460,6 +470,9 @@ function RequestCard({ agreement, offline }: { agreement: CreditAgreement; offli
   const { accessToken } = useSession();
   const { storeId } = useStore();
   const request = agreement.latestRequest;
+  // An offer already sent (or lapsed) is not a request waiting on this supplier: it has no actions.
+  const offer = offerWording(agreement);
+  const waiting = agreement.status === 'REQUESTED' ? waitingWording(request?.createdAt, new Date(serverNow())) : null;
 
   const approve = useMutation({
     // No arguments approves exactly what was asked for. Anything else is a
@@ -486,8 +499,11 @@ function RequestCard({ agreement, offline }: { agreement: CreditAgreement; offli
           agreement.outletLocality,
           formatDistance(agreement.distanceKm),
         ]}
-        trailing={<MandiStatusChip label="new request" tone="pending" size="sm" />}
+        trailing={offer == null ? <MandiStatusChip label="new request" tone="pending" size="sm" /> : undefined}
       />
+      {offer != null && (
+        <MandiText variant="caption" color={Colors.textSecondary} testID={`offer-${agreement.id}`}>{offer}</MandiText>
+      )}
       {request?.purpose != null && (
         <MandiText variant="caption" color={Colors.textPrimary}>
           {request.purpose}
@@ -499,6 +515,11 @@ function RequestCard({ agreement, offline }: { agreement: CreditAgreement; offli
         <Asked label="Period" value={`${request?.requestedPeriodDays ?? '—'} days`} />
       </View>
 
+      {waiting != null && (
+        <MandiText variant="caption" color={Colors.textTertiary} testID={`waiting-${agreement.id}`}>{waiting}</MandiText>
+      )}
+
+      {offer == null && (
       <View style={styles.actionsRow}>
         <MandiButton
           label="Approve As Asked"
@@ -512,10 +533,11 @@ function RequestCard({ agreement, offline }: { agreement: CreditAgreement; offli
           label="Review"
           variant="neutral"
           size="md"
-          onPress={() => router.push(`/supplier/credit/${agreement.id}`)}
+          onPress={() => router.push(`/supplier/credit/request/${agreement.id}`)}
           style={styles.flex}
         />
       </View>
+      )}
     </MandiCard>
   );
 }

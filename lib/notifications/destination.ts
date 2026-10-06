@@ -51,6 +51,11 @@ export function destinationFor(notification: AppNotification): string | null {
     case 'PROCUREMENT':
       return supplier ? null : `/restaurant/checkout/${id}`;
 
+    // A subscription whose delivery could not be arranged or was skipped (API D-132): only its restaurant is told, and
+    // the list is where it can pause, resume, skip or change it. There is no screen per subscription.
+    case 'SUBSCRIPTION':
+      return supplier ? null : '/restaurant/subscriptions';
+
     default:
       return null;
   }

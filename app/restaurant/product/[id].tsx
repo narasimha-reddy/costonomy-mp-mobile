@@ -224,15 +224,20 @@ export default function ProductScreen() {
               // supplier's answer and is null on a draft, so the figure never
               // appeared. Both are the server's — nothing here multiplies.
               lineTotal={line?.agreedLineTotal}
-              busy={change.isPending && change.variables?.offerId === offer.offerId}
-              onQuantity={(packs) =>
-                queueChange(offer.offerId, offer.supplierSkuId, packs)}
+              quantityForSku={(skuId) => {
+                const l = inCart.get(skuId);
+                return desired[skuId] ?? (l ? Number(l.requestedQuantity) : 0);
+              }}
+              lineTotalForSku={(skuId) => inCart.get(skuId)?.agreedLineTotal}
+              busy={change.isPending && (change.variables?.offerId === offer.offerId || change.variables?.skuId === offer.supplierSkuId)}
+              onQuantity={(packs, skuId, offerId) =>
+                queueChange(offerId ?? offer.offerId, skuId ?? offer.supplierSkuId, packs)}
               // Comparing suppliers often ends in wanting to see one properly —
               // what else they carry, how far off they are, whether there is
               // credit. The seller panel is the way through.
               onOpenSupplier={() =>
                 router.push(`/restaurant/supplier/${offer.supplierStoreId}`)}
-              onOpenSku={() => router.push(`/restaurant/sku/${offer.supplierSkuId}`)}
+              onOpenSku={(skuId) => router.push(`/restaurant/sku/${skuId ?? offer.supplierSkuId}`)}
               onOpenPack={(supplierSkuId) =>
                 router.push(`/restaurant/sku/${supplierSkuId}`)}
             />

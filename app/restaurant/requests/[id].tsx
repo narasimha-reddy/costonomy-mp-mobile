@@ -35,6 +35,8 @@ import {
 import type { IntentItem } from '@/models/intent';
 import type { DeliveryMode } from '@/models/procurement';
 import { DeliveryModePicker } from '@/components/request/DeliveryModePicker';
+import { DeliverySlotPicker } from '@/components/request/DeliverySlotPicker';
+import { istDay } from '@/lib/delivery/deliveryDay';
 import { PaymentMethodPicker, type PaymentMethod } from '@/components/request/PaymentMethodPicker';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
@@ -44,6 +46,8 @@ import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
+import { CatchWeightNote } from '@/components/order';
+import { feeNeedsRefreshing } from '@/lib/delivery/quoteMessages';
 
 const SCREEN = 'REST-REQ-02';
 
@@ -106,6 +110,25 @@ export default function RequestDetailScreen() {
     quoteReference?: string;
   } | null>(null);
 
+  // No slot and no day is as soon as possible, which is where it starts unless the request was sent for a day.
+  const [slot, setSlot] = React.useState<{
+    slotId: number | null;
+    scheduledDate: string | null;
+  }>({
+    slotId: null,
+    scheduledDate: null,
+  });
+
+  // Start the slot picker on the day the buyer asked for when sending, unless that day has gone by.
+  // Once, and only if they have not already picked a day here.
+  const askedDay = request?.preferredDeliveryDate ?? null;
+  const prefilled = React.useRef(false);
+  React.useEffect(() => {
+    if (askedDay == null || prefilled.current) return;
+    prefilled.current = true;
+    if (askedDay >= istDay(0)) setSlot({ slotId: null, scheduledDate: askedDay });
+  }, [askedDay]);
+
   /**
    * How this will be paid for. Chosen here, like the delivery mode, because
    * both decide what happens the moment the order exists — a card sends the
@@ -150,12 +173,14 @@ export default function RequestDetailScreen() {
   const ordering = React.useRef(false);
   React.useEffect(() => {
     orderKey.current = null;
-  }, [delivery?.mode, delivery?.quoteReference, method]);
+  }, [delivery?.mode, delivery?.quoteReference, slot.slotId, slot.scheduledDate, method]);
 
   const order = useMutation({
     mutationFn: (key: string) => createOrderFromIntent(accessToken as string, intentId, {
       deliveryMode: (delivery?.mode ?? 'PICKUP') as DeliveryMode,
       deliveryQuoteReference: delivery?.quoteReference,
+      deliverySlotId: slot.slotId ?? undefined,
+      scheduledDeliveryDate: slot.scheduledDate ?? undefined,
       paymentMethod: method ?? 'PREPAID',
     }, key),
     onSettled: () => {
@@ -193,6 +218,12 @@ export default function RequestDetailScreen() {
       if (caught instanceof ApiError && caught.status < 500
         && caught.code !== 'IDEMPOTENT_REQUEST_IN_PROGRESS' && caught.status !== 429) {
         orderKey.current = null;
+      }
+      // The fee shown is no longer the right one (the goods have become chilled since it was quoted): ask for it
+      // again and make the restaurant choose again, rather than leave a choice standing that the server will refuse.
+      if (feeNeedsRefreshing(caught)) {
+        void queryClient.invalidateQueries({ queryKey: ['delivery-quote', intentId] });
+        setDelivery(null);
       }
       toast.show(
         caught instanceof ApiError ? caught.message : 'Could not create that order.', 'error');
@@ -425,6 +456,14 @@ export default function RequestDetailScreen() {
                 onSelect={(mode, fee, quoteReference) =>
                   setDelivery({ mode, fee, quoteReference })}
               />
+              {delivery?.mode !== 'PICKUP' && (
+                <DeliverySlotPicker
+                  supplierStoreId={request.supplierStoreId}
+                  selectedSlotId={slot.slotId}
+                  selectedDate={slot.scheduledDate}
+                  onSelect={(slotId, scheduledDate) => setSlot({ slotId, scheduledDate })}
+                />
+              )}
               {/* Below delivery, because the amount it has to cover depends on
                   the mode: a wallet that covers a collected order may not cover
                   the same order with a courier on it. */}
@@ -503,17 +542,21 @@ export default function RequestDetailScreen() {
                   no price on this request at all. */}
               <Row label="Item value" value={formatMoney(request.acceptance.offeredValue)} />
               <Row label="GST" value={formatMoney(request.acceptance.offeredGst)} />
-              {/* Only when it costs something. A "Delivery  Free" line on a
-                  pickup states the obvious twice — the picker above already
-                  says Free against the option that was chosen. */}
+              {/* Whoever carries it, the charge is a line the restaurant sees before ordering: the supplier's own fee, or
+                  Costonomy's quoted fee. Free delivery says so; a pickup has no delivery line at all. */}
               {preview.data != null && Number(preview.data.deliveryFee) > 0 && (
                 <Row label="Delivery" value={formatMoney(preview.data.deliveryFee)} />
+              )}
+              {preview.data != null && Number(preview.data.deliveryFee) === 0
+                && delivery != null && delivery.mode !== 'PICKUP' && (
+                <Row label="Delivery" value="Free" />
               )}
               <Row
                 label="Total"
                 value={formatMoney(preview.data?.grandTotal ?? request.acceptance.offeredTotal)}
                 emphasis
               />
+              {(preview.data?.lines ?? []).some((line) => line.isCatchWeight === true) && <CatchWeightNote />}
               {request.acceptance.notes != null && (
                 <MandiText variant="caption" color={Colors.textSecondary} style={styles.note}>
                   “{request.acceptance.notes}”
@@ -757,6 +800,7 @@ function RequestLine({
               Inc. {formatGstRate((answered ? item.gstRate : item.agreedGstRate) as string)} GST
             </MandiText>
           )}
+          {item.sku?.isCatchWeight === true && <CatchWeightNote />}
         </View>
       )}
     </View>

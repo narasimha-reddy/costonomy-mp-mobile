@@ -12,6 +12,7 @@ import type { Intent } from '@/models/intent';
 import { formatMoney } from '@/utils/money';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { Colors, Elevation, FontSize, IconSize, Radius, Spacing } from '@/theme';
+import { CatchWeightNote } from '@/components/order';
 
 /**
  * One supplier's request in the cart, as a heading and a body.
@@ -44,6 +45,14 @@ export function sectionWarning(draft: Intent): string | null {
   }
   if (!draft.pricedComplete) {
     return 'Some items have no price';
+  }
+  // The server holds the order to its minimum on the goods BEFORE GST (`IntentOrderCreator`), so that is what is
+  // compared: `agreedValue`, not the GST-inclusive `agreedTotal`. Compared only; both figures shown are the server's,
+  // and the shortfall is not worked out here (the app does no money arithmetic).
+  const minOrder = draft.minOrderValue != null ? Number(draft.minOrderValue) : 0;
+  const goods = draft.agreedValue != null ? Number(draft.agreedValue) : 0;
+  if (minOrder > 0 && goods < minOrder) {
+    return `Minimum order ${formatMoney(draft.minOrderValue as string)} before GST · items ${formatMoney(String(draft.agreedValue ?? '0'))}`;
   }
   return null;
 }
@@ -138,8 +147,10 @@ export function SupplierSectionBody({
   expanded,
   sending,
   ordering,
+  shownQuantity,
   onChangeQuantity,
   onRemove,
+  onChangeDeliveryPreference,
   onSend,
   onOrderDirectly,
   onOpenSku,
@@ -150,8 +161,12 @@ export function SupplierSectionBody({
   sending: boolean;
   /** An order is being prepared from this draft. */
   ordering: boolean;
+  /** The quantity to show for a line: one the person has just tapped, else the server's. */
+  shownQuantity?: (itemId: number, serverQuantity: number) => number;
   onChangeQuantity: (itemId: number, quantity: string) => void;
   onRemove: (itemId: number) => void;
+  /** Deliver to the restaurant or let them collect it, for this supplier's request (API D-143). */
+  onChangeDeliveryPreference?: (preference: 'DELIVERY' | 'PICKUP') => void;
   onSend: () => void;
   onOrderDirectly: () => void;
   /** Open the pack's own page. D-096. */
@@ -194,9 +209,11 @@ export function SupplierSectionBody({
             </Pressable>
 
             <MandiQuantityStepper
-              value={Number(item.requestedQuantity)}
+              value={shownQuantity?.(item.id, Number(item.requestedQuantity)) ?? Number(item.requestedQuantity)}
               onChange={(quantity) => onChangeQuantity(item.id, String(quantity))}
               min={0}
+              editable
+              commitOnBlur
               unit={item.unit}
               itemLabel={skuTitle(item.sku)}
             />
@@ -214,6 +231,7 @@ export function SupplierSectionBody({
                     was {formatMoney(item.previousUnitPrice)}
                   </MandiText>
                 )}
+                {item.sku?.isCatchWeight === true && <CatchWeightNote />}
               </>
             ) : (
               // No live offer behind this line. Said plainly rather than shown as
@@ -239,18 +257,86 @@ export function SupplierSectionBody({
         </View>
       ))}
 
-      {draft.agreedTotal != null && (
-        <View style={[styles.totals, !expanded && styles.totalsFirst]}>
-          <Row label="Items" value={formatMoney(draft.agreedValue ?? '0')} />
-          <Row label="GST" value={formatMoney(draft.agreedGst ?? '0')} />
-          <Row label="Total" value={formatMoney(draft.agreedTotal)} emphasis />
-          {!draft.pricedComplete && (
-            <MandiText variant="caption" color={Colors.warning}>
-              One or more items have no current price, so this is less than the whole.
-            </MandiText>
-          )}
+      {onChangeDeliveryPreference != null && (
+        <View style={styles.preference}>
+          {([['DELIVERY', 'Deliver to me'], ['PICKUP', "I'll collect"]] as const).map(([value, label]) => {
+            const active = (draft.deliveryPreference ?? 'DELIVERY') === value;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => onChangeDeliveryPreference(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${draft.storeName ?? 'Supplier'}: ${label}`}
+                style={[styles.preferenceOption, active && styles.preferenceActive]}
+              >
+                <MandiText variant="caption" color={active ? Colors.surface : Colors.textSecondary}>
+                  {label}
+                </MandiText>
+              </Pressable>
+            );
+          })}
         </View>
       )}
+
+      {draft.agreedTotal != null && (() => {
+        const minOrderNum = draft.minOrderValue != null ? parseFloat(draft.minOrderValue) : 0;
+        const currentTotalNum = parseFloat(draft.agreedTotal);
+        const isBelowMov = minOrderNum > 0 && currentTotalNum < minOrderNum;
+        const freeThresholdNum = draft.freeDeliveryThreshold != null ? parseFloat(draft.freeDeliveryThreshold) : 0;
+        const goodsNum = draft.agreedValue != null ? parseFloat(draft.agreedValue) : 0;
+
+        return (
+          <View style={[styles.totals, !expanded && styles.totalsFirst]}>
+            <Row label="Items" value={formatMoney(draft.agreedValue ?? '0')} />
+            <Row label="GST" value={formatMoney(draft.agreedGst ?? '0')} />
+            <Row label="Total" value={formatMoney(draft.agreedTotal)} emphasis />
+            {!draft.pricedComplete && (
+              <MandiText variant="caption" color={Colors.warning}>
+                One or more items have no current price, so this is less than the whole.
+              </MandiText>
+            )}
+
+            {minOrderNum > 0 && (
+              <View style={styles.thresholdBadge}>
+                <Ionicons
+                  name={!isBelowMov ? 'checkmark-circle' : 'alert-circle'}
+                  size={IconSize.xs}
+                  color={!isBelowMov ? Colors.success : Colors.warning}
+                />
+                <MandiText
+                  variant="caption"
+                  color={!isBelowMov ? Colors.success : Colors.warning}
+                >
+                  {!isBelowMov
+                    ? `Min order ₹${minOrderNum.toFixed(0)} met`
+                    : `Min order ₹${minOrderNum.toFixed(0)} (Add ₹${(minOrderNum - currentTotalNum).toFixed(2)} more)`}
+                </MandiText>
+              </View>
+            )}
+
+            {freeThresholdNum > 0 && (draft.deliveryPreference ?? 'DELIVERY') === 'DELIVERY' && (
+              <View style={styles.thresholdBadge}>
+                <Ionicons
+                  name={goodsNum >= freeThresholdNum ? 'sparkles' : 'bicycle'}
+                  size={IconSize.xs}
+                  color={goodsNum >= freeThresholdNum ? Colors.success : Colors.info}
+                />
+                <MandiText
+                  variant="caption"
+                  color={goodsNum >= freeThresholdNum ? Colors.success : Colors.info}
+                >
+                  {/* The supplier's own delivery only: Costonomy riders are paid for. Compared on the goods before GST,
+                      as the server does. */}
+                  {goodsNum >= freeThresholdNum
+                    ? 'Free delivery if the supplier delivers'
+                    : `Add ₹${(freeThresholdNum - goodsNum).toFixed(2)} more for free delivery by the supplier`}
+                </MandiText>
+              </View>
+            )}
+          </View>
+        );
+      })()}
 
       {/* Sending one supplier without the others.
           <p>A basket of three is three conversations, and they are not always
@@ -263,39 +349,46 @@ export function SupplierSectionBody({
           asks, so the round trip buys nothing. Both are offered rather than one
           replacing the other — a kitchen may still want the supplier to confirm
           before money moves, and that choice is theirs. */}
-      <View style={styles.actions}>
-        <MandiButton
-          label="Send Request"
-          variant="secondary"
-          size="md"
-          loading={sending}
-          onPress={onSend}
-          style={styles.action}
-        />
-        {/* Shown either way, disabled where the supplier wants asking first.
-            <p>Hiding it made two suppliers' cards differ by a button with no
-            explanation, which reads as a bug rather than as a difference
-            between the suppliers. Present and unavailable, with the reason
-            underneath, says the thing that is actually true. */}
-        <MandiButton
-          label="Create Order"
-          size="md"
-          loading={ordering}
-          disabled={!draft.directOrdersEnabled}
-          onPress={onOrderDirectly}
-          style={styles.action}
-        />
-      </View>
+      {(() => {
+        const minOrderNum = draft.minOrderValue != null ? parseFloat(draft.minOrderValue) : 0;
+        const currentTotalNum = draft.agreedTotal != null ? parseFloat(draft.agreedTotal) : 0;
+        const isBelowMov = minOrderNum > 0 && currentTotalNum < minOrderNum;
 
-      {/* No icon. It sat in front of a sentence that already says what it
-          means, and the two variants of this line would otherwise carry
-          different glyphs and hang at different indents under buttons that are
-          side by side. */}
-      <MandiText variant="caption" color={Colors.textTertiary} style={styles.directNote}>
-        {draft.directOrdersEnabled
-          ? 'This supplier keeps stock, so you can order without asking first.'
-          : "You can't order directly from this supplier. Send a request to check stock, then place the order once they confirm."}
-      </MandiText>
+        return (
+          <>
+            <View style={styles.actions}>
+              <MandiButton
+                label="Send Request"
+                variant="secondary"
+                size="md"
+                loading={sending}
+                onPress={onSend}
+                style={styles.action}
+              />
+              <MandiButton
+                label="Create Order"
+                size="md"
+                loading={ordering}
+                disabled={!draft.directOrdersEnabled || isBelowMov}
+                onPress={onOrderDirectly}
+                style={styles.action}
+              />
+            </View>
+
+            <MandiText
+              variant="caption"
+              color={isBelowMov ? Colors.warning : Colors.textTertiary}
+              style={styles.directNote}
+            >
+              {isBelowMov
+                ? `Store minimum order value is ₹${minOrderNum.toFixed(0)}. Please add more items to place an order.`
+                : draft.directOrdersEnabled
+                ? 'This supplier keeps stock, so you can order without asking first.'
+                : "You can't order directly from this supplier. Send a request to check stock, then place the order once they confirm."}
+            </MandiText>
+          </>
+        );
+      })()}
     </View>
   );
 }
@@ -316,6 +409,16 @@ function Row({ label, value, emphasis }: {
 }
 
 const styles = StyleSheet.create({
+  preference: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  preferenceOption: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  preferenceActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   flex: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -390,5 +493,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
+  },
+  thresholdBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingVertical: 2,
   },
 });

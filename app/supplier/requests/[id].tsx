@@ -7,6 +7,10 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { useDebounced } from '@/hooks/useDebounced';
 import { fetchIntent, previewResponse, respondToIntent } from '@/services/intent';
+import { fetchDeliveryPolicy } from '@/services/supplier';
+import {
+  DeliveryOfferChoice, deliveryAnswerFor, deliveryChargeValid, deliveryOffersFor, type DeliveryOffer,
+} from '@/components/request/DeliveryOfferChoice';
 import { intentKey, storeIntentsKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import {
@@ -32,6 +36,7 @@ import { ApiError } from '@/lib/api/errors';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
+import { describeDeliveryDay } from '@/lib/delivery/deliveryDay';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -63,6 +68,25 @@ export default function SupplierRequestScreen() {
   const [offered, setOffered] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState('');
   const [confirmDecline, setConfirmDecline] = useState(false);
+  const [deliveryChoice, setDeliveryChoice] = useState<DeliveryOffer | null>(null);
+  // What to charge for this order when delivering themselves. Empty or 0 is free delivery.
+  const [deliveryCharge, setDeliveryCharge] = useState('');
+
+  // What this store is allowed to offer for delivery. The server checks it again.
+  const deliveryPolicy = useQuery({
+    queryKey: ['delivery-policy', storeId],
+    queryFn: () => fetchDeliveryPolicy(accessToken as string, storeId as number),
+    enabled: storeId != null && accessToken != null,
+  });
+  const offers = deliveryOffersFor(deliveryPolicy.data);
+  // Their usual way unless they pick another: their own delivery first, else Costonomy's.
+  const deliveryOffer: DeliveryOffer | null =
+    deliveryChoice != null && offers.includes(deliveryChoice) ? deliveryChoice
+      : offers.includes('SELF') ? 'SELF'
+        : offers.includes('SELF_FREE') ? 'SELF_FREE'
+          : offers[0] ?? null;
+
+  const chargeValid = deliveryChargeValid(deliveryCharge);
 
   const query = useQuery({
     queryKey: intentKey(intentId),
@@ -133,6 +157,7 @@ export default function SupplierRequestScreen() {
         // quantities while a request is open, so accepting without saying which
         // version you read is accepting whatever it happens to be now.
         expectedRevision: request?.revision,
+        ...deliveryAnswerFor(deliveryOffer, deliveryCharge),
         notes: notes.trim() === '' ? undefined : notes.trim(),
       }),
     onSuccess: () => {
@@ -196,6 +221,12 @@ export default function SupplierRequestScreen() {
                 <MandiText variant="bodyEmphasis">
                   {request.items.length} item{request.items.length === 1 ? '' : 's'} requested
                 </MandiText>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {request.deliveryPreference === 'PICKUP' ? 'Will collect · ' : 'Delivery wanted · '}
+                  {request.preferredDeliveryDate != null
+                    ? `Wanted ${describeDeliveryDay(request.preferredDeliveryDate)}`
+                    : 'Wanted immediately'}
+                </MandiText>
                 {request.requestedDeliveryTime != null && (
                   <MandiText variant="caption" color={Colors.textSecondary}>
                     Wanted by {new Date(request.requestedDeliveryTime).toLocaleString()}
@@ -257,6 +288,25 @@ export default function SupplierRequestScreen() {
               />
             ))}
           </MandiCard>
+
+          {answerable && request.deliveryPreference === 'PICKUP' && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">The restaurant will collect this</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                No delivery is needed, so there is nothing to offer for delivery.
+              </MandiText>
+            </MandiCard>
+          )}
+
+          {answerable && request.deliveryPreference !== 'PICKUP' && deliveryPolicy.data != null && (
+            <DeliveryOfferChoice
+              policy={deliveryPolicy.data}
+              value={deliveryOffer}
+              onChange={setDeliveryChoice}
+              fee={deliveryCharge}
+              onFeeChange={setDeliveryCharge}
+            />
+          )}
 
           {answerable ? (
             <MandiCard>
@@ -349,6 +399,7 @@ export default function SupplierRequestScreen() {
           size="lg"
           variant={everythingDeclined ? 'destructive' : 'primary'}
           loading={reply.isPending}
+          disabled={!everythingDeclined && deliveryOffer === 'SELF' && !chargeValid}
           onPress={() => (everythingDeclined ? setConfirmDecline(true) : reply.mutate())}
         />
       </MandiStickyBar>

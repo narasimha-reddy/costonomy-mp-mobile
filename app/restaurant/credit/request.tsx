@@ -67,8 +67,10 @@ export default function CreditRequestScreen() {
   const searching = settledTerm.trim().length >= 2;
 
   const suppliers = useQuery({
-    queryKey: ['search', 'suppliers', settledTerm.trim(), outletId],
-    queryFn: () => searchSuppliers(accessToken as string, settledTerm.trim(), outletId ?? undefined),
+    queryKey: ['search', 'suppliers', 'all', settledTerm.trim(), outletId],
+    // reach=all: a supplier you ask for credit need not deliver to this outlet, and a filter would hide them.
+    queryFn: () => searchSuppliers(accessToken as string, settledTerm.trim(), outletId ?? undefined,
+      undefined, undefined, { reach: 'all' }),
     enabled: searching && accessToken != null,
   });
 

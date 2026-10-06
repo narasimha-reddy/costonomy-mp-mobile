@@ -7,7 +7,9 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchCategories } from '@/services/catalog';
 import { fetchOutletOrders } from '@/services/procurement';
 import { fetchIntents } from '@/services/intent';
+import { fetchQuickScanConfig } from '@/services/quickscan';
 import { intentsKey } from '@/lib/queryKeys';
+import { QuickActionTiles, type MoneyAction } from '@/components/wallet/QuickActionTiles';
 import { CategoryTile } from '@/components/product/CategoryTile';
 import {
   MandiCard,
@@ -30,6 +32,7 @@ import { PopularSuppliersCarousel } from '@/components/restaurant/PopularSupplie
 import type { Intent } from '@/models/intent';
 import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
+import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
 import { Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
@@ -64,6 +67,8 @@ export default function RestaurantHome() {
         placeholder="Search paneer, rice, oil…"
       />
 
+      <QuickActions outletId={outletId} />
+
       <RequestsSection outletId={outletId} />
       {/* Below requests, above orders: a request is somebody already waiting on
           this kitchen's behalf, and an order is work in hand. Browsing sits
@@ -75,6 +80,57 @@ export default function RestaurantHome() {
   );
 }
 
+
+/**
+ * The "Money Transfers" section: Quick Scan and Wallet in a row of four slots.
+ *
+ * <p><b>QuickScan is hidden rather than broken.</b> Loading and erroring both
+ * leave it out: a feature the outlet cannot use yet, or that this call failed to
+ * confirm, is one Home should not offer rather than show disabled. `enabled` is
+ * the server's word on whether the outlet can use it at all; the pay screen
+ * checks the rest itself. Wallet then takes the first slot.
+ *
+ * <p>No balance here: it lives on the wallet screen, which is where Add money is.
+ * More actions are one more entry in `actions`.
+ */
+function QuickActions({ outletId }: { outletId: number | null }) {
+  const router = useRouter();
+  const { accessToken } = useSession();
+
+  const config = useQuery({
+    queryKey: ['outlet', outletId, 'quickscan-config'],
+    queryFn: () => fetchQuickScanConfig(accessToken as string, outletId as number),
+    enabled: outletId != null && accessToken != null,
+  });
+
+  const actions: MoneyAction[] = [
+    {
+      key: 'quickscan',
+      label: 'Quick Scan',
+      icon: 'qr-code-outline',
+      renderIcon: (size) => <ScanQrIcon size={size} variant="white" />,
+      accessibilityLabel: 'Quick Scan. Pay a shop by scanning its QR.',
+      visible: config.data?.enabled === true,
+      onPress: () => {
+        track('open_quickscan', { screen: SCREEN, outletId });
+        router.push('/restaurant/quickscan');
+      },
+    },
+    {
+      key: 'wallet',
+      label: 'Wallet',
+      icon: 'wallet-outline',
+      accessibilityLabel: 'Wallet',
+      visible: true,
+      onPress: () => {
+        track('open_wallet', { screen: SCREEN, outletId });
+        router.push('/restaurant/wallet');
+      },
+    },
+  ];
+
+  return <QuickActionTiles actions={actions} />;
+}
 
 /**
  * The one thing about the open requests worth a line.

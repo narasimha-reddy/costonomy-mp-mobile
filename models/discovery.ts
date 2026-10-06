@@ -17,6 +17,26 @@ export type ExplanationCode =
   | 'FULL_QUANTITY'
   | 'HIGHLY_RATED'
   | 'PREVIOUSLY_ORDERED';
+export interface BrandOption {
+  supplierSkuId: number;
+  offerId: number | null;
+  skuName: string;
+  brandName: string | null;
+  grade?: string | null;
+  packSize: Money;
+  packUnit: string;
+  sellingPrice: Money;
+  mrp?: Money | null;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
+  gstRate: Money | null;
+  unitPriceInclusiveGst: Money | null;
+  imageUrl: string | null;
+  availability: string;
+  availableQuantity: Money | null;
+  measureValue: Money | null;
+  measureUnit: string | null;
+}
 
 export interface RecommendedOffer {
   offerId: number;
@@ -26,9 +46,13 @@ export interface RecommendedOffer {
   storeName: string;
   skuName: string;
   brandName: string | null;
+  grade?: string | null;
   packSize: Money;
   packUnit: string;
+  mrp?: Money | null;
   unitPrice: Money;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
   gstRate: Money;
   itemTotal: Money;
   gstAmount: Money;
@@ -75,6 +99,8 @@ export interface RecommendedOffer {
    * rest exist.
    */
   otherPackCount: number;
+  /** All brand options for this item from this supplier, sorted lowest priced first. */
+  brandOptions?: BrandOption[];
 }
 
 export interface ProductRecommendation {
@@ -117,6 +143,8 @@ export interface SupplierSearchResult {
 export interface SupplierSearchPage {
   suppliers: SupplierSearchResult[];
   beyondRadius: number;
+  total?: number;
+  nextOffset?: number | null;
 }
 
 /**
@@ -133,9 +161,13 @@ export interface StorefrontSku {
   supplierSkuId: number;
   skuName: string;
   brandName: string | null;
+  grade?: string | null;
   packSize: Money;
   packUnit: string;
+  mrp?: Money | null;
   sellingPrice: Money;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
   gstRate: Money;
   availability: string;
   availableQuantity: Money | null;
@@ -163,6 +195,8 @@ export interface StorefrontSku {
   /** The amount inside one pack, where a pack has one. */
   measureValue: Money | null;
   measureUnit: string | null;
+  /** All brand options for this item from this supplier, sorted lowest priced first. */
+  brandOptions?: BrandOption[];
 }
 
 /**

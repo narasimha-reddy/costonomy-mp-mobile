@@ -1,5 +1,5 @@
 import { API_BASE_URL } from './config';
-import { ApiError, NetworkError } from './errors';
+import { ApiError, NetworkError, UploadTimeoutError } from './errors';
 
 /**
  * Upload a file as multipart.
@@ -65,4 +65,73 @@ export async function uploadFile(
   }
 
   return envelope?.data as UploadedFile;
+}
+
+export interface UploadPart {
+  uri: string;
+  name: string;
+  type: string;
+}
+
+export const UPLOAD_TIMEOUT_MS = 120_000;
+
+/**
+ * Upload several files as parts named `file`, reporting progress, and return the unwrapped `data`.
+ *
+ * <p>XMLHttpRequest rather than `fetch`, because `fetch` cannot report how much of the body has
+ * gone. Like `uploadFile` it sets no Content-Type (the runtime writes the boundary) and does not
+ * retry: a retried upload could be a second bill. A request that runs past the timeout is an
+ * `UploadTimeoutError`; one that never connects is a `NetworkError`.
+ */
+export async function uploadParts<T>(
+  path: string,
+  files: UploadPart[],
+  token: string,
+  onProgress?: (fraction: number) => void,
+): Promise<T> {
+  const form = new FormData();
+  for (const file of files) {
+    if (file.uri.startsWith('data:') || file.uri.startsWith('blob:')) {
+      const blob = await (await fetch(file.uri)).blob();
+      form.append('file', blob, file.name);
+    } else {
+      form.append('file', { uri: file.uri, name: file.name, type: file.type } as never);
+    }
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE_URL}${path}`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.timeout = UPLOAD_TIMEOUT_MS;
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) onProgress(Math.min(1, e.loaded / e.total));
+      };
+    }
+    xhr.onerror = () => reject(new NetworkError());
+    xhr.ontimeout = () => reject(new UploadTimeoutError());
+    xhr.onload = () => {
+      let envelope: { data?: T; error?: { code: string; message: string } } | null = null;
+      try {
+        envelope = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        envelope = null;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(1);
+        resolve(envelope?.data as T);
+        return;
+      }
+      const retryAfter = xhr.getResponseHeader?.('Retry-After');
+      reject(new ApiError({
+        code: envelope?.error?.code ?? 'UNEXPECTED_ERROR',
+        message: envelope?.error?.message ?? 'Could not upload that file.',
+        status: xhr.status,
+        retryAfterSeconds: retryAfter ? Number(retryAfter) : undefined,
+      }));
+    };
+    xhr.send(form);
+  });
 }

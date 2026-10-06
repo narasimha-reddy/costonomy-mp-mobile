@@ -1,3 +1,4 @@
+import { endedPaymentBody } from '@/lib/payments/statusLabel';
 import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -225,7 +226,7 @@ export default function PayForOrderScreen() {
             />
             <MandiText variant="bodyEmphasis">{title(shown)}</MandiText>
             <MandiText variant="caption" color={Colors.textSecondary} style={styles.centred}>
-              {message ?? body(shown)}
+              {message ?? (shown === 'ended' ? endedPaymentBody(current?.status) : body(shown))}
             </MandiText>
 
             {total != null && (
@@ -298,7 +299,7 @@ function body(phase: Phase): string {
       // only ever taken from a funded one. A bank hold, if any, is released.
       return 'No money has been taken for this order. If your bank shows a hold, it is released automatically. You can try again.';
     case 'ended':
-      return 'This order’s payment has closed without being paid, and no money was taken for it. Check Orders, or order again from the request.';
+      return endedPaymentBody(null);
     case 'unknown':
       return 'We could not confirm the outcome from here. Your money is not at risk — the payment provider tells us directly, and Orders will show the result shortly. Do not pay again.';
   }

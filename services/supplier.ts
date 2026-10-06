@@ -1,6 +1,7 @@
 import { apiRequest } from '@/lib/api/client';
 import { uploadFile, type UploadedFile } from '@/lib/api/upload';
 import type { IncomingOrder, SupplierOrder } from '@/models/procurement';
+import type { RateSheetResponse, UpdateRateSheetItem, UpdateRateSheetResponse } from '@/models/catalog';
 import type { Money } from '@/utils/money';
 
 export interface SupplierStore {
@@ -226,6 +227,7 @@ export interface SupplierSku {
   skuCode: string | null;
   name: string;
   brandName: string | null;
+  grade?: string | null;
   packSize: Money;
   packUnit: string;
   /**
@@ -253,7 +255,10 @@ export interface SupplierSku {
   youtubeUrl: string | null;
   images: string[];
   status: string;
+  mrp?: Money | null;
   sellingPrice: Money;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
   gstRate: Money;
   availability: string;
   availableQuantity: Money | null;
@@ -268,6 +273,7 @@ export function updateSku(
   token: string,
   skuId: number,
   patch: Partial<{
+    mrp: string;
     sellingPrice: string;
     gstRate: string;
     availability: 'AVAILABLE' | 'OUT_OF_STOCK';
@@ -275,6 +281,7 @@ export function updateSku(
     status: 'ACTIVE' | 'INACTIVE';
     name: string;
     brandName: string;
+    grade: string;
     packSize: string;
     packUnit: string;
     measureValue: string;
@@ -382,11 +389,13 @@ export interface CreateSkuInput {
   skuCode?: string;
   name: string;
   brandName?: string;
+  grade?: string;
   packSize: string;
   packUnit: string;
   /** Required when packUnit is a container; refused otherwise. */
   measureValue?: string;
   measureUnit?: string;
+  mrp?: string;
   imageUrl?: string;
   /**
    * Optional detail, for the page a kitchen decides on. D-096.
@@ -471,6 +480,10 @@ export interface DeliveryPolicy {
   ownDeliveryFee: Money | null;
   /** Null means no minimum. */
   ownDeliveryMinOrderValue: Money | null;
+  /** Store minimum order value threshold. Subtotal must reach this to checkout. */
+  minOrderValue?: Money;
+  /** Store subtotal threshold for free delivery. */
+  freeDeliveryThreshold?: Money | null;
   /** Null means no limit beyond the platform's own serviceability. */
   maxDeliveryRadiusKm: Money | null;
 }
@@ -488,6 +501,8 @@ export function saveDeliveryPolicy(
     costonomyDeliveryEnabled: boolean;
     ownDeliveryFee?: string;
     ownDeliveryMinOrderValue?: string | null;
+    minOrderValue?: string | null;
+    freeDeliveryThreshold?: string | null;
     maxDeliveryRadiusKm?: string | null;
   },
 ): Promise<DeliveryPolicy> {
@@ -537,3 +552,120 @@ export function saveCreditPolicy(
     `/api/v1/supplier-stores/${storeId}/credit-policy`,
     { method: 'PUT', token, body: policy });
 }
+
+// ── Item Variants Management ──────────────────────────────────────────
+
+export interface VariantPreset {
+  brandName: string;
+  grade: string | null;
+  packSize: Money;
+  packUnit: string;
+  typicalMrp: Money | null;
+  isTopSeller: boolean;
+}
+
+export interface ItemVariantGroupResponse {
+  canonicalProductId: number;
+  productName: string;
+  categoryId: number | null;
+  categoryName: string | null;
+  imageUrl: string | null;
+  baseUnit: string;
+  variants: SupplierSku[];
+  recommendedPresets: VariantPreset[];
+}
+
+export interface BatchVariantEntry {
+  skuId?: number | null;
+  skuCode?: string | null;
+  name?: string | null;
+  brandName?: string | null;
+  grade?: string | null;
+  packSize: string;
+  packUnit: string;
+  mrp?: string | null;
+  sellingPrice: string;
+  gstRate: string;
+  availability: string;
+  availableQuantity?: string | null;
+}
+
+export interface BatchUpdateVariantsRequest {
+  canonicalProductId: number;
+  variants: BatchVariantEntry[];
+}
+
+export function fetchItemVariants(
+  token: string,
+  storeId: number,
+  productId: number,
+): Promise<ItemVariantGroupResponse> {
+  return apiRequest<ItemVariantGroupResponse>(
+    `/api/v1/supplier-stores/${storeId}/products/${productId}/variants`,
+    { token },
+  );
+}
+
+export function batchUpdateVariants(
+  token: string,
+  storeId: number,
+  productId: number,
+  request: BatchUpdateVariantsRequest,
+): Promise<SupplierSku[]> {
+  return apiRequest<SupplierSku[]>(
+    `/api/v1/supplier-stores/${storeId}/products/${productId}/variants/batch`,
+    {
+      method: 'POST',
+      token,
+      body: request,
+    },
+  );
+}
+
+// ── Catch-weight weighing & Morning rate sheet ─────────────────────────
+
+export interface RecordDispatchWeightItem {
+  supplierOrderItemId: number;
+  dispatchedWeight: string;
+}
+
+export function recordDispatchWeights(
+  token: string,
+  orderId: number,
+  weights: RecordDispatchWeightItem[],
+): Promise<SupplierOrder> {
+  return apiRequest<SupplierOrder>(
+    `/api/v1/supplier-orders/${orderId}/weights`,
+    {
+      method: 'POST',
+      token,
+      body: { weights },
+    },
+  );
+}
+
+export function fetchRateSheet(
+  token: string,
+  storeId: number,
+): Promise<RateSheetResponse> {
+  return apiRequest<RateSheetResponse>(
+    `/api/v1/supplier-stores/${storeId}/rate-sheet`,
+    { token },
+  );
+}
+
+export function updateRateSheet(
+  token: string,
+  storeId: number,
+  rows: UpdateRateSheetItem[],
+): Promise<UpdateRateSheetResponse> {
+  return apiRequest<UpdateRateSheetResponse>(
+    `/api/v1/supplier-stores/${storeId}/rate-sheet`,
+    {
+      method: 'POST',
+      token,
+      body: { rows },
+    },
+  );
+}
+

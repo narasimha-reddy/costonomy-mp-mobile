@@ -30,6 +30,7 @@ const routes: [string, string | null, string | null][] = [
   ['PROCUREMENT', null, '/restaurant/checkout/7'],
   ['INTENT', '/supplier/requests/7', '/restaurant/requests/7'],
   ['CHAT_THREAD', '/chat/7', '/chat/7'],
+  ['SUBSCRIPTION', null, '/restaurant/subscriptions'],
 ];
 
 describe('destinationFor', () => {

@@ -15,7 +15,7 @@ export type ProcurementStatus =
 
 export type ApprovalStatus = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
-export type PaymentMethod = 'PREPAID' | 'CREDIT';
+export type PaymentMethod = 'PREPAID' | 'WALLET' | 'CREDIT';
 
 export interface ProcurementItem {
   id: number;
@@ -231,6 +231,17 @@ export interface SupplierOrderItem {
    */
   acceptedLineTotal: Money | null;
   status: string;
+  isCatchWeight?: boolean;
+  requiresColdChain?: boolean;
+  dispatchedWeight?: Money | null;
+  /** What a weighed catch-weight line is billed for: the lesser of the scale reading and what was accepted (API D-128). Null until weighed. */
+  billableQuantity?: Money | null;
+  weighedAt?: string | null;
+  weightDeltaAmount?: Money | null;
+  doorstepAcceptedQty?: Money | null;
+  doorstepRejectedQty?: Money | null;
+  doorstepRejectionReason?: string | null;
+  doorstepRefundAmount?: Money | null;
 }
 
 export interface SupplierOrder {
@@ -263,11 +274,36 @@ export interface SupplierOrder {
   /** `acceptedAmount` split the way the ordered total is, so the two can be shown side by side. */
   acceptedSubtotal: Money;
   acceptedGst: Money;
+  weightAdjustmentAmount?: Money | null;
+  doorstepRefundAmount?: Money | null;
+  finalPayableAmount?: Money | null;
   paymentMethod: PaymentMethod | null;
+  /**
+   * Read live. Beyond the card and wallet statuses it may be RETURNING, RETURNED
+   * or RETURN_DELAYED (D-109), and an unknown value must render neutrally.
+   */
   paymentStatus: string | null;
+  /**
+   * How the money moved: card, upi, netbanking, wallet, emi, paylater. Null before
+   * payment and for wallet or credit orders, and absent from an older API. Wording only.
+   */
+  paymentInstrument?: string | null;
+  /**
+   * The cancellation refund to the source account: its amount from when it is raised,
+   * and when it completed. Both null unless such a refund exists (a released card hold
+   * or an older wallet refund has none); absent from an older API. Number or string.
+   */
+  refundAmount?: Money | number | null;
+  refundedAt?: string | null;
   /** How the goods travel, and what the carriage cost. D-091. */
   deliveryMode: DeliveryMode | null;
   deliveryFee: Money | null;
+  deliverySlotId?: number | null;
+  deliverySlotName?: string | null;
+  scheduledDeliveryDate?: string | null;
+  isSubscriptionOrder?: boolean | null;
+  subscriptionId?: number | null;
+  hasColdChainItems?: boolean | null;
   /** Set only on a cancelled order, and the reason it is not three statuses. */
   cancelledBy: CancelledBy | null;
   cancellationReason: string | null;
@@ -307,6 +343,7 @@ export interface IncomingOrder {
   /** What the store committed to. Zero before they answer, below the total after a partial. */
   acceptedAmount: Money;
   paymentMethod: PaymentMethod | null;
+  hasColdChainItems?: boolean | null;
   items: SupplierOrderItem[];
 }
 

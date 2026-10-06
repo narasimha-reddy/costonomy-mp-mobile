@@ -36,6 +36,7 @@ import { Colors, Elevation, Radius, Spacing, TouchTarget } from '@/theme';
 const SCREEN = 'SUP-CATALOG-02';
 const STEPS = ['Choose the product', 'Pack and price'];
 const GST_RATES = ['0', '5', '12', '18'];
+const STANDARD_GRADES = ['Grade A', 'Grade B', 'Grade C', 'Premium', 'Standard'];
 
 /** Big enough to hold the whole catalog in one call; the server pages at 20. */
 const PAGE_SIZE = 200;
@@ -72,9 +73,11 @@ export default function NewSkuScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [name, setName] = useState('');
   const [brandName, setBrandName] = useState('');
+  const [grade, setGrade] = useState('');
   const [skuCode, setSkuCode] = useState('');
   const [packSize, setPackSize] = useState('1');
   const [packUnit, setPackUnit] = useState('KG');
+  const [mrp, setMrp] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [gstRate, setGstRate] = useState('5');
   const [measureValue, setMeasureValue] = useState('');
@@ -198,6 +201,7 @@ export default function NewSkuScreen() {
         canonicalProductId: (product as Product).id,
         name: name.trim(),
         brandName: brandName.trim() || undefined,
+        grade: grade.trim() || undefined,
         skuCode: skuCode.trim() || undefined,
         packSize: packSize.trim(),
         packUnit,
@@ -205,6 +209,7 @@ export default function NewSkuScreen() {
         // measure on a unit that already states an amount.
         measureValue: needsMeasure ? measureValue.trim() : undefined,
         measureUnit: needsMeasure ? measureUnit : undefined,
+        mrp: mrp.trim() ? mrp.trim() : undefined,
         sellingPrice: sellingPrice.trim(),
         gstRate,
         imageUrl: imageUrl.trim() || undefined,
@@ -406,6 +411,27 @@ export default function NewSkuScreen() {
             placeholder="Amul"
           />
 
+          <View style={styles.gradeSection}>
+            <MandiText variant="label">Grade (optional)</MandiText>
+            <View style={styles.chips}>
+              {STANDARD_GRADES.map((g) => (
+                <Chip
+                  key={g}
+                  label={g}
+                  active={grade === g}
+                  onPress={() => setGrade(grade === g ? '' : g)}
+                />
+              ))}
+            </View>
+            <MandiFormField
+              label="Custom grade (if not above)"
+              value={STANDARD_GRADES.includes(grade) ? '' : grade}
+              onChangeText={setGrade}
+              placeholder="e.g. Export Grade"
+              hint="Useful for commodities: Grade A, Grade B, Premium, etc."
+            />
+          </View>
+
           <PackFields
             packSize={packSize}
             onPackSize={setPackSize}
@@ -417,6 +443,23 @@ export default function NewSkuScreen() {
             onMeasureUnit={setMeasureUnit}
             units={units.data}
           />
+
+          <MandiFormField
+            label="MRP (optional for loose items)"
+            value={mrp}
+            onChangeText={(text) => setMrp(text.replace(/[^\d.]/g, ''))}
+            placeholder="500"
+            keyboardType="decimal-pad"
+            hint="Printed maximum retail price. Leave empty for loose/unbranded commodities."
+          />
+          {Number(mrp) > Number(sellingPrice) && Number(sellingPrice) > 0 && (
+            <View style={styles.discountPreview}>
+              <Ionicons name="pricetag-outline" size={14} color="#E65100" />
+              <MandiText variant="captionEmphasis" color="#E65100">
+                Buyer savings: {Math.round(((Number(mrp) - Number(sellingPrice)) / Number(mrp)) * 100)}% OFF (Save ₹{(Number(mrp) - Number(sellingPrice)).toFixed(2)})
+              </MandiText>
+            </View>
+          )}
 
           <MandiFormField
             label="Selling price"
@@ -713,4 +756,17 @@ const styles = StyleSheet.create({
   },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   preview: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  gradeSection: { gap: Spacing.xs },
+  discountPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.sm,
+    backgroundColor: '#FFF3E0',
+    alignSelf: 'flex-start',
+    marginTop: -Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
 });

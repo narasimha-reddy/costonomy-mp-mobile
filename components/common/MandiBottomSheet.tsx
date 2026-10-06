@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
 import { DEVICE_WIDTH } from './DeviceFrame';
@@ -29,6 +29,8 @@ export function MandiBottomSheet({
   onClose,
   title,
   closeLabel,
+  avoidKeyboard = false,
+  testID,
   children,
 }: {
   visible: boolean;
@@ -37,6 +39,9 @@ export function MandiBottomSheet({
   title?: string;
   /** What the close button announces, e.g. "Close the filter". */
   closeLabel?: string;
+  /** Lift the sheet above the keyboard (iOS; Android resizes the window itself). For sheets with inputs. */
+  avoidKeyboard?: boolean;
+  testID?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -60,7 +65,12 @@ export function MandiBottomSheet({
         accessible={false}
         importantForAccessibility="no"
       >
-        <View style={styles.column} pointerEvents="box-none">
+        <KeyboardAvoidingView
+          style={styles.column}
+          pointerEvents="box-none"
+          behavior={avoidKeyboard && Platform.OS === 'ios' ? 'padding' : undefined}
+          enabled={avoidKeyboard}
+        >
           {/* A View that claims the touch, not a Pressable.
               The sheet has to swallow taps so they do not reach the scrim and
               close it — but a Pressable inside a Pressable renders as a button
@@ -70,8 +80,14 @@ export function MandiBottomSheet({
           <View
             style={styles.sheet}
             onStartShouldSetResponder={() => true}
+            // On web a click inside the sheet still bubbles up the DOM to the scrim, whose press handler closes the
+            // sheet, whatever the responder system did with the touch. A tap on a text box has no handler of its own
+            // to stop it, so it closed the sheet. Stop the click here, at the edge of the sheet. (React Native's View
+            // has no onClick in its types; react-native-web passes it through, and native never fires it.)
+            {...({ onClick: (event: { stopPropagation: () => void }) => event.stopPropagation() } as object)}
             accessibilityViewIsModal
             accessibilityLabel={title}
+            testID={testID}
           >
             <View style={styles.titleRow}>
               {title ? (
@@ -89,7 +105,7 @@ export function MandiBottomSheet({
             </View>
             {children}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );

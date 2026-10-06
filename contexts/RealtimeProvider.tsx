@@ -78,6 +78,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         break;
       case 'DELIVERY':
         invalidate(['supplier-order']);
+        invalidate(['deliveries']);
+        invalidate(['outlet-delivery-radar']);
+        invalidate(['outlet-deliveries']);
         break;
       case 'PROCUREMENT':
         if (event.aggregateId != null) invalidate(['procurement', event.aggregateId]);

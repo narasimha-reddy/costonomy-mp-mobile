@@ -1,10 +1,14 @@
-import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { paymentStatusCopy } from '@/lib/payments/statusLabel';
+import React, { useState } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { billingFailureMessage } from '@/lib/billing/messages';
+import { fetchTaxInvoice, fetchCreditNotes, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder } from '@/services/procurement';
+import { fetchDelivery } from '@/services/delivery';
 import {
   MandiButton,
   MandiCard,
@@ -17,11 +21,13 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
-import { PaymentMethodPill } from '@/components/order';
-import { DeliveryMode, orderStatusFor, resolveStatus } from '@/models/status';
+import { CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
+import { isApiError } from '@/lib/api/errors';
+import { DeliveryMode, orderStatusFor, resolveStatus, DeliveryStatus as DeliveryStatusRegistry, SupplierOrderStatus } from '@/models/status';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
-import { formatMomentWithRecency } from '@/utils/dateRange';
+import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine } from '@/utils/skuLabel';
+import { DetailRow as Row } from '@/components/restaurant/DetailRow';
 import { Colors, Spacing } from '@/theme';
 
 /**
@@ -60,7 +66,16 @@ export default function OrderDetailScreen() {
     },
   });
 
+  const delivery = useQuery({
+    queryKey: ['supplier-order', orderId, 'delivery'],
+    queryFn: () => fetchDelivery(accessToken as string, orderId),
+    enabled: Number.isFinite(orderId) && accessToken != null,
+    retry: (count, error) => !isApiError(error) && count < 2,
+  });
+
   const order = query.data;
+  const deliveryStatus = delivery.data;
+  const deliveryNotYet = delivery.error != null && isApiError(delivery.error);
 
   /**
    * The supplier answered, and for less than was asked.
@@ -73,6 +88,57 @@ export default function OrderDetailScreen() {
     && order.acceptedAmount != null
     && order.items.some((item) => item.acceptedQuantity != null)
     && Number(order.acceptedAmount) !== Number(order.totalAmount);
+
+  const payment = order?.paymentStatus
+    ? paymentStatusCopy({
+      status: order.paymentStatus,
+      instrument: order.paymentInstrument,
+      // The figure the Total row shows: as sent, not worked out here.
+      amount: settled ? order.acceptedAmount : order.totalAmount,
+      cancelled: order.status === 'CANCELLED',
+      refundAmount: order.refundAmount,
+      refundedAt: order.refundedAt,
+    })
+    : undefined;
+
+  // ── Billing: statutory invoices & credit notes ──────────────────────
+  const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
+  const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+
+  const billingEligible = order != null && [
+    'DELIVERED', 'COMPLETED', 'SETTLED',
+  ].includes(order.status);
+
+  async function handleViewInvoice() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const inv = await fetchTaxInvoice(accessToken, orderId);
+      setInvoice(inv);
+    } catch (caught) {
+      Alert.alert('Invoice', billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function handleViewCreditNotes() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    try {
+      const notes = await fetchCreditNotes(accessToken, orderId);
+      if (notes.length === 0) {
+        Alert.alert('Credit Notes', 'No credit notes have been issued for this order.');
+      } else {
+        setCreditNotes(notes);
+      }
+    } catch (caught) {
+      Alert.alert('Credit Notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
+    } finally {
+      setBillingLoading(false);
+    }
+  }
 
   return (
     <MandiScreen
@@ -177,6 +243,9 @@ export default function OrderDetailScreen() {
                       {formatQuantity(item.requestedQuantity)} {item.unit} ordered ·
                       Inc. {formatGstRate(item.gstRate)} GST
                     </MandiText>
+                    {item.requiresColdChain && (
+                      <ColdChainBanner compact text="Chilled goods" />
+                    )}
                     {short && (
                       <View style={styles.shortRow}>
                         <Ionicons name="alert-circle-outline" size={14} color={Colors.warning} />
@@ -199,10 +268,65 @@ export default function OrderDetailScreen() {
                     <MandiText variant="bodyEmphasis">
                       {formatMoney(item.acceptedLineTotal ?? item.lineTotal)}
                     </MandiText>
+                    {item.isCatchWeight === true && (
+                      <CatchWeightNote billed={item.billableQuantity} unit={item.unit} />
+                    )}
                   </View>
                 </View>
               );
             })}
+          </MandiCard>
+
+          <MandiCard>
+            <View style={styles.deliverySummaryHeader}>
+              <MandiText variant="bodyEmphasis">Delivery</MandiText>
+              {deliveryStatus && (
+                <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, deliveryStatus.status)} size="sm" />
+              )}
+            </View>
+
+            {order.hasColdChainItems && (
+              <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />
+            )}
+
+            {order.scheduledDeliveryDate && (
+              <Row label="Scheduled Date" value={order.scheduledDeliveryDate} />
+            )}
+            {order.deliverySlotName && (
+              <Row label="Delivery Window" value={order.deliverySlotName} />
+            )}
+            {order.isSubscriptionOrder && (
+              <Row label="Order Type" value="Daily Subscription" />
+            )}
+
+            {deliveryStatus ? (
+              <View style={styles.deliverySummaryBody}>
+                {deliveryStatus.etaMinutes != null && (
+                  <Row label="ETA" value={`${deliveryStatus.etaMinutes} min`} />
+                )}
+                {deliveryStatus.estimatedArrivalAt && (
+                  <Row label="Arriving" value={formatMoment(deliveryStatus.estimatedArrivalAt)} />
+                )}
+                {deliveryStatus.driverName && (
+                  <Row label="Driver" value={deliveryStatus.driverName} />
+                )}
+                {deliveryStatus.pickupAddress && (
+                  <Row label="Pickup" value={deliveryStatus.pickupAddress} />
+                )}
+                {deliveryStatus.dropAddress && (
+                  <Row label="Destination" value={deliveryStatus.dropAddress} />
+                )}
+                {!deliveryStatus.trackable && deliveryStatus.mode === 'SUPPLIER_OWN' && (
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Supplier own delivery does not show live tracking.
+                  </MandiText>
+                )}
+              </View>
+            ) : !deliveryNotYet ? (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Delivery details will appear once the supplier prepares this order.
+              </MandiText>
+            ) : null}
           </MandiCard>
 
           <MandiCard>
@@ -219,11 +343,15 @@ export default function OrderDetailScreen() {
               label="GST"
               value={formatMoney(settled ? order.acceptedGst : order.gstAmount)}
             />
-            {/* Where the request screen puts it, and only when it cost
-                something: a "Delivery  Free" line on a collected order states
-                the obvious next to a chip that already said "You collect". */}
+            {/* Where the request screen puts it. A charge is a line; free delivery is a line too (below). */}
             {order.deliveryFee != null && Number(order.deliveryFee) > 0 && (
               <Row label="Delivery" value={formatMoney(order.deliveryFee)} />
+            )}
+            {/* Said outright when somebody delivers for nothing: a missing line reads as "not charged yet". Still
+                nothing for a collected order, where it would state the obvious. */}
+            {order.deliveryFee != null && Number(order.deliveryFee) === 0
+              && order.deliveryMode != null && order.deliveryMode !== 'PICKUP' && (
+              <Row label="Delivery" value="Free" />
             )}
             <Row
               label="Total"
@@ -231,7 +359,13 @@ export default function OrderDetailScreen() {
               emphasis
             />
             {order.paymentStatus && (
-              <Row label="Payment" value={humanise(order.paymentStatus)} />
+              <Row label="Payment" value={payment?.label ?? ''} />
+            )}
+            {/* Said by the server's status and instrument, never guessed: a
+                UPI order that was cancelled has been debited and is being
+                refunded, which is not "no money was taken". */}
+            {payment?.detail != null && (
+              <MandiText variant="caption" color={Colors.textSecondary}>{payment.detail}</MandiText>
             )}
             {/* How this one is funded — the restaurant is the party who either
                 paid or owes, and until now its own view of the order was the
@@ -248,6 +382,66 @@ export default function OrderDetailScreen() {
               </View>
             )}
           </MandiCard>
+
+          {/* ── Statutory Billing Documents ────────────────────────── */}
+          {billingEligible && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">📄 GST Documents</MandiText>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : 'View Invoice'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={handleViewInvoice}
+                  disabled={billingLoading}
+                />
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : 'Credit Notes'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={handleViewCreditNotes}
+                  disabled={billingLoading}
+                />
+              </View>
+
+              {invoice != null && (
+                <View style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.primary}>
+                    {invoice.invoiceNumber} — {formatMoney(invoice.totalAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Issued {formatMoment(invoice.issuedAt)} • {invoice.isInterState ? 'IGST' : 'CGST + SGST'}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Seller: {invoice.supplierName} (GSTIN {invoice.supplierGstin})
+                  </MandiText>
+                  {invoice.items.map((item) => (
+                    <View key={item.id} style={styles.totalsRow}>
+                      <MandiText variant="caption">{item.productName} ({item.hsnCode})</MandiText>
+                      <MandiText variant="caption">{formatMoney(item.totalAmount)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {creditNotes != null && creditNotes.length > 0 && creditNotes.map((cn) => (
+                <View key={cn.id} style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.danger}>
+                    {cn.creditNoteNumber} — Refund {formatMoney(cn.totalRefundAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Reason: {cn.reasonCode} • Issued {formatMoment(cn.issuedAt)}
+                  </MandiText>
+                  {cn.items.map((item) => (
+                    <View key={item.id} style={styles.totalsRow}>
+                      <MandiText variant="caption">{item.productName}: {item.rejectedQuantity} rejected</MandiText>
+                      <MandiText variant="caption" color={Colors.danger}>-{formatMoney(item.totalRefund)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </MandiCard>
+          )}
         </>
       )}
     </MandiScreen>
@@ -345,37 +539,6 @@ export default function OrderDetailScreen() {
   }
 }
 
-function Row({
-  label,
-  value,
-  emphasis,
-  hint,
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-  hint?: string;
-}) {
-  return (
-    <View style={styles.totalsRow}>
-      <View style={styles.flex}>
-        <MandiText variant={emphasis ? 'bodyEmphasis' : 'body'} color={Colors.textSecondary}>
-          {label}
-        </MandiText>
-        {hint && (
-          <MandiText variant="caption" color={Colors.textTertiary}>{hint}</MandiText>
-        )}
-      </View>
-      <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
-    </View>
-  );
-}
-
-function humanise(value: string): string {
-  const spaced = value.replace(/_/g, ' ').toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
 const styles = StyleSheet.create({
   partyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   pressed: { opacity: 0.7 },
@@ -397,9 +560,18 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
   },
+  countdown: { marginTop: Spacing.md, gap: Spacing.xs },
+  deliverySummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
   barActions: { flexDirection: 'row', gap: Spacing.sm },
   barAction: { flex: 1 },
   party: { marginTop: Spacing.xs },
+  deliverySummaryBody: { gap: Spacing.xs },
   item: {
     flexDirection: 'row',
     gap: Spacing.md,

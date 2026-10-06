@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MandiCard, MandiStatusChip, MandiText } from '@/components/common';
-import { dueChip } from '@/lib/credit/dueChip';
+import { creditedRowValue, hasCredit, invoiceChip } from '@/lib/credit/creditNotes';
 import { isSettled, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import { formatMoney } from '@/utils/money';
 import { Colors, Spacing } from '@/theme';
@@ -20,17 +20,20 @@ export function CreditInvoiceRow({
   /** Overrides the default `credit-invoice-{id}`, for the same invoice drawn twice on a screen. */
   testID?: string;
 }) {
-  const chip = dueChip(invoice.dueState, invoice.daysToDue);
+  const chip = invoiceChip(invoice);
   const order = invoice.orderNumber ?? invoice.supplierOrderId;
   const orderText = order != null ? `Order #${order}` : null;
   const amountText = isSettled(invoice)
     ? `${formatMoney(invoice.amount)} invoice`
     : `${formatMoney(invoice.outstanding)} of ${formatMoney(invoice.amount)} owed`;
 
+  const creditText = hasCredit(invoice) ? `Credit note ${creditedRowValue(invoice.creditedAmount)}` : null;
+
   const label = [
     `Invoice ${invoice.invoiceNumber}`,
     orderText,
     amountText,
+    creditText,
     chip?.label,
     selected === true ? 'selected' : null,
   ].filter(Boolean).join(', ');
@@ -54,6 +57,9 @@ export function CreditInvoiceRow({
         <MandiText variant="caption" color={Colors.textSecondary}>{orderText}</MandiText>
       )}
       <MandiText variant="caption" color={Colors.textSecondary}>{amountText}</MandiText>
+      {creditText != null && (
+        <MandiText variant="caption" color={Colors.textSecondary}>{creditText}</MandiText>
+      )}
       {selected === true && (
         <MandiText variant="captionEmphasis" color={Colors.primary}>Selected</MandiText>
       )}

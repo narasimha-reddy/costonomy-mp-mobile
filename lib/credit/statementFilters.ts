@@ -10,7 +10,7 @@ export const MAX_RANGE_DAYS = 366;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type PeriodPreset = 'd30' | 'd90' | 'd180' | 'd365';
-export type StatementType = 'ORDERS' | 'REPAYMENTS';
+export type StatementType = 'ORDERS' | 'REPAYMENTS' | 'CREDIT_NOTES' | 'WRITE_OFFS' | 'REVERSALS';
 export type PaidBy = 'WALLET' | 'UPI' | 'BANK_TRANSFER' | 'CASH' | 'CHEQUE' | 'CARD';
 
 /** Period quick choices; the server's own default (last 90 days) is `DEFAULT_PRESET`. */
@@ -25,6 +25,9 @@ export const DEFAULT_PRESET: PeriodPreset = 'd90';
 export const TYPE_OPTIONS: { key: StatementType; label: string }[] = [
   { key: 'ORDERS', label: 'Orders on credit' },
   { key: 'REPAYMENTS', label: 'Repayments' },
+  { key: 'CREDIT_NOTES', label: 'Credit notes' },
+  { key: 'WRITE_OFFS', label: 'Write-offs' },
+  { key: 'REVERSALS', label: 'Reversals' },
 ];
 
 export const PAID_BY_OPTIONS: { key: PaidBy; label: string }[] = [
@@ -197,6 +200,19 @@ export function paidByOf(line: CreditStatementLine): PaidBy | null {
   return null;
 }
 
+const LINE_TYPES: Record<string, StatementType> = {
+  UTILIZE: 'ORDERS',
+  REPAYMENT: 'REPAYMENTS',
+  CREDIT_NOTE: 'CREDIT_NOTES',
+  WRITE_OFF: 'WRITE_OFFS',
+  PAYMENT_REVERSED: 'REVERSALS',
+};
+
+/** Which Type a line is, from the server's own `type`. Null for kinds with no filter (limit changes, holds). */
+function typeOf(line: CreditStatementLine): StatementType | null {
+  return LINE_TYPES[line.type] ?? null;
+}
+
 /**
  * Lines that pass Type and Paid by. Orders are the lines the supplier drew on credit
  * (UTILIZE), repayments the REPAYMENT ones; "Paid by" only ever matches repayments. Sections
@@ -209,7 +225,7 @@ export function applyLineFilters(
   if (types.length === 0 && paidBy.length === 0) return lines;
   return lines.filter((line) => {
     if (types.length > 0) {
-      const kind: StatementType | null = isRepayment(line) ? 'REPAYMENTS' : line.type === 'UTILIZE' ? 'ORDERS' : null;
+      const kind = typeOf(line);
       if (kind == null || !types.includes(kind)) return false;
     }
     if (paidBy.length > 0) {

@@ -67,6 +67,7 @@ export function methodLabel(method: string): string {
 export function statementDetail(line: CreditStatementLine): string {
   const parts: string[] = [];
   if (line.invoiceNumber) parts.push(line.invoiceNumber);
+  if (line.creditNoteNumber) parts.push(line.creditNoteNumber);
   if (isRepayment(line)) {
     parts.push('Repayment');
     if (line.source === 'WALLET') {

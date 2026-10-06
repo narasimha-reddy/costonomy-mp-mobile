@@ -6,6 +6,9 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchCreditInvoice } from '@/services/credit';
 import { ClaimReviewSheet } from '@/components/credit/ClaimReviewSheet';
+import { CreditNotesSection } from '@/components/credit/CreditNotesSection';
+import { InvoiceCreditActions } from '@/components/credit/InvoiceCreditActions';
+import { InvoiceMoneyCard } from '@/components/credit/InvoiceMoneyCard';
 import { ExtendDueSheet } from '@/components/credit/ExtendDueSheet';
 import { RecordPaymentSheet } from '@/components/credit/RecordPaymentSheet';
 import {
@@ -28,23 +31,16 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { ApiError } from '@/lib/api/errors';
 import { duplicateWarning, mayDecideClaims, waitingText } from '@/lib/credit/claimInbox';
 import { claimMethodLabel } from '@/lib/credit/claims';
-import { dueChip } from '@/lib/credit/dueChip';
+import { invoiceChip, invoiceStatusText } from '@/lib/credit/creditNotes';
 import { isSettled } from '@/lib/credit/invoices';
 import { paymentDetail } from '@/lib/credit/payments';
 import { paymentBadge } from '@/lib/credit/supplierLine';
 import { supplierInvoiceKey } from '@/lib/queryKeys';
-import type { ClaimStatus, CreditInvoiceStatus } from '@/models/credit';
+import type { ClaimStatus } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 import { Colors, Spacing } from '@/theme';
 
-const STATUS_TEXT: Record<CreditInvoiceStatus, string> = {
-  ISSUED: 'Issued',
-  PARTIALLY_PAID: 'Part paid',
-  PAID: 'Paid',
-  OVERDUE: 'Overdue',
-  WRITTEN_OFF: 'Written off',
-};
 const CLAIM_STATUS_TEXT: Record<ClaimStatus, string> = {
   SUBMITTED: 'Waiting for you',
   CONFIRMED: 'Confirmed',
@@ -128,7 +124,7 @@ export default function SupplierInvoiceScreen() {
     );
   }
 
-  const chip = dueChip(invoice.dueState, invoice.daysToDue);
+  const chip = invoiceChip(invoice);
   const open = !isSettled(invoice);
   const owes = Number(invoice.outstanding) > 0;
   const mayRecord = canCollect && open && owes;
@@ -170,16 +166,12 @@ export default function SupplierInvoiceScreen() {
         <View style={styles.statusRow}>
           {chip != null && <MandiStatusChip label={chip.label} tone={chip.tone} testID="invoice-chip" />}
           <MandiText variant="body" testID="invoice-status">
-            {`Status: ${STATUS_TEXT[invoice.status] ?? invoice.status}`}
+            {`Status: ${invoiceStatusText(invoice)}`}
           </MandiText>
         </View>
       </MandiCard>
 
-      <MandiCard>
-        <Line label="Invoice amount" value={formatMoney(invoice.amount)} testID="invoice-amount" />
-        <Line label="Paid" value={formatMoney(invoice.paidAmount)} testID="invoice-paid" />
-        <Line label="Still owed" value={formatMoney(invoice.outstanding)} testID="invoice-outstanding" strong />
-      </MandiCard>
+      <InvoiceMoneyCard invoice={invoice} />
 
       <MandiCard>
         {formatDay(invoice.issuedAt) != null && <Line label="Issued" value={formatDay(invoice.issuedAt) as string} testID="invoice-issued" />}
@@ -215,6 +207,8 @@ export default function SupplierInvoiceScreen() {
           )}
         </View>
       )}
+
+      <InvoiceCreditActions invoice={invoice} offline={offline} />
 
       <MandiSectionHeader title="Payments" />
       {invoice.payments.length === 0 ? (
@@ -288,6 +282,8 @@ export default function SupplierInvoiceScreen() {
           })}
         </View>
       )}
+
+      <CreditNotesSection notes={invoice.creditNotes} />
 
       {extensions.length > 0 && (
         <View style={styles.section} testID="invoice-extensions">

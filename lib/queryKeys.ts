@@ -161,6 +161,11 @@ export function supplierStatementKey(
   return ['store', storeId, 'credit', 'statement', agreementId, from, to] as const;
 }
 
+/** The store's refunds due to restaurants, by status. Under `['store', id, 'credit-refunds']` so a mark refreshes them all. */
+export function refundsDueKey(storeId: number | null | undefined, status: 'OPEN' | 'REFUNDED') {
+  return ['store', storeId, 'credit-refunds', status] as const;
+}
+
 // ── Supplier writes (M19, M25) ────────────────────────────────────────
 
 /** One invoice as the supplier reads it. Not under the line's key: its screen opens before the line is known. */

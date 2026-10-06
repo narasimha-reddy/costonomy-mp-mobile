@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchPayments, fetchPayouts } from '@/services/credit';
+import { CsvExportError, fetchCollectionsCsv, shareCsv } from '@/services/creditExport';
 import type {
   CreditPayout, PayoutStatusFilter, StorePayment, StorePaymentSource,
 } from '@/models/credit';
@@ -26,6 +27,7 @@ import {
   useToast,
 } from '@/components/common';
 import { GradientHero } from '@/components/common/GradientHero';
+import { useCsvExport } from '@/hooks/useCsvExport';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import {
   EMPTY_PAYOUT_PARAMS,
@@ -79,6 +81,7 @@ export default function PayoutsScreen() {
   const [status, setStatus] = useState<PayoutStatusFilter>('ALL');
   const [source, setSource] = useState<StorePaymentSource | 'ALL'>('ALL');
   const [openId, setOpenId] = useState<number | null>(null);
+  const csv = useCsvExport();
 
   const filters = useMemo(
     () => payoutFiltersFromParams(params as Record<string, string | undefined>),
@@ -175,6 +178,37 @@ export default function PayoutsScreen() {
   const header = (
     <>
       {hero}
+      {tab === 'recorded' && (
+        <View style={styles.csvRow}>
+          <Pressable
+            testID="collections-csv"
+            onPress={() => {
+              if (offline) { void csv.run(() => Promise.reject(new CsvExportError('offline'))); return; }
+              void csv.run(async () => {
+                const file = await fetchCollectionsCsv(accessToken as string, storeId as number, {
+                  from: from ?? null, to: to ?? null, source: source === 'ALL' ? null : source,
+                });
+                await shareCsv(file);
+              });
+            }}
+            disabled={!ready}
+            accessibilityRole="button"
+            accessibilityLabel="Download collections CSV"
+            accessibilityState={{ busy: csv.exporting }}
+            style={styles.csvButton}
+          >
+            <Ionicons name="download-outline" size={IconSize.md} color={Colors.primary} />
+            <MandiText variant="bodyEmphasis" color={Colors.primary}>
+              {csv.exporting ? 'Preparing the file' : 'Download collections CSV'}
+            </MandiText>
+          </Pressable>
+          {csv.error != null && (
+            <MandiText variant="caption" color={Colors.danger} accessibilityLiveRegion="polite" testID="collections-csv-error">
+              {csv.error}
+            </MandiText>
+          )}
+        </View>
+      )}
       <MandiText variant="caption" color={Colors.textSecondary} style={styles.note}>
         {tab === 'mandi'
           ? 'Money restaurants paid from their Mandi wallet. We pay it to you in your settlements.'
@@ -361,5 +395,7 @@ const styles = StyleSheet.create({
   },
   chipOn: { backgroundColor: Colors.primary },
   filterButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  csvRow: { gap: Spacing.xs, paddingBottom: Spacing.sm },
+  csvButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   more: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: Spacing.md },
 });

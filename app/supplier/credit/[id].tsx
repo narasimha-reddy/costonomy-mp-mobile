@@ -18,6 +18,7 @@ import {
   rejectCredit,
   suspendCredit,
 } from '@/services/credit';
+import { AgreementCreditNotes } from '@/components/credit/AgreementCreditNotes';
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
 import { ClaimReviewSheet } from '@/components/credit/ClaimReviewSheet';
 import { LineReasonSheet } from '@/components/credit/LineReasonSheet';
@@ -29,6 +30,7 @@ import { SupplierLineHero } from '@/components/credit/SupplierLineHero';
 import { SupplierPaymentRow } from '@/components/credit/SupplierPaymentRow';
 import { TermsEditorSheet } from '@/components/credit/TermsEditorSheet';
 import { UndoPaymentSheet } from '@/components/credit/UndoPaymentSheet';
+import { WriteOffSheet } from '@/components/credit/WriteOffSheet';
 import {
   MandiButton,
   MandiCard,
@@ -49,6 +51,7 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { usePermissions } from '@/hooks/usePermissions';
 import { mayDecideClaims } from '@/lib/credit/claimInbox';
 import { claimMethodLabel } from '@/lib/credit/claims';
+import { mayWriteOff } from '@/lib/credit/creditNotes';
 import { queuedText } from '@/lib/credit/remind';
 import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import {
@@ -123,6 +126,10 @@ export default function SupplierCreditAgreementScreen() {
   // Undo and Remind: one sheet each, for the payment being undone and for the line.
   const [undoing, setUndoing] = useState<StorePayment | null>(null);
   const [remindOpen, setRemindOpen] = useState(false);
+  // Write off everything owed: owner and admin only (CREDIT_WRITE_OFF), one sheet per opening.
+  const [writeOffOpen, setWriteOffOpen] = useState(false);
+  const [writeOffSession, setWriteOffSession] = useState(0);
+  const canWriteOff = mayWriteOff(canForStore, store);
   const [picked, setPicked] = useState<number[]>([]);
   const enabled = Number.isFinite(agreementId) && accessToken != null;
 
@@ -358,7 +365,12 @@ export default function SupplierCreditAgreementScreen() {
         onPress: () => openSheet('close'),
       });
     }
-    // 'Write off' joins this list when its sheet exists.
+  }
+  if (data != null && canWriteOff && (data.status === 'ACTIVE' || data.status === 'SUSPENDED') && Number(data.due) > 0) {
+    moreEntries.push({
+      key: 'write-off', label: 'Write off everything owed', hint: 'Give up on what they owe', destructive: true,
+      onPress: () => { setWriteOffSession((n) => n + 1); setWriteOffOpen(true); },
+    });
   }
 
   return (
@@ -604,6 +616,8 @@ export default function SupplierCreditAgreementScreen() {
             </View>
           )}
 
+          {hasPosition && <AgreementCreditNotes agreementId={agreementId} />}
+
           {hasPosition && <ReminderHistory agreementId={agreementId} />}
 
           {hasPosition && split.paid.length > 0 && (
@@ -692,6 +706,19 @@ export default function SupplierCreditAgreementScreen() {
           )}
 
           <SupplierMoreSheet visible={sheet === 'more'} onClose={closeSheet} entries={moreEntries} />
+
+          {canWriteOff && (
+            <WriteOffSheet
+              key={`write-off-${writeOffSession}`}
+              visible={writeOffOpen}
+              onClose={() => setWriteOffOpen(false)}
+              target={{
+                kind: 'line', id: agreementId, agreementId, title: data.restaurantName ?? data.outletName ?? 'This credit line',
+                outstanding: data.due,
+              }}
+              offline={offline}
+            />
+          )}
 
           {canModify && (
             <>

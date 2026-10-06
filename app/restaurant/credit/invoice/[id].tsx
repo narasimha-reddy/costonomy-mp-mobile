@@ -16,7 +16,9 @@ import {
   MandiText,
 } from '@/components/common';
 import { CreditClaimsSection } from '@/components/credit/CreditClaimsSection';
+import { CreditNotesSection } from '@/components/credit/CreditNotesSection';
 import { CreditPaymentRow } from '@/components/credit/CreditPaymentRow';
+import { InvoiceMoneyCard } from '@/components/credit/InvoiceMoneyCard';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { useCreditInvoice, useWalletRepayEnabled } from '@/hooks/useCreditInvoice';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
@@ -25,20 +27,11 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useSingleNavigation } from '@/hooks/useSingleNavigation';
 import { useWithdrawClaim } from '@/hooks/useWithdrawClaim';
 import { canReportPayment, waitingClaimsTotal } from '@/lib/credit/claims';
-import { dueChip } from '@/lib/credit/dueChip';
+import { invoiceChip, invoiceStatusText } from '@/lib/credit/creditNotes';
 import { ApiError } from '@/lib/api/errors';
-import type { CreditInvoiceStatus } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 import { Colors, IconSize, Spacing } from '@/theme';
-
-const STATUS_TEXT: Record<CreditInvoiceStatus, string> = {
-  ISSUED: 'Issued',
-  PARTIALLY_PAID: 'Part paid',
-  PAID: 'Paid',
-  OVERDUE: 'Overdue',
-  WRITTEN_OFF: 'Written off',
-};
 
 function Line({ label, value, testID, strong }: { label: string; value: string; testID?: string; strong?: boolean }) {
   return (
@@ -122,7 +115,7 @@ export default function CreditInvoiceScreen() {
     );
   }
 
-  const chip = dueChip(invoice.dueState, invoice.daysToDue);
+  const chip = invoiceChip(invoice);
   const settled = invoice.status === 'PAID' || invoice.status === 'WRITTEN_OFF'
     || invoice.dueState === 'PAID' || invoice.dueState === 'WRITTEN_OFF';
   const owes = Number(invoice.outstanding) > 0;
@@ -172,7 +165,7 @@ export default function CreditInvoiceScreen() {
           <View style={styles.statusRow}>
             {chip != null && <MandiStatusChip label={chip.label} tone={chip.tone} testID="invoice-chip" />}
             <MandiText variant="body" testID="invoice-status">
-              {`Status: ${STATUS_TEXT[invoice.status] ?? invoice.status}`}
+              {`Status: ${invoiceStatusText(invoice)}`}
             </MandiText>
           </View>
           {orderLabel != null && (
@@ -193,11 +186,7 @@ export default function CreditInvoiceScreen() {
           )}
         </MandiCard>
 
-        <MandiCard>
-          <Line label="Invoice amount" value={formatMoney(invoice.amount)} testID="invoice-amount" />
-          <Line label="Paid" value={formatMoney(invoice.paidAmount)} testID="invoice-paid" />
-          <Line label="Still owed" value={formatMoney(invoice.outstanding)} testID="invoice-outstanding" strong />
-        </MandiCard>
+        <InvoiceMoneyCard invoice={invoice} />
 
         <MandiCard>
           {issued != null && <Line label="Issued" value={issued} testID="invoice-issued" />}
@@ -228,6 +217,8 @@ export default function CreditInvoiceScreen() {
             ))}
           </MandiCard>
         )}
+
+        <CreditNotesSection notes={invoice.creditNotes} />
 
         {invoice.claims != null && invoice.claims.length > 0 && (
           <CreditClaimsSection

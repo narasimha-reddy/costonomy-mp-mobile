@@ -6,9 +6,9 @@ import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClie
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import {
-  approveCredit, fetchReceivableRestaurants, fetchReceivables, fetchStoreAgreements,
+  approveCredit, fetchReceivableRestaurants, fetchReceivables, fetchRefundsDue, fetchStoreAgreements,
 } from '@/services/credit';
-import { receivableRestaurantsKey, receivablesKey, receivablesRootKey } from '@/lib/queryKeys';
+import { receivableRestaurantsKey, receivablesKey, receivablesRootKey, refundsDueKey } from '@/lib/queryKeys';
 import type {
   CreditAgreement, ReceivableRestaurant, Receivables, ReceivablesSort, ReceivablesStatus,
 } from '@/models/credit';
@@ -110,6 +110,14 @@ export default function SupplierCreditScreen() {
     queryFn: () => fetchStoreAgreements(accessToken as string, storeId as number),
     enabled,
   });
+
+  // Refunds to give back after cancelled orders: one read, counted; a failure just hides the row.
+  const refunds = useQuery({
+    queryKey: refundsDueKey(storeId, 'OPEN'),
+    queryFn: () => fetchRefundsDue(accessToken as string, storeId as number, 'OPEN'),
+    enabled,
+  });
+  const refundCount = refunds.data?.length ?? 0;
 
   const data = totals.data;
   // Waiting requests, the one that has waited longest first; then offers sent and offers that lapsed.
@@ -213,6 +221,21 @@ export default function SupplierCreditScreen() {
               if (target.scroll != null) scrollTo(target.scroll);
             }}
           />
+
+          {refundCount > 0 && (
+            <Pressable
+              testID="refunds-entry"
+              onPress={() => router.push('/supplier/credit/refunds')}
+              accessibilityRole="button"
+              accessibilityLabel={`Refunds to give back, ${refundCount}`}
+              style={({ pressed }) => [styles.pending, pressed && styles.pressed]}
+            >
+              <MandiText variant="captionEmphasis" color={Colors.primaryDark} style={styles.flex}>
+                {`Refunds to give back (${refundCount})`}
+              </MandiText>
+              <Ionicons name="chevron-forward" size={IconSize.sm} color={Colors.primaryDark} />
+            </Pressable>
+          )}
 
           {data.counts.requestsPending > 0 && requests.length > 0 && (
             <View style={styles.section} onLayout={mark('requests')} testID="new-requests">

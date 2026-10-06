@@ -15,6 +15,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/sup-m27-credit-notes-writeoff]
+#### Added
+- Credit notes (`components/credit/CreditNoteSheet.tsx`, `hooks/useIssueCreditNote.ts`, `hooks/useKeyedWrite.ts`, `lib/credit/creditNotes.ts`, plan S13): "Issue credit note" on the supplier invoice screen (CREDIT_COLLECT or CREDIT_MODIFY, hidden on PAID and WRITTEN_OFF or when nothing is owed) with six reason chips, an amount that starts at the server outstanding (string, 2 decimals max) and a note. A refusal quotes the server's outstanding (`CREDIT_NOTE_EXCEEDS_OUTSTANDING`) or says the invoice is settled; a refusal spends its idempotency key, a dropped connection or 5xx keeps it. The result is the server's answer (number, still owed).
+- Write-off (`components/credit/WriteOffSheet.tsx`, `hooks/useWriteOff.ts`, plan S12): "Write off" on the invoice screen and "Write off everything owed" in the restaurant More menu, for CREDIT_WRITE_OFF holders only (the permission is checked on the store like CREDIT_COLLECT). Quick reasons, reason, amount (left as shown sends no amount), "Keep the line open" (off by default), a second "Yes, write off" step with the plain consequence text, and a result from the server (items, line paused or open).
+- Credit notes list: a collapsed "Credit notes" section on the supplier restaurant screen (fetched on open, paged) and on both invoice screens (the invoice detail's `creditNotes`); an automatic cancel note reads "Order cancelled: credit note issued automatically".
+- Refunds to give back (`app/supplier/credit/refunds.tsx`, `components/credit/RefundRow.tsx`, `hooks/useMarkRefunded.ts`): To give back and Refunded chips, "Mark as refunded" with an optional note, WALLET rows say "Our team will settle this" and have no action; a "Refunds to give back (N)" row on the receivables home when N is above 0 (one OPEN read, counted).
+- "Download collections CSV" in the Recorded by you view of Collections and payouts (`fetchCollectionsCsv` and the share sheet; same states as the statement export).
+- Statement Type filter gains Credit notes, Write-offs and Reversals (narrowing the loaded lines by the server's `type`); credit note and write-off rows show the credit note number.
+#### Changed
+- Both apps' invoice money lines read Invoice amount, Paid, Credit note, Still owed (`components/credit/InvoiceMoneyCard.tsx`); a list row adds "Credit note −₹X". A fully credited invoice (server status PAID, nothing paid, something credited) reads "Settled by credit note", never "Paid".
+
 ### [feat/sup-m23-requests-context]
 #### Added
 - Request review screen (`app/supplier/credit/request/[id].tsx`, plan S9/S10): what they asked, the server's context for this store only (orders in 90 days, first and last order, cancellations, earlier overdue, how an earlier line ended, line history; no arithmetic in the app; a 404 shows a quiet line, other errors a Retry), and Approve as asked, Approve at my usual terms (store policy defaults, exact preview first, hidden without defaults), Change terms (the existing terms editor) and Decline (quick reasons, reason required). Each sheet says what happens next. Needs CREDIT_MODIFY to act, CREDIT_REQUEST_VIEW for the context.

@@ -146,6 +146,8 @@ export interface CreditInvoice {
   status: CreditInvoiceStatus;
   amount: Money;
   paidAmount: Money;
+  /** What credit notes and write-offs took off. Absent on older payloads. */
+  creditedAmount?: Money;
   outstanding: Money;
   dueDate: string | null;
   overdueAfter: string | null;
@@ -187,6 +189,8 @@ export interface CreditInvoiceDetail {
   status: CreditInvoiceStatus;
   amount: Money;
   paidAmount: Money;
+  /** What credit notes and write-offs took off. Absent on older payloads. */
+  creditedAmount?: Money;
   outstanding: Money;
   dueDate: string | null;
   overdueAfter: string | null;
@@ -207,6 +211,8 @@ export interface CreditInvoiceDetail {
   reportableAmount?: number;
   /** Every time the supplier moved the due date, newest first. Absent on older payloads. */
   extensions?: DueExtension[];
+  /** Every credit note and write-off on this invoice, oldest first. Absent on older payloads. */
+  creditNotes?: CreditNote[];
 }
 
 /** One move of an invoice's due date. */
@@ -293,6 +299,8 @@ export interface CreditStatementLine {
   method: string | null;
   reference: string | null;
   walletEntryId: number | null;
+  /** The number of the credit note or write-off, for a CREDIT_NOTE or WRITE_OFF line. Absent on older payloads. */
+  creditNoteNumber?: string | null;
 }
 
 /** Newest line first. */
@@ -606,4 +614,99 @@ export interface ReminderList {
   size: number;
   total: number;
   hasNext: boolean;
+}
+
+// ── Credit notes, write-offs and refunds due ──────────────────────────
+
+export type CreditNoteReason = 'SHORT_SUPPLY' | 'QUALITY' | 'PRICE' | 'CANCELLED' | 'GOODWILL' | 'OTHER';
+export type CreditNoteKind = 'MANUAL' | 'SYSTEM_CANCEL' | 'WRITE_OFF';
+
+/** One credit note or write-off. `createdBy` is null for the system. */
+export interface CreditNote {
+  id: number;
+  creditNoteNumber: string;
+  invoiceId: number;
+  invoiceNumber: string;
+  agreementId: number;
+  amount: Money;
+  reasonCode: CreditNoteReason;
+  kind: CreditNoteKind;
+  note: string | null;
+  disputeId: number | null;
+  createdBy: number | null;
+  createdAt: string;
+}
+
+export interface CreditNoteBody {
+  /** At most 2 decimals, as the string typed. */
+  amount: string;
+  reasonCode: CreditNoteReason;
+  note?: string;
+  disputeId?: number;
+}
+
+/** What issuing a note did: the note, the invoice and the line as they now stand. */
+export interface IssuedCreditNote extends CreditNote {
+  invoice: {
+    status: CreditInvoiceStatus; amount: Money; paidAmount: Money; creditedAmount: Money; outstanding: Money;
+  };
+  agreement: { due: Money; overdue: Money; available: Money; status: CreditAgreementStatus };
+}
+
+export interface CreditNotePage {
+  items: CreditNote[];
+  page: number;
+  size: number;
+  total: number;
+  hasNext: boolean;
+}
+
+export type WriteOffQuickReason = 'RESTAURANT_CLOSED' | 'UNRECOVERABLE' | 'SETTLED_OUTSIDE' | 'GOODWILL';
+
+export interface WriteOffBody {
+  /** Left out: everything owed. */
+  amount?: string;
+  reason: string;
+  quickReason?: WriteOffQuickReason;
+  /** Sent only when true. */
+  keepLineOpen?: boolean;
+}
+
+export interface WriteOffItem {
+  invoiceId: number;
+  invoiceNumber: string;
+  creditNoteId: number;
+  creditNoteNumber: string;
+  amount: Money;
+  invoiceStatus: CreditInvoiceStatus;
+  outstanding: Money;
+}
+
+export interface WriteOffResult {
+  writtenOff: Money;
+  items: WriteOffItem[];
+  lineStatus: CreditAgreementStatus;
+  lineSuspended: boolean;
+  agreement: { due: Money; overdue: Money; available: Money; status: CreditAgreementStatus };
+}
+
+export type RefundDueStatus = 'OPEN' | 'REFUNDED';
+
+export interface RefundDue {
+  id: number;
+  amount: Money;
+  /** OFF_PLATFORM is the supplier's to refund; WALLET is Mandi's to settle. */
+  channel: 'OFF_PLATFORM' | 'WALLET';
+  status: RefundDueStatus;
+  note: string | null;
+  invoiceId: number;
+  invoiceNumber: string;
+  creditNoteId: number | null;
+  creditNoteNumber: string | null;
+  agreementId: number;
+  outletId: number;
+  outletName: string | null;
+  restaurantName: string | null;
+  createdAt: string;
+  refundedAt: string | null;
 }

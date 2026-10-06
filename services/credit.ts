@@ -2,6 +2,13 @@ import { apiRequest } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/errors';
 import type {
   CreditAgreement,
+  CreditNoteBody,
+  CreditNotePage,
+  IssuedCreditNote,
+  RefundDue,
+  RefundDueStatus,
+  WriteOffBody,
+  WriteOffResult,
   CreditAttention,
   CreditInvoiceDetail,
   CreditStatement,
@@ -549,4 +556,57 @@ export function fetchPayments(
   parts.push(`page=${query.page}`, `size=${query.size}`);
   return apiRequest<StorePaymentList>(
     `/api/v1/supplier-stores/${storeId}/credit/payments?${parts.join('&')}`, { token });
+}
+
+// ── Credit notes, write-offs, refunds due (M27) ───────────────────────
+
+/** Issue a credit note on one invoice. Moves debt, so it needs an idempotency key. */
+export function issueCreditNote(
+  token: string, invoiceId: number, body: CreditNoteBody, idempotencyKey: string,
+): Promise<IssuedCreditNote> {
+  return apiRequest<IssuedCreditNote>(`/api/v1/credit/invoices/${invoiceId}/credit-notes`, {
+    method: 'POST', token, idempotencyKey, body,
+  });
+}
+
+/** The credit notes and write-offs on a line, newest first; either side may read. */
+export function fetchCreditNotes(
+  token: string, agreementId: number, query: { page: number; size?: number },
+): Promise<CreditNotePage> {
+  const parts = [`page=${query.page}`];
+  if (query.size != null) parts.push(`size=${query.size}`);
+  return apiRequest<CreditNotePage>(`/api/v1/credit/agreements/${agreementId}/credit-notes?${parts.join('&')}`, { token });
+}
+
+/** Write off what is owed on one invoice. CREDIT_WRITE_OFF only. */
+export function writeOffInvoice(
+  token: string, invoiceId: number, body: WriteOffBody, idempotencyKey: string,
+): Promise<WriteOffResult> {
+  return apiRequest<WriteOffResult>(`/api/v1/credit/invoices/${invoiceId}/write-off`, {
+    method: 'POST', token, idempotencyKey, body,
+  });
+}
+
+/** Write off what is owed on the whole line, oldest invoice first. CREDIT_WRITE_OFF only. */
+export function writeOffLine(
+  token: string, agreementId: number, body: WriteOffBody, idempotencyKey: string,
+): Promise<WriteOffResult> {
+  return apiRequest<WriteOffResult>(`/api/v1/credit/agreements/${agreementId}/write-off`, {
+    method: 'POST', token, idempotencyKey, body,
+  });
+}
+
+/** Money to give back to restaurants after cancelled orders; `status` OPEN or REFUNDED, or all when left out. */
+export function fetchRefundsDue(
+  token: string, storeId: number, status?: RefundDueStatus,
+): Promise<RefundDue[]> {
+  const query = status != null ? `?status=${status}` : '';
+  return apiRequest<RefundDue[]>(`/api/v1/supplier-stores/${storeId}/credit/refunds-due${query}`, { token });
+}
+
+/** The supplier refunded the restaurant directly. No key: marking twice answers 200 and changes nothing. */
+export function markRefundDue(token: string, refundId: number, note?: string): Promise<RefundDue> {
+  return apiRequest<RefundDue>(`/api/v1/credit/refunds-due/${refundId}/mark-refunded`, {
+    method: 'POST', token, body: note != null && note !== '' ? { note } : {},
+  });
 }

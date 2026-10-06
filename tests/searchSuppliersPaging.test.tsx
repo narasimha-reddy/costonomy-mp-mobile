@@ -12,6 +12,7 @@ jest.mock('@expo/vector-icons', () => {
 });
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
@@ -45,7 +46,7 @@ function setup() {
 }
 
 async function openSuppliers() {
-  fireEvent.changeText(screen.getByLabelText('Search for paneer, rice, oil and more'), 'sup');
+  fireEvent.changeText(screen.getByLabelText('Search for products'), 'sup');
   fireEvent.press(await screen.findByText('Suppliers'));
 }
 

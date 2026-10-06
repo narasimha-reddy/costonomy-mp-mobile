@@ -17,6 +17,11 @@ import type {
   PayoutStatusFilter,
   StorePaymentList,
   StorePaymentSource,
+  Ageing,
+  Receivables,
+  ReceivablesPage,
+  ReceivablesSort,
+  ReceivablesStatus,
 } from '@/models/credit';
 
 // ── Restaurant side ───────────────────────────────────────────────────
@@ -315,6 +320,33 @@ export function repayFromWallet(
     `/api/v1/credit/agreements/${agreementId}/wallet-repayments`,
     { method: 'POST', token, idempotencyKey, body },
   );
+}
+
+// ── Supplier receivables (M17) ────────────────────────────────────────
+
+/** What the store is owed, as the server worked it out. The app only formats these. */
+export function fetchReceivables(token: string, storeId: number): Promise<Receivables> {
+  return apiRequest<Receivables>(`/api/v1/supplier-stores/${storeId}/credit/receivables`, { token });
+}
+
+/** One page of the restaurants that owe or hold a line. `size` 20, at most 100 on the server. */
+export function fetchReceivableRestaurants(
+  token: string,
+  storeId: number,
+  params: { sort: ReceivablesSort; status?: ReceivablesStatus | null; q?: string; page: number; size: number },
+): Promise<ReceivablesPage> {
+  const query = new URLSearchParams({ sort: params.sort });
+  if (params.status != null) query.set('status', params.status);
+  if (params.q != null && params.q !== '') query.set('q', params.q);
+  query.set('page', String(params.page));
+  query.set('size', String(params.size));
+  return apiRequest<ReceivablesPage>(
+    `/api/v1/supplier-stores/${storeId}/credit/receivables/restaurants?${query.toString()}`, { token });
+}
+
+/** Open outstanding in four buckets by days past due, in India time. */
+export function fetchAgeing(token: string, storeId: number): Promise<Ageing> {
+  return apiRequest<Ageing>(`/api/v1/supplier-stores/${storeId}/credit/ageing`, { token });
 }
 
 // ── Error helpers ─────────────────────────────────────────────────────

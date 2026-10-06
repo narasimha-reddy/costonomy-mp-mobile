@@ -66,7 +66,7 @@ export function GradientHero({
           <MandiText variant="subtitle" color={Colors.onGradient} style={styles.symbol}>
             {split.negative ? '−₹' : '₹'}
           </MandiText>
-          <MandiText variant="hero" color={Colors.onGradient} style={styles.rupees}>
+          <MandiText variant="hero" color={Colors.onGradient} style={styles.rupees} numberOfLines={1} adjustsFontSizeToFit>
             {split.rupees}
           </MandiText>
           <MandiText variant="subtitle" color={Colors.onGradientMuted} style={styles.paise}>
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
     gap: Spacing.sm,
   },
-  amountRow: { flexDirection: 'row', alignItems: 'baseline' },
+  amountRow: { flexDirection: 'row', alignItems: 'baseline', flexShrink: 1 },
   symbol: { marginRight: 2 },
   rupees: { ...TextStyles.hero, fontVariant: ['tabular-nums'] },
   paise: { marginLeft: 1 },

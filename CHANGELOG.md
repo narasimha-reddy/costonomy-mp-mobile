@@ -23,7 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### [feat/sup-m20-claims-inbox]
 #### Added
 - Supplier claims inbox (`app/supplier/credit/claims.tsx`): "Paid direct" payments waiting for the supplier, grouped by restaurant (invoice, amount, method, reference, paid-on date, note, "Sent N days ago" from the server timestamp). Tapping opens a review sheet: "Yes, I received it" (amount prefilled with the claim, editable to a lower amount only, the server caps it) or "I did not receive this" (required reason: quick choices plus free text). Idempotency key held in `lib/credit/attemptKeys`, one request at a time, claims, agreements and invoices refetched on success, server message shown on `CREDIT_OVERPAYMENT` / `CREDIT_CLAIM_STATE`. Acting needs `CREDIT_COLLECT` or `CREDIT_MODIFY`, otherwise the sheet is view-only with an explanation.
-- Supplier Credit tab: a "Claims waiting (N)" row, shown only when something is waiting, opens the inbox.
+- Supplier Credit tab is now Receivables (M17): a To receive hero (overdue line), Lent of extended and Collected this month, round actions Claims (count badge), Ageing, Payouts, Requests, a strip of only the "needs doing" chips the server sends, new requests on top, and the restaurant list (sort Most overdue / Owes most / Next due, All / Active / Suspended, search, Show more paging). New Ageing screen (`/supplier/credit/ageing`): stacked bar sized by server amounts and a card per bucket. `RoundAction` takes an optional `badge`, `MandiScreen` an optional `scrollTarget`.
+- (Replaced by the above) Supplier Credit tab: a "Claims waiting (N)" row, shown only when something is waiting, opens the inbox.
 - `fetchStoreClaims`, `confirmClaim`, `rejectClaim` in `services/credit.ts`.
 
 ### [feat/credit-m16-final-polish]

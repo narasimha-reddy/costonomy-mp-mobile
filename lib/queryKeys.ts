@@ -109,3 +109,25 @@ export function storePaymentsKey(
 ) {
   return ['store', storeId, 'credit-payments', source, from, to] as const;
 }
+
+// ── Supplier receivables (M17) ────────────────────────────────────────
+
+/** Every receivables read of a store (home totals, restaurant list, ageing): invalidate this after any credit write. */
+export function receivablesRootKey(storeId: number | null | undefined) {
+  return ['store', storeId, 'credit', 'receivables'] as const;
+}
+
+export function receivablesKey(storeId: number | null | undefined) {
+  return [...receivablesRootKey(storeId), 'totals'] as const;
+}
+
+/** The restaurant list under one sort, status filter and search; page-runs live in the infinite query. */
+export function receivableRestaurantsKey(
+  storeId: number | null | undefined, sort: string, status: string | null, q: string,
+) {
+  return [...receivablesRootKey(storeId), 'restaurants', sort, status, q] as const;
+}
+
+export function ageingKey(storeId: number | null | undefined) {
+  return [...receivablesRootKey(storeId), 'ageing'] as const;
+}

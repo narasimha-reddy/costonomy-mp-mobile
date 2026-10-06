@@ -330,6 +330,8 @@ export default function SupplierSlotsScreen() {
         onClose={closeModal}
         title={editingSlot ? 'Edit Delivery Slot' : 'New Delivery Slot'}
         closeLabel="Cancel"
+        // The form has text boxes: lift the sheet above the keyboard instead of leaving them under it.
+        avoidKeyboard
       >
         <View style={styles.form}>
           <MandiFormField

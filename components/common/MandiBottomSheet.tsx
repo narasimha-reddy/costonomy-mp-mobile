@@ -80,6 +80,11 @@ export function MandiBottomSheet({
           <View
             style={styles.sheet}
             onStartShouldSetResponder={() => true}
+            // On web a click inside the sheet still bubbles up the DOM to the scrim, whose press handler closes the
+            // sheet, whatever the responder system did with the touch. A tap on a text box has no handler of its own
+            // to stop it, so it closed the sheet. Stop the click here, at the edge of the sheet. (React Native's View
+            // has no onClick in its types; react-native-web passes it through, and native never fires it.)
+            {...({ onClick: (event: { stopPropagation: () => void }) => event.stopPropagation() } as object)}
             accessibilityViewIsModal
             accessibilityLabel={title}
             testID={testID}

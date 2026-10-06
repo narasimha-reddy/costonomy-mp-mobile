@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-sheet-clicks] - Text boxes in a bottom sheet
+#### Fixed
+- Tapping a text box inside a bottom sheet (such as New Delivery Slot) closed the sheet on web: the click bubbled to the dimmed background, which closes on a tap. The click is now stopped at the edge of the sheet. The delivery-slot sheet also lifts above the keyboard.
+
 ### [phase6/mobile-order-rows] - Delivery addresses on the buyer's order screen
 #### Fixed
 - "Pickup" and "Destination" drew one letter per line down the screen: a long address took all the width and squeezed the label. The label now keeps its width (up to 45% of the row) and the address wraps beside it (`DetailRow`).

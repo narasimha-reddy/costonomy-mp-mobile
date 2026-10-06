@@ -155,11 +155,16 @@ describe('orderTrackingView, every delivery status x mode x audience', () => {
       delivery: delivery('IN_TRANSIT', { estimatedArrivalAt: new Date(NOW + offsetMs).toISOString() }), nowMs: NOW,
     });
     expect(eta(9 * 60000, 'buyer').headline).toBe('Arriving in 9 mins');
-    expect(eta(9 * 60000, 'supplier').subline).toBe('Arriving at Cafe Mocha in 9 mins.');
+    expect(eta(9 * 60000, 'buyer').etaSmall).toMatch(/^by \d+:\d\d (AM|PM)$/);
+    expect(eta(9 * 60000, 'supplier').headline).toBe('Out for delivery');
+    expect(eta(9 * 60000, 'supplier').etaSmall).toBe('arrives in 9 mins');
+    expect(eta(9 * 60000, 'supplier').subline).toBe('Ravi is taking it to Cafe Mocha');
     const late = eta(-60000, 'buyer');
-    expect(late.headline).toBe('Running a little late');
+    expect(late.headline).toBe('Running late');
     expect(late.tone).toBe('warning');
-    expect(late.subline).toMatch(/^Expected by \d+:\d\d (AM|PM)\./);
+    expect(late.delayed).toBe(true);
+    expect(late.etaSmall).toMatch(/^was due by \d+:\d\d (AM|PM)$/);
+    expect(late.subline).toBe('Ravi is still on the way');
   });
 
   it('uses searching bars: indeterminate for the buyer, determinate for the supplier', () => {
@@ -186,7 +191,9 @@ describe('orderTrackingView, every delivery status x mode x audience', () => {
     const v = (status: any, mode: any, audience: 'buyer' | 'supplier' = 'buyer') =>
       orderTrackingView({ audience, order: order(mode, status), delivery: null, nowMs: NOW });
     expect(v('CONFIRMED', 'COSTONOMY_DELIVERY').currentIndex).toBe(0);
-    expect(v('PREPARING', 'COSTONOMY_DELIVERY', 'supplier').headline).toBe('Preparing');
+    expect(v('CONFIRMED', 'COSTONOMY_DELIVERY').headline).toBe('Order placed');
+    expect(v('PREPARING', 'COSTONOMY_DELIVERY').headline).toBe('Packing your order');
+    expect(v('PREPARING', 'COSTONOMY_DELIVERY', 'supplier').headline).toBe('Pack the order');
     expect(v('READY_FOR_PICKUP', 'COSTONOMY_DELIVERY').headline).toBe('Finding a delivery partner');
     expect(v('READY_FOR_PICKUP', 'COSTONOMY_DELIVERY', 'supplier').headline).toBe('Ready to send');
     expect(v('READY_FOR_PICKUP', 'PICKUP').headline).toBe('Ready to collect');
@@ -198,6 +205,123 @@ describe('orderTrackingView, every delivery status x mode x audience', () => {
     expect(v('COMPLETED', 'COSTONOMY_DELIVERY').showReceive).toBe(false);
     expect(v('DELIVERED', 'SUPPLIER_DELIVERY').showReceive).toBe(true);
     expect(v('DELIVERED', 'SUPPLIER_DELIVERY', 'supplier').showReceive).toBe(false);
+  });
+});
+
+describe('segments, tags and the top of the screen', () => {
+  const view = (audience: 'buyer' | 'supplier', oStatus: any, d: object | null, now = NOW, mode = 'COSTONOMY_DELIVERY') =>
+    orderTrackingView({
+      audience, order: order(mode, oStatus), nowMs: now,
+      delivery: d == null ? null : delivery((d as any).status, d, 'COSTONOMY'),
+    });
+  const soon = new Date(NOW + 14 * 60000).toISOString();
+
+  it('draws five segments for a partner delivery and says which step and what is next', () => {
+    const v = view('buyer', 'OUT_FOR_DELIVERY', { status: 'IN_TRANSIT', estimatedArrivalAt: soon });
+    expect(v.segments).toEqual(['Placed', 'Packing', 'Partner', 'On the way', 'Delivered']);
+    expect(v.segmentIndex).toBe(3);
+    expect(v.stepLine).toBe('Step 4 of 5 · On the way');
+    expect(v.nextLine).toBe('Next: Delivered');
+  });
+
+  it('lands each moment in the right segment', () => {
+    const seg = (o: any, d: string | null) => view('buyer', o, d == null ? null : { status: d }).segmentIndex;
+    expect(seg('CONFIRMED', null)).toBe(0);
+    expect(seg('PREPARING', null)).toBe(1);
+    expect(seg('READY_FOR_PICKUP', null)).toBe(2);
+    expect(seg('READY_FOR_PICKUP', 'DELIVERY_REQUESTED')).toBe(2);
+    expect(seg('READY_FOR_PICKUP', 'DRIVER_ASSIGNED')).toBe(2);
+    expect(seg('READY_FOR_PICKUP', 'DRIVER_AT_PICKUP')).toBe(2);
+    expect(seg('OUT_FOR_DELIVERY', 'PICKED_UP')).toBe(3);
+    expect(seg('OUT_FOR_DELIVERY', 'ARRIVED_AT_DESTINATION')).toBe(3);
+    expect(seg('DELIVERED', 'DELIVERED')).toBe(4);
+  });
+
+  it('is complete at the end, with a delivered tag and a success top', () => {
+    const v = view('buyer', 'DELIVERED', { status: 'DELIVERED', deliveredAt: '2026-01-01T09:55:00' });
+    expect(v.complete).toBe(true);
+    expect(v.stepLine).toBe('Step 5 of 5 · Delivered');
+    expect(v.nextLine).toBe('Complete');
+    expect(v.tag).toEqual({ kind: 'delivered', label: 'Delivered' });
+    expect(v.top).toBe('success');
+    expect(v.stage).toBe('done');
+    expect(v.headline).toMatch(/^Delivered at \d+:\d\d (AM|PM)$/);
+    expect(v.subline).toBe('Check the goods in to close the order');
+    expect(view('supplier', 'DELIVERED', { status: 'DELIVERED' }).subline).toBe('Waiting for the restaurant to check it in');
+  });
+
+  it('tags on time while a partner has the order and the estimate stands', () => {
+    const v = view('buyer', 'OUT_FOR_DELIVERY', { status: 'IN_TRANSIT', estimatedArrivalAt: soon });
+    expect(v.tag).toEqual({ kind: 'on_time', label: 'On time' });
+    expect(v.delayed).toBe(false);
+    expect(v.banner).toBeNull();
+    expect(v.top).toBe('map');
+  });
+
+  it('tags late by whole minutes, with a delay banner, once the estimate has passed', () => {
+    const v = view('buyer', 'OUT_FOR_DELIVERY', { status: 'IN_TRANSIT', estimatedArrivalAt: new Date(NOW - 7.5 * 60000).toISOString() });
+    expect(v.delayed).toBe(true);
+    expect(v.lateMinutes).toBe(8);
+    expect(v.tag).toEqual({ kind: 'late', label: 'Late by 8 min' });
+    expect(v.banner?.title).toBe('Delayed');
+  });
+
+  it('tags searching while a partner is found, with an illustration rather than a map', () => {
+    const buyer = view('buyer', 'READY_FOR_PICKUP', { status: 'PROVIDER_SELECTED', driverName: null, trackable: false });
+    expect(buyer.tag).toEqual({ kind: 'searching', label: 'Searching' });
+    expect(buyer.searching).toBe(true);
+    expect(buyer.top).toBe('illustration');
+    expect(buyer.stage).toBe('bicycle');
+    expect(buyer.subline).toBe('Usually takes 2 to 5 mins');
+  });
+
+  it('tells the supplier how far through the 30 minute search we are', () => {
+    const v = view('supplier', 'READY_FOR_PICKUP', {
+      status: 'PROVIDER_SELECTED', driverName: null, trackable: false,
+      searchStartedAt: new Date(NOW - 12 * 60000).toISOString(), retryUntil: new Date(NOW + 18 * 60000).toISOString(),
+    });
+    expect(v.subline).toBe('Searching… 12 of 30 min. We keep looking automatically.');
+  });
+
+  it.each(['DRIVER_CANCELLED', 'PICKUP_FAILED'])('says the partner changed for the buyer on %s, and not for the supplier', (status) => {
+    const buyer = view('buyer', 'READY_FOR_PICKUP', { status, driverName: null, trackable: false });
+    expect(buyer.partnerChanged).toBe(true);
+    expect(buyer.headline).toBe('Finding a new delivery partner');
+    expect(buyer.banner).toEqual({
+      title: 'Partner changed',
+      body: 'Your previous partner could not complete the pickup. A new partner is being assigned.',
+    });
+    expect(buyer.tag?.kind).toBe('searching');
+    expect(JSON.stringify(buyer)).not.toContain(REASON);
+    const supplier = view('supplier', 'READY_FOR_PICKUP', { status, driverName: null, trackable: false });
+    expect(supplier.partnerChanged).toBe(false);
+    expect(supplier.headline).toBe('No partner found yet');
+  });
+
+  it('shows the illustration for the stage before a partner exists', () => {
+    expect(view('buyer', 'CONFIRMED', null).stage).toBe('bag');
+    expect(view('buyer', 'PREPARING', null).stage).toBe('cube');
+    expect(view('buyer', 'PREPARING', null).tag).toBeNull();
+    expect(view('buyer', 'CONFIRMED', null).top).toBe('illustration');
+  });
+
+  it('uses Ready as the third segment for a supplier van and stops a collection at Ready', () => {
+    expect(stagesFor('SUPPLIER_DELIVERY')).toHaveLength(5);
+    const own = orderTrackingView({ audience: 'buyer', order: order('SUPPLIER_DELIVERY', 'OUT_FOR_DELIVERY'), delivery: null, nowMs: NOW });
+    expect(own.segments[2]).toBe('Ready');
+    expect(own.segmentIndex).toBe(3);
+    const pickup = orderTrackingView({ audience: 'buyer', order: order('PICKUP', 'READY_FOR_PICKUP'), delivery: null, nowMs: NOW });
+    expect(pickup.segments).toEqual(['Placed', 'Packing', 'Ready']);
+    expect(pickup.stepLine).toBe('Step 3 of 3 · Ready');
+    expect(pickup.nextLine).toBeNull();
+  });
+
+  it('never names the provider on any buyer screen', () => {
+    ALL.forEach((status) => {
+      const v = view('buyer', 'READY_FOR_PICKUP', { status });
+      const text = JSON.stringify(v).toLowerCase();
+      ['pidge', 'borzo', 'porter', 'shiprocket'].forEach((name) => expect(text).not.toContain(name));
+    });
   });
 });
 

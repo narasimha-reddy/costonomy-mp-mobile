@@ -3,7 +3,6 @@ import { Linking, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { DeliveryPartnerCard } from '@/components/delivery/DeliveryPartnerCard';
 import { PartnerSearchPanel } from '@/components/delivery/PartnerSearchPanel';
-import { DeliveredSummaryCard } from '@/components/delivery/DeliveredSummaryCard';
 import { CollapsibleSection } from '@/components/order/CollapsibleSection';
 
 jest.mock('@expo/vector-icons', () => {
@@ -21,8 +20,10 @@ const stopped = {
 describe('DeliveryPartnerCard', () => {
   it('calls the partner on the phone number', () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
-    render(<DeliveryPartnerCard name="Ravi Kumar" vehicle="Bike" phone="9999999999" showCall />);
+    render(<DeliveryPartnerCard name="Ravi Kumar" vehicle="KA 05 AB 1234" phone="9999999999" showCall />);
     expect(screen.getByText('RK', { includeHiddenElements: true })).toBeTruthy();
+    expect(screen.getByText('KA 05 AB 1234')).toBeTruthy();
+    expect(screen.getByText('Your delivery partner')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('Call Ravi Kumar'));
     expect(open).toHaveBeenCalledWith('tel:9999999999');
   });
@@ -35,6 +36,20 @@ describe('DeliveryPartnerCard', () => {
   });
 });
 
+describe('DeliveryPartnerCard, delivered', () => {
+  it('names who delivered, with no call and no masked-number line', () => {
+    render(<DeliveryPartnerCard name="Ravi Kumar" vehicle="KA 05 AB 1234" phone="9999999999" showCall delivered />);
+    expect(screen.getByText('Delivered by Ravi Kumar')).toBeTruthy();
+    expect(screen.queryByLabelText(/Call/)).toBeNull();
+    expect(screen.queryByText(/masked/i)).toBeNull();
+  });
+
+  it('shows a long name in full', () => {
+    render(<DeliveryPartnerCard name="Venkata Subramanian Raghavan" showCall={false} />);
+    expect(screen.getByText('Venkata Subramanian Raghavan').props.numberOfLines).toBeUndefined();
+  });
+});
+
 describe('PartnerSearchPanel', () => {
   it('fires retry and switch for the supplier, and leaves the reason to the hero', () => {
     const onRetry = jest.fn();
@@ -42,39 +57,35 @@ describe('PartnerSearchPanel', () => {
     render(<PartnerSearchPanel audience="supplier" delivery={stopped} nowMs={NOW} onRetry={onRetry} onSwitchOwn={onSwitchOwn} />);
     expect(screen.queryByText('No riders in range')).toBeNull();
     fireEvent.press(screen.getByText('Try again'));
-    fireEvent.press(screen.getByText("I'll deliver it myself"));
+    fireEvent.press(screen.getByText('I will deliver it myself'));
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onSwitchOwn).toHaveBeenCalledTimes(1);
   });
 
   it('hides the switch when the server has not allowed it', () => {
     render(<PartnerSearchPanel audience="supplier" delivery={{ ...stopped, canSwitchToOwn: false }} nowMs={NOW} onRetry={jest.fn()} onSwitchOwn={jest.fn()} />);
-    expect(screen.queryByText("I'll deliver it myself")).toBeNull();
+    expect(screen.queryByText('I will deliver it myself')).toBeNull();
   });
 
-  it('shows the buyer an indeterminate bar and never the reason or any action', () => {
+  it('reassures the buyer while a partner is found and never shows the reason or any action', () => {
     const { rerender } = render(<PartnerSearchPanel audience="buyer" delivery={{ ...stopped, status: 'DELIVERY_REQUESTED' }} nowMs={NOW} />);
-    expect(screen.getByText('This usually takes a few minutes')).toBeTruthy();
+    expect(screen.getByText('Assigning a partner')).toBeTruthy();
+    expect(screen.getByText('Your order is packed. You do not need to do anything.')).toBeTruthy();
     rerender(<PartnerSearchPanel audience="buyer" delivery={stopped} nowMs={NOW} onRetry={jest.fn()} />);
     expect(screen.queryByText('No riders in range')).toBeNull();
     expect(screen.queryByText('Try again')).toBeNull();
+    expect(screen.queryByText('Try again now')).toBeNull();
   });
 
-  it('labels the supplier bar with minutes elapsed of the window', () => {
-    render(<PartnerSearchPanel audience="supplier" nowMs={NOW}
+  it('labels the supplier bar with minutes elapsed of the window and retries on Try again now', () => {
+    const onRetry = jest.fn();
+    render(<PartnerSearchPanel audience="supplier" nowMs={NOW} onRetry={onRetry}
       delivery={{ ...stopped, status: 'PROVIDER_SELECTED', searchStartedAt: '2026-01-01T10:00:00Z', retryUntil: '2026-01-01T10:20:00Z' }} />);
-    expect(screen.getByText('Searching for a partner… 10 of 20 min')).toBeTruthy();
-  });
-});
-
-describe('DeliveredSummaryCard', () => {
-  it('names who delivered, offers receive to the buyer only, and has no call', () => {
-    const onReceive = jest.fn();
-    render(<DeliveredSummaryCard audience="buyer" driverName="Ravi" deliveredAt="2026-01-01T10:10:00Z" onReceive={onReceive} />);
-    expect(screen.getByText('Delivered by Ravi')).toBeTruthy();
-    expect(screen.queryByLabelText(/Call/)).toBeNull();
-    fireEvent.press(screen.getByText('Inspect and receive goods'));
-    expect(onReceive).toHaveBeenCalled();
+    expect(screen.getByText('Searching for a partner')).toBeTruthy();
+    expect(screen.getByText('10 of 20 min')).toBeTruthy();
+    expect(screen.getByText('Auto-retrying')).toBeTruthy();
+    fireEvent.press(screen.getByText('Try again now'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,37 +1,37 @@
 import React from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useRealtime } from '@/contexts/RealtimeProvider';
 import { fetchDelivery, reassignDelivery, switchToOwnDelivery } from '@/services/delivery';
 import { fetchSupplierOrder } from '@/services/procurement';
-import { DeliveredSummaryCard } from '@/components/delivery/DeliveredSummaryCard';
-import { DeliveryPartnerCard } from '@/components/delivery/DeliveryPartnerCard';
 import { DeliveryTimeline } from '@/components/delivery/DeliveryTimeline';
-import { LiveMapHeader } from '@/components/delivery/LiveMapHeader';
-import { OrderProgressHero } from '@/components/delivery/OrderProgressHero';
-import { PartnerSearchPanel } from '@/components/delivery/PartnerSearchPanel';
+import { OrderSummaryCard } from '@/components/delivery/OrderSummaryCard';
+import { TrackingCards } from '@/components/delivery/TrackingCards';
+import { TrackingSheet } from '@/components/delivery/TrackingSheet';
+import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
 import { CollapsibleSection } from '@/components/order/CollapsibleSection';
 import {
   MandiButton,
-  MandiCard,
+  MandiChatAction,
   MandiConfirm,
   MandiErrorState,
   MandiHeader,
   MandiScreen,
   MandiSkeletonList,
+  MandiStickyBar,
   MandiText,
   useToast,
 } from '@/components/common';
 import { useServerNow } from '@/hooks/useServerNow';
 import { ApiError, isApiError } from '@/lib/api/errors';
 import { canRetryPartner } from '@/lib/delivery/deliveryPartner';
-import { orderTrackingView, stepTimesFromTimeline } from '@/lib/delivery/orderTracking';
+import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { formatMoney, formatQuantity } from '@/utils/money';
-import { Colors, IconSize, MapHeight, Spacing } from '@/theme';
+import { Colors, Radius, Spacing, TrackingLayout } from '@/theme';
 import { newIdempotencyKey } from '@/lib/api/client';
 
 const ACTIVE_POLL_MS = 15_000;
@@ -52,6 +52,7 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
   const router = useRouter();
   const queryClient = useQueryClient();
   const { show } = useToast();
+  const insets = useSafeAreaInsets();
   const { accessToken } = useSession();
   const { outlet } = useOutlet();
   const { transport } = useRealtime();
@@ -147,117 +148,100 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
   const destination = buyer && outlet?.latitude != null && outlet?.longitude != null
     ? { latitude: Number(outlet.latitude), longitude: Number(outlet.longitude) }
     : null;
-  const stepTimes = stepTimesFromTimeline(data?.timeline);
-  const retryable = data != null && canRetryPartner(data.mode, data.status);
-  const deliveredByPartner = data?.status === 'DELIVERED';
   const itemCount = o.items.length;
   const summary = `${itemCount} ${itemCount === 1 ? 'item' : 'items'} · ${formatMoney(o.totalAmount)}`;
   const receive = () => router.push(`/restaurant/receiving/${orderId}`);
+  const back = () => (router.canGoBack()
+    ? router.back()
+    : router.replace((buyer ? '/restaurant/orders' : `/supplier/orders/${orderId}`) as never));
+  const deliveringTo = data?.dropAddress ?? [o.outletName, o.outletLocality].filter(Boolean).join(', ');
+  const chat = {
+    outletId: o.outletId,
+    supplierStoreId: o.supplierStoreId,
+    side: buyer ? 'RESTAURANT' as const : 'SUPPLIER' as const,
+    orderId: o.id,
+  };
 
   return (
-    <MandiScreen header={header} onRefresh={onRefresh} refreshing={delivery.isRefetching || order.isRefetching}>
-      {view.showTrack && data != null && (
-        <LiveMapHeader delivery={data} destination={destination} height={MapHeight.full} />
-      )}
-
-      <MandiCard accentColor={view.tone === 'danger' ? Colors.danger : view.tone === 'warning' ? Colors.warning : undefined}>
-        <OrderProgressHero view={view} orientation="vertical" stepTimes={stepTimes} />
-      </MandiCard>
-
-      {(view.search != null || (view.showFailure && retryable)) && (
-        <PartnerSearchPanel
-          audience={audience}
+    <View style={styles.root}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={delivery.isRefetching || order.isRefetching}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+          />
+        }
+      >
+        <TrackingTopArea
+          view={view}
           delivery={data}
-          nowMs={nowMs}
-          onRetry={buyer || data == null ? undefined : () => retry.mutate(data.id)}
-          onSwitchOwn={buyer || data == null ? undefined : () => setConfirmingOwn(true)}
-          retrying={retry.isPending}
-          switching={switchOwn.isPending}
+          destination={destination}
+          height={TrackingLayout.topHeight + insets.top}
+          insetTop={insets.top}
+          onBack={back}
+          help={(
+            <MandiChatAction outletId={chat.outletId} supplierStoreId={chat.supplierStoreId} side={chat.side}
+              suggest={{ type: 'ORDER', id: chat.orderId }}>
+              {({ onPress, label }) => (
+                <Pressable
+                  onPress={onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  hitSlop={Spacing.xs}
+                  style={styles.help}
+                >
+                  <MandiText variant="captionEmphasis">Help</MandiText>
+                </Pressable>
+              )}
+            </MandiChatAction>
+          )}
         />
-      )}
+        <TrackingSheet>
+          <TrackingCards
+            audience={audience}
+            view={view}
+            delivery={data}
+            nowMs={nowMs}
+            onReport={buyer ? () => router.push(`/restaurant/dispute/${orderId}`) : undefined}
+            onRetry={data == null ? undefined : () => retry.mutate(data.id)}
+            onSwitchOwn={data == null ? undefined : () => setConfirmingOwn(true)}
+            retrying={retry.isPending}
+            switching={switchOwn.isPending}
+          />
+          <OrderSummaryCard
+            orderNumber={o.orderNumber}
+            summary={summary}
+            lines={o.items.map((item) => ({
+              id: item.id,
+              name: item.productName,
+              quantity: formatQuantity(item.acceptedQuantity ?? item.requestedQuantity, item.unit),
+            }))}
+            total={formatMoney(o.totalAmount)}
+            deliveringTo={deliveringTo}
+            chat={chat}
+          />
+          {data != null && data.timeline.length > 0 && (
+            <CollapsibleSection
+              title="Activity"
+              summary={`${data.timeline.length} ${data.timeline.length === 1 ? 'update' : 'updates'}`}
+            >
+              <DeliveryTimeline events={data.timeline} />
+            </CollapsibleSection>
+          )}
+        </TrackingSheet>
+      </ScrollView>
 
-      {view.showPartner && data?.driverName != null && (
-        <DeliveryPartnerCard
-          name={data.driverName}
-          vehicle={data.driverVehicle}
-          phone={data.driverPhone}
-          showCall={view.showCall}
-        />
-      )}
-
-      {view.showTrack && data?.trackingUrl != null && (
-        <MandiButton
-          label="Open live tracking"
-          icon="open-outline"
-          variant="secondary"
-          size="md"
-          onPress={() => { void Linking.openURL(data.trackingUrl as string); }}
-        />
-      )}
-
-      {deliveredByPartner ? (
-        <DeliveredSummaryCard
-          audience={audience}
-          deliveredAt={data.deliveredAt}
-          driverName={data.driverName}
-          onReceive={view.showReceive ? receive : undefined}
-        />
-      ) : view.showReceive ? (
-        <MandiCard accentColor={Colors.success}>
-          <MandiButton label="Inspect and receive goods" size="md" onPress={receive} />
-        </MandiCard>
+      {buyer && view.showReceive ? (
+        <MandiStickyBar>
+          <MandiButton label="Check in delivery" size="lg" onPress={receive} />
+        </MandiStickyBar>
+      ) : !buyer ? (
+        <MandiStickyBar>
+          <MandiButton label="Back to order" variant="neutral" size="md" onPress={back} />
+        </MandiStickyBar>
       ) : null}
-
-      {data != null && (data.pickupAddress != null || data.dropAddress != null) && (
-        <MandiCard>
-          <MandiText variant="bodyEmphasis">Route</MandiText>
-          <View style={styles.stop}>
-            <Ionicons name="location-outline" size={IconSize.md} color={Colors.primary} />
-            <View style={styles.flex}>
-              <MandiText variant="caption" color={Colors.textTertiary}>{buyer ? 'Pickup' : 'Pickup from your store'}</MandiText>
-              <MandiText variant="body" numberOfLines={2}>{data.pickupAddress ?? 'Pickup location pending'}</MandiText>
-            </View>
-          </View>
-          <View style={styles.stop}>
-            <Ionicons name="pin-outline" size={IconSize.md} color={Colors.success} />
-            <View style={styles.flex}>
-              <MandiText variant="caption" color={Colors.textTertiary}>{buyer ? 'Your outlet' : 'Delivering to'}</MandiText>
-              <MandiText variant="body" numberOfLines={2}>{data.dropAddress ?? 'Destination pending'}</MandiText>
-            </View>
-          </View>
-        </MandiCard>
-      )}
-
-      <CollapsibleSection key={`summary-${view.terminal}`} title="Order summary" summary={summary} defaultOpen={view.terminal}>
-        {o.items.map((item) => (
-          <View key={item.id} style={styles.line}>
-            <MandiText variant="body" style={styles.flex} numberOfLines={2}>{item.productName}</MandiText>
-            <MandiText variant="caption" color={Colors.textSecondary}>{formatQuantity(item.acceptedQuantity ?? item.requestedQuantity, item.unit)}</MandiText>
-          </View>
-        ))}
-        <View style={styles.line}>
-          <MandiText variant="bodyEmphasis">Total</MandiText>
-          <MandiText variant="bodyEmphasis">{formatMoney(o.totalAmount)}</MandiText>
-        </View>
-      </CollapsibleSection>
-
-      {data != null && data.timeline.length > 0 && (
-        <CollapsibleSection
-          title="Activity"
-          summary={`${data.timeline.length} ${data.timeline.length === 1 ? 'update' : 'updates'}`}
-        >
-          <DeliveryTimeline events={data.timeline} />
-        </CollapsibleSection>
-      )}
-
-      {!buyer && data == null && (
-        <MandiButton
-          label="Back to order"
-          variant="tertiary"
-          size="md"
-          onPress={() => (router.canGoBack() ? router.back() : router.replace(`/supplier/orders/${orderId}` as never))}
-        />
-      )}
 
       <MandiConfirm
         visible={confirmingOwn}
@@ -271,12 +255,19 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
         }}
         onCancel={() => setConfirmingOwn(false)}
       />
-    </MandiScreen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  stop: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md, marginTop: Spacing.md },
-  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md, paddingVertical: Spacing.xs },
+  root: { flex: 1, backgroundColor: Colors.background },
+  scroll: { flexGrow: 1 },
+  help: {
+    minHeight: 36,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

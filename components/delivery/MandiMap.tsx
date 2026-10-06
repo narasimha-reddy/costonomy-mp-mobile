@@ -12,6 +12,8 @@ export interface MandiMapProps {
   /** True when the newest fix is older than the freshness threshold (doc 06 §8). */
   stale: boolean;
   height?: number;
+  /** Fill the space it is given: no rounded corners, for use as the top of the tracking screen. */
+  bare?: boolean;
 }
 
 /**
@@ -25,7 +27,7 @@ export interface MandiMapProps {
  * §8: an old fix shown as if it were live is worse than no fix, because the
  * restaurant plans around it.
  */
-export function MandiMap({ driver, destination, stale, height = 220 }: MandiMapProps) {
+export function MandiMap({ driver, destination, stale, height = 220, bare = false }: MandiMapProps) {
   const focus = driver
     ? { latitude: Number(driver.latitude), longitude: Number(driver.longitude) }
     : destination;
@@ -33,7 +35,7 @@ export function MandiMap({ driver, destination, stale, height = 220 }: MandiMapP
   if (!focus) return null;
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View style={[styles.container, bare && styles.bare, { height }]}>
       <MapView
         provider={PROVIDER_DEFAULT}
         style={StyleSheet.absoluteFill}
@@ -62,4 +64,5 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: Colors.surfaceSunken,
   },
+  bare: { borderRadius: 0 },
 });

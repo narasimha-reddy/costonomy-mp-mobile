@@ -80,8 +80,9 @@ describe('OrderProgressHero', () => {
     render(<OrderProgressHero view={view} onTrack={onTrack} />);
     const header = screen.getByRole('header');
     expect(header.props.accessibilityLiveRegion).toBe('polite');
-    expect(screen.getAllByText('Partner assigned').length).toBeGreaterThan(0);
-    expect(screen.getByText('Ravi is heading to the supplier.')).toBeTruthy();
+    expect(screen.getByText('Ravi is heading to the supplier')).toBeTruthy();
+    expect(screen.getByText('Your order will be picked up shortly')).toBeTruthy();
+    expect(screen.getByText('Step 3 of 5 · Partner')).toBeTruthy();
     expect(screen.getByLabelText('Track')).toBeTruthy();
   });
 });

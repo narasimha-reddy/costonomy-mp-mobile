@@ -27,6 +27,7 @@ export function MandiChatAction({
   supplierStoreId,
   side,
   suggest,
+  children,
 }: {
   outletId: number | null | undefined;
   supplierStoreId: number | null | undefined;
@@ -40,6 +41,11 @@ export function MandiChatAction({
    * the other side reading "is this ready?" has no way to know which one.
    */
   suggest?: { type: 'REQUEST' | 'ORDER'; id: number };
+  /**
+   * Draw the trigger yourself (a pill, a row) instead of the header icon. It receives what to call on a tap and the
+   * accessible label, and the thread is opened the same way.
+   */
+  children?: (trigger: { onPress: () => void; label: string; busy: boolean }) => React.ReactNode;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -68,10 +74,14 @@ export function MandiChatAction({
     return null;
   }
 
+  const label = side === 'RESTAURANT' ? 'Message this supplier' : 'Message this restaurant';
+  if (children != null) {
+    return <>{children({ onPress: () => open.mutate(), label, busy: open.isPending })}</>;
+  }
   return (
     <MandiHeaderAction
       icon="chatbubble-ellipses-outline"
-      label={side === 'RESTAURANT' ? 'Message this supplier' : 'Message this restaurant'}
+      label={label}
       onPress={() => open.mutate()}
     />
   );

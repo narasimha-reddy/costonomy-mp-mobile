@@ -14,6 +14,7 @@ export {
   Tracker,
   AvatarSize,
   MapHeight,
+  TrackingLayout,
   hitSlopFor,
   Breakpoints,
   ContentMaxWidth,

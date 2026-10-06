@@ -54,16 +54,14 @@ import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
-import { DeliveredSummaryCard } from '@/components/delivery/DeliveredSummaryCard';
-import { DeliveryPartnerCard } from '@/components/delivery/DeliveryPartnerCard';
-import { OrderProgressHero } from '@/components/delivery/OrderProgressHero';
-import { PartnerSearchPanel } from '@/components/delivery/PartnerSearchPanel';
+import { TrackingCards } from '@/components/delivery/TrackingCards';
+import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
 import { useServerNow } from '@/hooks/useServerNow';
 import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
-import { Colors, FontSize, Radius, Spacing } from '@/theme';
+import { Colors, FontSize, Radius, Spacing, TrackingLayout } from '@/theme';
 
 const SCREEN = 'SUP-ORD-01';
 
@@ -283,7 +281,6 @@ export default function SupplierOrderScreen() {
   const view = order == null
     ? null
     : orderTrackingView({ audience: 'supplier', order, delivery: deliveryData, nowMs });
-  const stopped = deliveryData != null && canRetryPartner(deliveryData.mode, deliveryData.status);
   const busy = advance.isPending || cancel.isPending;
   const catchWeightItems = catchWeightLines(order);
   const hasCatchWeight = catchWeightItems.length > 0;
@@ -391,14 +388,30 @@ export default function SupplierOrderScreen() {
       ) : (
         <>
           {view != null && (
-            <MandiCard
-              accentColor={view.tone === 'danger' ? Colors.danger : view.tone === 'warning' ? Colors.warning : undefined}
-            >
-              <OrderProgressHero
+            <View style={styles.tracker}>
+              <View style={styles.topClip}>
+                <TrackingTopArea
+                  view={view}
+                  delivery={deliveryData}
+                  destination={null}
+                  height={TrackingLayout.previewHeight}
+                  overlap={0}
+                  compact
+                  onPress={view.showTrack && view.showMap ? () => router.push(`/supplier/tracking/${order.id}`) : undefined}
+                />
+              </View>
+              <TrackingCards
+                audience="supplier"
                 view={view}
+                delivery={deliveryData}
+                nowMs={nowMs}
                 onTrack={() => router.push(`/supplier/tracking/${order.id}`)}
+                onRetry={deliveryData == null ? undefined : () => retryPartner.mutate(deliveryData.id)}
+                onSwitchOwn={() => setConfirmingOwn(true)}
+                retrying={retryPartner.isPending}
+                switching={switchToOwn.isPending}
               />
-            </MandiCard>
+            </View>
           )}
 
           <MandiCard>
@@ -598,35 +611,6 @@ export default function SupplierOrderScreen() {
           {order.status === 'READY_FOR_PICKUP' && !deliveryData && wantsDeliveryPartner(order.deliveryMode)
             && order.hasColdChainItems && (
             <ColdChainBanner text="Temperature-controlled: only a carrier verified for chilled goods can be assigned. If none can, the delivery fails and you will see why." />
-          )}
-
-          {deliveryData != null && view != null && (view.search != null || stopped) && (
-            <PartnerSearchPanel
-              audience="supplier"
-              delivery={deliveryData}
-              nowMs={nowMs}
-              onRetry={() => retryPartner.mutate(deliveryData.id)}
-              onSwitchOwn={() => setConfirmingOwn(true)}
-              retrying={retryPartner.isPending}
-              switching={switchToOwn.isPending}
-            />
-          )}
-
-          {view != null && view.showPartner && deliveryData?.driverName != null && (
-            <DeliveryPartnerCard
-              name={deliveryData.driverName}
-              vehicle={deliveryData.driverVehicle}
-              phone={deliveryData.driverPhone}
-              showCall={view.showCall}
-            />
-          )}
-
-          {view != null && view.complete && deliveryData != null && (
-            <DeliveredSummaryCard
-              audience="supplier"
-              deliveredAt={deliveryData.deliveredAt}
-              driverName={deliveryData.driverName}
-            />
           )}
 
           {cancelling ? (
@@ -928,6 +912,8 @@ function CancelPanel({
 }
 
 const styles = StyleSheet.create({
+  tracker: { gap: Spacing.listGap },
+  topClip: { borderRadius: Radius.lg, overflow: 'hidden' },
   deliveryRow: {
     flexDirection: 'row',
     alignItems: 'center',

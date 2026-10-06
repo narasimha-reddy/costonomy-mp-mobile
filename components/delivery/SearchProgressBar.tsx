@@ -1,57 +1,48 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
-import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, Radius, Spacing, TrackingLayout } from '@/theme';
 
 /**
- * Progress while a delivery partner is being found. With a `fraction` it is a determinate bar over the automatic
- * search window; without one it is an indeterminate sweep (still, when the person asked for reduced motion).
+ * How far through the automatic search for a partner we are, over the server's window. It fills to the end and stops
+ * there; it never claims a partner was found.
  */
 export function SearchProgressBar({
-  fraction,
-  label,
+  fraction, label, note,
 }: {
-  fraction: number | null;
+  fraction: number;
+  /** Left of the line under the bar: "12 of 30 min". */
   label: string;
+  /** Right of it: "Auto-retrying". */
+  note?: string;
 }) {
-  const reduceMotion = useReducedMotion();
-  const sweep = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (fraction != null || reduceMotion) return undefined;
-    const loop = Animated.loop(Animated.timing(sweep, { toValue: 1, duration: 1400, useNativeDriver: false }));
-    loop.start();
-    return () => loop.stop();
-  }, [fraction, reduceMotion, sweep]);
-
-  const width = fraction != null ? `${Math.round(fraction * 100)}%` : '35%';
-  const left = fraction != null || reduceMotion
-    ? undefined
-    : sweep.interpolate({ inputRange: [0, 1], outputRange: ['-35%', '100%'] });
-
+  const pct = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
   return (
     <View style={styles.wrap}>
       <View
         style={styles.track}
         accessibilityRole="progressbar"
         accessibilityLabel={label}
-        accessibilityValue={fraction != null ? { min: 0, max: 100, now: Math.round(fraction * 100) } : undefined}
+        accessibilityValue={{ min: 0, max: 100, now: pct }}
       >
-        <Animated.View style={[styles.fill, { width: width as `${number}%` }, left != null && { left }]} />
+        <View style={[styles.fill, { width: `${pct}%` }]} />
       </View>
-      <MandiText variant="caption" color={Colors.textSecondary}>{label}</MandiText>
+      <View style={styles.text}>
+        <MandiText variant="caption" color={Colors.textSecondary}>{label}</MandiText>
+        {note != null && <MandiText variant="caption" color={Colors.textSecondary}>{note}</MandiText>}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: Spacing.xs, marginVertical: Spacing.sm },
+  wrap: { gap: Spacing.sm - 1, marginTop: Spacing.sm },
   track: {
-    height: 8,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceSunken,
+    height: TrackingLayout.segmentHeight,
+    borderRadius: Radius.sm / 2,
+    backgroundColor: Colors.progressTrack,
     overflow: 'hidden',
   },
-  fill: { height: 8, borderRadius: Radius.md, backgroundColor: Colors.primary },
+  fill: { height: '100%', backgroundColor: Colors.primary },
+  text: { flexDirection: 'row', justifyContent: 'space-between' },
 });

@@ -156,6 +156,27 @@ export const Colors = {
   partnerAvatarBg: '#FFF7ED',
   partnerAvatarText: '#CC4D00',
 
+  // ── Marketplace: tracking screen ────────────────────────────────────
+  /** The band at the top once an order is delivered; same two-stop idea as the brand gradient. */
+  successGradientStart: '#14663A',
+  successGradientEnd: '#16A34A',
+  /** Text on the light status backgrounds, dark enough to read at small sizes. */
+  successText: '#15803D',
+  warningText: '#92400E',
+  /** The amber banner for a delay or a partner change. */
+  warningBanner: '#FBEFD5',
+  /** The tracking sheet's grab handle. */
+  sheetHandle: '#DCD7D1',
+  /** Segments of the progress bar still to come. */
+  progressTrack: '#E5E7EB',
+  /** The stylised map drawn where there are no tiles (web). */
+  mapBackground: '#E8EEE4',
+  mapWater: '#CFE0EE',
+  mapPark: '#D5E6CF',
+  mapRoad: '#FFFFFF',
+  /** The "order in progress" bar on the orders list. */
+  inProgressBar: '#1F2937',
+
   // ── Skeletons ───────────────────────────────────────────────────────
   skeletonBase: '#E5E7EB',
   skeletonHighlight: '#F3F4F6',

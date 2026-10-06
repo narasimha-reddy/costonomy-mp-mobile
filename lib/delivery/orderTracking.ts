@@ -1,6 +1,6 @@
 import type { Delivery, DeliveryStatus } from '@/models/delivery';
 import type { DeliveryMode as OrderDeliveryMode, SupplierOrder, SupplierOrderStatus } from '@/models/procurement';
-import { canRetryPartner, clockTime } from '@/lib/delivery/deliveryPartner';
+import { canRetryPartner, clockTime, searchProgress } from '@/lib/delivery/deliveryPartner';
 
 /**
  * What the order tracker shows, as one pure function of what the server said.
@@ -132,7 +132,64 @@ export type TrackingOrder = Pick<SupplierOrder, 'status' | 'deliveryMode'>
 
 export type TrackingDelivery = Pick<Delivery, 'status' | 'mode'> & Partial<Omit<Delivery, 'status' | 'mode'>>;
 
+export type TrackerTagKind = 'on_time' | 'late' | 'searching' | 'delivered';
+export interface TrackerTag {
+  kind: TrackerTagKind;
+  /** Sentence case; the screen draws it in capitals. */
+  label: string;
+}
+export interface TrackerBanner {
+  title: string;
+  body: string;
+}
+/** What the top of the screen illustrates while there is no live map. */
+export type TrackerStage = 'bag' | 'cube' | 'bicycle' | 'done';
+
+/**
+ * The five (or three) segments of the progress bar.
+ *
+ * <p>A Costonomy delivery reads Placed, Packing, Partner, On the way, Delivered. A supplier's own van and a collection
+ * have no partner, so their third segment is Ready, and a collection stops there.
+ */
+const SEGMENTS: Record<TravelKind, string[]> = {
+  partner: ['Placed', 'Packing', 'Partner', 'On the way', 'Delivered'],
+  own: ['Placed', 'Packing', 'Ready', 'On the way', 'Delivered'],
+  pickup: ['Placed', 'Packing', 'Ready'],
+};
+/** Which segment each position on the full seven-step journey lands in. */
+const SEGMENT_OF_RANK: Record<TravelKind, number[]> = {
+  partner: [0, 1, 2, 2, 3, 3, 4],
+  own: [0, 1, 2, 2, 3, 3, 4],
+  pickup: [0, 1, 2, 2, 2, 2, 2],
+};
+
 export interface OrderTrackingView {
+  /** The small line above the headline: who the other party is. */
+  party: string | null;
+  /** The five-segment progress bar; empty when the order has no journey to show. */
+  segments: string[];
+  /** Index into `segments` of the current one; -1 when there is none. */
+  segmentIndex: number;
+  /** How full the current segment is drawn, 0 to 1. Presentation only. */
+  segmentFill: number;
+  /** "Step 4 of 5 · On the way". */
+  stepLine: string | null;
+  /** "Next: Delivered", or "Complete". */
+  nextLine: string | null;
+  /** The small text after a big headline: "by 7:48 PM". */
+  etaSmall: string | null;
+  tag: TrackerTag | null;
+  /** The server's estimate has passed. */
+  delayed: boolean;
+  lateMinutes: number | null;
+  /** The previous partner fell through and another is being found (buyer only). */
+  partnerChanged: boolean;
+  banner: TrackerBanner | null;
+  stage: TrackerStage;
+  /** The top of the screen: a map once a partner is reported, a success band when delivered, else an illustration. */
+  top: 'illustration' | 'map' | 'success';
+  /** True while we are looking for a partner: pulse rings, shimmer. */
+  searching: boolean;
   steps: TrackerStep[];
   /** Index into `steps`; -1 when the stepper is hidden. */
   currentIndex: number;
@@ -176,6 +233,10 @@ export function orderTrackingView(input: {
   const orderNumber = order.orderNumber ?? 'the order';
 
   const base: OrderTrackingView = {
+    party: buyer ? supplier : order.outletName ?? null,
+    segments: [], segmentIndex: -1, segmentFill: 0, stepLine: null, nextLine: null, etaSmall: null, tag: null,
+    delayed: false, lateMinutes: null, partnerChanged: false, banner: null, stage: 'bag', top: 'illustration',
+    searching: false,
     steps: [], currentIndex: -1, complete: false, problem: null, tone: 'neutral', headline: '', subline: null,
     etaText: null, search: null, showFailure: false, showPartner: false, showCall: false, showMap: false,
     showTrack: false, showReceive: false, terminal: false,
@@ -204,6 +265,8 @@ export function orderTrackingView(input: {
   const retryable = canRetryPartner(delivery?.mode, dStatus);
   const partnerPhase = dStatus != null && PARTNER_PHASE.has(dStatus);
   const searching = dStatus != null && SEARCHING.has(dStatus);
+  // The partner fell through after being found. The restaurant is told calmly; the supplier sees the usual stop.
+  const partnerChanged = buyer && (dStatus === 'DRIVER_CANCELLED' || dStatus === 'PICKUP_FAILED');
 
   let canonicalIndex = canonical;
   if (failed) {
@@ -220,27 +283,41 @@ export function orderTrackingView(input: {
     ? etaCopy(delivery?.estimatedArrivalAt, delivery?.etaMinutes, nowMs)
     : { text: null, overdue: false };
   const overdue = eta.overdue && !complete && !failed;
+  const arrivalMs = delivery?.estimatedArrivalAt ? Date.parse(delivery.estimatedArrivalAt) : NaN;
+  const lateMinutes = overdue && Number.isFinite(arrivalMs) ? Math.max(1, Math.ceil((nowMs - arrivalMs) / 60000)) : null;
 
   let copy: Copy;
   let search: OrderTrackingView['search'] = null;
+  let banner: TrackerBanner | null = null;
 
   if (completed) {
     copy = buyer
-      ? { headline: 'Order completed', subline: 'Checked in. Rate it or report a problem.', tone: 'success' }
+      ? { headline: 'Order completed', subline: 'Checked in. Report an issue if something is not right.', tone: 'success' }
       : { headline: 'Completed', subline: 'Checked in by the restaurant.', tone: 'success' };
   } else if (delivered) {
     const at = clockTime(delivery?.deliveredAt);
     copy = buyer
       ? {
-        headline: 'Delivered',
-        subline: `${at ? `Delivered at ${at}. ` : ''}Check the goods in to close the order.`,
+        headline: at ? `Delivered at ${at}` : 'Delivered',
+        subline: 'Check the goods in to close the order',
         tone: 'success',
       }
-      : { headline: 'Delivered', subline: 'Awaiting the restaurant\'s check-in.', tone: 'success' };
+      : {
+        headline: at ? `Delivered at ${at}` : 'Delivered',
+        subline: 'Waiting for the restaurant to check it in',
+        tone: 'success',
+      };
   } else if (failed) {
     copy = buyer
       ? { headline: 'Delivery didn\'t go through', subline: 'Your supplier and our team have been told.', tone: 'danger' }
       : { headline: 'Delivery failed', subline: delivery?.failureReason ?? null, tone: 'danger' };
+  } else if (partnerChanged) {
+    search = 'indeterminate';
+    copy = { headline: 'Finding a new delivery partner', subline: 'Usually takes 2 to 5 mins', tone: 'warning' };
+    banner = {
+      title: 'Partner changed',
+      body: 'Your previous partner could not complete the pickup. A new partner is being assigned.',
+    };
   } else if (retryable) {
     copy = buyer
       ? {
@@ -255,11 +332,24 @@ export function orderTrackingView(input: {
       };
   } else if (dStatus != null && partnerPhase) {
     copy = partnerCopy({ buyer, dStatus, eta, name: partnerName, outlet, orderNumber, delivery, overdue });
+    if (overdue) {
+      banner = {
+        title: 'Delayed',
+        body: 'The delivery is taking longer than expected. We will keep this page updated.',
+      };
+    }
   } else if (searching) {
     search = buyer ? 'indeterminate' : 'determinate';
+    const progress = searchProgress(delivery?.searchStartedAt, delivery?.retryUntil, new Date(nowMs));
     copy = buyer
-      ? { headline: 'Finding a delivery partner', subline: 'Your order is packed. We\'re assigning a partner.', tone: 'info' }
-      : { headline: 'Finding a delivery partner', subline: 'We\'re looking for a partner near your store.', tone: 'info' };
+      ? { headline: 'Finding a delivery partner', subline: 'Usually takes 2 to 5 mins', tone: 'info' }
+      : {
+        headline: 'Finding a delivery partner',
+        subline: progress.minutesElapsed != null && progress.minutesTotal != null
+          ? `Searching… ${progress.minutesElapsed} of ${progress.minutesTotal} min. We keep looking automatically.`
+          : 'We\'re looking for a partner near your store.',
+        tone: 'info',
+      };
   } else {
     copy = orderCopy({ buyer, kind, oStatus, supplier, order, dStatus });
     if (kind === 'partner' && oStatus === 'READY_FOR_PICKUP' && buyer) search = 'indeterminate';
@@ -271,8 +361,51 @@ export function orderTrackingView(input: {
   const showReceive = buyer && !completed
     && (oStatus === 'DELIVERED' || dStatus === 'DELIVERED'
       || (kind === 'pickup' && oStatus === 'READY_FOR_PICKUP'));
+  const showMap = showTrack && delivery?.location != null;
+  const isSearching = search != null;
+
+  // The five-segment bar. A failed delivery stays on the last segment it reached.
+  const segments = SEGMENTS[kind];
+  const rank = Math.max(0, Math.min(6, canonicalIndex));
+  const segmentIndex = complete && kind !== 'pickup' ? segments.length - 1 : SEGMENT_OF_RANK[kind][rank] ?? 0;
+  const atEnd = segmentIndex >= segments.length - 1;
+  const stepLine = `Step ${segmentIndex + 1} of ${segments.length} · ${segments[segmentIndex]}`;
+  const nextLine = complete && atEnd ? 'Complete' : atEnd ? null : `Next: ${segments[segmentIndex + 1]}`;
+
+  let tag: TrackerTag | null = null;
+  if (complete && kind !== 'pickup') tag = { kind: 'delivered', label: 'Delivered' };
+  else if (overdue) tag = { kind: 'late', label: lateMinutes != null ? `Late by ${lateMinutes} min` : 'Late' };
+  else if (isSearching) tag = { kind: 'searching', label: 'Searching' };
+  else if (partnerPhase && !failed && !retryable) tag = { kind: 'on_time', label: 'On time' };
+
+  // Only a stated arrival time is repeated small; a bare minutes figure has no clock time to show.
+  const arrivalClock = clockTime(delivery?.estimatedArrivalAt);
+  let etaSmall: string | null = null;
+  if (overdue) etaSmall = arrivalClock ? `was due by ${arrivalClock}` : null;
+  else if (eta.text != null && buyer && arrivalClock) etaSmall = `by ${arrivalClock}`;
+  else if (eta.text != null && !buyer) etaSmall = eta.text.replace('Arriving in', 'arrives in');
+
+  let stage: TrackerStage = 'bag';
+  if (complete && kind !== 'pickup') stage = 'done';
+  else if (isSearching || retryable || partnerPhase || (oStatus === 'OUT_FOR_DELIVERY' && kind !== 'pickup')) stage = 'bicycle';
+  else if (segmentIndex >= 1) stage = 'cube';
 
   return {
+    party: base.party,
+    segments,
+    segmentIndex,
+    segmentFill: isSearching ? 1 : dStatus === 'ARRIVED_AT_DESTINATION' ? 0.92 : 0.5,
+    stepLine,
+    nextLine,
+    etaSmall,
+    tag,
+    delayed: overdue,
+    lateMinutes,
+    partnerChanged,
+    banner,
+    stage,
+    top: complete && kind !== 'pickup' ? 'success' : showTrack ? 'map' : 'illustration',
+    searching: isSearching,
     steps,
     currentIndex,
     complete,
@@ -285,7 +418,7 @@ export function orderTrackingView(input: {
     showFailure: failed || retryable,
     showPartner,
     showCall: showPartner && !!delivery?.driverPhone,
-    showMap: showTrack && delivery?.location != null,
+    showMap,
     showTrack,
     showReceive,
     terminal: complete || failed,
@@ -312,38 +445,33 @@ function partnerCopy(a: {
   delivery: TrackingDelivery | null | undefined;
   overdue: boolean;
 }): Copy {
-  const { buyer, dStatus, eta, name, outlet, orderNumber, delivery, overdue } = a;
+  const { buyer, dStatus, eta, name, outlet, orderNumber, overdue } = a;
+  const first = name.split(/\s+/)[0] || name;
   if (overdue) {
-    const by = clockTime(delivery?.estimatedArrivalAt);
     return {
-      headline: 'Running a little late',
-      subline: `${by ? `Expected by ${by}. ` : ''}We're keeping an eye on it.`,
+      headline: 'Running late',
+      subline: buyer ? `${first} is still on the way` : `${first} is still on the way to ${outlet}`,
       tone: 'warning',
     };
   }
   switch (dStatus) {
     case 'DRIVER_ASSIGNED':
       return buyer
-        ? { headline: 'Partner assigned', subline: `${name} is heading to the supplier.` }
+        ? { headline: `${first} is heading to the supplier`, subline: 'Your order will be picked up shortly' }
         : { headline: 'Partner on the way to you', subline: `Keep order ${orderNumber} at the counter.` };
     case 'DRIVER_AT_PICKUP':
       return buyer
-        ? { headline: 'Partner at the supplier', subline: `${name} is collecting your order.` }
-        : { headline: 'Partner is at your store', subline: `Hand over order ${orderNumber}.` };
+        ? { headline: `${first} has reached the supplier`, subline: 'Collecting your order' }
+        : { headline: 'Partner is at your store', subline: `Hand over order ${orderNumber}` };
     case 'ARRIVED_AT_DESTINATION':
       return buyer
-        ? { headline: 'Partner has arrived', subline: `Meet ${name} at your receiving door.`, tone: 'success' }
+        ? { headline: 'Arriving now', subline: `${first} has reached ${outlet}`, tone: 'success' }
         : { headline: 'Partner at the restaurant', subline: null, tone: 'success' };
-    default: {
+    default:
       // PICKED_UP, IN_TRANSIT
-      const minutes = eta.text ? eta.text.replace('Arriving in ', '') : null;
       return buyer
-        ? { headline: eta.text ?? 'On the way', subline: `${name} is on the way to ${outlet}.` }
-        : {
-          headline: 'Out for delivery',
-          subline: minutes ? `Arriving at ${outlet} in ${minutes}.` : `On the way to ${outlet}.`,
-        };
-    }
+        ? { headline: eta.text ?? 'On the way', subline: `${first} is on the way` }
+        : { headline: 'Out for delivery', subline: `${first} is taking it to ${outlet}` };
   }
 }
 
@@ -359,12 +487,16 @@ function orderCopy(a: {
   switch (oStatus) {
     case 'CONFIRMED':
       return buyer
-        ? { headline: 'Order confirmed', subline: `${supplier} will start preparing it soon.`, tone: 'neutral' }
-        : { headline: 'New order to prepare', subline: 'Start preparing when you\'re ready.', tone: 'neutral' };
+        ? { headline: 'Order placed', subline: `${supplier} will start preparing it soon.`, tone: 'neutral' }
+        : { headline: 'New order to prepare', subline: 'Start preparing when you are ready', tone: 'neutral' };
     case 'PREPARING':
       return buyer
-        ? { headline: 'Preparing your order', subline: `${supplier} is packing your items.`, tone: 'info' }
-        : { headline: 'Preparing', subline: 'Mark it ready once it\'s packed.', tone: 'info' };
+        ? {
+          headline: 'Packing your order',
+          subline: kind === 'partner' ? 'We will assign a delivery partner soon' : `${supplier} is packing your items.`,
+          tone: 'info',
+        }
+        : { headline: 'Pack the order', subline: 'Mark it ready once it is packed', tone: 'info' };
     case 'READY_FOR_PICKUP':
       if (kind === 'pickup') {
         return buyer
@@ -390,8 +522,8 @@ function orderCopy(a: {
           : { headline: 'Delivery cancelled', subline: 'Request a delivery partner again.', tone: 'warning' };
       }
       return buyer
-        ? { headline: 'Finding a delivery partner', subline: 'Your order is packed. We\'re assigning a partner.', tone: 'info' }
-        : { headline: 'Ready to send', subline: 'Request a delivery partner to dispatch it.', tone: 'info' };
+        ? { headline: 'Finding a delivery partner', subline: 'Usually takes 2 to 5 mins', tone: 'info' }
+        : { headline: 'Ready to send', subline: 'Request a delivery partner to dispatch it', tone: 'info' };
     case 'OUT_FOR_DELIVERY':
       if (kind === 'own') {
         return buyer

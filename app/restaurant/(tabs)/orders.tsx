@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchOutletOrders } from '@/services/procurement';
+import { fetchDelivery } from '@/services/delivery';
 import type { SupplierOrder, SupplierOrderStatus as Status } from '@/models/procurement';
 import {
   MandiCard,
@@ -17,7 +18,11 @@ import {
 } from '@/components/common';
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
+import { OrderInProgressBar } from '@/components/delivery/OrderInProgressBar';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
+import { useServerNow } from '@/hooks/useServerNow';
+import { isApiError } from '@/lib/api/errors';
+import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 /** REST-ORDERS-01. Doc 05 §15 — pending, active, completed, cancelled. */
@@ -42,6 +47,25 @@ const TABS: { key: Tab; label: string; statuses: Status[] }[] = [
   { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED'] },
 ];
 
+/** The statuses in which a Costonomy delivery can exist to be asked about. */
+const WITH_DELIVERY: Status[] = ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'];
+const IN_FLIGHT = TABS[1]?.statuses ?? [];
+const BAR_POLL_MS = 30_000;
+/** Room under the list for the bar that floats over it. */
+const BAR_CLEARANCE = 96;
+
+/**
+ * The restaurant's most recent order that Costonomy is delivering and that is not yet delivered, or null.
+ * Read from the list the screen already has.
+ */
+function latestInFlight(orders: SupplierOrder[] | undefined): SupplierOrder | null {
+  const candidates = (orders ?? []).filter(
+    (o) => o.deliveryMode === 'COSTONOMY_DELIVERY' && IN_FLIGHT.includes(o.status),
+  );
+  candidates.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return candidates[0] ?? null;
+}
+
 export default function OrdersScreen() {
   const router = useRouter();
   const { accessToken } = useSession();
@@ -54,6 +78,21 @@ export default function OrdersScreen() {
     enabled: outletId != null && accessToken != null,
   });
 
+  const inFlight = useMemo(() => latestInFlight(query.data), [query.data]);
+  const nowMs = useServerNow();
+  // One extra read for that one order: the list has its status but not where its delivery has got to. It shares the
+  // order screen's key, so opening the order starts from what this already fetched.
+  const flightDelivery = useQuery({
+    queryKey: ['supplier-order', inFlight?.id, 'delivery'],
+    queryFn: () => fetchDelivery(accessToken as string, inFlight?.id as number),
+    enabled: inFlight != null && accessToken != null && WITH_DELIVERY.includes(inFlight.status),
+    retry: (count, error) => !isApiError(error) && count < 2,
+    refetchInterval: BAR_POLL_MS,
+  });
+  const flightView = inFlight == null
+    ? null
+    : orderTrackingView({ audience: 'buyer', order: inFlight, delivery: flightDelivery.data ?? null, nowMs });
+
   const orders = useMemo(() => {
     const statuses = TABS.find((t) => t.key === tab)?.statuses ?? [];
     return (query.data ?? []).filter((order) => statuses.includes(order.status));
@@ -64,6 +103,10 @@ export default function OrdersScreen() {
       header={<Header tab={tab} onTab={setTab} />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
+      contentStyle={flightView != null ? { paddingBottom: BAR_CLEARANCE } : undefined}
+      floating={flightView != null && inFlight != null ? (
+        <OrderInProgressBar view={flightView} onPress={() => router.push(`/restaurant/orders/${inFlight.id}`)} />
+      ) : undefined}
     >
       {outletLoading || query.isPending ? (
         <MandiSkeletonList count={3} />

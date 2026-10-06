@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.
 
+### [phase6/mobile-map-first-tracking] - Map-first order tracking, as approved in the design mockup (API D-151)
+#### Changed
+- Tracking screen and both order screens: an illustration band until a partner is assigned, then the map; a sheet with one big headline and ETA, an on-time / late / searching / delivered tag and five progress segments; a bigger partner card with call; amber banners for a delay or a changed partner; a green delivered state with Check in delivery and Report an issue; supplier search, Try again and I will deliver it myself cards.
+- Orders list: an order-in-progress bar with Track.
+- No partner chat, handover code, star rating or share link (decided with the product owner).
+
 ### [phase6/mobile-live-tracking] - Live order tracking: stepper, partner card, map (API D-151)
 #### Added
 - A shared order-tracking view model (`lib/delivery/orderTracking.ts`) and components: a stage stepper, a headline with ETA, a partner card with call, a search panel, a delivered summary and a live map header. Both tracking screens use them.

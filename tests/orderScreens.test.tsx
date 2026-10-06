@@ -79,7 +79,7 @@ describe('buyer order screen', () => {
   it('has no Track Delivery while preparing', async () => {
     noDelivery();
     setup(RestaurantOrderScreen);
-    expect(await screen.findByText('Preparing your order')).toBeTruthy();
+    expect(await screen.findByText('Packing your order')).toBeTruthy();
     expect(screen.queryByText('Track Delivery')).toBeNull();
   });
 
@@ -101,6 +101,25 @@ describe('buyer order screen', () => {
     expect(screen.getByText('1 item · ₹1,180.00')).toBeTruthy();
   });
 
+  it('opens tracking from a map preview only once a position is reported', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
+    setup(RestaurantOrderScreen);
+    await screen.findByText('Track Delivery');
+    // A partner but no reported position: the top stays an illustration, not a tappable map.
+    expect(screen.queryByLabelText('Track delivery on the map')).toBeNull();
+  });
+
+  it('shows the map preview, which opens tracking, when the partner has a position', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'OUT_FOR_DELIVERY' });
+    (fetchDelivery as jest.Mock).mockResolvedValue({
+      ...delivery, status: 'IN_TRANSIT',
+      location: { latitude: '12.9', longitude: '77.6', bearing: null, recordedAt: '2026-01-01T10:00:00Z' },
+      locationStale: false,
+    });
+    setup(RestaurantOrderScreen);
+    expect(await screen.findByLabelText('Track delivery on the map')).toBeTruthy();
+  });
+
   it('never shows the failure reason to the buyer', async () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
     (fetchDelivery as jest.Mock).mockResolvedValue({
@@ -117,9 +136,9 @@ describe('buyer order screen', () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'DELIVERED' });
     (fetchDelivery as jest.Mock).mockResolvedValue({ ...delivery, status: 'DELIVERED', deliveredAt: null });
     setup(RestaurantOrderScreen);
-    expect(await screen.findByText('Check In Delivery')).toBeTruthy();
+    expect(await screen.findByText('Check in delivery')).toBeTruthy();
     expect(screen.getByText('Delivered by Ravi Kumar')).toBeTruthy();
-    expect(screen.getByText('Report a problem')).toBeTruthy();
+    expect(screen.getByText('Report an issue')).toBeTruthy();
     expect(screen.queryByText('Track Delivery')).toBeNull();
     expect(screen.queryByLabelText('Call Ravi Kumar')).toBeNull();
   });
@@ -133,7 +152,7 @@ describe('supplier order screen', () => {
     });
     setup(SupplierOrderScreen);
     expect(await screen.findByText('Try again')).toBeTruthy();
-    expect(screen.getByText("I'll deliver it myself")).toBeTruthy();
+    expect(screen.getByText('I will deliver it myself')).toBeTruthy();
     expect(screen.getAllByText('secret reason').length).toBeGreaterThan(0);
     expect(screen.queryByText('Track')).toBeNull();
     expect(screen.queryByText(/Pidge/)).toBeNull();

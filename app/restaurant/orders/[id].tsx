@@ -22,10 +22,8 @@ import {
 } from '@/components/common';
 import { CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { isApiError } from '@/lib/api/errors';
-import { DeliveredSummaryCard } from '@/components/delivery/DeliveredSummaryCard';
-import { DeliveryPartnerCard } from '@/components/delivery/DeliveryPartnerCard';
-import { OrderProgressHero } from '@/components/delivery/OrderProgressHero';
-import { PartnerSearchPanel } from '@/components/delivery/PartnerSearchPanel';
+import { TrackingCards } from '@/components/delivery/TrackingCards';
+import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
 import { CollapsibleSection } from '@/components/order/CollapsibleSection';
 import { useServerNow } from '@/hooks/useServerNow';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
@@ -33,7 +31,7 @@ import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { DetailRow as Row } from '@/components/restaurant/DetailRow';
-import { Colors, Spacing } from '@/theme';
+import { Colors, Radius, Spacing, TrackingLayout } from '@/theme';
 
 const ACTIVE_POLL_MS = 15_000;
 const ENDED_ORDER = ['COMPLETED', 'CANCELLED'];
@@ -181,12 +179,33 @@ export default function OrderDetailScreen() {
         <MandiErrorState message="Couldn't load this order." onRetry={() => query.refetch()} />
       ) : (
         <>
-          {/* The tracker: where the order is, from what the server said. */}
-          <MandiCard
-            accentColor={view?.tone === 'danger' ? Colors.danger : view?.tone === 'warning' ? Colors.warning : undefined}
-          >
-            {view != null && <OrderProgressHero view={view} />}
-            <MandiText variant="caption" color={Colors.textTertiary} style={styles.placed}>
+          {/* The tracker: where the order is, from what the server said. The top is an illustration until a partner
+              is reporting, then a map preview that opens the live view. */}
+          {view != null && (
+            <View style={styles.tracker}>
+              <View style={styles.topClip}>
+                <TrackingTopArea
+                  view={view}
+                  delivery={deliveryStatus}
+                  destination={null}
+                  height={TrackingLayout.previewHeight}
+                  overlap={0}
+                  compact
+                  onPress={view.showTrack && view.showMap ? () => router.push(`/restaurant/tracking/${order.id}`) : undefined}
+                />
+              </View>
+              <TrackingCards
+                audience="buyer"
+                view={view}
+                delivery={deliveryStatus}
+                nowMs={nowMs}
+                onReport={() => router.push(`/restaurant/dispute/${order.id}`)}
+              />
+            </View>
+          )}
+
+          <MandiCard>
+            <MandiText variant="caption" color={Colors.textTertiary}>
               {formatMomentWithRecency(order.createdAt)}
             </MandiText>
             {/* Through to the supplier's shelf. Somebody reading an order
@@ -209,27 +228,6 @@ export default function OrderDetailScreen() {
               <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
             </Pressable>
           </MandiCard>
-
-          {view != null && view.search != null && (
-            <PartnerSearchPanel audience="buyer" delivery={deliveryStatus} nowMs={nowMs} />
-          )}
-
-          {view != null && view.showPartner && deliveryStatus?.driverName != null && (
-            <DeliveryPartnerCard
-              name={deliveryStatus.driverName}
-              vehicle={deliveryStatus.driverVehicle}
-              phone={deliveryStatus.driverPhone}
-              showCall={view.showCall}
-            />
-          )}
-
-          {view != null && view.complete && deliveryStatus != null && (
-            <DeliveredSummaryCard
-              audience="buyer"
-              deliveredAt={deliveryStatus.deliveredAt}
-              driverName={deliveryStatus.driverName}
-            />
-          )}
 
           {(order.hasColdChainItems || order.scheduledDeliveryDate || order.deliverySlotName
             || order.isSubscriptionOrder) && (
@@ -386,15 +384,6 @@ export default function OrderDetailScreen() {
                 suggest={{ type: 'ORDER', id: order.id }}
               />
             </View>
-            {(order.status === 'DELIVERED' || order.status === 'COMPLETED') && (
-              <MandiButton
-                label="Report a problem"
-                variant="tertiary"
-                size="md"
-                icon="alert-circle-outline"
-                onPress={() => router.push(`/restaurant/dispute/${order.id}`)}
-              />
-            )}
           </MandiCard>
 
           {/* ── Statutory Billing Documents ────────────────────────── */}
@@ -522,7 +511,7 @@ export default function OrderDetailScreen() {
           )}
           {receivable && (
             <MandiButton
-              label={carried ? 'Check In Delivery' : 'Confirm Collection'}
+              label={carried ? 'Check in delivery' : 'Confirm Collection'}
               size="lg"
               style={styles.barAction}
               onPress={() => router.push(`/restaurant/receiving/${order.id}`)}
@@ -545,6 +534,8 @@ export default function OrderDetailScreen() {
 const styles = StyleSheet.create({
   partyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   pressed: { opacity: 0.7 },
+  tracker: { gap: Spacing.listGap },
+  topClip: { borderRadius: Radius.lg, overflow: 'hidden' },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   // The request screen's chip row, so the two read alike.

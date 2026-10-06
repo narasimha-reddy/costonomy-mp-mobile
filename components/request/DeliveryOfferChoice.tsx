@@ -17,14 +17,35 @@ export type DeliveryOffer = 'SELF_FREE' | 'SELF' | 'COSTONOMY' | 'NONE';
  */
 export function deliveryOffersFor(policy: DeliveryPolicy | undefined): DeliveryOffer[] {
   if (policy == null) return [];
-  // "I will deliver this one" is the supplier's own call and needs no setting. Charging for it is limited by the
-  // store's own delivery fee, so that option is there only when a fee is set.
-  const offers: DeliveryOffer[] = ['SELF_FREE'];
-  if (policy.ownDeliveryFee != null && Number(policy.ownDeliveryFee) > 0) offers.push('SELF');
+  // "I will deliver it" is the supplier's own call and needs no setting. What they charge is theirs to enter for each
+  // order: zero is free delivery.
+  const offers: DeliveryOffer[] = ['SELF'];
   if (policy.costonomyDeliveryEnabled) offers.push('COSTONOMY');
   // Not every request can be delivered: saying so leaves the restaurant to collect it, or go elsewhere.
   offers.push('NONE');
   return offers;
+}
+
+/** The charge typed for delivery: empty means 0 (free); anything else must be a plain non-negative number. */
+export function deliveryChargeValid(fee: string | undefined): boolean {
+  const text = (fee ?? '').trim();
+  return text === '' || (/^\d*\.?\d*$/.test(text) && text !== '.' && Number.isFinite(Number(text)));
+}
+
+/**
+ * What to send for the supplier's choice. Delivering themselves with a charge of 0 (or nothing typed) is free
+ * delivery; any other amount is the charge the restaurant is shown. The server checks the amount again.
+ */
+export function deliveryAnswerFor(
+  offer: DeliveryOffer | null,
+  charge: string,
+): { deliveryOffer?: DeliveryOffer; deliveryFee?: string } {
+  if (offer == null) return {};
+  if (offer !== 'SELF') return { deliveryOffer: offer };
+  const amount = Number(charge.trim() === '' ? '0' : charge);
+  return amount === 0
+    ? { deliveryOffer: 'SELF_FREE' }
+    : { deliveryOffer: 'SELF', deliveryFee: String(amount) };
 }
 
 export function DeliveryOfferChoice({
@@ -46,12 +67,12 @@ export function DeliveryOfferChoice({
 
   const labels: Record<DeliveryOffer, { title: string; detail: string }> = {
     SELF_FREE: {
-      title: 'I will deliver it — free',
-      detail: 'You handle the delivery yourself, at no charge to the restaurant. They are told it is free.',
+      title: 'I will deliver it',
+      detail: 'You handle the delivery yourself.',
     },
     SELF: {
-      title: `I will deliver it — ${formatMoney(policy.ownDeliveryFee ?? '0')}`,
-      detail: 'Charged to the restaurant. Keep your store fee, or enter a lower amount for this order.',
+      title: 'I will deliver it',
+      detail: 'You handle the delivery yourself. Enter what you charge the restaurant, or 0 for free delivery.',
     },
     NONE: {
       title: "I can't deliver this order",
@@ -86,13 +107,22 @@ export function DeliveryOfferChoice({
         })}
       </View>
       {value === 'SELF' && onFeeChange != null && (
-        <MandiFormField
-          label={`Delivery charge for this order (up to ${formatMoney(policy.ownDeliveryFee ?? '0')})`}
-          value={fee ?? ''}
-          onChangeText={onFeeChange}
-          keyboardType="decimal-pad"
-          placeholder={String(policy.ownDeliveryFee ?? '0')}
-        />
+        <>
+          <MandiFormField
+            label="Delivery charge for this order (₹)"
+            value={fee ?? ''}
+            onChangeText={(text) => onFeeChange(text.replace(/[^0-9.]/g, ''))}
+            keyboardType="decimal-pad"
+            placeholder="0"
+          />
+          <MandiText variant="caption" color={deliveryChargeValid(fee) && Number(fee || '0') === 0 ? Colors.success : Colors.textSecondary}>
+            {!deliveryChargeValid(fee)
+              ? 'Enter a number, such as 0 or 40.'
+              : Number(fee || '0') === 0
+                ? 'Free delivery. The restaurant is told it is free.'
+                : `The restaurant sees ${formatMoney(String(Number(fee)))} for delivery before they order.`}
+          </MandiText>
+        </>
       )}
     </MandiCard>
   );

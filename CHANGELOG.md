@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-delivery-charge] - One "I will deliver it" with a charge box
+#### Changed
+- The supplier's answer has one "I will deliver it" option with a "Delivery charge for this order (₹)" box. 0 (or empty) is free delivery and the restaurant is told so; any other amount is what the restaurant is shown before ordering. It no longer depends on a store fee or the own-delivery setting, and an amount that is not a number blocks Accept.
+
 ### [phase6/mobile-sheet-clicks] - Text boxes in a bottom sheet
 #### Fixed
 - Tapping a text box inside a bottom sheet (such as New Delivery Slot) closed the sheet on web: the click bubbled to the dimmed background, which closes on a tap. The click is now stopped at the edge of the sheet. The delivery-slot sheet also lifts above the keyboard.

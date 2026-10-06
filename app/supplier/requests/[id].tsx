@@ -8,7 +8,9 @@ import { useStore } from '@/contexts/StoreProvider';
 import { useDebounced } from '@/hooks/useDebounced';
 import { fetchIntent, previewResponse, respondToIntent } from '@/services/intent';
 import { fetchDeliveryPolicy } from '@/services/supplier';
-import { DeliveryOfferChoice, deliveryOffersFor, type DeliveryOffer } from '@/components/request/DeliveryOfferChoice';
+import {
+  DeliveryOfferChoice, deliveryAnswerFor, deliveryChargeValid, deliveryOffersFor, type DeliveryOffer,
+} from '@/components/request/DeliveryOfferChoice';
 import { intentKey, storeIntentsKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import {
@@ -67,7 +69,7 @@ export default function SupplierRequestScreen() {
   const [notes, setNotes] = useState('');
   const [confirmDecline, setConfirmDecline] = useState(false);
   const [deliveryChoice, setDeliveryChoice] = useState<DeliveryOffer | null>(null);
-  // What to charge for this order when delivering at a fee; empty keeps the store's fee.
+  // What to charge for this order when delivering themselves. Empty or 0 is free delivery.
   const [deliveryCharge, setDeliveryCharge] = useState('');
 
   // What this store is allowed to offer for delivery. The server checks it again.
@@ -83,6 +85,8 @@ export default function SupplierRequestScreen() {
       : offers.includes('SELF') ? 'SELF'
         : offers.includes('SELF_FREE') ? 'SELF_FREE'
           : offers[0] ?? null;
+
+  const chargeValid = deliveryChargeValid(deliveryCharge);
 
   const query = useQuery({
     queryKey: intentKey(intentId),
@@ -153,8 +157,7 @@ export default function SupplierRequestScreen() {
         // quantities while a request is open, so accepting without saying which
         // version you read is accepting whatever it happens to be now.
         expectedRevision: request?.revision,
-        deliveryOffer: deliveryOffer ?? undefined,
-        deliveryFee: deliveryOffer === 'SELF' && deliveryCharge.trim() !== '' ? deliveryCharge.trim() : undefined,
+        ...deliveryAnswerFor(deliveryOffer, deliveryCharge),
         notes: notes.trim() === '' ? undefined : notes.trim(),
       }),
     onSuccess: () => {
@@ -396,6 +399,7 @@ export default function SupplierRequestScreen() {
           size="lg"
           variant={everythingDeclined ? 'destructive' : 'primary'}
           loading={reply.isPending}
+          disabled={!everythingDeclined && deliveryOffer === 'SELF' && !chargeValid}
           onPress={() => (everythingDeclined ? setConfirmDecline(true) : reply.mutate())}
         />
       </MandiStickyBar>

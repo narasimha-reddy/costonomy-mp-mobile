@@ -284,6 +284,7 @@ export function SupplierSectionBody({
         const currentTotalNum = parseFloat(draft.agreedTotal);
         const isBelowMov = minOrderNum > 0 && currentTotalNum < minOrderNum;
         const freeThresholdNum = draft.freeDeliveryThreshold != null ? parseFloat(draft.freeDeliveryThreshold) : 0;
+        const goodsNum = draft.agreedValue != null ? parseFloat(draft.agreedValue) : 0;
 
         return (
           <View style={[styles.totals, !expanded && styles.totalsFirst]}>
@@ -314,20 +315,22 @@ export function SupplierSectionBody({
               </View>
             )}
 
-            {freeThresholdNum > 0 && (
+            {freeThresholdNum > 0 && (draft.deliveryPreference ?? 'DELIVERY') === 'DELIVERY' && (
               <View style={styles.thresholdBadge}>
                 <Ionicons
-                  name={currentTotalNum >= freeThresholdNum ? 'sparkles' : 'bicycle'}
+                  name={goodsNum >= freeThresholdNum ? 'sparkles' : 'bicycle'}
                   size={IconSize.xs}
-                  color={currentTotalNum >= freeThresholdNum ? Colors.success : Colors.info}
+                  color={goodsNum >= freeThresholdNum ? Colors.success : Colors.info}
                 />
                 <MandiText
                   variant="caption"
-                  color={currentTotalNum >= freeThresholdNum ? Colors.success : Colors.info}
+                  color={goodsNum >= freeThresholdNum ? Colors.success : Colors.info}
                 >
-                  {currentTotalNum >= freeThresholdNum
-                    ? '🎉 FREE delivery unlocked!'
-                    : `Add ₹${(freeThresholdNum - currentTotalNum).toFixed(2)} more for FREE delivery`}
+                  {/* The supplier's own delivery only: Costonomy riders are paid for. Compared on the goods before GST,
+                      as the server does. */}
+                  {goodsNum >= freeThresholdNum
+                    ? 'Free delivery if the supplier delivers'
+                    : `Add ₹${(freeThresholdNum - goodsNum).toFixed(2)} more for free delivery by the supplier`}
                 </MandiText>
               </View>
             )}

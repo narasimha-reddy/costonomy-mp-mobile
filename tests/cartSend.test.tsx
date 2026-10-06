@@ -171,5 +171,22 @@ describe('the cart', () => {
 
     await waitFor(() => expect(setDeliveryPreference).toHaveBeenCalledWith('token', 31, 'PICKUP'));
   });
+
+  it('says free delivery is by the supplier, compares goods before GST, and hides when the buyer collects', () => {
+    const draft = mockDraft as unknown as Record<string, unknown>;
+    draft.freeDeliveryThreshold = '2000.00';
+    const { unmount } = setup();
+
+    // 2,000 less the goods before GST (1,230), not the total with GST (1,291.50).
+    expect(screen.getByText('Add ₹770.00 more for free delivery by the supplier')).toBeTruthy();
+    unmount();
+
+    draft.deliveryPreference = 'PICKUP';
+    setup();
+    expect(screen.queryByText(/free delivery/i)).toBeNull();
+
+    draft.deliveryPreference = 'DELIVERY';
+    draft.freeDeliveryThreshold = undefined;
+  });
 });
 

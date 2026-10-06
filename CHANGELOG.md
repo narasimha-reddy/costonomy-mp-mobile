@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-free-delivery-nudge] - Free delivery is the supplier's (API D-146)
+#### Changed
+- The cart's free-delivery nudge now says "free delivery by the supplier", is hidden when the buyer will collect, and compares the goods before GST, as the server does. Costonomy riders are never free by threshold.
+
 ### [phase6/mobile-no-riders-for-own-delivery] - Delivery partner button
 #### Fixed
 - "Request Delivery Partner" (the card and the bottom button) appeared for pickups and for orders the supplier delivers themselves. It now shows only for orders sold with Costonomy delivery (API D-145).

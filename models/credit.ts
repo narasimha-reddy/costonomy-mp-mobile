@@ -284,3 +284,73 @@ export interface WalletRepayment {
   allocations: WalletRepaymentAllocation[];
   agreement: { due: Money; overdue: Money; available: Money; status: CreditAgreementStatus };
 }
+
+// ── Collections and payouts (supplier S8) ─────────────────────────────
+
+export type PayoutStatus = 'PENDING' | 'APPLIED';
+export type PayoutStatusFilter = 'ALL' | PayoutStatus;
+
+export interface CreditPayoutInvoice {
+  invoiceId: number;
+  invoiceNumber: string;
+  amount: Money;
+}
+
+/** Money a restaurant paid from its Mandi wallet, and what Mandi pays the supplier of it. All figures are the server's. */
+export interface CreditPayout {
+  payoutId: number;
+  repaymentId: number;
+  agreementId: number;
+  outletId: number;
+  outletName: string | null;
+  restaurantName: string | null;
+  grossAmount: Money;
+  /** The rate in force when it was paid; null when none applied. */
+  commissionRatePercent: Money | null;
+  commissionAmount: Money;
+  netAmount: Money;
+  status: PayoutStatus;
+  settlementId: number | null;
+  settlementNumber: string | null;
+  settlementDate: string | null;
+  appliedAt: string | null;
+  createdAt: string;
+  invoices: CreditPayoutInvoice[];
+}
+
+export interface CreditPayoutList {
+  summary: { pendingNet: Money; appliedNetThisMonth: Money };
+  items: CreditPayout[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasNext: boolean;
+}
+
+export type StorePaymentSource = 'SUPPLIER_RECORDED' | 'WALLET' | 'CLAIM_CONFIRMED';
+
+/** One payment on any of the store's credit lines. */
+export interface StorePayment {
+  id: number;
+  paidAt: string;
+  paidOn: string;
+  agreementId: number;
+  outletId: number;
+  outletName: string | null;
+  restaurantName: string | null;
+  invoiceId: number;
+  invoiceNumber: string;
+  amount: Money;
+  source: StorePaymentSource;
+  method: string | null;
+  reference: string | null;
+}
+
+export interface StorePaymentList {
+  items: StorePayment[];
+  page: number;
+  size: number;
+  total: number;
+  hasNext: boolean;
+}

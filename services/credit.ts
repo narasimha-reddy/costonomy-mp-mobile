@@ -13,6 +13,10 @@ import type {
   ClaimResponse,
   ClaimStatus,
   SubmitClaimRequest,
+  CreditPayoutList,
+  PayoutStatusFilter,
+  StorePaymentList,
+  StorePaymentSource,
 } from '@/models/credit';
 
 // ── Restaurant side ───────────────────────────────────────────────────
@@ -338,4 +342,39 @@ export function isOverpaymentError(error: unknown): { outstanding: number } | nu
 export function isClaimStateError(error: unknown): boolean {
   return error instanceof ApiError
     && (error.code === 'CREDIT_CLAIM_STATE' || error.status === 404);
+}
+
+// ── Collections and payouts (supplier S8) ─────────────────────────────
+
+/**
+ * Wallet repayments Mandi collected for the store and what is paid out of them, newest
+ * first, with the store's pending and this-month totals. `from` and `to` are 'YYYY-MM-DD'
+ * and optional; with neither, the server applies no date limit.
+ */
+export function fetchPayouts(
+  token: string,
+  storeId: number,
+  query: { status: PayoutStatusFilter; from?: string; to?: string; page: number; size: number },
+): Promise<CreditPayoutList> {
+  const parts = [`status=${query.status}`];
+  if (query.from != null) parts.push(`from=${encodeURIComponent(query.from)}`);
+  if (query.to != null) parts.push(`to=${encodeURIComponent(query.to)}`);
+  parts.push(`page=${query.page}`, `size=${query.size}`);
+  return apiRequest<CreditPayoutList>(
+    `/api/v1/supplier-stores/${storeId}/credit/payouts?${parts.join('&')}`, { token });
+}
+
+/** Every payment on every credit line of the store, newest first. No `source` means all sources. */
+export function fetchPayments(
+  token: string,
+  storeId: number,
+  query: { source?: StorePaymentSource; from?: string; to?: string; page: number; size: number },
+): Promise<StorePaymentList> {
+  const parts: string[] = [];
+  if (query.from != null) parts.push(`from=${encodeURIComponent(query.from)}`);
+  if (query.to != null) parts.push(`to=${encodeURIComponent(query.to)}`);
+  if (query.source != null) parts.push(`source=${query.source}`);
+  parts.push(`page=${query.page}`, `size=${query.size}`);
+  return apiRequest<StorePaymentList>(
+    `/api/v1/supplier-stores/${storeId}/credit/payments?${parts.join('&')}`, { token });
 }

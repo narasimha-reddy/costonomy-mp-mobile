@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/sup-m22-payouts]
+#### Added
+- Supplier "Collections and payouts" screen (`app/supplier/credit/payouts.tsx`, route `/supplier/credit/payouts`). Two views: "Collected through Mandi" (wallet repayments Mandi collected: orange hero with "Coming to you" and "Paid to you this month", rows grouped Pending / Paid out showing gross, "Mandi fee ₹X (rate)", net in bold, date and settlement number; tap for a sheet with the invoices covered, the three figures, the settlement, a plain explanation and "Copy settlement number") and "Recorded by you" (the store's payments feed with method, reference and source chips). Status chips, the shared Period Filters screen (`payouts-filters.tsx`, no default period so nothing hides), "Show more" paging, pull to refresh, skeleton, error with retry, offline banner. Every figure is the server's; the app adds nothing up.
+- `fetchPayouts`, `fetchPayments` in `services/credit.ts`; `lib/credit/payouts.ts`.
+
 ### [feat/sup-m20-claims-inbox]
 #### Added
 - Supplier claims inbox (`app/supplier/credit/claims.tsx`): "Paid direct" payments waiting for the supplier, grouped by restaurant (invoice, amount, method, reference, paid-on date, note, "Sent N days ago" from the server timestamp). Tapping opens a review sheet: "Yes, I received it" (amount prefilled with the claim, editable to a lower amount only, the server caps it) or "I did not receive this" (required reason: quick choices plus free text). Idempotency key held in `lib/credit/attemptKeys`, one request at a time, claims, agreements and invoices refetched on success, server message shown on `CREDIT_OVERPAYMENT` / `CREDIT_CLAIM_STATE`. Acting needs `CREDIT_COLLECT` or `CREDIT_MODIFY`, otherwise the sheet is view-only with an explanation.

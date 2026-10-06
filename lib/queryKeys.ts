@@ -95,3 +95,17 @@ export function invoiceLookupKey(
 export function claimsKey(storeId: number | null | undefined) {
   return ['store', storeId, 'credit-claims', 'SUBMITTED'] as const;
 }
+
+/** The supplier store's payouts list for one status and day range (S8). */
+export function payoutsKey(
+  storeId: number | null | undefined, status: string, from: string | null, to: string | null,
+) {
+  return ['store', storeId, 'credit-payouts', status, from, to] as const;
+}
+
+/** The supplier store's payments feed for one source and day range (S8). */
+export function storePaymentsKey(
+  storeId: number | null | undefined, source: string | null, from: string | null, to: string | null,
+) {
+  return ['store', storeId, 'credit-payments', source, from, to] as const;
+}

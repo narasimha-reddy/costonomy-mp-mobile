@@ -139,7 +139,7 @@ export const CreditAgreementStatus: Record<string, StatusDisplay> = {
   ACTIVE: { label: 'Active', tone: 'credit' },
   REJECTED: { label: 'Rejected', tone: 'danger' },
   SUSPENDED: { label: 'Suspended', tone: 'danger' },
-  EXPIRED: { label: 'Expired', tone: 'neutral' },
+  EXPIRED: { label: 'Offer expired', tone: 'neutral' },
   CLOSED: { label: 'Closed', tone: 'neutral' },
 };
 

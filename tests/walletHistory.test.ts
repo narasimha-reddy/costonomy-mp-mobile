@@ -5,6 +5,7 @@ import {
   billBanner,
   billsPendingLine,
   buildTransactionsQuery,
+  CATEGORY_OPTIONS,
   canApply,
   categoryLabel,
   entryKey,
@@ -187,6 +188,7 @@ describe('categoryLabel', () => {
     expect(categoryLabel('DISPUTE_REFUND')).toBe('Refund');
     expect(categoryLabel('ORDER_REFUND')).toBe('Refund');
     expect(categoryLabel('QUICKSCAN_RETURN')).toBe('Shop payment');
+    expect(categoryLabel('CREDIT_REPAYMENT')).toBe('Credit repayment');
     expect(categoryLabel('SOMETHING_NEW')).toBe('Wallet');
   });
 });
@@ -416,5 +418,25 @@ describe('billsPendingLine', () => {
   });
   it('says nothing for zero, absent or odd numbers', () => {
     for (const n of [0, -1, 1.5, NaN, null, undefined]) expect(billsPendingLine(n)).toBeNull();
+  });
+});
+
+describe('CREDIT_REPAYMENT in History', () => {
+  it('is a debit row: minus sign, debit tone, label, no chip', () => {
+    const view = presentEntry(entry(9, { kind: 'CREDIT_REPAYMENT', direction: 'DEBIT' }));
+    expect(view).toMatchObject({ category: 'Credit repayment', title: 'Credit repayment', sign: '−', tone: 'debit', chip: null });
+  });
+
+  it('has its own filter category that sends exactly its kind', () => {
+    expect(CATEGORY_OPTIONS.find((o) => o.key === 'CREDIT_REPAYMENT'))
+      .toEqual({ key: 'CREDIT_REPAYMENT', label: 'Credit repayment', kinds: ['CREDIT_REPAYMENT'] });
+    expect(buildTransactionsQuery({ filters: { ...NO_FILTERS, categories: ['CREDIT_REPAYMENT'] } }))
+      .toBe('?kinds=CREDIT_REPAYMENT');
+    expect(filtersFromParams({ categories: 'CREDIT_REPAYMENT' }).categories).toEqual(['CREDIT_REPAYMENT']);
+  });
+
+  it('counts as paid from the wallet for the Wallet instrument', () => {
+    expect(matchesInstruments(entry(1, { kind: 'CREDIT_REPAYMENT' }), ['WALLET'])).toBe(true);
+    expect(matchesInstruments(entry(1, { kind: 'CREDIT_REPAYMENT' }), ['CARD'])).toBe(false);
   });
 });

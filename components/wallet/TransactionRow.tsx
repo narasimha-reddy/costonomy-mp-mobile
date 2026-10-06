@@ -52,7 +52,8 @@ function TransactionRowBase({
   const account = accountLine(entry);
   const amount = `${view.sign === '+' ? '+ ' : ''}${formatRupees(entry.amount)}`;
 
-  const billStatus = entry.bill?.status ?? null;
+  // A credit repayment never takes a bill, whatever the server says.
+  const billStatus = entry.kind === 'CREDIT_REPAYMENT' ? null : entry.bill?.status ?? null;
   // Viewing a bill needs no permission; adding one does.
   const chipTappable = billStatus != null && onBillPress != null
     && (billStatus !== 'PENDING' || mayAddBill);

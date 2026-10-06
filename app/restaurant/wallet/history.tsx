@@ -42,6 +42,7 @@ import {
   mergeMonthTotals,
   mergePages,
   monthNet,
+  SEARCH_DEBOUNCE_MS,
   monthTitle,
 } from '@/lib/wallet/history';
 import { billChipRoute } from '@/lib/wallet/billChip';
@@ -56,9 +57,6 @@ const PAGE_SIZE = 20;
 
 /** With an instrument chosen, keep loading pages until this many rows match (or there are no more). */
 const MIN_MATCHES = 10;
-
-/** How long typing must pause before the list is searched. */
-const SEARCH_DEBOUNCE_MS = 250;
 
 /**
  * REST-WALLET-02. Wallet Transaction History: everything that moved in or out of the

@@ -19,6 +19,7 @@ export function entryLabel(entry: WalletEntry): string {
       return entry.direction === 'CREDIT' ? 'Order adjusted · money back' : 'Order adjusted · extra charge';
     case 'BANK_PAYOUT': return 'Transferred to verified bank account';
     case 'BANK_PAYOUT_REVERSAL': return 'Bank transfer returned to wallet';
+    case 'CREDIT_REPAYMENT': return 'Credit repayment';
     // A kind this app does not know (a newer API): say only what the direction shows.
     default:
       if (entry.direction === 'CREDIT') return 'Money in';
@@ -66,7 +67,8 @@ export function rowLabel(entry: WalletEntry): string {
   switch (entry.kind) {
     case 'TOP_UP': return 'Added to wallet';
     case 'ORDER_PAYMENT':
-    case 'QUICKSCAN_PAYMENT': return 'Paid to';
+    case 'QUICKSCAN_PAYMENT':
+    case 'CREDIT_REPAYMENT': return 'Paid to';
     case 'ORDER_REFUND':
     case 'REFUND':
     case 'DISPUTE_REFUND': return 'Refund from';
@@ -121,6 +123,7 @@ export function rowTitle(entry: WalletEntry): string {
     case 'WITHDRAWAL_REVERSAL': return 'Returned withdrawal';
     case 'QUICKSCAN_PAYMENT':
     case 'QUICKSCAN_RETURN': return reason ?? 'QuickScan payment';
+    case 'CREDIT_REPAYMENT': return reason ?? 'Credit repayment';
     default: return reason ?? entryLabel(entry);
   }
 }

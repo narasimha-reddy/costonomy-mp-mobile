@@ -9,6 +9,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { RotatingHint } from './RotatingHint';
 import {
   Colors,
   ControlHeight,
@@ -19,10 +20,17 @@ import {
   hitSlopFor,
 } from '@/theme';
 
+const SEARCH_LABEL = 'Search for products';
+
 interface MandiSearchBarProps {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  /**
+   * Hints that replace the static placeholder one at a time while the field is
+   * empty. Absent or empty: `placeholder` is used, as before.
+   */
+  rotatingHints?: readonly string[];
   onSubmit?: () => void;
   /** Spinner in the trailing slot while suggestions are in flight. */
   loading?: boolean;
@@ -58,6 +66,7 @@ export function MandiSearchBar({
   value,
   onChangeText,
   placeholder = 'Search for products',
+  rotatingHints,
   onSubmit,
   loading = false,
   autoFocus = false,
@@ -68,6 +77,12 @@ export function MandiSearchBar({
   style,
   testID,
 }: MandiSearchBarProps) {
+  const showHint = !!rotatingHints && rotatingHints.length > 0 && value === '';
+  // One stable name; the rotating text must never leak into it.
+  const label = rotatingHints && rotatingHints.length > 0 ? SEARCH_LABEL : placeholder;
+  const hint = showHint ? (
+    <RotatingHint hints={rotatingHints} testID={testID ? `${testID}-hint` : undefined} />
+  ) : null;
   const body = (
     <View style={[styles.container, pill && styles.pill, style]}>
       {leading}
@@ -75,28 +90,33 @@ export function MandiSearchBar({
 
       {readOnly ? (
         <View style={styles.readOnlyText}>
-          <Text
-            numberOfLines={1}
-            style={[styles.input, !value && { color: Colors.textTertiary }]}
-          >
-            {value || placeholder}
-          </Text>
+          {hint ?? (
+            <Text
+              numberOfLines={1}
+              style={[styles.input, !value && { color: Colors.textTertiary }]}
+            >
+              {value || placeholder}
+            </Text>
+          )}
         </View>
       ) : (
-        <TextInput
-          testID={testID}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={Colors.textTertiary}
-          onSubmitEditing={onSubmit}
-          autoFocus={autoFocus}
-          returnKeyType="search"
-          autoCorrect={false}
-          autoCapitalize="none"
-          accessibilityLabel={placeholder}
-          style={styles.input}
-        />
+        <View style={styles.readOnlyText}>
+          <TextInput
+            testID={testID}
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={showHint ? '' : placeholder}
+            placeholderTextColor={Colors.textTertiary}
+            onSubmitEditing={onSubmit}
+            autoFocus={autoFocus}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+            accessibilityLabel={label}
+            style={styles.input}
+          />
+          {hint && <View pointerEvents="none" style={styles.overlay}>{hint}</View>}
+        </View>
       )}
 
       {loading && <ActivityIndicator size="small" color={Colors.textTertiary} />}
@@ -120,7 +140,8 @@ export function MandiSearchBar({
         testID={testID}
         onPress={onPress}
         accessibilityRole="search"
-        accessibilityLabel={placeholder}
+        accessibilityLabel={label}
+        accessibilityHint="Opens search"
       >
         {body}
       </Pressable>
@@ -153,6 +174,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   readOnlyText: { flex: 1, justifyContent: 'center' },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center' },
 });
 
 export default MandiSearchBar;

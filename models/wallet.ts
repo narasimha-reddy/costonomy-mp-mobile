@@ -125,7 +125,7 @@ export interface WalletTransactionsPage {
 }
 
 /** The choices behind the History screen's "Filters", in the server's words where it has them. */
-export type WalletCategory = 'TOP_UP' | 'ORDER_PAYMENT' | 'REFUND' | 'WITHDRAWAL' | 'SHOP_PAYMENT';
+export type WalletCategory = 'TOP_UP' | 'ORDER_PAYMENT' | 'REFUND' | 'WITHDRAWAL' | 'SHOP_PAYMENT' | 'CREDIT_REPAYMENT';
 export type WalletInstrument = 'CARD' | 'UPI' | 'NETBANKING' | 'WALLET';
 export type WalletStatusFilter = 'COMPLETED' | 'IN_PROGRESS' | 'RETURNED';
 
@@ -159,7 +159,9 @@ export type WalletEntryKind =
   /** A catch-weight order settled at the scale weight: money back (credit) or, on old data, an extra charge (API D-128). */
   | 'ORDER_ADJUSTMENT'
   /** Money sent to a verified bank account, and the same put back when the transfer failed. */
-  | 'BANK_PAYOUT' | 'BANK_PAYOUT_REVERSAL';
+  | 'BANK_PAYOUT' | 'BANK_PAYOUT_REVERSAL'
+  /** A restaurant repaying a supplier's credit invoices from its wallet. A debit; never takes a bill. */
+  | 'CREDIT_REPAYMENT';
 
 /** Where a withdrawal's refund has got to. `REJECTED`/`REVERSED` need API D-110. */
 export type WithdrawalRefundStatus =

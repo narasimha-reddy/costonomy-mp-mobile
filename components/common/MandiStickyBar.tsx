@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardOpenContext } from './screenKeyboard';
 import { Colors, Elevation, Spacing } from '@/theme';
 
 /**
@@ -12,9 +13,11 @@ import { Colors, Elevation, Spacing } from '@/theme';
  */
 export function MandiStickyBar({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
+  // With the keyboard up the bar sits on it, not on the home indicator.
+  const keyboardOpen = useContext(KeyboardOpenContext);
 
   return (
-    <View style={[styles.bar, { paddingBottom: Spacing.md + insets.bottom }]}>
+    <View style={[styles.bar, { paddingBottom: Spacing.md + (keyboardOpen ? 0 : insets.bottom) }]}>
       {children}
     </View>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
 import { DEVICE_WIDTH } from './DeviceFrame';
@@ -39,7 +39,12 @@ export function MandiBottomSheet({
   title?: string;
   /** What the close button announces, e.g. "Close the filter". */
   closeLabel?: string;
-  /** Lift the sheet above the keyboard (iOS; Android resizes the window itself). For sheets with inputs. */
+  /**
+   * For sheets with inputs. Lifts the sheet above the keyboard (padding on both
+   * platforms: with edge-to-edge Android the window no longer resizes itself)
+   * and puts the body in a scroll view so everything stays reachable when it
+   * does not fit above the keyboard.
+   */
   avoidKeyboard?: boolean;
   testID?: string;
   children: React.ReactNode;
@@ -54,32 +59,30 @@ export function MandiBottomSheet({
       // navigation bar rather than stopping short of it.
       statusBarTranslucent
     >
-      {/* The scrim closes on a tap but is not announced as a button.
-          As a button it wrapped every control in the sheet — an option inside a
-          button inside a button, which is invalid on web and gives a screen
-          reader nested controls where there is one surface. Tapping away stays a
-          sighted convenience; the close button below is the announced way out. */}
-      <Pressable
-        style={styles.scrim}
-        onPress={onClose}
-        accessible={false}
-        importantForAccessibility="no"
-      >
+      <View style={styles.scrim}>
+        {/* The backdrop is a SIBLING layer behind the sheet, not its parent.
+            As the parent, every press inside the sheet that was not claimed by a
+            control (the Amount field, plain text) bubbled up to it and closed the
+            sheet; on web that made typing an amount impossible. Only a tap on the
+            dimmed area now reaches it. It is not announced as a button: the close
+            button below is the announced way out, tapping away is a sighted
+            convenience. */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessible={false}
+          importantForAccessibility="no"
+          testID={testID ? `${testID}-backdrop` : 'sheet-backdrop'}
+        />
         <KeyboardAvoidingView
           style={styles.column}
           pointerEvents="box-none"
-          behavior={avoidKeyboard && Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={avoidKeyboard ? 'padding' : undefined}
           enabled={avoidKeyboard}
+          testID={avoidKeyboard && testID ? `${testID}-keyboard-avoiding` : undefined}
         >
-          {/* A View that claims the touch, not a Pressable.
-              The sheet has to swallow taps so they do not reach the scrim and
-              close it — but a Pressable inside a Pressable renders as a button
-              inside a button, which is invalid HTML on web and gives a screen
-              reader two nested controls where there is one surface. Claiming the
-              responder stops the bubble without pretending to be a control. */}
           <View
             style={styles.sheet}
-            onStartShouldSetResponder={() => true}
             // On web a click inside the sheet still bubbles up the DOM to the scrim, whose press handler closes the
             // sheet, whatever the responder system did with the touch. A tap on a text box has no handler of its own
             // to stop it, so it closed the sheet. Stop the click here, at the edge of the sheet. (React Native's View
@@ -91,7 +94,7 @@ export function MandiBottomSheet({
           >
             <View style={styles.titleRow}>
               {title ? (
-                <MandiText variant="subtitle" style={styles.flex}>{title}</MandiText>
+                <MandiText variant="subtitle" style={styles.flex} numberOfLines={2}>{title}</MandiText>
               ) : <View style={styles.flex} />}
               <Pressable
                 onPress={onClose}
@@ -103,10 +106,19 @@ export function MandiBottomSheet({
                 <Ionicons name="close" size={20} color={Colors.textSecondary} />
               </Pressable>
             </View>
-            {children}
+            {avoidKeyboard ? (
+              <ScrollView
+                style={styles.scrollBody}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                testID={testID ? `${testID}-scroll` : undefined}
+              >
+                {children}
+              </ScrollView>
+            ) : children}
           </View>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
@@ -123,7 +135,9 @@ const styles = StyleSheet.create({
     // The cap is web-only: on a device the frame is the screen, and a maxWidth
     // would letterbox the sheet on anything wider than 390pt.
     maxWidth: Platform.OS === 'web' ? DEVICE_WIDTH : undefined,
+    maxHeight: '100%',
   },
+  scrollBody: { flexGrow: 0, flexShrink: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   flex: { flex: 1 },
   close: { padding: Spacing.xs, margin: -Spacing.xs },
@@ -133,5 +147,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: Radius.xl,
     padding: Spacing.xl,
     gap: Spacing.xs,
+    flexShrink: 1,
   },
 });

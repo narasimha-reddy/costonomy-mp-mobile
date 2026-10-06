@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.
 
+### [phase6/mobile-delivery-fallback] - Still looking, then "I'll deliver it myself" (API D-151)
+#### Added
+- While no partner is found the order screen says it keeps looking until a time, and after the offer shows "I'll deliver it myself" with a confirmation.
+
 ### [phase6/mobile-delivery-retry] - Try again when no delivery partner is available (API D-150)
 #### Fixed
 - An order with Costonomy delivery that found no partner sat on "No partner available" with no way forward. The supplier's order screen now shows the reason and a "Try again" button.

@@ -13,6 +13,7 @@ import {
   fetchDelivery,
   requestDelivery,
   reassignDelivery,
+  switchToOwnDelivery,
   markDeliveryDispatched,
   markDeliveryDelivered,
 } from '@/services/delivery';
@@ -53,7 +54,7 @@ import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
-import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
+import { canRetryPartner, noPartnerNote, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
@@ -229,6 +230,18 @@ export default function SupplierOrderScreen() {
     onError: (caught) => onRefusal(caught, 'Could not request another partner.'),
   });
 
+  const [confirmingOwn, setConfirmingOwn] = React.useState(false);
+  const switchToOwn = useMutation({
+    mutationFn: (deliveryId: number) => switchToOwnDelivery(accessToken as string, deliveryId, newIdempotencyKey()),
+    onSuccess: () => {
+      track('delivery_switched_to_own', { screen: SCREEN, entityId: orderId });
+      void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId, 'delivery'] });
+      void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId] });
+      show('You are delivering this order', 'success');
+    },
+    onError: (caught) => onRefusal(caught, 'Could not switch to your own delivery.'),
+  });
+
   const dispatchDelivery = useMutation({
     mutationFn: (deliveryId: number) => markDeliveryDispatched(accessToken as string, deliveryId),
     onSuccess: () => {
@@ -326,6 +339,18 @@ export default function SupplierOrderScreen() {
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
     >
+      <MandiConfirm
+        visible={confirmingOwn}
+        title="Deliver this order yourself?"
+        message="The restaurant has already paid the delivery charge and it stays unchanged. You will dispatch the goods and confirm delivery yourself."
+        confirmLabel="Yes, I'll deliver"
+        cancelLabel="Not now"
+        onConfirm={() => {
+          setConfirmingOwn(false);
+          if (delivery.data) switchToOwn.mutate(delivery.data.id);
+        }}
+        onCancel={() => setConfirmingOwn(false)}
+      />
       <MandiConfirm
         visible={confirmingCancel}
         title="Cancel this order?"
@@ -613,9 +638,20 @@ export default function SupplierOrderScreen() {
                   {canRetryPartner(delivery.data.mode, delivery.data.status) && (
                     <View style={{ marginTop: Spacing.sm }}>
                       <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.xs }}>
-                        {delivery.data.failureReason ?? 'No delivery partner is available right now.'} The order stays
-                        ready; try again in a few minutes.
+                        {delivery.data.failureReason ?? 'No delivery partner is available right now.'}{' '}
+                        {noPartnerNote(delivery.data.canSwitchToOwn, delivery.data.retryUntil)}
                       </MandiText>
+                      {delivery.data.canSwitchToOwn && (
+                        <MandiButton
+                          label="I'll deliver it myself"
+                          icon="car-outline"
+                          size="md"
+                          variant="secondary"
+                          loading={switchToOwn.isPending}
+                          onPress={() => setConfirmingOwn(true)}
+                          style={{ marginBottom: Spacing.xs }}
+                        />
+                      )}
                       <MandiButton
                         label="Try again"
                         icon="refresh-outline"

@@ -1,4 +1,4 @@
-import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
+import { canRetryPartner, clockTime, noPartnerNote, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 
 describe('wantsDeliveryPartner', () => {
   it('is true only for an order sold with Costonomy delivery', () => {
@@ -29,5 +29,24 @@ describe('canRetryPartner', () => {
     }
     expect(canRetryPartner('SUPPLIER_OWN', 'QUOTE_FAILED')).toBe(false);
     expect(canRetryPartner('COSTONOMY', null)).toBe(false);
+  });
+});
+
+describe('noPartnerNote', () => {
+  const now = new Date('2026-10-06T10:00:00Z');
+
+  it('offers delivering it themselves once the server says they can', () => {
+    expect(noPartnerNote(true, null, now)).toMatch(/deliver this order yourself/);
+  });
+
+  it('says it is still looking, and until when, while the retries run', () => {
+    const note = noPartnerNote(false, '2026-10-06T10:30:00Z', now);
+    expect(note).toMatch(/Still looking/);
+    expect(note).toContain(clockTime('2026-10-06T10:30:00Z') as string);
+  });
+
+  it('falls back to a plain line when the retries have ended', () => {
+    expect(noPartnerNote(false, '2026-10-06T09:00:00Z', now)).toMatch(/Try again in a few minutes/);
+    expect(noPartnerNote(undefined, undefined, now)).toMatch(/Try again in a few minutes/);
   });
 });

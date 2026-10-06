@@ -8,6 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { fetchAgreement, fetchCreditStatement } from '@/services/credit';
+import { CsvExportError, exportStatementCsv } from '@/services/creditExport';
+import { useCsvExport } from '@/hooks/useCsvExport';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useDebounced } from '@/hooks/useDebounced';
 import { CreditStatementRow } from '@/components/credit/CreditStatementRow';
@@ -19,6 +21,7 @@ import {
   MandiEmptyState,
   MandiErrorState,
   MandiHeader,
+  MandiHeaderAction,
   MandiOfflineBanner,
   MandiSkeletonList,
   MandiText,
@@ -80,6 +83,7 @@ export default function CreditStatementScreen() {
   );
   const { range, clipped } = useMemo(() => statementRange(filters), [filters]);
 
+  const csv = useCsvExport();
   const [query, setQuery] = useState('');
   const search = useDebounced(query.trim(), SEARCH_DEBOUNCE_MS);
   const searching = search !== '';
@@ -220,8 +224,27 @@ export default function CreditStatementScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <MandiHeader title="Statement" subtitle={restaurant} back />
+      <MandiHeader
+        title="Statement"
+        subtitle={restaurant}
+        back
+        right={accessToken != null && Number.isFinite(agreementId) ? (
+          <MandiHeaderAction
+            icon="download-outline"
+            label="Export CSV"
+            onPress={() => {
+              if (offline) { csv.run(() => Promise.reject(new CsvExportError('offline'))); return; }
+              void csv.run(() => exportStatementCsv(accessToken, agreementId, range ?? {}));
+            }}
+          />
+        ) : undefined}
+      />
       <MandiOfflineBanner visible={offline} />
+      {csv.error != null && (
+        <View style={styles.exportNote} accessibilityLiveRegion="polite" testID="statement-export-error">
+          <MandiText variant="caption" color={Colors.danger}>{csv.error}</MandiText>
+        </View>
+      )}
       <HistorySearch
         value={query}
         onChangeText={setQuery}
@@ -310,5 +333,6 @@ const styles = StyleSheet.create({
   summary: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.md },
   summaryCell: { flex: 1, gap: 2 },
   summaryEnd: { alignItems: 'flex-end' },
+  exportNote: { paddingHorizontal: Spacing.screenHorizontal, paddingVertical: Spacing.xs },
   forPeriod: { marginTop: Spacing.xs },
 });

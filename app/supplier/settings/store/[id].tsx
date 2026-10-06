@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { useDeviceLocation } from '@/hooks/useDeviceLocation';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   fetchCreditPolicy,
   fetchDeliveryPolicy,
@@ -66,6 +67,10 @@ export default function StoreDetailScreen() {
   const { accessToken } = useSession();
   const { supplier } = useStore();
   const location = useDeviceLocation();
+  const { canForStore } = usePermissions();
+  // Hiding is a courtesy; the server checks CREDIT_MODIFY again.
+  const canModifyCredit = supplier != null
+    && canForStore('CREDIT_MODIFY', { id: storeId, supplierOrganizationId: supplier.id });
 
   const store = useQuery({
     queryKey: ['supplier-store', storeId],
@@ -112,6 +117,7 @@ export default function StoreDetailScreen() {
   const [creditLimit, setCreditLimit] = useState<string | null>(null);
   const [creditDays, setCreditDays] = useState<string | null>(null);
   const [graceDays, setGraceDays] = useState<string | null>(null);
+  const [autoReminders, setAutoReminders] = useState<boolean | null>(null);
 
   const nameValue = name ?? data?.name ?? '';
   const line1Value = line1 ?? data?.addressLine1 ?? '';
@@ -149,11 +155,13 @@ export default function StoreDetailScreen() {
     ? String(Number(credit.data.defaultCreditLimit)) : '');
   const creditDaysValue = creditDays ?? String(credit.data?.defaultCreditPeriodDays ?? 30);
   const graceDaysValue = graceDays ?? String(credit.data?.defaultGracePeriodDays ?? 5);
+  // Absent from an older server means on, which is the server's default too.
+  const autoRemindersValue = autoReminders ?? credit.data?.autoRemindersEnabled ?? true;
 
   const touched = [
     name, line1, line2, city, stateName, pincode, contactName, contactPhone, prep, hours, pin,
     own, partner, ownFee, ownMin, radius,
-    creditOn, creditLimit, creditDays, graceDays,
+    creditOn, creditLimit, creditDays, graceDays, autoReminders,
   ].some((value) => value !== null) || location.coordinates != null;
 
   const online = data?.status === 'ACTIVE';
@@ -206,6 +214,8 @@ export default function StoreDetailScreen() {
         defaultCreditLimit: creditLimitValue.trim() || null,
         defaultCreditPeriodDays: Number(creditDaysValue) || null,
         defaultGracePeriodDays: Number(graceDaysValue) || null,
+        // Only a change goes up, and only from someone who may make it: a left-out field keeps the server's value.
+        ...(canModifyCredit && autoReminders != null ? { autoRemindersEnabled: autoReminders } : {}),
       });
     },
     onSuccess: () => {
@@ -235,7 +245,7 @@ export default function StoreDetailScreen() {
     setName(null); setLine1(null); setLine2(null); setCity(null); setStateName(null);
     setPincode(null); setContactName(null); setContactPhone(null); setPrep(null); setHours(null);
     setOwn(null); setPartner(null); setOwnFee(null); setOwnMin(null); setRadius(null);
-    setCreditOn(null); setCreditLimit(null); setCreditDays(null); setGraceDays(null);
+    setCreditOn(null); setCreditLimit(null); setCreditDays(null); setGraceDays(null); setAutoReminders(null);
     setPin(null);
   }
 
@@ -490,6 +500,14 @@ export default function StoreDetailScreen() {
                     style={styles.flex}
                   />
                 </View>
+                {canModifyCredit && (
+                  <Toggle
+                    label="Automatic reminders"
+                    hint="We remind restaurants 3 days before, on the due date and weekly while overdue."
+                    value={autoRemindersValue}
+                    onValueChange={setAutoReminders}
+                  />
+                )}
               </>
             ) : null}
             <MandiText variant="caption" color={Colors.textTertiary}>

@@ -250,13 +250,13 @@ describe('banners by status', () => {
 });
 
 describe('action bar (extension points)', () => {
-  it('Record is live (opens the sheet) while Remind still shows disabled "Coming soon"', async () => {
+  it('Record and Remind are both live (no "Coming soon")', async () => {
     renderScreen();
     await screen.findByTestId('line-hero');
     expect(screen.getByTestId('action-record').props.accessibilityState).not.toMatchObject({ disabled: true });
     expect(screen.queryByTestId('action-record-soon')).toBeNull();
-    expect(screen.getByTestId('action-remind').props.accessibilityState).toMatchObject({ disabled: true });
-    expect(screen.getByTestId('action-remind-soon')).toBeTruthy();
+    expect(screen.getByTestId('action-remind').props.accessibilityState).not.toMatchObject({ disabled: true });
+    expect(screen.queryByTestId('action-remind-soon')).toBeNull();
   });
 
   it('hides Record and Remind from people who cannot collect, and keeps Statement', async () => {

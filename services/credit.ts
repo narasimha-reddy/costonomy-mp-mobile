@@ -26,6 +26,10 @@ import type {
   PaymentPreview,
   RecordPaymentBody,
   RecordedPayment,
+  ReversalResult,
+  Reminder,
+  ReminderList,
+  ReminderPreview,
 } from '@/models/credit';
 
 // ── Restaurant side ───────────────────────────────────────────────────
@@ -430,6 +434,59 @@ export function fetchAgreementPayments(
   if (query.size != null) parts.push(`size=${query.size}`);
   return apiRequest<StorePaymentList>(
     `/api/v1/credit/agreements/${agreementId}/payments?${parts.join('&')}`, { token });
+}
+
+// ── Undo a recorded payment (M26) ─────────────────────────────────────
+
+/** Undo a whole receipt (every invoice it paid). Moves debt, so it needs an idempotency key; `reason` is 3 to 500 characters. */
+export function reverseReceipt(
+  token: string, receiptId: number, reason: string, idempotencyKey: string,
+): Promise<ReversalResult> {
+  return apiRequest<ReversalResult>(`/api/v1/credit/receipts/${receiptId}/reverse`, {
+    method: 'POST', token, idempotencyKey, body: { reason },
+  });
+}
+
+/** Undo one payment that was recorded alone. Same rules as {@link reverseReceipt}. */
+export function reversePayment(
+  token: string, paymentId: number, reason: string, idempotencyKey: string,
+): Promise<ReversalResult> {
+  return apiRequest<ReversalResult>(`/api/v1/credit/payments/${paymentId}/reverse`, {
+    method: 'POST', token, idempotencyKey, body: { reason },
+  });
+}
+
+// ── Reminders (M26) ───────────────────────────────────────────────────
+
+/**
+ * Send a reminder. Not retried by the client: a throttle (429) is an answer to show, not to wait
+ * out. A dropped connection is retried by the person with the same key.
+ */
+export function sendReminder(
+  token: string, agreementId: number, body: { invoiceIds?: number[]; note?: string }, idempotencyKey: string,
+): Promise<Reminder> {
+  return apiRequest<Reminder>(`/api/v1/credit/agreements/${agreementId}/reminders`, {
+    method: 'POST', token, idempotencyKey, body, retries: 0,
+  });
+}
+
+/** What a reminder would say and whether it may go now. A pure read. */
+export function previewReminder(
+  token: string, agreementId: number, invoiceIds?: number[],
+): Promise<ReminderPreview> {
+  const query = invoiceIds != null && invoiceIds.length > 0 ? `?invoiceIds=${invoiceIds.join(',')}` : '';
+  return apiRequest<ReminderPreview>(
+    `/api/v1/credit/agreements/${agreementId}/reminders/preview${query}`, { token });
+}
+
+/** Reminders already sent to this restaurant, newest first (needs CREDIT_VIEW). */
+export function fetchReminders(
+  token: string, agreementId: number, query: { page: number; size?: number },
+): Promise<ReminderList> {
+  const parts = [`page=${query.page}`];
+  if (query.size != null) parts.push(`size=${query.size}`);
+  return apiRequest<ReminderList>(
+    `/api/v1/credit/agreements/${agreementId}/reminders?${parts.join('&')}`, { token });
 }
 
 // ── Error helpers ─────────────────────────────────────────────────────

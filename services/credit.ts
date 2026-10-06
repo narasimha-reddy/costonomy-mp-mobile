@@ -90,6 +90,7 @@ export interface ApproveCreditInput {
   creditPeriodDays?: number;
   gracePeriodDays?: number;
   maxSingleOrderCredit?: string;
+  maxOverdueAmount?: string;
   note?: string;
 }
 
@@ -171,10 +172,19 @@ export function suspendCredit(
   });
 }
 
-export function reinstateCredit(token: string, agreementId: number): Promise<CreditAgreement> {
+/**
+ * Lift a suspension. The app asks for a reason and sends it, but today's endpoint takes no
+ * body and does not store one, so the reason is not yet on the audit row (an API gap).
+ */
+export function reinstateCredit(
+  token: string,
+  agreementId: number,
+  reason?: string,
+): Promise<CreditAgreement> {
   return apiRequest<CreditAgreement>(`/api/v1/credit/agreements/${agreementId}/reinstate`, {
     method: 'POST',
     token,
+    ...(reason != null ? { body: { reason } } : {}),
   });
 }
 
@@ -347,6 +357,18 @@ export function fetchReceivableRestaurants(
 /** Open outstanding in four buckets by days past due, in India time. */
 export function fetchAgeing(token: string, storeId: number): Promise<Ageing> {
   return apiRequest<Ageing>(`/api/v1/supplier-stores/${storeId}/credit/ageing`, { token });
+}
+
+/** One page of the payments made on one credit line, newest first. `size` 20 by default, at most 100. */
+export function fetchAgreementPayments(
+  token: string,
+  agreementId: number,
+  query: { page: number; size?: number },
+): Promise<StorePaymentList> {
+  const parts = [`page=${query.page}`];
+  if (query.size != null) parts.push(`size=${query.size}`);
+  return apiRequest<StorePaymentList>(
+    `/api/v1/credit/agreements/${agreementId}/payments?${parts.join('&')}`, { token });
 }
 
 // ── Error helpers ─────────────────────────────────────────────────────

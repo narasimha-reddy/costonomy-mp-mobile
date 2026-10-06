@@ -27,7 +27,7 @@ function prefill(amount: string | number): string {
  * the sheet says so.
  */
 export function ClaimReviewSheet({
-  claim, visible, onClose, canAct, offline, pending, error, onConfirm, onReject, onEdit,
+  claim, visible, onClose, canAct, offline, pending, error, onConfirm, onReject, onEdit, initialMode = 'review',
 }: {
   claim: ClaimResponse | null;
   visible: boolean;
@@ -42,20 +42,22 @@ export function ClaimReviewSheet({
   onReject: (claim: ClaimResponse, reason: string) => void;
   /** The person changed something: clear any earlier error. */
   onEdit: () => void;
+  /** Which step the sheet opens on: the restaurant detail's Reject goes straight to "Why not?". */
+  initialMode?: 'review' | 'reject';
 }) {
-  const [mode, setMode] = useState<'review' | 'reject'>('review');
+  const [mode, setMode] = useState<'review' | 'reject'>(initialMode);
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState<RejectReason | null>(null);
   const [reasonText, setReasonText] = useState('');
 
   const claimId = claim?.id;
   useEffect(() => {
-    setMode('review');
+    setMode(initialMode);
     setAmountText(claim == null ? '' : prefill(claim.amount));
     setReason(null);
     setReasonText('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claimId, visible]);
+  }, [claimId, visible, initialMode]);
 
   if (claim == null) return null;
 

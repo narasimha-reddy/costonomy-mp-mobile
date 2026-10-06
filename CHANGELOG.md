@@ -15,6 +15,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Credit]
 
+### [feat/sup-m18-restaurant-detail]
+#### Added
+- Supplier restaurant detail reworked (`app/supplier/credit/[id].tsx`, plan S2): header with the terms summary, an orange hero with the server's owed, overdue, available-to-them and on-hold figures, banners (automatic pause, supplier pause with its reason, approved offer not accepted yet), "Payments to confirm" with inline Confirm/Reject on the Claims inbox sheet, Open invoices with due chips, Recent payments with a source badge (You recorded / Confirmed claim / Through Mandi), Settled invoices and Activity collapsed. Action row Record / Remind / Statement / More: Record and Remind show disabled "Coming soon" until their handlers are passed (`SupplierLineActions`); the More menu lists only wired entries.
+- Terms editor sheet (S10) replaces the inline edit modes: limit, period chips 7/15/30/45/60 plus 1-180, grace 0-60, per-order cap, auto-pause amount (only when the server sends it), reason. Suspend, reinstate and decline are sheets with a required reason; reinstate of an automatic pause says it may return.
+- Supplier statement (`statement.tsx`, `statement-filters.tsx`): opening and closing owed as the server sends them, the shared filters.
+#### Changed
+- Modify now sends the grace period and per-order cap the line already has (before, a terms change cleared the cap). `reinstateCredit` sends the reason (the API does not store it yet). `fetchAgreementPayments` added.
+
 ### [feat/sup-m22-payouts]
 #### Added
 - Supplier "Collections and payouts" screen (`app/supplier/credit/payouts.tsx`, route `/supplier/credit/payouts`). Two views: "Collected through Mandi" (wallet repayments Mandi collected: orange hero with "Coming to you" and "Paid to you this month", rows grouped Pending / Paid out showing gross, "Mandi fee ₹X (rate)", net in bold, date and settlement number; tap for a sheet with the invoices covered, the three figures, the settlement, a plain explanation and "Copy settlement number") and "Recorded by you" (the store's payments feed with method, reference and source chips). Status chips, the shared Period Filters screen (`payouts-filters.tsx`, no default period so nothing hides), "Show more" paging, pull to refresh, skeleton, error with retry, offline banner. Every figure is the server's; the app adds nothing up.

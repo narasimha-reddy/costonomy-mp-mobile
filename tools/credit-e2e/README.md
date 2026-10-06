@@ -6,8 +6,8 @@ wallet, payment, payout and settlement rows.
 
 ```
 export PATH=$HOME/.local/opt/node/bin:$PATH
-node tools/credit-e2e/suite.js          # everything (S1..S9)
-node tools/credit-e2e/suite.js S1 S2    # a subset (later scenarios need the ids of S1, S2, S4, S5)
+node tools/credit-e2e/suite.js          # everything (S1..S15)
+node tools/credit-e2e/suite.js S1 S2    # a subset (S5..S9 need the ids of S1, S2, S4, S5; S10..S15 are self-contained)
 SWEEP_WAIT_S=300 node tools/credit-e2e/suite.js
 ```
 
@@ -44,6 +44,12 @@ dependencies.
 | S7 | outlet totals vs the agreements (due, overdue, utilized, claims, reportable), attention flags vs SQL, per-invoice `dueState`/`daysToDue` vs an independent India-date implementation, statement identity (`opening + sum = closing`, each `owedAfter` chained) for restaurant and supplier, statement window validation |
 | S8 | credit orders never in `commission_calculation`/settlement adjustments/statements; pending payouts match the repayments (amount, commission); applied payouts (if a settlement run already happened) have exactly one CREDIT_REPAYMENT credit and CREDIT_COMMISSION debit |
 | S9 | other tenant, other store's supplier and wrong-side callers get 404 on every credit read and write; unauthenticated calls 401; key reuse on payments, claims, confirms |
+| S10 | supplier Receivables (store 1, fixtures on line 6 dated 40/10/3 days late, due today, +3, +6, +7): `receivables` totals (total, overdue, in grace, due today, "due this week" = today..today+6 in India, collected this month, exposure, counts, pendingActions) and the four ageing buckets with their top restaurants, each checked against SQL on `credit_invoice` / `credit_agreement` and as movements from before the fixtures; restaurant rows (owed, overdue, next due, worst state, claims, utilization), sort `overdue` / `owed` / `nextDue`, status filter, `q`, paging and page caps; the payment feed against `credit_payment` (source / day filters); other store, both restaurants 404, no token 401; stores 2 and 3 checked against SQL too |
+| S11 | agreement-level receipts on line 6: preview == actual allocation (oldest due first, tie by id, partial, claim warning), receipt / payment / ledger / statement / audit rows, no payout and no wallet movement, replay and key reuse (`IDEMPOTENCY_KEY_REUSE`), duplicate UTR 409 and `allowDuplicateReference`, overpay 422, validation, permission (restaurant, other tenant, other store 404; no token 401); reversal: a typo receipt undone restores invoice and line exactly, `collectedThisMonth` excludes it, double reversal 409, replay, a payment of a receipt refused (details name the receipt), a single payment and a confirmed claim (goes back to REJECTED), the 7-day window refused and the 30-day cheque window (rows moved back in time by SQL), no headroom 422 (limit tightened through the supplier's modify and restored), a WALLET payment refused, statement identity |
+| S12 | credit notes, cancel, refunds due, write-off: a manual note (cap, refusals, replay, outstanding lower in invoice, line, restaurant summary, receivables, ageing, restaurant row and statement; not a payment), a note for exactly what is owed (PAID, claim SUPERSEDED, then 409 settled); a credit order cancelled after the draw gets the automatic SYSTEM_CANCEL note and exposure is back exactly; a part-paid cancelled order leaves an OFF_PLATFORM refund due (list, mark refunded, again, permission), a wallet-paid part a WALLET refund that only ops can settle (409); write-off of an invoice (partial with `keepLineOpen` true, then the rest with the default: WRITTEN_OFF, claim superseded, line suspended by the supplier with reason "Written off", the dead invoice refuses every verb) and of a whole line on store 3 / outlet 2 (stated amount spread oldest first, then everything), statement identity after all of it |
+| S13 | permission matrix: every supplier verb (24 reads and writes, plus the payout by id) is called by the restaurant of the line, the other tenant's restaurant and two other stores' owners (all 404, nothing moves, checked on 12 counters), without a token (401), and then by the owner (allowed with the documented status); the either-side reads (credit notes, statement, statement.csv, ledger, invoices, payments) |
+| S14 | reminders: preview, send, text == preview, claim-covered and not-due skips, history, replay, key reuse, 24-hour gate (429 `CREDIT_REMINDER_TOO_SOON`, `nextAllowedAt`), 3 per 7 days (429 `CREDIT_REMINDER_LIMIT`), `CREDIT_REMINDER_NOT_NEEDED`; extend-due (later only, 60 days past the ORIGINAL date, OVERDUE back to ISSUED, replay, PAID refused); close a line (refused while owed, closes after payoff, again, asking again); offer approved on the supplier's own terms shows `offerExpiresOn` (14 India days) and is withdrawn; request context for a restaurant asking (orders with THIS store only, checked against SQL, nothing about other suppliers, other store 404) |
+| S15 | payouts against `credit_repayment_payout` for all three stores (gross, commission snapshot, net, status, settlement, invoice shares, summary, filters, paging, one payout, 404s), a fresh wallet repayment makes one PENDING payout and a supplier receipt none; `collections.csv` and `statement.csv` against the JSON (every cell, row counts, headers, quoting, formula-injection guard on references starting `= + - @`, content type, attachment name, no BOM, `CREDIT_EXPORT` audit row with the row count, refusals) |
 
 ## Re-running
 
@@ -52,7 +58,18 @@ the request/approve steps (they are still asserted), idempotency keys carry a pe
 by id after a per-run marker, and when a line has too little headroom (or was left suspended) the suite first fixes
 it through the supplier's own API (`modify` / `reinstate`) and says so. Nothing is ever deleted; each run adds
 invoices, payments, claims and wallet repayments for stores 2 and 3 (and one small order for outlet 2 / store 1 on
-first use). Agreement 1 (demo data) is never written to.
+first use). Agreement 1 (demo data) is written to only by S7 (one small order on credit when store 1's line owes nothing, so the summary has three suppliers) and by the demo seed.
+
+S10 to S15 are self-contained: each makes its own fresh invoices through the real order flow (agreement 6 = Tandoor House
+with store 1, agreement 3 = Spice Garden with store 2 for the wallet cases, agreement 5 = Tandoor House with store 3 for the
+whole-line cases), moves their due dates by SQL (test data only, as S4 does), and settles whatever it made at the end, so a
+re-run on a used database starts clean and S5 / S6 / S7 see no stray open invoices. Other SQL fixtures, all on rows the
+scenario itself made: payment rows moved 8 days back to reach the reversal window (S11), earlier manual reminders on line 6
+aged to clear the 24-hour and 7-day limits (S14, before and after), an invoice marked OVERDUE as the sweep would (S14).
+Left behind: payments, receipts, credit notes, write-offs, reversals and reminders as history (S12 also leaves one OPEN WALLET
+refund due on store 2 per run, which only ops can clear), line 5 CLOSED then re-requested and rejected again as S3 leaves it,
+and a limit raised through the supplier's own modify when a line is short of headroom. S7's statement label check accepts the
+labels these scenarios create (Payment reversed, Credit note, Written off).
 
 ## Known limits
 
@@ -60,8 +77,32 @@ first use). Agreement 1 (demo data) is never written to.
   S8 asserts the pending payout rows and marks "applied once / generating twice" NOT-RUN until an applied payout exists.
 * There is no restaurant user without CREDIT permission in the local data and no invite API, so that single S4 check
   is skipped; the other-tenant user is covered in S9.
+* There is no local supplier user other than SUP_OWNER (no store manager, finance, salesperson or admin), so the rows of the
+  S11 to S14 permission matrix for those roles are SKIPped (their grants are covered by the API integration tests). The 50 reminders
+  per store per day limit, the 20,000-row export limit and a payout that has been APPLIED by a settlement run are also not reachable.
 * S6 depends on the hourly `costonomy.mp.credit.overdue-interval`. Restart the API with a short interval
   (for example `COSTONOMY_MP_CREDIT_OVERDUE_INTERVAL=PT20S`) if the invoice is not marked within the wait.
+
+## Demo seed (`seed-supplier-demo.js`)
+
+```
+export PATH=$HOME/.local/opt/node/bin:$PATH
+node tools/credit-e2e/suite.js            # first, so the data is in a known state
+node tools/credit-e2e/seed-supplier-demo.js
+```
+
+Local data only. Tidies Sri Balaji Traders (store 1, `+919876511001`) with Spice Garden (`+919876500004`, agreement 1) into a
+showable state and prints what the supplier then sees (receivables, ageing, restaurant rows, claims, refunds, payouts, requests):
+2 invoices overdue (20 and 8 days late, marked OVERDUE as the sweep would), 2 due this week (one partly paid), 1 due later,
+1 fresh "Paid direct" claim and 1 stale one (older than 7 days; the API cannot make an old claim, so its date is moved back by
+SQL), 1 payment recorded and then undone, 1 credit note, 1 refund due (an order cancelled after 150 was paid), 1 wallet repayment
+whose payout is pending, 1 reminder sent, and a pending credit request from Tandoor House (`+919876500007`) to store 1 (its line
+is paid off, closed and requested again). Money moves only through the API as the supplier or the restaurant; the SQL is limited to
+due dates, the OVERDUE mark and the age of the stale claim. Nothing is deleted.
+
+Safe to run twice: it withdraws waiting claims, settles what an earlier run left open on agreement 1 with one receipt
+(`SEEDCLEAN-...`) and rebuilds the same open state; the refund due, the wallet payout and the reminder are created only when none is
+waiting (a reminder sent in the last 24 hours is kept), so those do not pile up. Paid invoices, notes and reversals accumulate as history.
 
 ## UI walkthrough (`ui-walk.js`): every Credit screen in a real browser at phone size
 

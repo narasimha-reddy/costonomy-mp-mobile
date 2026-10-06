@@ -13,6 +13,8 @@ const OUTLET2 = 2;         // Tandoor House / Koramangala (+919876500007)
 // Terms the suite itself sets (and re-asserts), per store.
 const TERMS = { 2: { cap: 25000, maxOver: 10000 }, 3: { cap: 5000, maxOver: 1500 } };
 const ctx = {};            // ids shared between scenarios
+const F = require('./flows')(T, SUP);   // flows shared with the supplier scenarios S10..S15 and the demo seed
+const note = (m) => console.log(`    (${m})`);
 
 // ── small helpers ──────────────────────────────────────────────────────
 const istDate = (offsetDays = 0) =>
@@ -64,7 +66,7 @@ async function notifs(token, eventType, targetId, { min = 1, timeout = 30000, af
 const countNotifs = async (token, eventType, targetId, after = 0) =>
   (await inbox(token)).filter((x) => x.eventType === eventType && x.id > after && (targetId == null || x.targetId === targetId)).length;
 
-const skuOf = (storeId) => dbNum(`select id from supplier_sku where supplier_store_id=${storeId} and name='Paneer' and status='ACTIVE' order by id limit 1`);
+const skuOf = (storeId) => dbNum(`select id from supplier_sku where supplier_store_id=${storeId} and name like '%Paneer' and status='ACTIVE' order by id limit 1`);
 
 /**
  * The real purchase sequence: add to the outlet's draft for the store, send, the supplier answers in full.
@@ -510,7 +512,8 @@ async function s5() {
   eq('wallet row reference credit-repayment-<repaymentId>', wt[3], `credit-repayment-${d.repaymentId}`);
   const hist = (await G(`/outlets/${OUTLET}/wallet/transactions?limit=5`, T.rest)).data?.items || [];
   const h = hist.find((x) => x.id === d.walletEntryId);
-  eq('wallet history (API) shows it: CREDIT_REPAYMENT DEBIT amount', h && [h.kind, h.direction, n(h.amount), h.reason], ['CREDIT_REPAYMENT', 'DEBIT', amount, 'Credit repayment']);
+  // D-128: the row names the supplier ("Credit repayment to <supplier>").
+  eq('wallet history (API) shows it: CREDIT_REPAYMENT DEBIT amount, "Credit repayment to <supplier>"', h && [h.kind, h.direction, n(h.amount), /^Credit repayment to Metro Fresh Supplies/.test(h.reason || '')], ['CREDIT_REPAYMENT', 'DEBIT', amount, true]);
   const rep = db(`select amount, source, status, wallet_transaction_id, supplier_store_id, outlet_id, credit_agreement_id from credit_repayment where id=${d.repaymentId}`)[0] || [];
   eq('credit_repayment row: WALLET COMPLETED, linked to the wallet entry', [n(rep[0]), rep[1], rep[2], n(rep[3]), n(rep[4]), n(rep[5]), n(rep[6])], [amount, 'WALLET', 'COMPLETED', d.walletEntryId, 2, OUTLET, aid]);
   const cp = db(`select credit_invoice_id, amount, source, method from credit_payment where credit_repayment_id=${d.repaymentId} order by credit_invoice_id`);
@@ -671,7 +674,9 @@ async function s5() {
   const wd = await P(`/credit/claims/${c3.data.id}/withdraw`, T.rest, {});
   expectStatus('restaurant withdraws the open claim', wd, 200);
   eq('claim WITHDRAWN, open claims back to 0', [wd.data?.status, n((await agr(aid)).openClaimsAmount)], ['WITHDRAWN', 0]);
-  expectStatus('withdrawing twice is a state error', await P(`/credit/claims/${c3.data.id}/withdraw`, T.rest, {}), 409, 'CREDIT_CLAIM_STATE');
+  // D-129: a retry after a lost response is answered, not refused.
+  const wd2 = await P(`/credit/claims/${c3.data.id}/withdraw`, T.rest, {});
+  eq('withdrawing twice answers 200 and changes nothing (D-129)', [wd2.status, wd2.data?.status, n((await agr(aid)).openClaimsAmount)], [200, 'WITHDRAWN', 0]);
   expectStatus('confirming a withdrawn claim is a state error', await P(`/credit/claims/${c3.data.id}/confirm`, SUP[2], {}, L.key('cfw')), 409, 'CREDIT_CLAIM_STATE');
   expectStatus('the supplier cannot withdraw a claim for the restaurant', await P(`/credit/claims/${c3.data.id}/withdraw`, SUP[2], {}), 404);
   ctx.claims = { c1: c1.data.id, c2: c2.data.id, c3: c3.data.id };
@@ -867,9 +872,16 @@ async function s6() {
 
 // ── S7 ─────────────────────────────────────────────────────────────────
 async function s7() {
-  // An open claim on A3 so reportable != owed there.
+  // The multi-supplier summary needs all three suppliers owed something: store 1's demo line may have been paid off, so draw one small order on it.
+  const a1row = (await agreementsOf(OUTLET, T.rest)).find((a) => a.supplierStoreId === 1);
+  if (a1row && a1row.status === 'ACTIVE' && n(a1row.due) === 0) {
+    const x = await F.newInvoice({ storeId: 1, outlet: OUTLET, qty: 1, aid: a1row.id, log: note });
+    note(`store 1's line owed nothing; one order on credit drawn (${x.invoiceNumber}) so the summary has three suppliers`);
+  }
+  // An open claim on A3 so reportable != owed there. Other claims may already be waiting on the line (other testers): the checks are movements.
   let claimId = null;
-  const openA3 = (await invoicesOf(ctx.a3)).find((i) => ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'].includes(i.status) && n(i.outstanding) > 400);
+  const baseA3 = await agr(ctx.a3);
+  const openA3 = (await invoicesOf(ctx.a3)).find((i) => ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'].includes(i.status) && n(i.reportableAmount) > 400);
   if (openA3) {
     const c = await P(`/credit/invoices/${openA3.id}/claims`, T.rest, { amount: 300, method: 'UPI', reference: `E2E-S7-${RUN}`, paidOn: istDate(0) }, L.key('s7c'));
     if (expectStatus('S7 setup: an open claim of 300 on a store 3 invoice', c, 201)) claimId = c.data.id;
@@ -936,7 +948,7 @@ async function s7() {
       }
       ok(`${tag} (${who}): every line's owedAfter == the line before it (older) + its signed amount`, chain, why);
       ok(`${tag} (${who}): lines are newest first`, lines.every((x, k) => k === 0 || Date.parse(lines[k - 1].at) >= Date.parse(x.at)), 'order broken');
-      eq(`${tag} (${who}): only Order on credit / Repayment / Adjustment labels (nothing that changes no debt)`, lines.every((x) => ['Order on credit', 'Repayment', 'Adjustment'].includes(x.label)), true);
+      eq(`${tag} (${who}): only labels of movements that change the debt (Order on credit / Repayment / Adjustment / Payment reversed / Credit note / Written off)`, lines.every((x) => ['Order on credit', 'Repayment', 'Adjustment', 'Payment reversed', 'Credit note', 'Written off'].includes(x.label)), true);
     }
   }
   const a1 = live.find((a) => a.supplierStoreId === 1);
@@ -949,10 +961,10 @@ async function s7() {
   // Claims: withdraw the S7 claim so the run leaves no open claim of its own.
   if (claimId) {
     const a3 = await agr(ctx.a3);
-    eq('store 3 line shows the 300 open claim and a reduced reportableAmount', [n(a3.openClaimsAmount), n(a3.reportableAmount)], [300, money(n(a3.due) - 300)]);
+    eq('store 3 line shows the 300 more open claim and a reportableAmount 300 lower', [n(a3.openClaimsAmount), n(a3.reportableAmount)], [money(n(baseA3.openClaimsAmount) + 300), money(n(baseA3.reportableAmount) - 300)]);
     expectStatus('S7 claim withdrawn again', await P(`/credit/claims/${claimId}/withdraw`, T.rest, {}), 200);
     const a3b = await agr(ctx.a3);
-    eq('after the withdrawal reportableAmount == owed', [n(a3b.openClaimsAmount), n(a3b.reportableAmount)], [0, n(a3b.due)]);
+    eq('after the withdrawal the open claims and reportableAmount are back where they were', [n(a3b.openClaimsAmount), n(a3b.reportableAmount)], [n(baseA3.openClaimsAmount), n(baseA3.reportableAmount)]);
   }
 }
 
@@ -1058,6 +1070,1308 @@ async function s9() {
   eq('approve is idempotent on an ACTIVE line (no state change)', (await P(`/credit/agreements/${aid}/approve`, T.sup2, {})).data?.status, 'ACTIVE');
 }
 
+// ── supplier-side scenarios S10..S15 ───────────────────────────────────────────
+// Fixtures: store 1 (Sri Balaji, SUP[1]) and outlet 2 (Tandoor House, T.rest2) on agreement 6, plus store 2 / outlet 1
+// (agreement 3) where the restaurant's wallet is deep, and store 3 / outlet 2 (agreement 5) for the whole-line cases.
+// Every scenario makes its own fresh invoices through the real order flow, moves their dates by SQL (test data only) and
+// settles what it made at the end, so a re-run on a used database starts clean. No row is ever deleted.
+
+const WORST = ['OVERDUE', 'IN_GRACE', 'DUE_TODAY', 'DUE_SOON', 'DUE_LATER'];
+const FOREIGN_NOTE = 'no other supplier role exists in the local data (only SUP_OWNER users), so manager / finance cases are not run';
+
+/** Everything the supplier-side receivables screens say about one store, checked against SQL and against the invoices' own states. */
+async function checkReceivablesAgainstSql(label, storeId, tok) {
+  const today = istDate(0);
+  const R = (await G(`/supplier-stores/${storeId}/credit/receivables`, tok)).data;
+  const A = (await G(`/supplier-stores/${storeId}/credit/ageing`, tok)).data;
+  const RL = (await G(`/supplier-stores/${storeId}/credit/receivables/restaurants?size=100`, tok)).data;
+  const S = F.sqlStore(storeId, today);
+  const by = (st) => sum(S.open.filter((r) => r.state === st).map((r) => r.out));
+  eq(`${label}: asOf is today in India`, R.asOf, today);
+  eq(`${label}: totalReceivable == open invoices' outstanding (SQL)`, n(R.totalReceivable), sum(S.open.map((r) => r.out)));
+  eq(`${label}: overdue == invoices in state OVERDUE (past grace, swept or not)`, n(R.overdue), by('OVERDUE'));
+  eq(`${label}: inGrace == invoices in state IN_GRACE`, n(R.inGrace), by('IN_GRACE'));
+  eq(`${label}: dueToday == invoices due today (India date)`, n(R.dueToday), by('DUE_TODAY'));
+  eq(`${label}: dueThisWeek == not yet due, due today through today+6`, n(R.dueThisWeek),
+    sum(S.open.filter((r) => ['DUE_TODAY', 'DUE_SOON', 'DUE_LATER'].includes(r.state) && r.ahead >= 0 && r.ahead < 7).map((r) => r.out)));
+  eq(`${label}: collectedThisMonth == payments in the India month not reversed (SQL)`, n(R.collectedThisMonth), S.collected);
+  const act = S.lines.filter((l) => l.status === 'ACTIVE');
+  eq(`${label}: exposure.extended == limits of ACTIVE lines`, n(R.exposure.extended), sum(act.map((l) => l.limit)));
+  eq(`${label}: exposure.drawn == utilized on ACTIVE lines`, n(R.exposure.drawn), sum(act.map((l) => l.utilized)));
+  eq(`${label}: exposure.availableToLend == sum of max(0, limit - reserved - utilized) on ACTIVE lines`, n(R.exposure.availableToLend),
+    sum(act.map((l) => Math.max(0, money(l.limit - l.reserved - l.utilized)))));
+  const openAids = new Set(S.open.map((r) => r.aid));
+  const listed = S.lines.filter((l) => ['ACTIVE', 'SUSPENDED'].includes(l.status) || openAids.has(l.id));
+  const overdueAids = new Set(S.open.filter((r) => r.state === 'OVERDUE').map((r) => r.aid));
+  const claims = sum(Object.values(S.waiting));
+  const atLimit = act.filter((l) => money(l.limit - l.reserved - l.utilized) <= 0).length;
+  eq(`${label}: counts match SQL`, R.counts, {
+    restaurants: listed.length, linesActive: act.length, linesSuspended: S.lines.filter((l) => l.status === 'SUSPENDED').length,
+    requestsPending: S.lines.filter((l) => l.status === 'REQUESTED').length, claimsWaiting: claims, overdueRestaurants: overdueAids.size });
+  const expectActions = [['CLAIMS_WAITING', claims], ['REQUESTS_PENDING', S.lines.filter((l) => l.status === 'REQUESTED').length],
+    ['OVERDUE_RESTAURANTS', overdueAids.size], ['LINE_AT_LIMIT', atLimit]].filter(([, c]) => c > 0).map(([kind, count]) => ({ kind, count }));
+  eq(`${label}: pendingActions are exactly the kinds with a count above zero, in the documented order`, R.pendingActions, expectActions);
+
+  // Ageing: days past the due date, in India time.
+  const bucketOf = (late) => (late <= 0 ? 0 : late <= 7 ? 1 : late <= 30 ? 2 : 3);
+  const names = ['CURRENT', 'D1_7', 'D8_30', 'D30_PLUS'];
+  eq(`${label}: ageing has the four buckets in order`, A.buckets.map((b) => b.bucket), names);
+  eq(`${label}: ageing asOf is today`, A.asOf, today);
+  for (let i = 0; i < 4; i++) {
+    const rows = S.open.filter((r) => bucketOf(r.late) === i);
+    const perLine = {};
+    for (const r of rows) { perLine[r.aid] = perLine[r.aid] || { amount: 0, count: 0 }; perLine[r.aid].amount = money(perLine[r.aid].amount + r.out); perLine[r.aid].count++; }
+    const top = Object.entries(perLine).map(([aid, v]) => ({ aid: n(aid), ...v })).sort((x, y) => y.amount - x.amount || x.aid - y.aid).slice(0, 5);
+    const b = A.buckets[i];
+    eq(`${label}: ageing ${names[i]}: amount, invoices, restaurants vs SQL`, [n(b.amount), b.invoiceCount, b.restaurantCount],
+      [sum(rows.map((r) => r.out)), rows.length, Object.keys(perLine).length]);
+    eq(`${label}: ageing ${names[i]}: top restaurants (at most 5, largest first)`, b.topRestaurants.map((t) => [t.agreementId, n(t.amount), t.invoiceCount]), top.map((t) => [t.aid, t.amount, t.count]));
+  }
+  eq(`${label}: ageing total == sum of the buckets == receivables.totalReceivable`, [n(A.total), sum(A.buckets.map((b) => b.amount))], [n(R.totalReceivable), n(R.totalReceivable)]);
+
+  // Restaurant rows.
+  eq(`${label}: one restaurant row per live or owing line`, RL.items.map((r) => r.agreementId).sort((x, y) => x - y), listed.map((l) => l.id));
+  eq(`${label}: restaurants total == rows listed`, RL.total, listed.length);
+  const bad = [];
+  for (const row of RL.items) {
+    const mine = S.open.filter((r) => r.aid === row.agreementId);
+    const line = S.lines.find((l) => l.id === row.agreementId);
+    const nextDue = mine.length ? mine.map((r) => r.due).sort()[0] : null;
+    const worst = mine.length ? WORST.find((w) => mine.some((r) => r.state === w)) : null;
+    const exp = {
+      status: line.status, owed: sum(mine.map((r) => r.out)), overdue: sum(mine.filter((r) => r.state === 'OVERDUE').map((r) => r.out)),
+      nextDueDate: nextDue, nextDueAmount: nextDue ? sum(mine.filter((r) => r.due === nextDue).map((r) => r.out)) : null, dueState: worst,
+      claimsWaiting: S.waiting[row.agreementId] || 0, limit: line.limit, utilized: line.utilized,
+      utilization: line.limit === 0 ? null : Math.round((line.utilized * 1000) / line.limit + 1e-9) / 10 };
+    const got = { status: row.status, owed: n(row.owed), overdue: n(row.overdue), nextDueDate: row.nextDueDate, nextDueAmount: row.nextDueAmount == null ? null : n(row.nextDueAmount),
+      dueState: row.dueState, claimsWaiting: row.claimsWaiting, limit: n(row.limit), utilized: n(row.utilized), utilization: row.utilization == null ? null : n(row.utilization) };
+    if (JSON.stringify(exp) !== JSON.stringify(got)) bad.push({ agreement: row.agreementId, exp, got });
+  }
+  eq(`${label}: every restaurant row matches SQL (owed, overdue, next due, worst state, claims, limit, utilization)`, bad, []);
+  return { R, A, RL, S, today };
+}
+
+async function s10() {
+  const store = 1, tok = SUP[1];
+  const aid = await F.ensureLine(1, OUTLET2, { log: note });
+  const today = istDate(0);
+  const R0 = (await G(`/supplier-stores/${store}/credit/receivables`, tok)).data;
+  const A0 = (await G(`/supplier-stores/${store}/credit/ageing`, tok)).data;
+  const spec = [['L40', -40, -35], ['L10', -10, -5], ['G3', -3, 2], ['T0', 0, 5], ['P3', 3, 8], ['P6', 6, 11], ['P7', 7, 12]];
+  const fx = {};
+  for (const [k, due, over] of spec) { fx[k] = await F.newInvoice({ storeId: store, outlet: OUTLET2, qty: 1, aid, log: note }); F.setDue(fx[k].invoiceId, due, over); }
+  const ids = Object.values(fx).map((x) => x.invoiceId);
+  const amt = (...ks) => sum(ks.map((k) => fx[k].amount));
+  try {
+    const states = [['L40', 'OVERDUE', -40], ['L10', 'OVERDUE', -10], ['G3', 'IN_GRACE', -3], ['T0', 'DUE_TODAY', 0], ['P3', 'DUE_SOON', 3], ['P6', 'DUE_LATER', 6], ['P7', 'DUE_LATER', 7]];
+    for (const [k, st, d] of states) {
+      const inv = await F.invoiceDetail(fx[k].invoiceId, tok);
+      eq(`fixture ${k}: the supplier sees dueState ${st}, daysToDue ${d} (India days)`, [inv.dueState, inv.daysToDue], [st, d]);
+    }
+    const { R, A, RL } = await checkReceivablesAgainstSql('store 1', store, tok);
+    // The same figures, as movements from before the fixtures: independent of the SQL port above.
+    eq('totalReceivable grew by the 7 fixture invoices', n(R.totalReceivable), money(n(R0.totalReceivable) + amt('L40', 'L10', 'G3', 'T0', 'P3', 'P6', 'P7')));
+    eq('overdue grew by the two past-grace invoices', n(R.overdue), money(n(R0.overdue) + amt('L40', 'L10')));
+    eq('inGrace grew by the invoice 3 days late inside its grace', n(R.inGrace), money(n(R0.inGrace) + amt('G3')));
+    eq('dueToday grew by the invoice due today', n(R.dueToday), money(n(R0.dueToday) + amt('T0')));
+    eq('dueThisWeek grew by due today, +3 and +6 but NOT +7 (today through today+6) and not the late ones', n(R.dueThisWeek), money(n(R0.dueThisWeek) + amt('T0', 'P3', 'P6')));
+    eq('drawn grew by the same invoices (credit drawn is what is owed)', n(R.exposure.drawn), money(n(R0.exposure.drawn) + amt('L40', 'L10', 'G3', 'T0', 'P3', 'P6', 'P7')));
+    eq('availableToLend shrank by the same amount', n(R.exposure.availableToLend), money(n(R0.exposure.availableToLend) - amt('L40', 'L10', 'G3', 'T0', 'P3', 'P6', 'P7')));
+    const dB = (i) => n(A.buckets[i].amount) - n(A0.buckets[i].amount);
+    eq('ageing CURRENT grew by due today, +3, +6, +7', money(dB(0)), amt('T0', 'P3', 'P6', 'P7'));
+    eq('ageing D1_7 grew by the invoice 3 days late (inside grace counts here)', money(dB(1)), amt('G3'));
+    eq('ageing D8_30 grew by the invoice 10 days late', money(dB(2)), amt('L10'));
+    eq('ageing D30_PLUS grew by the invoice 40 days late', money(dB(3)), amt('L40'));
+    eq('ageing invoice counts grew 4 / 1 / 1 / 1', A.buckets.map((b, i) => b.invoiceCount - A0.buckets[i].invoiceCount), [4, 1, 1, 1]);
+    const row6 = RL.items.find((r) => r.agreementId === aid);
+    ok('the line of the fixtures is listed with the worst state OVERDUE and a claim count', !!row6 && row6.dueState === 'OVERDUE', JSON.stringify(row6));
+    ok('pendingActions include OVERDUE_RESTAURANTS (one line has overdue invoices)', R.pendingActions.some((p) => p.kind === 'OVERDUE_RESTAURANTS' && p.count >= 1), JSON.stringify(R.pendingActions));
+
+    // Ordering, filters and paging of the restaurant list (two lines on this store).
+    const all = RL.items;
+    const cmp = {
+      overdue: (x, y) => n(y.overdue) - n(x.overdue) || x.agreementId - y.agreementId,
+      owed: (x, y) => n(y.owed) - n(x.owed) || x.agreementId - y.agreementId,
+      nextDue: (x, y) => (x.nextDueDate == null ? 1 : y.nextDueDate == null ? -1 : x.nextDueDate < y.nextDueDate ? -1 : x.nextDueDate > y.nextDueDate ? 1 : 0) || x.agreementId - y.agreementId,
+    };
+    for (const sort of ['overdue', 'owed', 'nextDue']) {
+      const r = (await G(`/supplier-stores/${store}/credit/receivables/restaurants?sort=${sort}&size=100`, tok)).data;
+      eq(`restaurants sort=${sort}: ordered as documented (ties by agreement id)`, r.items.map((x) => x.agreementId), [...all].sort(cmp[sort]).map((x) => x.agreementId));
+    }
+    eq('restaurants: default sort is overdue', all.map((x) => x.agreementId), [...all].sort(cmp.overdue).map((x) => x.agreementId));
+    expectStatus('restaurants: an unknown sort is refused', await G(`/supplier-stores/${store}/credit/receivables/restaurants?sort=bogus`, tok), 400);
+    expectStatus('restaurants: page -1 is refused', await G(`/supplier-stores/${store}/credit/receivables/restaurants?page=-1`, tok), 400);
+    expectStatus('restaurants: size 0 is refused', await G(`/supplier-stores/${store}/credit/receivables/restaurants?size=0`, tok), 400);
+    const big = (await G(`/supplier-stores/${store}/credit/receivables/restaurants?size=500`, tok)).data;
+    eq('restaurants: size is capped at 100', big.size, 100);
+    const seen = []; let page = 0; let pg;
+    do { pg = (await G(`/supplier-stores/${store}/credit/receivables/restaurants?size=1&page=${page}`, tok)).data; seen.push(...pg.items.map((x) => x.agreementId)); page++; } while (pg.hasNext && page < 20);
+    eq('restaurants: paging one at a time returns every row once, in order', seen, all.map((x) => x.agreementId));
+    eq('restaurants: first page of size 1 says hasNext and the full total', [(await G(`/supplier-stores/${store}/credit/receivables/restaurants?size=1&page=0`, tok)).data.hasNext, pg.total], [all.length > 1, all.length]);
+    eq('restaurants: a page past the end is empty with hasNext false', (await G(`/supplier-stores/${store}/credit/receivables/restaurants?size=20&page=9`, tok)).data.items.length, 0);
+    const act = (await G(`/supplier-stores/${store}/credit/receivables/restaurants?status=ACTIVE&size=100`, tok)).data;
+    eq('restaurants: status=ACTIVE keeps only ACTIVE lines', act.items.every((x) => x.status === 'ACTIVE') && act.total === all.filter((x) => x.status === 'ACTIVE').length, true);
+    eq('restaurants: q=tandoor (any case) finds only that restaurant', (await G(`/supplier-stores/${store}/credit/receivables/restaurants?q=TANDOOR`, tok)).data.items.map((x) => x.restaurantName), all.filter((x) => /tandoor/i.test(x.restaurantName)).map((x) => x.restaurantName));
+    eq('restaurants: q matches the outlet name too (Koramangala)', (await G(`/supplier-stores/${store}/credit/receivables/restaurants?q=koramangala`, tok)).data.items.every((x) => x.outletName === 'Koramangala'), true);
+    eq('restaurants: q with no match is an empty page', (await G(`/supplier-stores/${store}/credit/receivables/restaurants?q=zzzz-none`, tok)).data.total, 0);
+
+    // The payment feed against SQL.
+    const sqlCount = (extra = '') => dbNum(`select count(*) from credit_payment p join credit_agreement a on a.id=p.credit_agreement_id where a.supplier_store_id=${store} ${extra}`);
+    const feed = (await G(`/supplier-stores/${store}/credit/payments?size=100`, tok)).data;
+    eq('payment feed: total == payments of the store (SQL)', feed.total, sqlCount());
+    ok('payment feed: newest first', feed.items.every((x, i) => i === 0 || Date.parse(feed.items[i - 1].paidAt) >= Date.parse(x.paidAt)), 'order broken');
+    const sample = feed.items.slice(0, 5);
+    for (const it of sample) {
+      const row = db(`select amount, source, method, reference, credit_invoice_id from credit_payment where id=${it.id}`)[0] || [];
+      eq(`payment feed item ${it.id}: amount, source, method, reference, invoice vs SQL`, [n(it.amount), it.source, it.method, it.reference == null ? 'NULL' : it.reference, it.invoiceId], [n(row[0]), row[1], row[2], row[3], n(row[4])]);
+    }
+    for (const src of ['SUPPLIER_RECORDED', 'WALLET', 'CLAIM_CONFIRMED']) {
+      eq(`payment feed: source=${src} total == SQL`, (await G(`/supplier-stores/${store}/credit/payments?source=${src}&size=1`, tok)).data.total, sqlCount(`and p.source='${src}'`));
+    }
+    const dayStart = (d) => `date_sub('${d} 00:00:00', interval 330 minute)`;
+    eq('payment feed: from=to=today counts the India day (SQL, UTC+5:30)', (await G(`/supplier-stores/${store}/credit/payments?from=${today}&to=${today}&size=1`, tok)).data.total,
+      sqlCount(`and p.paid_at >= ${dayStart(today)} and p.paid_at < ${dayStart(istDate(1))}`));
+    expectStatus('payment feed: to before from is refused', await G(`/supplier-stores/${store}/credit/payments?from=${today}&to=${istDate(-1)}`, tok), 400);
+    eq('payment feed: size capped at 100', (await G(`/supplier-stores/${store}/credit/payments?size=900`, tok)).data.size, 100);
+    expectStatus('payment feed: page -1 refused', await G(`/supplier-stores/${store}/credit/payments?page=-1`, tok), 400);
+
+    // Isolation: another store's owner and both restaurants learn nothing; nobody signed in is refused.
+    const reads = ['receivables', 'receivables/restaurants', 'ageing', 'payments'];
+    for (const [who, t] of [['store 3 supplier', SUP[3]], ['store 2 supplier', SUP[2]], ['the restaurant of outlet 2', T.rest2], ['the restaurant of outlet 1', T.rest]]) {
+      for (const r of reads) expectStatus(`${who}: GET store 1 ${r} -> 404`, await G(`/supplier-stores/${store}/credit/${r}`, t), 404);
+    }
+    for (const r of reads) expectStatus(`no token: GET store 1 ${r} -> 401`, await api(`/supplier-stores/${store}/credit/${r}`), 401);
+    for (const r of reads) expectStatus(`the owner: GET store 1 ${r} -> 200`, await G(`/supplier-stores/${store}/credit/${r}`, tok), 200);
+    expectStatus('an unknown store -> 404 for the owner too', await G('/supplier-stores/999999/credit/receivables', tok), 404);
+    const own3 = await G('/supplier-stores/3/credit/receivables', SUP[3]);
+    const own1 = await G('/supplier-stores/1/credit/receivables', SUP[1]);
+    ok('each owner sees only its own store: store 3 figures differ from store 1', own3.status === 200 && JSON.stringify(own3.data.exposure) !== JSON.stringify(own1.data.exposure), 'identical exposure on two stores');
+    await checkReceivablesAgainstSql('store 2', 2, SUP[2]);
+    await checkReceivablesAgainstSql('store 3', 3, SUP[3]);
+  } finally {
+    const done = await F.settle(aid, store, ids, 'S10');
+    note(`S10 fixtures settled: HTTP ${done?.status}`);
+  }
+  const R2 = (await G(`/supplier-stores/${store}/credit/receivables`, tok)).data;
+  eq('after the fixtures are settled the receivable is back where it started', n(R2.totalReceivable), n(R0.totalReceivable));
+  eq('  ...and the month\'s collections grew by exactly what was settled', n(R2.collectedThisMonth), money(n(R0.collectedThisMonth) + amt(...Object.keys(fx))));
+}
+
+
+/** The statement of a line from one side: opening + sum(amount) == closing == what is owed now, every owedAfter chained. */
+async function checkStatementIdentity(label, aid, token) {
+  const st = (await G(`/credit/agreements/${aid}/statement`, token)).data;
+  if (!st) { eq(`${label}: statement readable`, false, true); return null; }
+  const lines = st.lines || [];
+  const now = (await G(`/credit/agreements/${aid}`, token)).data;
+  eq(`${label}: openingOwed + sum(amount) == closingOwed`, money(n(st.openingOwed) + sum(lines.map((x) => x.amount))), n(st.closingOwed));
+  eq(`${label}: closingOwed == what the line owes now`, n(st.closingOwed), n(now.utilized));
+  let chain = true, why = '';
+  for (let k = 0; k < lines.length; k++) {
+    const older = k + 1 < lines.length ? n(lines[k + 1].owedAfter) : n(st.openingOwed);
+    if (money(older + n(lines[k].amount)) !== money(n(lines[k].owedAfter))) { chain = false; why = `line ${k} ${lines[k].label} owedAfter ${lines[k].owedAfter} != ${older} + ${lines[k].amount}`; break; }
+  }
+  ok(`${label}: every owedAfter is the line before it plus the signed amount`, chain, why);
+  return st;
+}
+
+// ── S11 ─ receipts and their reversal ──────────────────────────────────────────────
+async function s11() {
+  const store = 1, tok = SUP[1], buyer = T.rest2, today = istDate(0);
+  const aid = await F.ensureLine(1, OUTLET2, { log: note });
+  const mk = async (qty, due, over) => { const x = await F.newInvoice({ storeId: store, outlet: OUTLET2, qty, aid, log: note }); F.setDue(x.invoiceId, due, over); return x; };
+  // Created in this order; due dates make the oldest-first order B, D (same day as B, higher id), C, A.
+  const A = await mk(1, 5, 10), B = await mk(1, 1, 6), C = await mk(2, 3, 8), D = await mk(1, 1, 6);
+  const ids = [A, B, C, D].map((x) => x.invoiceId);
+  const counts = () => ({
+    rep: dbNum(`select count(*) from credit_repayment where credit_agreement_id=${aid}`),
+    pay: dbNum(`select count(*) from credit_payment where credit_agreement_id=${aid}`),
+    payout: dbNum(`select count(*) from credit_repayment_payout where supplier_store_id=${store}`),
+    rev: dbNum(`select count(*) from credit_payment_reversal where credit_agreement_id=${aid}`),
+    idem: dbNum(`select count(*) from credit_repayment where idempotency_key is not null and credit_agreement_id=${aid}`) });
+  const wallet = () => G('/outlets/2/wallet', buyer).then((r) => n(r.data.balance));
+  const inv = (id) => F.invoiceDetail(id, tok);
+  const collected = async () => n((await G(`/supplier-stores/${store}/credit/receivables`, tok)).data.collectedThisMonth);
+  const allocs = (r) => (r.allocations || []).map((x) => [x.invoiceId, n(x.amount), x.statusAfter]);
+  const feedOf = async (pred) => ((await G(`/supplier-stores/${store}/credit/payments?size=100`, tok)).data.items || []).filter(pred);
+  const rev = (receiptId, reason, k, t = tok) => P(`/credit/receipts/${receiptId}/reverse`, t, { reason }, k);
+  const revPay = (paymentId, reason, k, t = tok) => P(`/credit/payments/${paymentId}/reverse`, t, { reason }, k);
+  const ctl = { claimC: null, limit0: null, wallet: null };
+  const w3 = {};
+  try {
+    const pre = await F.snap(aid, buyer);
+    const sumBD = B.amount + D.amount;
+
+    // ---- preview == what the receipt then does
+    const pBody = { amount: money(sumBD + 100), invoiceIds: [D.invoiceId, A.invoiceId, C.invoiceId, B.invoiceId] };
+    const c0 = counts();
+    const pv = await F.receiptPreview(aid, tok, pBody);
+    expectStatus('preview: a receipt of B + D + 100 over the four invoices', pv, 200);
+    const expectAlloc = [[B.invoiceId, B.amount, 'PAID'], [D.invoiceId, D.amount, 'PAID'], [C.invoiceId, 100, 'PARTIALLY_PAID']];
+    eq('preview: oldest due date first, ties by invoice id (B, D, then C partly), A untouched', allocs(pv.data), expectAlloc);
+    eq('preview: the line afterwards (due down, available up by the amount, overdue and status unchanged)',
+      [n(pv.data.agreement.due), n(pv.data.agreement.overdue), n(pv.data.agreement.available), pv.data.agreement.status],
+      [money(pre.due - pBody.amount), pre.overdue, money(pre.available + pBody.amount), 'ACTIVE']);
+    eq('preview: no claims to warn about yet', pv.data.pendingClaims, []);
+    eq('preview wrote nothing (receipts, payments, payouts, reversals)', counts(), c0);
+    const cl = await P(`/credit/invoices/${C.invoiceId}/claims`, buyer, { amount: 50, method: 'CASH', paidOn: today, note: 'paid on the counter' }, L.key('s11claim'));
+    if (expectStatus('setup: the restaurant claims it paid 50 on C', cl, 201)) ctl.claimC = cl.data.id;
+    const pv2 = await F.receiptPreview(aid, tok, pBody);
+    eq('preview: warns about the restaurant\'s open claim on C (the supplier may prefer to confirm it)', (pv2.data.pendingClaims || []).map((x) => [x.invoiceId, x.invoiceNumber, n(x.amount)]), [[C.invoiceId, C.invoiceNumber, 50]]);
+    const ov = await F.receiptPreview(aid, tok, { amount: money(A.amount + 0.01), invoiceIds: [A.invoiceId] });
+    expectStatus('preview: one paisa more than the chosen invoice owes -> CREDIT_OVERPAYMENT', ov, 422, 'CREDIT_OVERPAYMENT');
+    eq('  ...details.outstanding is what the chosen invoices owe', n(ov.error?.details?.outstanding), A.amount);
+    expectStatus('preview: an unknown invoice id is not found', await F.receiptPreview(aid, tok, { amount: 10, invoiceIds: [999999999] }), 404);
+    const foreignInv = dbNum(`select id from credit_invoice where supplier_store_id=2 order by id limit 1`);
+    expectStatus('preview: another store\'s invoice is not found', await F.receiptPreview(aid, tok, { amount: 10, invoiceIds: [foreignInv] }), 404);
+    expectStatus('preview: the same invoice twice is refused', await F.receiptPreview(aid, tok, { amount: 10, invoiceIds: [A.invoiceId, A.invoiceId] }), 400);
+    // Without ids: the whole open set, oldest first (compared with SQL's order).
+    const first = db(`select id from credit_invoice where credit_agreement_id=${aid} and status not in ('PAID','WRITTEN_OFF') order by due_date, id limit 1`)[0];
+    const pvAll = await F.receiptPreview(aid, tok, { amount: 1 });
+    eq('preview without invoiceIds: the first open invoice by (due date, id) takes the money', (pvAll.data.allocations || []).map((x) => x.invoiceId), [n(first[0])]);
+
+    // ---- record: the actual allocation is the previewed one
+    const ref1 = F.ref('UTR'), K1 = L.key('s11rcpt');
+    const body = { amount: pBody.amount, method: 'BANK_TRANSFER', reference: ref1, paidOn: today, invoiceIds: pBody.invoiceIds, note: 'e2e receipt' };
+    const mRest = await mark(buyer);
+    const w0 = await wallet();
+    const rec = await F.receipt(aid, tok, body, K1);
+    expectStatus('receipt recorded (201)', rec, 201);
+    const rid = rec.data.receiptId;
+    eq('receipt allocation == the preview\'s (same invoices, amounts, statuses)', allocs(rec.data), allocs(pv2.data));
+    eq('receipt: the line afterwards == the preview\'s', rec.data.agreement, pv2.data.agreement);
+    eq('receipt: echoes amount, method, reference, paidOn', [n(rec.data.amount), rec.data.method, rec.data.reference, rec.data.paidOn], [pBody.amount, 'BANK_TRANSFER', ref1, today]);
+    const rr = db(`select amount, source, status, method, reference, paid_on, outlet_id, supplier_store_id from credit_repayment where id=${rid}`)[0] || [];
+    eq('receipt row: SUPPLIER_RECORDED COMPLETED, method, reference, paid_on, outlet 2, store 1', [n(rr[0]), rr[1], rr[2], rr[3], rr[4], rr[5], n(rr[6]), n(rr[7])], [pBody.amount, 'SUPPLIER_RECORDED', 'COMPLETED', 'BANK_TRANSFER', ref1, today, 2, 1]);
+    const pays = db(`select credit_invoice_id, amount, source, method, reference from credit_payment where credit_repayment_id=${rid} order by credit_invoice_id`);
+    eq('one payment row per invoice, source SUPPLIER_RECORDED, linked to the receipt', pays.map((p) => [n(p[0]), n(p[1]), p[2], p[3], p[4]]),
+      [[B.invoiceId, B.amount], [C.invoiceId, 100], [D.invoiceId, D.amount]].sort((x, y) => x[0] - y[0]).map(([i, a]) => [i, a, 'SUPPLIER_RECORDED', 'BANK_TRANSFER', ref1]));
+    const c1 = counts();
+    eq('exactly one receipt and three payments added; no payout (nothing went through Mandi); no reversal', [c1.rep - c0.rep, c1.pay - c0.pay, c1.payout - c0.payout, c1.rev - c0.rev], [1, 3, 0, 0]);
+    eq('the restaurant\'s wallet is untouched (the money moved outside Mandi)', await wallet(), w0);
+    const [iA, iB, iC, iD] = await Promise.all([A, B, C, D].map((x) => inv(x.invoiceId)));
+    eq('B and D are PAID with nothing outstanding', [iB.status, n(iB.outstanding), iD.status, n(iD.outstanding)], ['PAID', 0, 'PAID', 0]);
+    eq('C is PARTIALLY_PAID: 100 paid, the rest outstanding', [iC.status, n(iC.paidAmount), n(iC.outstanding)], ['PARTIALLY_PAID', 100, money(C.amount - 100)]);
+    eq('A is untouched', [iA.status, n(iA.paidAmount), n(iA.outstanding)], ['ISSUED', 0, A.amount]);
+    const post = await F.snap(aid, buyer);
+    eq('the line: utilized and due down, available up by exactly the receipt', [post.utilized, post.due, post.available], [money(pre.utilized - pBody.amount), money(pre.due - pBody.amount), money(pre.available + pBody.amount)]);
+    eq('the line: available == limit - reserved - utilized', post.available, money(post.limit - post.reserved - post.utilized));
+    eq('the open claim on C is still waiting (the receipt does not touch it)', (await G(`/credit/agreements/${aid}/claims?status=SUBMITTED`, buyer)).data.some((x) => x.id === ctl.claimC), true);
+    eq('ledger: one REPAYMENT movement per invoice paid', dbNum(`select count(*) from credit_transaction where credit_agreement_id=${aid} and transaction_type='REPAYMENT' and credit_invoice_id in (${B.invoiceId},${C.invoiceId},${D.invoiceId})`), 3);
+    eq('audit: CREDIT_RECEIPT_RECORDED written once for the receipt', dbNum(`select count(*) from audit_log where action='CREDIT_RECEIPT_RECORDED' and entity_id=${rid}`), 1);
+    const st1 = (await G(`/credit/agreements/${aid}/statement`, tok)).data;
+    eq('statement: three Repayment lines for the receipt (source, method, reference)', st1.lines.filter((x) => x.reference === ref1).map((x) => [x.type, x.label, x.source, x.method]), [1, 2, 3].map(() => ['REPAYMENT', 'Repayment', 'SUPPLIER_RECORDED', 'BANK_TRANSFER']));
+    const nt = await notifs(buyer, 'CreditRepaymentRecorded', B.invoiceId, { after: mRest });
+    ok('the restaurant is told "Payment recorded" once, naming the invoices ("and 2 more")', nt.length === 1 && nt[0].title === 'Payment recorded' && /and 2 more/.test(nt[0].body), JSON.stringify(nt));
+    const items = await feedOf((x) => x.receiptId === rid);
+    eq('payment feed: three items carry the receipt id, reversible until today+7', [items.length, items.every((x) => x.reversible === true && x.reversibleUntil === istDate(7) && x.reversedAt == null), sum(items.map((x) => x.amount))], [3, true, pBody.amount]);
+
+    // ---- replay, key reuse
+    const rp = await F.receipt(aid, tok, body, K1);
+    eq('replay (same key and body): the same receipt, status 201', [rp.status, rp.data?.receiptId], [201, rid]);
+    eq('replay recorded nothing', counts(), c1);
+    const reuse = await F.receipt(aid, tok, { ...body, amount: 61 }, K1);
+    expectStatus('same key with another amount -> IDEMPOTENCY_KEY_REUSE', reuse, 409, 'IDEMPOTENCY_KEY_REUSE');
+    eq('  ...nothing moved', counts(), c1);
+    const nokey = await api(`/credit/agreements/${aid}/payments`, { token: tok, body });
+    ok('a receipt without an Idempotency-Key is refused', nokey.status >= 400 && nokey.status < 500, `HTTP ${nokey.status}`);
+
+    // ---- duplicate reference
+    const dupBody = { amount: 50, method: 'BANK_TRANSFER', reference: ref1, paidOn: today, invoiceIds: [A.invoiceId] };
+    const dup = await F.receipt(aid, tok, dupBody);
+    expectStatus('the same UTR again -> 409 CREDIT_DUPLICATE_REFERENCE', dup, 409, 'CREDIT_DUPLICATE_REFERENCE');
+    eq('  ...details name the earlier receipt, its day and amount', [dup.error?.details?.receiptId, dup.error?.details?.paidOn, n(dup.error?.details?.amount)], [rid, today, pBody.amount]);
+    expectStatus('the same UTR with spaces around it is still a duplicate (trimmed)', await F.receipt(aid, tok, { ...dupBody, reference: `  ${ref1}  ` }), 409, 'CREDIT_DUPLICATE_REFERENCE');
+    eq('  ...refusals recorded nothing', counts(), c1);
+    const allow = await F.receipt(aid, tok, { ...dupBody, allowDuplicateReference: true });
+    expectStatus('allowDuplicateReference: true records it anyway (201)', allow, 201);
+    eq('  ...A is down by 50', n((await inv(A.invoiceId)).outstanding), money(A.amount - 50));
+
+    // ---- overpay and validation, all with nothing moving
+    const c2 = counts();
+    const aOut = n((await inv(A.invoiceId)).outstanding);
+    const over = await F.receipt(aid, tok, { amount: money(aOut + 0.01), method: 'CASH', paidOn: today, invoiceIds: [A.invoiceId] });
+    expectStatus('overpay by one paisa -> 422 CREDIT_OVERPAYMENT', over, 422, 'CREDIT_OVERPAYMENT');
+    eq('  ...details.outstanding == what the chosen invoice owes', n(over.error?.details?.outstanding), aOut);
+    const base = { amount: 10, method: 'CASH', paidOn: today, invoiceIds: [A.invoiceId] };
+    const refused = [
+      ['ADJUSTMENT is not a method for a receipt', { ...base, method: 'ADJUSTMENT' }],
+      ['UPI without a reference', { ...base, method: 'UPI' }],
+      ['a reference of 3 characters', { ...base, method: 'BANK_TRANSFER', reference: 'abc' }],
+      ['a reference of 65 characters', { ...base, method: 'BANK_TRANSFER', reference: 'x'.repeat(65) }],
+      ['a payment date in the future', { ...base, paidOn: istDate(1) }],
+      ['a payment date before the invoice was issued', { ...base, paidOn: istDate(-3) }],
+      ['an amount of zero', { ...base, amount: 0 }],
+      ['three decimal places', { ...base, amount: 10.123 }],
+      ['an empty invoice list', { ...base, invoiceIds: [] }],
+      ['the same invoice twice', { ...base, invoiceIds: [A.invoiceId, A.invoiceId] }],
+    ];
+    for (const [what, b] of refused) expectStatus(`refused: ${what}`, await F.receipt(aid, tok, b), 400);
+    expectStatus('refused: a PAID invoice cannot be chosen (not found)', await F.receipt(aid, tok, { ...base, invoiceIds: [B.invoiceId] }), 404);
+    expectStatus('refused: another store\'s invoice (not found)', await F.receipt(aid, tok, { ...base, invoiceIds: [foreignInv] }), 404);
+    eq('  ...none of those moved anything', counts(), c2);
+
+    // ---- permission
+    for (const [who, t, st] of [['the restaurant of outlet 2', buyer, 404], ['the other tenant\'s restaurant', T.rest, 404], ['another store\'s owner', SUP[3], 404]]) {
+      expectStatus(`${who}: receipt preview -> ${st}`, await F.receiptPreview(aid, t, { amount: 10 }), st);
+      expectStatus(`${who}: record a receipt -> ${st}`, await F.receipt(aid, t, { ...base, amount: 10 }), st);
+    }
+    expectStatus('no token: record a receipt -> 401', await api(`/credit/agreements/${aid}/payments`, { body: base, headers: { 'Idempotency-Key': L.key('anon') } }), 401);
+    expectStatus('the owner: receipt preview -> 200', await F.receiptPreview(aid, tok, { amount: 10 }), 200);
+    skip('a store manager (CREDIT_COLLECT without CREDIT_MODIFY) can record a receipt', FOREIGN_NOTE);
+    eq('  ...no refusal moved anything', counts(), c2);
+
+    // ---- reversal: a typo
+    const preA = await inv(A.invoiceId), preSnap = await F.snap(aid, buyer), C0 = await collected();
+    const ref2 = F.ref('TYPO');
+    const r2 = await F.receipt(aid, tok, { amount: 150, method: 'UPI', reference: ref2, paidOn: today, invoiceIds: [A.invoiceId], note: 'typed the wrong amount' });
+    expectStatus('typo: a receipt of 150 on A', r2, 201);
+    const rid2 = r2.data.receiptId;
+    eq('typo: collectedThisMonth counts it', await collected(), money(C0 + 150));
+    const mRest2 = await mark(buyer);
+    const KR = L.key('rev');
+    const rv1 = await rev(rid2, 'typed the wrong amount', KR);
+    expectStatus('typo: the supplier undoes the receipt (200)', rv1, 200);
+    eq('reversal response: receipt, amount, reason, allocation back on A', [rv1.data.receiptId, n(rv1.data.amount), rv1.data.reason, allocs(rv1.data).map((a) => [a[0], a[1]])], [rid2, 150, 'typed the wrong amount', [[A.invoiceId, 150]]]);
+    const postA = await inv(A.invoiceId), postSnap = await F.snap(aid, buyer);
+    eq('A is exactly as before (status, paid, outstanding)', [postA.status, n(postA.paidAmount), n(postA.outstanding), postA.settledAt], [preA.status, n(preA.paidAmount), n(preA.outstanding), preA.settledAt]);
+    eq('the line is exactly as before (utilized, available, due, overdue)', [postSnap.utilized, postSnap.available, postSnap.due, postSnap.overdue], [preSnap.utilized, preSnap.available, preSnap.due, preSnap.overdue]);
+    eq('the reversal response carries the line\'s position', [n(rv1.data.agreement.due), n(rv1.data.agreement.available)], [postSnap.due, postSnap.available]);
+    eq('collectedThisMonth no longer counts the reversed payment', await collected(), C0);
+    eq('DB: receipt REVERSED, the payment row stays, one reversal row with the reason', [dbVal(`select status from credit_repayment where id=${rid2}`), dbNum(`select count(*) from credit_payment where credit_repayment_id=${rid2}`),
+      db(`select receipt_id, amount, reason from credit_payment_reversal where receipt_id=${rid2}`).map((r) => [n(r[0]), n(r[1]), r[2]])], ['REVERSED', 1, [[rid2, 150, 'typed the wrong amount']]]);
+    eq('ledger: a PAYMENT_REVERSED movement on A', dbNum(`select count(*) from credit_transaction where credit_invoice_id=${A.invoiceId} and transaction_type='PAYMENT_REVERSED'`), 1);
+    eq('audit: CREDIT_PAYMENT_REVERSED written for the receipt', dbNum(`select count(*) from audit_log where action='CREDIT_PAYMENT_REVERSED' and entity_id=${rid2}`), 1);
+    const stRev = (await G(`/credit/agreements/${aid}/statement`, tok)).data;
+    ok('statement: a "Payment reversed" line of +150 on A', stRev.lines.some((x) => x.label === 'Payment reversed' && x.type === 'PAYMENT_REVERSED' && n(x.amount) === 150 && x.invoiceNumber === A.invoiceNumber), 'no such line');
+    const fi = await feedOf((x) => x.receiptId === rid2);
+    eq('payment feed: the reversed payment shows reversedAt and is no longer reversible', [fi.length, fi[0]?.reversedAt != null, fi[0]?.reversible], [1, true, false]);
+    const rn = await notifs(buyer, 'CreditPaymentReversed', A.invoiceId, { after: mRest2 });
+    ok('the restaurant is told the payment was undone, with the reason', rn.length >= 1 && /wrong amount/.test(rn[0].body), JSON.stringify(rn[0]));
+    const cnt = counts();
+    const again = await rev(rid2, 'typed the wrong amount', KR);
+    eq('replay of the reversal (same key): the same answer, nothing new', [again.status, again.data?.receiptId, counts()], [200, rid2, cnt]);
+    expectStatus('same key, different reason -> IDEMPOTENCY_KEY_REUSE', await rev(rid2, 'another reason entirely', KR), 409, 'IDEMPOTENCY_KEY_REUSE');
+    expectStatus('reversing it again with a new key -> 409 CREDIT_ALREADY_REVERSED', await rev(rid2, 'second attempt', L.key('rev2')), 409, 'CREDIT_ALREADY_REVERSED');
+    eq('  ...still exactly one reversal', counts(), cnt);
+    expectStatus('a reason of 2 characters is refused', await rev(rid, 'ab', L.key('rev3')), 400);
+    expectStatus('an unknown receipt is not found', await rev(999999999, 'whatever', L.key('rev4')), 404);
+    expectStatus('the restaurant cannot undo a receipt -> 404', await rev(rid, 'self', L.key('rev5'), buyer), 404);
+    expectStatus('another store\'s owner cannot undo it -> 404', await rev(rid, 'other', L.key('rev6'), SUP[3]), 404);
+    expectStatus('no token -> 401', await api(`/credit/receipts/${rid}/reverse`, { body: { reason: 'abc' }, headers: { 'Idempotency-Key': L.key('anon') } }), 401);
+    eq('  ...those moved nothing', counts(), cnt);
+    const onePay = dbNum(`select id from credit_payment where credit_repayment_id=${rid} order by id limit 1`);
+    const np = await revPay(onePay, 'trying one payment of a receipt', L.key('rev7'));
+    expectStatus('one payment of a receipt cannot be undone alone -> CREDIT_REVERSAL_NOT_ALLOWED', np, 409, 'CREDIT_REVERSAL_NOT_ALLOWED');
+    eq('  ...details name the receipt to undo instead', np.error?.details?.receiptId, rid);
+
+    // ---- reversal: one payment recorded alone
+    const preA2 = await inv(A.invoiceId), preS2 = await F.snap(aid, buyer);
+    const solo = await P(`/credit/invoices/${A.invoiceId}/payments`, tok, { amount: 75, method: 'CASH', note: 'cash at the door' }, L.key('solo'));
+    expectStatus('a payment recorded on one invoice alone (75)', solo, 200);
+    const sr = await revPay(solo.data.id, 'recorded on the wrong invoice', L.key('rev8'));
+    expectStatus('...and undone by payment id', sr, 200);
+    eq('  ...response is for a payment (no receipt id)', [sr.data.receiptId, sr.data.paymentId, n(sr.data.amount)], [null, solo.data.id, 75]);
+    const pa = await inv(A.invoiceId);
+    eq('  ...A and the line are exactly as before', [pa.status, n(pa.outstanding), (await F.snap(aid, buyer)).utilized], [preA2.status, n(preA2.outstanding), preS2.utilized]);
+    expectStatus('  ...undoing it again -> CREDIT_ALREADY_REVERSED', await revPay(solo.data.id, 'again', L.key('rev9')), 409, 'CREDIT_ALREADY_REVERSED');
+
+    // ---- reversal: a payment the supplier confirmed from a restaurant's claim: the claim goes back to REJECTED
+    const cl2 = await P(`/credit/invoices/${A.invoiceId}/claims`, buyer, { amount: 40, method: 'CASH', paidOn: today }, L.key('s11claim2'));
+    expectStatus('claim: the restaurant says it paid 40 on A', cl2, 201);
+    const cf = await P(`/credit/claims/${cl2.data.id}/confirm`, tok, {}, L.key('s11cf'));
+    expectStatus('claim: the supplier confirms it', cf, 200);
+    const cr = await revPay(cf.data.creditPaymentId, 'confirmed the wrong claim', L.key('rev10'));
+    expectStatus('claim: the confirmed payment is undone', cr, 200);
+    const cl2after = ((await G(`/credit/agreements/${aid}/claims`, tok)).data || []).find((x) => x.id === cl2.data.id);
+    eq('claim: back to REJECTED with the reason "Payment reversed by supplier", no confirmed amount', [cl2after?.status, cl2after?.decisionNote, cl2after?.confirmedAmount], ['REJECTED', 'Payment reversed by supplier', null]);
+    eq('claim: A owes what it owed before the claim', n((await inv(A.invoiceId)).outstanding), n(pa.outstanding));
+
+    // ---- reversal windows (the payment rows are moved back in time by SQL, the only time travel there is)
+    const r3 = await F.receipt(aid, tok, { amount: 100, method: 'CASH', paidOn: today, invoiceIds: [A.invoiceId] });
+    expectStatus('window: a cash receipt of 100', r3, 201);
+    db(`update credit_payment set created_at = created_at - interval 8 day where credit_repayment_id=${r3.data.receiptId}`);
+    const before = await inv(A.invoiceId), cW = counts();
+    const w = await rev(r3.data.receiptId, 'too late to undo', L.key('rev11'));
+    expectStatus('window: a cash receipt recorded 8 days ago can no longer be undone (7 days)', w, 409, 'CREDIT_REVERSAL_WINDOW_CLOSED');
+    eq('  ...details: reversibleUntil yesterday, closedOn today', [w.error?.details?.reversibleUntil, w.error?.details?.closedOn], [istDate(-1), today]);
+    eq('  ...nothing moved', [counts(), n((await inv(A.invoiceId)).outstanding)], [cW, n(before.outstanding)]);
+    const f3 = await feedOf((x) => x.receiptId === r3.data.receiptId);
+    eq('  ...the feed says so: not reversible, reversibleUntil yesterday', [f3[0]?.reversible, f3[0]?.reversibleUntil], [false, istDate(-1)]);
+    const ref4 = F.ref('CHQ');
+    const r4 = await F.receipt(aid, tok, { amount: 60, method: 'CHEQUE', reference: ref4, paidOn: today, invoiceIds: [A.invoiceId] });
+    expectStatus('window: a cheque of 60', r4, 201);
+    db(`update credit_payment set created_at = created_at - interval 8 day where credit_repayment_id=${r4.data.receiptId}`);
+    const f4 = await feedOf((x) => x.receiptId === r4.data.receiptId);
+    eq('window: a cheque recorded 8 days ago is still reversible until today+22 (30 days)', [f4[0]?.reversible, f4[0]?.reversibleUntil], [true, istDate(22)]);
+    expectStatus('  ...and it can be undone', await rev(r4.data.receiptId, 'cheque bounced', L.key('rev12')), 200);
+
+    // ---- reversal when the credit the payment freed has been used (no headroom)
+    const full = await F.agr(aid, buyer);
+    const maxOver = dbNum(`select coalesce(max_overdue_amount, 0) from credit_agreement where id=${aid}`);
+    const r5 = await F.receipt(aid, tok, { amount: 150, method: 'CASH', paidOn: today, invoiceIds: [A.invoiceId] });
+    expectStatus('headroom: a cash receipt of 150', r5, 201);
+    const s5 = await F.snap(aid, buyer);
+    ctl.limit0 = s5.limit;
+    const mod = (limit) => P(`/credit/agreements/${aid}/modify`, tok, { approvedLimit: limit, creditPeriodDays: full.creditPeriodDays, gracePeriodDays: full.gracePeriodDays,
+      maxSingleOrderCredit: Math.min(n(full.maxSingleOrderCredit), limit), maxOverdueAmount: maxOver, reason: `e2e ${RUN}: headroom test` });
+    const tight = await mod(money(s5.utilized + s5.reserved));
+    if (tight.status !== 200) {
+      skip('reversal refused with no headroom (limit tightened to what is drawn)', `the supplier's modify answered HTTP ${tight.status} ${code(tight)}`);
+      ctl.limit0 = null;
+    } else {
+      const tightSnap = await F.snap(aid, buyer);
+      const nh = await rev(r5.data.receiptId, 'put it back', L.key('rev13'));
+      expectStatus('headroom: undoing it needs credit that is no longer free -> 422 CREDIT_REVERSAL_NO_HEADROOM', nh, 422, 'CREDIT_REVERSAL_NO_HEADROOM');
+      eq('  ...details needed 150, available 0, shortBy 150', [n(nh.error?.details?.needed), n(nh.error?.details?.available), n(nh.error?.details?.shortBy)], [150, tightSnap.available, money(150 - tightSnap.available)]);
+      eq('  ...all or nothing: the receipt is still COMPLETED and the line unchanged', [dbVal(`select status from credit_repayment where id=${r5.data.receiptId}`), (await F.snap(aid, buyer)).utilized], ['COMPLETED', tightSnap.utilized]);
+      const back = await mod(ctl.limit0);
+      expectStatus('headroom: the limit is raised again', back, 200);
+      ctl.limit0 = null;
+      expectStatus('headroom: now it can be undone', await rev(r5.data.receiptId, 'put it back', L.key('rev14')), 200);
+    }
+
+    // ---- a payment that went through Mandi (the wallet) can never be undone by the supplier
+    const aid3 = await F.ensureLine(2, OUTLET, { log: note });
+    const W = await F.newInvoice({ storeId: 2, outlet: OUTLET, qty: 1, aid: aid3, log: note });
+    w3.invoice = W.invoiceId; w3.aid = aid3;
+    const wr = await P(`/credit/agreements/${aid3}/wallet-repayments`, T.rest, { amount: 20, invoiceIds: [W.invoiceId] }, L.key('s11wallet'));
+    if (wr.status !== 201) skip('a WALLET payment cannot be undone', `the wallet repayment answered HTTP ${wr.status} ${code(wr)}`);
+    else {
+      const wd = await F.invoiceDetail(W.invoiceId, SUP[2]);
+      const wp = (wd.payments || []).find((x) => x.source === 'WALLET');
+      const c3 = dbNum(`select count(*) from credit_payment_reversal where credit_agreement_id=${aid3}`);
+      const wrv = await revPay(wp.id, 'refund the wallet', L.key('rev15'), SUP[2]);
+      expectStatus('wallet: a payment made from the restaurant\'s wallet cannot be undone (paid through Mandi)', wrv, 409, 'CREDIT_REVERSAL_NOT_ALLOWED');
+      expectStatus('wallet: nor by the repayment id as a receipt', await rev(wr.data.repaymentId, 'refund the wallet', L.key('rev16'), SUP[2]), 409, 'CREDIT_REVERSAL_NOT_ALLOWED');
+      eq('  ...nothing moved: no reversal row, the invoice still shows the wallet payment', [dbNum(`select count(*) from credit_payment_reversal where credit_agreement_id=${aid3}`), n((await F.invoiceDetail(W.invoiceId, SUP[2])).paidAmount)], [c3, 20]);
+      const wf = ((await G('/supplier-stores/2/credit/payments?size=100', SUP[2])).data.items || []).find((x) => x.id === wp.id);
+      eq('  ...and the feed does not offer it: source WALLET, not reversible, no receipt id', [wf?.source, wf?.reversible, wf?.receiptId], ['WALLET', false, null]);
+    }
+
+    // ---- the whole story still adds up
+    await checkStatementIdentity('statement of line 6 (supplier)', aid, tok);
+    await checkStatementIdentity('statement of line 6 (restaurant)', aid, buyer);
+    await checkStatementIdentity('statement of line 3 (supplier)', aid3, SUP[2]);
+    await checkReceivablesAgainstSql('store 1 after receipts and reversals', store, tok);
+  } finally {
+    if (ctl.limit0 != null) {
+      const full = await F.agr(aid, buyer);
+      const r = await P(`/credit/agreements/${aid}/modify`, tok, { approvedLimit: ctl.limit0, creditPeriodDays: full.creditPeriodDays, gracePeriodDays: full.gracePeriodDays,
+        maxSingleOrderCredit: n(full.maxSingleOrderCredit), maxOverdueAmount: dbNum(`select coalesce(max_overdue_amount, 0) from credit_agreement where id=${aid}`), reason: `e2e ${RUN}: restore the limit` });
+      note(`S11 limit restored: HTTP ${r.status}`);
+    }
+    if (ctl.claimC) await P(`/credit/claims/${ctl.claimC}/withdraw`, buyer, {});
+    const done = await F.settle(aid, store, ids, 'S11');
+    note(`S11 fixtures settled: HTTP ${done?.status}`);
+    if (w3.invoice) note(`S11 wallet fixture settled: HTTP ${(await F.settle(w3.aid, 2, [w3.invoice], 'S11W'))?.status}`);
+  }
+}
+
+
+// ── S12 ─ credit notes, cancel after the draw, refunds due, write-off ───────────────
+async function s12() {
+  const store = 1, tok = SUP[1], buyer = T.rest2, today = istDate(0);
+  const aid = await F.ensureLine(1, OUTLET2, { log: note });
+  const made = [];     // [aid, store, invoiceId] to settle at the end if a step died half way
+  const mk = async (qty, due, over, opts = {}) => {
+    const x = await F.newInvoice({ storeId: opts.store || store, outlet: opts.outlet || OUTLET2, qty, aid: opts.aid || aid, log: note });
+    if (due != null) F.setDue(x.invoiceId, due, over);
+    made.push([x.aid, x.storeId, x.invoiceId]);
+    return x;
+  };
+  const inv = (id, t = tok) => F.invoiceDetail(id, t);
+  const noteOn = (id, key, body, t = tok) => P(`/credit/invoices/${id}/credit-notes`, t, body, key);
+  const woInv = (id, body, k, t = tok) => P(`/credit/invoices/${id}/write-off`, t, body, k);
+  const woLine = (a, body, k, t = tok) => P(`/credit/agreements/${a}/write-off`, t, body, k);
+  const noteRows = (invoiceId) => dbNum(`select count(*) from credit_invoice_note where credit_invoice_id=${invoiceId}`);
+  const money0 = () => ({
+    pay: dbNum('select count(*) from credit_payment'), payout: dbNum('select count(*) from credit_repayment_payout'),
+    comm: dbNum('select count(*) from commission_calculation') });
+  const collected = async () => n((await G(`/supplier-stores/${store}/credit/receivables`, tok)).data.collectedThisMonth);
+  const store1Receivable = async () => {
+    const r = (await G(`/supplier-stores/${store}/credit/receivables`, tok)).data;
+    const a = (await G(`/supplier-stores/${store}/credit/ageing`, tok)).data;
+    const rows = (await G(`/supplier-stores/${store}/credit/receivables/restaurants?size=100`, tok)).data.items;
+    return { total: n(r.totalReceivable), ageing: n(a.total), owed: n(rows.find((x) => x.agreementId === aid)?.owed) };
+  };
+  try {
+    // ================= A. a manual credit note =================
+    const X = await mk(2, 10, 15);
+    const preAg = await F.snap(aid, buyer);
+    const preSum = (await G('/outlets/2/credit/summary', buyer)).data.agreements.find((a) => a.id === aid);
+    const R0 = await store1Receivable(), C0 = await collected(), M0 = money0();
+    const st0 = (await G(`/credit/agreements/${aid}/statement`, tok)).data;
+    const mRest = await mark(buyer);
+    const KN = L.key('note');
+    const body = { amount: 100.25, reasonCode: 'SHORT_SUPPLY', note: '2 kg short on delivery' };
+    const n1 = await noteOn(X.invoiceId, KN, body);
+    expectStatus('credit note of 100.25 (SHORT_SUPPLY) issued (201)', n1, 201);
+    const d = n1.data || {};
+    ok('credit note number looks like CLN-yymmdd-nnnnnn', /^CLN-\d{6}-\d{6}$/.test(d.creditNoteNumber), d.creditNoteNumber);
+    eq('note: amount, reason, kind MANUAL, written by a person, on invoice X', [n(d.amount), d.reasonCode, d.kind, d.createdBy != null, d.invoiceId, d.invoiceNumber, d.agreementId], [100.25, 'SHORT_SUPPLY', 'MANUAL', true, X.invoiceId, X.invoiceNumber, aid]);
+    eq('note response: the invoice afterwards (PARTIALLY_PAID, credited 100.25, nothing paid, outstanding down)', [d.invoice.status, n(d.invoice.creditedAmount), n(d.invoice.paidAmount), n(d.invoice.outstanding)], ['PARTIALLY_PAID', 100.25, 0, money(X.amount - 100.25)]);
+    const postAg = await F.snap(aid, buyer);
+    eq('note response: the line afterwards (due, available)', [n(d.agreement.due), n(d.agreement.available)], [postAg.due, postAg.available]);
+    eq('the line: utilized and due down, available up by exactly the note', [postAg.utilized, postAg.due, postAg.available], [money(preAg.utilized - 100.25), money(preAg.due - 100.25), money(preAg.available + 100.25)]);
+    const dI = await inv(X.invoiceId);
+    eq('invoice detail: creditedAmount, outstanding, the note listed', [n(dI.creditedAmount), n(dI.outstanding), (dI.creditNotes || []).map((x) => x.creditNoteNumber)], [100.25, money(X.amount - 100.25), [d.creditNoteNumber]]);
+    eq('invoice list (restaurant\'s view): creditedAmount and outstanding agree', ((await F.invoicesOf(aid, buyer)).find((i) => i.id === X.invoiceId) || {}).creditedAmount, 100.25);
+    const sumRow = (await G('/outlets/2/credit/summary', buyer)).data.agreements.find((a) => a.id === aid);
+    eq('restaurant summary: the line owes 100.25 less', n(sumRow.due), money(n(preSum.due) - 100.25));
+    const R1 = await store1Receivable();
+    eq('supplier receivables: totalReceivable, ageing total and the restaurant row all 100.25 lower', [R1.total, R1.ageing, R1.owed], [money(R0.total - 100.25), money(R0.ageing - 100.25), money(R0.owed - 100.25)]);
+    eq('a credit note is not a payment: collectedThisMonth, payments, payouts, commission rows unchanged', [await collected(), money0()], [C0, M0]);
+    const stN = await checkStatementIdentity('statement after the note (supplier)', aid, tok);
+    const line = (stN?.lines || []).find((x) => x.creditNoteNumber === d.creditNoteNumber);
+    eq('statement: a "Credit note" line of -100.25 naming the note and the invoice', [line?.type, line?.label, n(line?.amount), line?.invoiceNumber], ['CREDIT_NOTE', 'Credit note', -100.25, X.invoiceNumber]);
+    eq('statement: closingOwed fell by the note', n(stN.closingOwed), money(n(st0.closingOwed) - 100.25));
+    await checkStatementIdentity('statement after the note (restaurant)', aid, buyer);
+    eq('ledger: one CREDIT_NOTE movement tied to the note', dbNum(`select count(*) from credit_transaction where credit_agreement_id=${aid} and transaction_type='CREDIT_NOTE' and credit_note_id=${d.id}`), 1);
+    const row = db(`select kind, reason_code, amount, created_by, outlet_id, supplier_store_id, note from credit_invoice_note where id=${d.id}`)[0] || [];
+    eq('credit_note row: MANUAL, SHORT_SUPPLY, amount, author set, outlet 2, store 1, note', [row[0], row[1], n(row[2]), row[3] !== 'NULL', n(row[4]), n(row[5]), row[6]], ['MANUAL', 'SHORT_SUPPLY', 100.25, true, 2, 1, '2 kg short on delivery']);
+    ok('audit: CREDIT_NOTE_ISSUED written for the note', dbNum(`select count(*) from audit_log where action='CREDIT_NOTE_ISSUED' and entity_id=${d.id}`) >= 1, 'no audit row');
+    const nt = await notifs(buyer, 'CreditNoteIssued', null, { after: mRest });
+    ok('the restaurant is told about the credit note', nt.length >= 1, JSON.stringify(nt));
+    const list = await G(`/credit/agreements/${aid}/credit-notes`, tok);
+    eq('credit-notes list: the note (MANUAL, with its author) is there for the supplier', (list.data.items || []).filter((x) => x.id === d.id).map((x) => [x.kind, x.createdBy != null, n(x.amount)]), [['MANUAL', true, 100.25]]);
+    expectStatus('...and the restaurant of the line may read it too', await G(`/credit/agreements/${aid}/credit-notes`, buyer), 200);
+    expectStatus('...but the other tenant\'s restaurant gets 404', await G(`/credit/agreements/${aid}/credit-notes`, T.rest), 404);
+    expectStatus('...and another store\'s supplier gets 404', await G(`/credit/agreements/${aid}/credit-notes`, SUP[3]), 404);
+
+    // replay, key reuse, refusals (nothing moves)
+    const rp = await noteOn(X.invoiceId, KN, body);
+    eq('replay (same key): the same note, no second one', [rp.status, rp.data?.id, noteRows(X.invoiceId)], [201, d.id, 1]);
+    expectStatus('same key with another amount -> IDEMPOTENCY_KEY_REUSE', await noteOn(X.invoiceId, KN, { ...body, amount: 5 }), 409, 'IDEMPOTENCY_KEY_REUSE');
+    const out = n((await inv(X.invoiceId)).outstanding), M1 = money0();
+    const over = await noteOn(X.invoiceId, L.key('note'), { ...body, amount: money(out + 0.01) });
+    expectStatus('a note above what is still owed (by a paisa) -> 422 CREDIT_NOTE_EXCEEDS_OUTSTANDING', over, 422, 'CREDIT_NOTE_EXCEEDS_OUTSTANDING');
+    eq('  ...details.outstanding', n(over.error?.details?.outstanding), out);
+    for (const [what, b, st] of [['an amount of zero', { ...body, amount: 0 }, 400], ['three decimal places', { ...body, amount: 1.234 }, 400], ['an unknown reason code', { ...body, reasonCode: 'BOGUS' }, 400], ['a note of 501 characters', { ...body, note: 'x'.repeat(501) }, 400]]) {
+      expectStatus(`refused: ${what}`, await noteOn(X.invoiceId, L.key('note'), b), st);
+    }
+    const nokey = await api(`/credit/invoices/${X.invoiceId}/credit-notes`, { token: tok, body });
+    ok('refused: no Idempotency-Key', nokey.status >= 400 && nokey.status < 500, `HTTP ${nokey.status}`);
+    expectStatus('an unknown invoice is not found', await noteOn(999999999, L.key('note'), body), 404);
+    expectStatus('the restaurant cannot issue a credit note -> 404', await noteOn(X.invoiceId, L.key('note'), body, buyer), 404);
+    expectStatus('another store\'s owner -> 404', await noteOn(X.invoiceId, L.key('note'), body, SUP[3]), 404);
+    expectStatus('no token -> 401', await api(`/credit/invoices/${X.invoiceId}/credit-notes`, { body, headers: { 'Idempotency-Key': L.key('anon') } }), 401);
+    eq('  ...nothing moved', [noteRows(X.invoiceId), n((await inv(X.invoiceId)).outstanding), money0()], [1, out, M1]);
+    // A note for exactly what is owed settles the invoice and supersedes a waiting claim.
+    const wc = await P(`/credit/invoices/${X.invoiceId}/claims`, buyer, { amount: 10, method: 'CASH', paidOn: today }, L.key('s12claim'));
+    expectStatus('setup: the restaurant claims it paid 10 on X', wc, 201);
+    const full = await noteOn(X.invoiceId, L.key('note'), { amount: out, reasonCode: 'PRICE', note: 'agreed price difference' });
+    expectStatus('a note for exactly what is owed (201)', full, 201);
+    eq('  ...the invoice is PAID: paid 0 + credited == amount, nothing outstanding, settled', [full.data?.invoice?.status, n(full.data?.invoice?.paidAmount) + n(full.data?.invoice?.creditedAmount), n(full.data?.invoice?.outstanding)], ['PAID', X.amount, 0]);
+    eq('  ...the waiting claim is SUPERSEDED (nothing left to confirm)', dbVal(`select status from credit_payment_claim where id=${wc.data?.id}`), 'SUPERSEDED');
+    eq('  ...the line owes exactly what it did before X existed', (await F.snap(aid, buyer)).utilized, money(preAg.utilized - X.amount));
+    expectStatus('a note on the settled invoice -> 409 CREDIT_NOTE_INVOICE_SETTLED', await noteOn(X.invoiceId, L.key('note'), { ...body, amount: 1 }), 409, 'CREDIT_NOTE_INVOICE_SETTLED');
+    skip('a store manager / finance user can issue a credit note', FOREIGN_NOTE);
+
+    // ================= B. an order cancelled after the draw: an automatic credit note =================
+    const preB = await F.snap(aid, buyer);
+    const Y = await mk(1, null);
+    const mB = await mark(buyer);
+    const cancel = (orderId, k = L.key('cancel')) => P(`/supplier-orders/${orderId}/cancel`, buyer, { reason: 'e2e: cancelled after the draw' }, k);
+    const cy = await cancel(Y.orderId);
+    if (!expectStatus('the restaurant cancels the credit order after the draw (200)', cy, 200)) {
+      skip('automatic credit note on cancel', 'the cancel was refused, so the automatic note cannot be checked');
+    } else {
+      eq('the order is CANCELLED', dbVal(`select status from supplier_order where id=${Y.orderId}`), 'CANCELLED');
+      const yi = await inv(Y.invoiceId);
+      eq('the invoice: nothing owed any more, credited the whole amount, PAID, nothing paid', [yi.status, n(yi.outstanding), n(yi.creditedAmount), n(yi.paidAmount)], ['PAID', 0, Y.amount, 0]);
+      const row = db(`select kind, reason_code, amount, created_by, idempotency_key from credit_invoice_note where credit_invoice_id=${Y.invoiceId}`);
+      eq('one credit_note row: SYSTEM_CANCEL, CANCELLED, the whole amount, no author, key cancel:<order>', row.map((r) => [r[0], r[1], n(r[2]), r[3], r[4]]), [['SYSTEM_CANCEL', 'CANCELLED', Y.amount, 'NULL', `cancel:${Y.orderId}`]]);
+      const sB = await F.snap(aid, buyer);
+      eq('the line is back exactly where it was before the order (utilized, available, due)', [sB.utilized, sB.available, sB.due], [preB.utilized, preB.available, preB.due]);
+      eq('no refund is due (nothing had been paid)', dbNum(`select count(*) from credit_refund_due where credit_invoice_id=${Y.invoiceId}`), 0);
+      const lst = ((await G(`/credit/agreements/${aid}/credit-notes?size=100`, tok)).data.items || []).find((x) => x.invoiceId === Y.invoiceId);
+      eq('the notes list shows it: SYSTEM_CANCEL, CANCELLED, no author (createdBy null)', [lst?.kind, lst?.reasonCode, lst?.createdBy, n(lst?.amount)], ['SYSTEM_CANCEL', 'CANCELLED', null, Y.amount]);
+      const stY = (await G(`/credit/agreements/${aid}/statement`, buyer)).data;
+      eq('statement: a "Credit note" line of the whole amount for the order', (stY.lines || []).filter((x) => x.creditNoteNumber === lst?.creditNoteNumber).map((x) => [x.label, n(x.amount)]), [['Credit note', -Y.amount]]);
+      ok('audit: CREDIT_NOTE_ISSUED by the system for the cancel', dbNum(`select count(*) from audit_log where action='CREDIT_NOTE_ISSUED' and entity_id=${lst?.id} and actor_id is null`) >= 1, 'no system audit row');
+      const ny = await notifs(buyer, 'CreditNoteIssued', null, { after: mB });
+      ok('the restaurant is told about the note', ny.length >= 1, JSON.stringify(ny));
+      const again = await cancel(Y.orderId);
+      eq('cancelling again (new key): 200, still one note, line unchanged', [again.status, noteRows(Y.invoiceId), (await F.snap(aid, buyer)).utilized], [200, 1, preB.utilized]);
+    }
+
+    // B2. part of the invoice was already paid directly: the note takes the rest, the paid part is a refund due.
+    const Z = await mk(2, null);
+    const zr = await F.receipt(aid, tok, { amount: 200, method: 'BANK_TRANSFER', reference: F.ref('Z'), paidOn: today, invoiceIds: [Z.invoiceId] });
+    expectStatus('setup: the supplier records 200 received directly on Z', zr, 201);
+    const mZ = await mark(tok);
+    const cz = await cancel(Z.orderId);
+    if (expectStatus('the order of Z is cancelled', cz, 200)) {
+      const zi = await inv(Z.invoiceId);
+      eq('Z: paid 200 + credited the rest, nothing outstanding, PAID', [n(zi.paidAmount), n(zi.creditedAmount), n(zi.outstanding), zi.status], [200, money(Z.amount - 200), 0, 'PAID']);
+      eq('the line owes what it owed before Z', (await F.snap(aid, buyer)).utilized, preB.utilized);
+      const rd = ((await G(`/supplier-stores/${store}/credit/refunds-due?status=OPEN`, tok)).data || []).filter((x) => x.invoiceId === Z.invoiceId);
+      eq('refunds due (OPEN): 200 for Z, off-platform, with invoice, note and restaurant', rd.map((x) => [n(x.amount), x.channel, x.status, x.invoiceNumber, x.restaurantName, x.outletName, x.creditNoteNumber != null]), [[200, 'OFF_PLATFORM', 'OPEN', Z.invoiceNumber, 'Tandoor House', 'Koramangala', true]]);
+      eq('DB: the refund row has the cancel key', dbVal(`select idempotency_key from credit_refund_due where id=${rd[0]?.id}`), `cancel:${Z.invoiceId}:OFF_PLATFORM`);
+      const sn = await notifs(tok, 'CreditRefundDue', null, { after: mZ });
+      ok('the supplier is told a refund is due', sn.length >= 1, JSON.stringify(sn));
+      expectStatus('the receipt on a cancelled order cannot be undone (the money is owed back)', await P(`/credit/receipts/${zr.data.receiptId}/reverse`, tok, { reason: 'undo it' }, L.key('rev')), 409, 'CREDIT_REVERSAL_NOT_ALLOWED');
+      expectStatus('the restaurant cannot read the store\'s refunds due -> 404', await G(`/supplier-stores/${store}/credit/refunds-due`, buyer), 404);
+      expectStatus('another store\'s owner cannot -> 404', await G(`/supplier-stores/${store}/credit/refunds-due`, SUP[3]), 404);
+      expectStatus('no token -> 401', await api(`/supplier-stores/${store}/credit/refunds-due`), 401);
+      const rid = rd[0]?.id;
+      expectStatus('the restaurant cannot mark it refunded -> 404', await P(`/credit/refunds-due/${rid}/mark-refunded`, buyer, { note: 'self' }), 404);
+      expectStatus('another store\'s owner cannot mark it refunded -> 404', await P(`/credit/refunds-due/${rid}/mark-refunded`, SUP[3], { note: 'other' }), 404);
+      const mk1 = await P(`/credit/refunds-due/${rid}/mark-refunded`, tok, { note: 'refunded by UPI' });
+      expectStatus('the supplier marks it refunded (200)', mk1, 200);
+      eq('  ...REFUNDED with the note and a refunded-at time', [mk1.data?.status, mk1.data?.note, mk1.data?.refundedAt != null], ['REFUNDED', 'refunded by UPI', true]);
+      const mk2 = await P(`/credit/refunds-due/${rid}/mark-refunded`, tok, { note: 'again' });
+      eq('  ...marking it again answers 200 and changes nothing (same refundedAt, same note)', [mk2.status, mk2.data?.refundedAt, mk2.data?.note], [200, mk1.data?.refundedAt, 'refunded by UPI']);
+      eq('  ...it is out of OPEN and in REFUNDED', [((await G(`/supplier-stores/${store}/credit/refunds-due?status=OPEN`, tok)).data || []).some((x) => x.id === rid), ((await G(`/supplier-stores/${store}/credit/refunds-due?status=REFUNDED`, tok)).data || []).some((x) => x.id === rid)], [false, true]);
+    }
+
+    // B3. paid from the restaurant's wallet: a WALLET refund that only ops can settle.
+    const aid3 = await F.ensureLine(2, OUTLET, { log: note });
+    const V = await F.newInvoice({ storeId: 2, outlet: OUTLET, qty: 1, aid: aid3, log: note });
+    made.push([aid3, 2, V.invoiceId]);
+    const wr = await P(`/credit/agreements/${aid3}/wallet-repayments`, T.rest, { amount: 25, invoiceIds: [V.invoiceId] }, L.key('s12wallet'));
+    if (wr.status !== 201) skip('a wallet-paid part of a cancelled order is a WALLET refund due', `the wallet repayment answered HTTP ${wr.status} ${code(wr)}`);
+    else {
+      const wBefore = n((await G('/outlets/1/wallet', T.rest)).data.balance);
+      const cv = await P(`/supplier-orders/${V.orderId}/cancel`, T.rest, { reason: 'e2e: cancelled after a wallet repayment' }, L.key('cancel'));
+      if (expectStatus('the order paid partly from the wallet is cancelled', cv, 200)) {
+        const rdv = ((await G('/supplier-stores/2/credit/refunds-due?status=OPEN', SUP[2])).data || []).filter((x) => x.invoiceId === V.invoiceId);
+        eq('a WALLET refund of 25 is due, OPEN, with the ops note', rdv.map((x) => [n(x.amount), x.channel, x.status, x.note]), [[25, 'WALLET', 'OPEN', 'wallet-funded: ops refund']]);
+        eq('no wallet money moved on the cancel (ops settles it)', n((await G('/outlets/1/wallet', T.rest)).data.balance), wBefore);
+        ok('audit: CREDIT_REFUND_DUE_OPS raised for ops', dbNum(`select count(*) from audit_log where action='CREDIT_REFUND_DUE_OPS' and entity_id=${rdv[0]?.id}`) >= 1, 'no ops audit row');
+        const mkw = await P(`/credit/refunds-due/${rdv[0]?.id}/mark-refunded`, SUP[2], { note: 'trying' });
+        expectStatus('the supplier cannot mark a WALLET refund (Mandi settles it) -> 409 CREDIT_REFUND_OPS_ONLY', mkw, 409, 'CREDIT_REFUND_OPS_ONLY');
+        eq('  ...it stays OPEN', dbVal(`select status from credit_refund_due where id=${rdv[0]?.id}`), 'OPEN');
+      }
+    }
+
+    // ================= C. write-off =================
+    const W1 = await mk(2, -2, 3);
+    const wc1 = await P(`/credit/invoices/${W1.invoiceId}/claims`, buyer, { amount: 30, method: 'CASH', paidOn: today }, L.key('s12claim2'));
+    expectStatus('setup: a claim of 30 is waiting on W1', wc1, 201);
+    const preW = await F.snap(aid, buyer), CW = await collected(), MW = money0();
+    const mW = await mark(buyer);
+    const KW = L.key('wo');
+    const wBody = { amount: 100, reason: 'e2e: goodwill on a damaged crate', quickReason: 'GOODWILL', keepLineOpen: true };
+    const w1 = await woInv(W1.invoiceId, wBody, KW);
+    expectStatus('partial write-off of 100, keepLineOpen true (200)', w1, 200);
+    eq('response: 100 written off, the invoice keeps its status with 761 left, the line stays ACTIVE and unsuspended', [n(w1.data?.writtenOff), w1.data?.items?.map((x) => [x.invoiceId, n(x.amount), n(x.outstanding)]), w1.data?.lineStatus, w1.data?.lineSuspended],
+      [100, [[W1.invoiceId, 100, money(W1.amount - 100)]], 'ACTIVE', false]);
+    const wi = await inv(W1.invoiceId);
+    eq('invoice: credited 100, outstanding down, status NOT changed by a partial write-off', [n(wi.creditedAmount), n(wi.outstanding), ['ISSUED', 'OVERDUE', 'PARTIALLY_PAID'].includes(wi.status)], [100, money(W1.amount - 100), true]);
+    eq('the waiting claim stays (money may still be owed)', dbVal(`select status from credit_payment_claim where id=${wc1.data?.id}`), 'SUBMITTED');
+    const wn = db(`select kind, reason_code, amount, created_by from credit_invoice_note where credit_invoice_id=${W1.invoiceId}`)[0] || [];
+    eq('credit_note row: WRITE_OFF, GOODWILL (the quick reason), 100, author set', [wn[0], wn[1], n(wn[2]), wn[3] !== 'NULL'], ['WRITE_OFF', 'GOODWILL', 100, true]);
+    eq('the line owes 100 less, still ACTIVE and able to fund', [(await F.snap(aid, buyer)).utilized, (await F.agr(aid, buyer)).canFund], [money(preW.utilized - 100), true]);
+    const stW = await checkStatementIdentity('statement after the partial write-off', aid, tok);
+    eq('statement: a "Written off" line of -100', (stW.lines || []).filter((x) => x.type === 'WRITE_OFF' && x.invoiceNumber === W1.invoiceNumber).map((x) => [x.label, n(x.amount)]), [['Written off', -100]]);
+    ok('audit: CREDIT_WRITTEN_OFF written', dbNum(`select count(*) from audit_log where action='CREDIT_WRITTEN_OFF' and entity_id=${W1.invoiceId}`) >= 1, 'no audit row');
+    ok('the restaurant is told (in-app) about the write-off', (await notifs(buyer, 'CreditWrittenOff', null, { after: mW })).length >= 1, 'no CreditWrittenOff');
+    eq('a write-off is not a payment: collectedThisMonth, payments, payouts, commission rows unchanged', [await collected(), money0()], [CW, MW]);
+    const wrp = await woInv(W1.invoiceId, wBody, KW);
+    eq('replay (same key): the same answer, no second note', [wrp.status, wrp.data?.items?.[0]?.creditNoteId, noteRows(W1.invoiceId)], [200, w1.data?.items?.[0]?.creditNoteId, 1]);
+    expectStatus('same key, other amount -> IDEMPOTENCY_KEY_REUSE', await woInv(W1.invoiceId, { ...wBody, amount: 5 }, KW), 409, 'IDEMPOTENCY_KEY_REUSE');
+    const left = n((await inv(W1.invoiceId)).outstanding);
+    const wex = await woInv(W1.invoiceId, { reason: 'too much' , amount: money(left + 0.01) }, L.key('wo'));
+    expectStatus('more than is owed -> 422 CREDIT_NOTE_EXCEEDS_OUTSTANDING', wex, 422, 'CREDIT_NOTE_EXCEEDS_OUTSTANDING');
+    eq('  ...details.outstanding', n(wex.error?.details?.outstanding), left);
+    expectStatus('a reason of 2 characters is refused', await woInv(W1.invoiceId, { reason: 'ab' }, L.key('wo')), 400);
+    expectStatus('an unknown quick reason is refused', await woInv(W1.invoiceId, { reason: 'because', quickReason: 'BOGUS' }, L.key('wo')), 400);
+    expectStatus('the restaurant cannot write off -> 404', await woInv(W1.invoiceId, { reason: 'abc' }, L.key('wo'), buyer), 404);
+    expectStatus('another store\'s owner cannot write off -> 404', await woInv(W1.invoiceId, { reason: 'abc' }, L.key('wo'), SUP[3]), 404);
+    expectStatus('no token -> 401', await api(`/credit/invoices/${W1.invoiceId}/write-off`, { body: { reason: 'abc' }, headers: { 'Idempotency-Key': L.key('anon') } }), 401);
+    skip('a finance / store-manager user cannot write off (owner and admin only)', FOREIGN_NOTE);
+    eq('  ...nothing moved', [noteRows(W1.invoiceId), n((await inv(W1.invoiceId)).outstanding)], [1, left]);
+
+    // The rest, keepLineOpen left at its default (false): the line is suspended by the supplier.
+    const KW2 = L.key('wo');
+    const w2 = await woInv(W1.invoiceId, { reason: 'e2e: restaurant closed down', quickReason: 'RESTAURANT_CLOSED' }, KW2);
+    expectStatus('write off the rest, default keepLineOpen (200)', w2, 200);
+    eq('response: everything left written off, the invoice WRITTEN_OFF with nothing outstanding, the line SUSPENDED', [n(w2.data?.writtenOff), w2.data?.items?.[0]?.invoiceStatus, n(w2.data?.items?.[0]?.outstanding), w2.data?.lineStatus, w2.data?.lineSuspended], [left, 'WRITTEN_OFF', 0, 'SUSPENDED', true]);
+    const wd = await inv(W1.invoiceId);
+    eq('invoice: WRITTEN_OFF, credited the whole amount, dueState WRITTEN_OFF, nothing outstanding', [wd.status, n(wd.creditedAmount), wd.dueState, n(wd.outstanding)], ['WRITTEN_OFF', W1.amount, 'WRITTEN_OFF', 0]);
+    eq('the waiting claim is SUPERSEDED', dbVal(`select status from credit_payment_claim where id=${wc1.data?.id}`), 'SUPERSEDED');
+    const sl = await F.agr(aid, buyer);
+    eq('the line: SUSPENDED with the reason "Written off", by the supplier, cannot fund', [sl.status, sl.suspensionReason, dbVal(`select suspension_source from credit_agreement where id=${aid}`), sl.canFund], ['SUSPENDED', 'Written off', 'SUPPLIER', false]);
+    eq('the line owes what it owed before W1 existed', (await F.snap(aid, buyer)).utilized, money(preW.utilized - W1.amount));
+    // A written-off invoice is dead.
+    const dead = { receipt: await F.receipt(aid, tok, { amount: 10, method: 'CASH', paidOn: today, invoiceIds: [W1.invoiceId] }), solo: await P(`/credit/invoices/${W1.invoiceId}/payments`, tok, { amount: 10, method: 'CASH' }, L.key('solo')),
+      claim: await P(`/credit/invoices/${W1.invoiceId}/claims`, buyer, { amount: 10, method: 'CASH', paidOn: today }, L.key('claim')),
+      note: await noteOn(W1.invoiceId, L.key('note'), { ...body, amount: 1 }), extend: await P(`/credit/invoices/${W1.invoiceId}/extend-due`, tok, { newDueDate: istDate(30), reason: 'extend a dead invoice' }, L.key('ext')),
+      again: await woInv(W1.invoiceId, { reason: 'again please' }, L.key('wo')) };
+    expectStatus('written off: a receipt over it -> not found (not open)', dead.receipt, 404);
+    ok('written off: a single payment on it is refused', dead.solo.status >= 400 && dead.solo.status < 500, `HTTP ${dead.solo.status} ${code(dead.solo)}`);
+    expectStatus('written off: an "I paid" claim -> CREDIT_OVERPAYMENT (nothing reportable)', dead.claim, 422, 'CREDIT_OVERPAYMENT');
+    expectStatus('written off: a credit note -> CREDIT_NOTE_INVOICE_SETTLED', dead.note, 409, 'CREDIT_NOTE_INVOICE_SETTLED');
+    expectStatus('written off: extend-due -> INVALID_STATE_TRANSITION', dead.extend, 409, 'INVALID_STATE_TRANSITION');
+    expectStatus('written off: a second write-off -> CREDIT_WRITE_OFF_NOTHING_OWED', dead.again, 409, 'CREDIT_WRITE_OFF_NOTHING_OWED');
+    const w2r = await woInv(W1.invoiceId, { reason: 'e2e: restaurant closed down', quickReason: 'RESTAURANT_CLOSED' }, KW2);
+    eq('replay of the final write-off (same key): the same answer, no new note', [w2r.status, w2r.data?.items?.[0]?.creditNoteId, noteRows(W1.invoiceId)], [200, w2.data?.items?.[0]?.creditNoteId, 2]);
+    eq('a write-off is not a payment: collectedThisMonth unchanged', await collected(), CW);
+    const rs = await P(`/credit/agreements/${aid}/reinstate`, tok, {});
+    eq('the supplier reinstates the line (its own suspension is never lifted by itself)', [rs.status, rs.data?.status], [200, 'ACTIVE']);
+    await checkStatementIdentity('statement after the write-offs (supplier)', aid, tok);
+    await checkStatementIdentity('statement after the write-offs (restaurant)', aid, buyer);
+    await checkReceivablesAgainstSql('store 1 after notes and write-offs', store, tok);
+
+    // ---- whole-line write-off, on a line that has nothing else open: store 3 / outlet 2
+    const aid5 = await F.ensureLine(3, OUTLET2, { log: note });
+    const others = dbNum(`select count(*) from credit_invoice where credit_agreement_id=${aid5} and status not in ('PAID','WRITTEN_OFF')`);
+    if (others > 0) skip('whole-line write-off', `line ${aid5} already has ${others} open invoice(s) that a whole-line write-off would also write off`);
+    else {
+      const P1 = await mk(1, -20, -15, { store: 3, aid: aid5 }), P2 = await mk(1, -3, 2, { store: 3, aid: aid5 });
+      const pre5 = await F.snap(aid5, buyer);
+      eq('setup: line 5 owes exactly the two fixtures', pre5.due, money(P1.amount + P2.amount));
+      expectStatus('the restaurant cannot write off a line -> 404', await woLine(aid5, { reason: 'abc' }, L.key('wo'), buyer), 404);
+      expectStatus('another store\'s owner cannot -> 404', await woLine(aid5, { reason: 'abc' }, L.key('wo'), SUP[1]), 404);
+      expectStatus('more than the line owes -> 422', await woLine(aid5, { reason: 'too much', amount: money(pre5.due + 0.01) }, L.key('wo'), SUP[3]), 422, 'CREDIT_NOTE_EXCEEDS_OUTSTANDING');
+      const part = money(P1.amount + 50);
+      const p2Status = (await inv(P2.invoiceId, SUP[3])).status;
+      const l1 = await woLine(aid5, { amount: part, reason: 'e2e: part of the line', keepLineOpen: true }, L.key('wo'), SUP[3]);
+      expectStatus('line write-off of a stated amount (the older invoice in full and 50 of the next), keepLineOpen true', l1, 200);
+      eq('  ...oldest due date first: P1 written off in full, P2 only 50 (its status unchanged), the rest untouched', (l1.data?.items || []).map((x) => [x.invoiceId, n(x.amount), x.invoiceStatus]), [[P1.invoiceId, P1.amount, 'WRITTEN_OFF'], [P2.invoiceId, 50, p2Status]]);
+      eq('  ...total written off, the line stays ACTIVE', [n(l1.data?.writtenOff), l1.data?.lineStatus, l1.data?.lineSuspended], [part, 'ACTIVE', false]);
+      eq('  ...one credit note and one audit row per invoice', [dbNum(`select count(*) from credit_invoice_note where credit_invoice_id in (${P1.invoiceId},${P2.invoiceId}) and kind='WRITE_OFF'`), dbNum(`select count(*) from audit_log where action='CREDIT_WRITTEN_OFF' and entity_id in (${P1.invoiceId},${P2.invoiceId})`)], [2, 2]);
+      eq('  ...the line owes what is left', (await F.snap(aid5, buyer)).due, money(pre5.due - part));
+      const l2 = await woLine(aid5, { reason: 'e2e: the rest of the line' }, L.key('wo'), SUP[3]);
+      expectStatus('line write-off of everything left (no amount), default keepLineOpen', l2, 200);
+      eq('  ...P2 written off with what was left, the line SUSPENDED once, nothing owed', [(l2.data?.items || []).map((x) => [x.invoiceId, n(x.amount), x.invoiceStatus]), l2.data?.lineStatus, (await F.snap(aid5, buyer)).due], [[[P2.invoiceId, money(P2.amount - 50), 'WRITTEN_OFF']], 'SUSPENDED', 0]);
+      expectStatus('  ...writing off a line with nothing owed -> CREDIT_WRITE_OFF_NOTHING_OWED', await woLine(aid5, { reason: 'nothing left' }, L.key('wo'), SUP[3]), 409, 'CREDIT_WRITE_OFF_NOTHING_OWED');
+      expectStatus('  ...the supplier reinstates the line', await P(`/credit/agreements/${aid5}/reinstate`, SUP[3], {}), 200);
+      await checkStatementIdentity('statement of line 5 after the line write-offs (supplier)', aid5, SUP[3]);
+      await checkStatementIdentity('statement of line 5 after the line write-offs (restaurant)', aid5, buyer);
+      await checkReceivablesAgainstSql('store 3 after a line write-off', 3, SUP[3]);
+    }
+    await checkStatementIdentity('statement of line 3 after the wallet cancel (supplier)', aid3, SUP[2]);
+  } finally {
+    for (const [a, s, id] of made) {
+      const r = await F.settle(a, s, [id], 'S12');
+      if (r) note(`S12 leftover invoice ${id} settled: HTTP ${r.status}`);
+    }
+  }
+}
+
+
+// ── S13 ─ permission matrix on every supplier verb ───────────────────────────────────
+async function s13() {
+  const store = 1, tok = SUP[1], buyer = T.rest2, today = istDate(0);
+  const aid = await F.ensureLine(1, OUTLET2, { log: note });
+  const Q = await F.newInvoice({ storeId: store, outlet: OUTLET2, qty: 2, aid, log: note });
+  F.setDue(Q.invoiceId, -30, -25);   // the oldest open invoice of the line, so a stated whole-line write-off lands on it
+  const made = [Q.invoiceId];
+  try {
+    // Things the verbs need to point at.
+    const rcpt = await F.receipt(aid, tok, { amount: 20, method: 'CASH', paidOn: today, invoiceIds: [Q.invoiceId] });
+    expectStatus('setup: a receipt of 20 (so there is a receipt id to point at)', rcpt, 201);
+    const rid = rcpt.data?.receiptId;
+    const solo = await P(`/credit/invoices/${Q.invoiceId}/payments`, tok, { amount: 10, method: 'CASH' }, L.key('s13solo'));
+    expectStatus('setup: a single payment of 10 (so there is a payment id to point at)', solo, 200);
+    const refundId = dbNum(`select coalesce(max(id), 0) from credit_refund_due where supplier_store_id=${store}`);
+    const payoutId = dbNum(`select coalesce(max(id), 0) from credit_repayment_payout where supplier_store_id=${store}`);
+    const mc = await P(`/credit/invoices/${Q.invoiceId}/claims`, buyer, { amount: 5, method: 'CASH', paidOn: today }, L.key('s13claim'));
+    expectStatus('setup: the restaurant claims it paid 5 (so there is a claim id to point at)', mc, 201);
+    const claimId = mc.data?.id;
+    const ctxAgreement = aid;
+    const base = { amount: 15, method: 'CASH', paidOn: today, invoiceIds: [Q.invoiceId] };
+
+    // [name, method, path, body, needsKey, owner statuses]
+    const verbs = [
+      ['receivables', 'GET', `/supplier-stores/${store}/credit/receivables`, undefined, false, [200]],
+      ['receivables/restaurants', 'GET', `/supplier-stores/${store}/credit/receivables/restaurants`, undefined, false, [200]],
+      ['ageing', 'GET', `/supplier-stores/${store}/credit/ageing`, undefined, false, [200]],
+      ['payments feed', 'GET', `/supplier-stores/${store}/credit/payments`, undefined, false, [200]],
+      ['payouts', 'GET', `/supplier-stores/${store}/credit/payouts`, undefined, false, [200]],
+      ['refunds due', 'GET', `/supplier-stores/${store}/credit/refunds-due`, undefined, false, [200]],
+      ['collections.csv', 'GET', `/supplier-stores/${store}/credit/collections.csv`, undefined, false, [200], true],
+      ['claims inbox', 'GET', `/supplier-stores/${store}/credit/claims`, undefined, false, [200]],
+      ['request context', 'GET', `/supplier-stores/${store}/credit/requests/${ctxAgreement}/context`, undefined, false, [200]],
+      ['reminder preview', 'GET', `/credit/agreements/${aid}/reminders/preview`, undefined, false, [200]],
+      ['reminder history', 'GET', `/credit/agreements/${aid}/reminders`, undefined, false, [200]],
+      ['receipt preview', 'POST', `/credit/agreements/${aid}/payments/preview`, { amount: 15, invoiceIds: [Q.invoiceId] }, false, [200]],
+      ['record receipt', 'POST', `/credit/agreements/${aid}/payments`, base, true, [201]],
+      ['record single payment', 'POST', `/credit/invoices/${Q.invoiceId}/payments`, { amount: 5, method: 'CASH' }, true, [200]],
+      ['reverse receipt', 'POST', `/credit/receipts/${rid}/reverse`, { reason: 'permission test' }, true, [200]],
+      ['reverse payment', 'POST', `/credit/payments/${solo.data?.id}/reverse`, { reason: 'permission test' }, true, [200]],
+      ['credit note', 'POST', `/credit/invoices/${Q.invoiceId}/credit-notes`, { amount: 5, reasonCode: 'GOODWILL' }, true, [201]],
+      ['mark refunded', 'POST', `/credit/refunds-due/${refundId}/mark-refunded`, { note: 'permission test' }, false, refundId ? [200, 409] : [404]],
+      ['write off invoice', 'POST', `/credit/invoices/${Q.invoiceId}/write-off`, { amount: 1, reason: 'permission test', keepLineOpen: true }, true, [200]],
+      ['write off line', 'POST', `/credit/agreements/${aid}/write-off`, { amount: 1, reason: 'permission test', keepLineOpen: true }, true, [200]],
+      ['send reminder', 'POST', `/credit/agreements/${aid}/reminders`, {}, true, [201, 422, 429]],
+      ['extend due date', 'POST', `/credit/invoices/${Q.invoiceId}/extend-due`, { newDueDate: istDate(-20), reason: 'permission test' }, true, [200, 201]],
+      ['close line', 'POST', `/credit/agreements/${aid}/close`, { reason: 'permission test' }, false, [409]],
+      ['confirm claim', 'POST', `/credit/claims/${claimId}/confirm`, {}, true, [200]],
+      ['reject claim', 'POST', `/credit/claims/${claimId}/reject`, { reason: 'permission test' }, false, [409]],
+    ];
+    if (!payoutId) skip('payout by id', 'no payout row exists for store 1'); else verbs.push(['payout by id', 'GET', `/supplier-stores/${store}/credit/payouts/${payoutId}`, undefined, false, [200]]);
+    const call = (v, token, anon) => {
+      const [, method, path, body, key, , csv] = v;
+      if (csv) return F.raw(path, token);
+      return api(path, { method, token, body, headers: key ? { 'Idempotency-Key': L.key('perm') } : {} });
+    };
+    const tables = () => ({
+      pay: dbNum('select count(*) from credit_payment'), rep: dbNum('select count(*) from credit_repayment'), notes: dbNum('select count(*) from credit_invoice_note'),
+      refunds: dbNum("select count(*) from credit_refund_due where status='REFUNDED'"), rem: dbNum('select count(*) from credit_reminder'), rev: dbNum('select count(*) from credit_payment_reversal'),
+      ext: dbNum('select count(*) from credit_due_extension'), exports: dbNum("select count(*) from audit_log where action='CREDIT_EXPORT'"),
+      claims: dbNum("select count(*) from credit_payment_claim where status<>'SUBMITTED'"), owed: db(`select utilized_amount from credit_agreement where id=${aid}`)[0][0],
+      lineStatus: dbVal(`select status from credit_agreement where id=${aid}`), written: dbNum("select count(*) from credit_invoice where status='WRITTEN_OFF'") });
+
+    // Everyone who must not get in, first: nothing may move.
+    const T0 = tables();
+    for (const [who, t] of [['the restaurant of the line (outlet 2)', buyer], ['the other tenant\'s restaurant', T.rest], ['another store\'s owner', SUP[3]], ['a second store\'s owner', SUP[2]]]) {
+      for (const v of verbs) {
+        const r = await call(v, t);
+        eq(`${who}: ${v[0]} -> 404`, r.status, 404);
+      }
+    }
+    for (const v of verbs) eq(`no token: ${v[0]} -> 401`, (await call(v, undefined)).status, 401);
+    eq('no refusal moved anything (payments, receipts, notes, refunds, reminders, reversals, extensions, exports, claims, the line, write-offs)', tables(), T0);
+
+    // Either side may read these; nobody else.
+    const both = [['credit notes', `/credit/agreements/${aid}/credit-notes`], ['statement', `/credit/agreements/${aid}/statement`], ['payments of the line', `/credit/agreements/${aid}/payments`],
+      ['statement.csv', `/credit/agreements/${aid}/statement.csv`, true], ['invoices', `/credit/agreements/${aid}/invoices`], ['ledger', `/credit/agreements/${aid}/ledger`]];
+    for (const [name, path, csv] of both) {
+      const get = (t) => (csv ? F.raw(path, t) : G(path, t));
+      eq(`${name}: the supplier owner reads it (200)`, (await get(tok)).status, 200);
+      eq(`${name}: the restaurant of the line reads it too (200)`, (await get(buyer)).status, 200);
+      eq(`${name}: the other tenant's restaurant -> 404`, (await get(T.rest)).status, 404);
+      eq(`${name}: another store's owner -> 404`, (await get(SUP[3])).status, 404);
+      eq(`${name}: no token -> 401`, (await get(undefined)).status, 401);
+    }
+    skip('store manager / salesperson / finance / admin rows of the matrix', FOREIGN_NOTE + '; their grants are asserted in the API integration tests');
+
+    // The owner reaches every verb (these are real calls; the cases are small and the invoice is settled below).
+    for (const v of verbs) {
+      const r = await call(v, tok);
+      eq(`the owner: ${v[0]} is allowed (HTTP ${v[5].join(' or ')})`, v[5].includes(r.status), true);
+      if (!v[5].includes(r.status)) console.log(`        ${v[0]} answered HTTP ${r.status} ${r.error?.code || ''} ${r.error?.message || ''}`);
+    }
+  } finally {
+    const r = await F.settle(aid, store, made, 'S13');
+    note(`S13 fixture settled: HTTP ${r?.status}`);
+  }
+}
+
+
+// ── S14 ─ reminders, close a line, extend a due date, request context, offer expiry ────────────
+const istHour = () => Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
+
+async function s14() {
+  const store = 1, tok = SUP[1], buyer = T.rest2, today = istDate(0);
+  const aid = await F.ensureLine(1, OUTLET2, { log: note });
+  const made = [];
+  const mk = async (qty, due, over, opts = {}) => {
+    const x = await F.newInvoice({ storeId: opts.store || store, outlet: OUTLET2, qty, aid: opts.aid || aid, log: note });
+    if (due != null) F.setDue(x.invoiceId, due, over);
+    made.push([x.aid, x.storeId, x.invoiceId]);
+    return x;
+  };
+  // The reminder limits count manual reminders in a rolling 24 hours / 7 days: move earlier ones out of the way (test data only).
+  const age = (hours) => db(`update credit_reminder set requested_at = requested_at - interval ${hours} hour where credit_agreement_id=${aid} and kind='MANUAL'`);
+  const remRows = () => dbNum(`select count(*) from credit_reminder where credit_agreement_id=${aid}`);
+  const rem = (body, k, t = tok) => P(`/credit/agreements/${aid}/reminders`, t, body, k);
+  const prev = (ids, t = tok) => G(`/credit/agreements/${aid}/reminders/preview${ids ? '?invoiceIds=' + ids.join(',') : ''}`, t);
+  const inv = (id, t = tok) => F.invoiceDetail(id, t);
+  try {
+    age(24 * 8);
+
+    // ================= reminders =================
+    const R1 = await mk(1, -12, -7), R2 = await mk(1, 2, 7), R3 = await mk(1, 20, 25), R4 = await mk(1, -1, 4);
+    const cl = await P(`/credit/invoices/${R4.invoiceId}/claims`, buyer, { amount: R4.amount, method: 'CASH', paidOn: today }, L.key('s14claim'));
+    expectStatus('setup: the restaurant claims it paid R4 in full (a claim covers it)', cl, 201);
+    const c0 = remRows();
+    const pv = await prev();
+    expectStatus('preview (200)', pv, 200);
+    const rows = Object.fromEntries((pv.data.invoices || []).map((x) => [x.invoiceNumber, x]));
+    eq('preview can remind now', [pv.data.canRemind, pv.data.reason], [true, null]);
+    eq('preview: R1 (overdue) and R2 (due in 2 days) are included', [rows[R1.invoiceNumber]?.included, rows[R1.invoiceNumber]?.dueState, rows[R2.invoiceNumber]?.included, rows[R2.invoiceNumber]?.dueState], [true, 'OVERDUE', true, 'DUE_SOON']);
+    eq('preview: R4 is left out because a claim covers it (CLAIM_SUBMITTED)', [rows[R4.invoiceNumber]?.included, rows[R4.invoiceNumber]?.skipReason], [false, 'CLAIM_SUBMITTED']);
+    eq('preview: R3 (due in 20 days) is not part of a reminder at all', rows[R3.invoiceNumber], undefined);
+    ok('preview: the message names R1 and R2 and not R3 or R4', pv.data.message.includes(R1.invoiceNumber) && pv.data.message.includes(R2.invoiceNumber) && !pv.data.message.includes(R3.invoiceNumber) && !pv.data.message.includes(R4.invoiceNumber), pv.data.message);
+    eq('preview: channels include SMS because something is overdue', pv.data.channels, ['IN_APP', 'PUSH', 'SMS']);
+    const hour = istHour(), inWindow = hour >= 9 && hour < 20;
+    eq(`preview: status follows the 09:00 to 20:00 India window (it is ${hour}:xx)`, [pv.data.status, pv.data.sendAt == null], inWindow ? ['SENT', true] : ['QUEUED', false]);
+    eq('preview wrote nothing', remRows(), c0);
+    const onlyR2 = await prev([R2.invoiceId]);
+    eq('preview of just R2: its own message, R1 not in it', [onlyR2.data.canRemind, onlyR2.data.message.includes(R1.invoiceNumber)], [true, false]);
+    const nd = await prev([R3.invoiceId]);
+    eq('preview of just R3 (not due): nothing to remind, R3 listed as NOT_DUE', [nd.data.canRemind, nd.data.reason, (nd.data.invoices || []).map((x) => [x.invoiceNumber, x.included, x.skipReason])], [false, 'NOTHING_DUE', [[R3.invoiceNumber, false, 'NOT_DUE']]]);
+    const cc = await prev([R4.invoiceId]);
+    eq('preview of just R4 (claim submitted): CLAIM_COVERED', [cc.data.canRemind, cc.data.reason], [false, 'CLAIM_COVERED']);
+    const foreignInv = dbNum('select id from credit_invoice where supplier_store_id=2 order by id limit 1');
+    expectStatus('preview of an invoice that is not on this line is refused', await prev([foreignInv]), 400);
+    expectStatus('the restaurant cannot preview -> 404', await prev(null, buyer), 404);
+    expectStatus('another store\'s owner cannot preview -> 404', await prev(null, SUP[3]), 404);
+
+    const mRest = await mark(buyer);
+    const K1 = L.key('rem');
+    const s1 = await rem({}, K1);
+    expectStatus('first reminder sent (201)', s1, 201);
+    const d1 = s1.data || {};
+    eq('reminder: MANUAL, status as previewed, the text is exactly the preview\'s', [d1.kind, d1.status, d1.message], ['MANUAL', pv.data.status, pv.data.message]);
+    eq('reminder: covers R1 and R2, skips R4 with the reason, SMS because overdue', [[...(d1.invoiceIds || [])].sort((a, b) => a - b), (d1.skipped || []).map((x) => [x.invoiceId, x.reason]), d1.channels],
+      [[R1.invoiceId, R2.invoiceId].sort((a, b) => a - b), [[R4.invoiceId, 'CLAIM_SUBMITTED']], ['IN_APP', 'PUSH', 'SMS']]);
+    eq('reminder: sentAt when sent now, sendAt (09:00) when queued', inWindow ? d1.sentAt != null : d1.sendAt != null, true);
+    const row = db(`select kind, status, created_by from credit_reminder where id=${d1.id}`)[0] || [];
+    eq('credit_reminder row and one credit_reminder_invoice row per invoice', [row[0], row[1], row[2] !== 'NULL', dbNum(`select count(*) from credit_reminder_invoice where credit_reminder_id=${d1.id}`)], ['MANUAL', d1.status, true, 2]);
+    if (inWindow) {
+      const nt = await notifs(buyer, 'CreditReminder', null, { after: mRest });
+      ok('the restaurant gets the reminder, naming the invoice', nt.length >= 1 && nt.some((x) => x.body.includes(R1.invoiceNumber)), JSON.stringify(nt.map((x) => x.body)));
+    } else skip('the restaurant is notified now', 'outside 09:00-20:00 India time the reminder is queued for 09:00');
+    const hist = await G(`/credit/agreements/${aid}/reminders`, tok);
+    eq('history: newest first, the reminder is the top row', [hist.data.items[0]?.id, hist.data.items[0]?.kind], [d1.id, 'MANUAL']);
+    expectStatus('history: the restaurant cannot read it (supplier side only) -> 404', await G(`/credit/agreements/${aid}/reminders`, buyer), 404);
+    expectStatus('history: another store\'s owner -> 404', await G(`/credit/agreements/${aid}/reminders`, SUP[3]), 404);
+    const rp = await rem({}, K1);
+    eq('replay (same key): the same reminder, nothing sent twice', [rp.status, rp.data?.id, remRows()], [201, d1.id, c0 + 1]);
+    expectStatus('same key with another note -> IDEMPOTENCY_KEY_REUSE', await rem({ note: 'different' }, K1), 409, 'IDEMPOTENCY_KEY_REUSE');
+    const tooSoon = await rem({}, L.key('rem'));
+    expectStatus('a second reminder within 24 hours -> 429 CREDIT_REMINDER_TOO_SOON', tooSoon, 429, 'CREDIT_REMINDER_TOO_SOON');
+    const asked = dbVal(`select unix_timestamp(requested_at) from credit_reminder where id=${d1.id}`);
+    const nextAt = Date.parse(tooSoon.error?.details?.nextAllowedAt) / 1000;
+    ok('  ...details.nextAllowedAt is 24 hours after the first', Math.abs(nextAt - (Number(asked) + 86400)) < 120, `${tooSoon.error?.details?.nextAllowedAt} vs ${asked}+24h`);
+    const pvSoon = await prev();
+    eq('preview now says TOO_SOON with the same time', [pvSoon.data.canRemind, pvSoon.data.reason, Date.parse(pvSoon.data.nextAllowedAt) / 1000 === nextAt], [false, 'TOO_SOON', true]);
+    eq('  ...nothing was sent by the refusals', remRows(), c0 + 1);
+    expectStatus('a note of 301 characters is refused', await rem({ note: 'x'.repeat(301) }, L.key('rem')), 400);
+    expectStatus('no Idempotency-Key is refused', await api(`/credit/agreements/${aid}/reminders`, { token: tok, body: {} }), 400);
+    expectStatus('the restaurant cannot send one -> 404', await rem({}, L.key('rem'), buyer), 404);
+    expectStatus('another store\'s owner cannot -> 404', await rem({}, L.key('rem'), SUP[3]), 404);
+    expectStatus('no token -> 401', await api(`/credit/agreements/${aid}/reminders`, { body: {}, headers: { 'Idempotency-Key': L.key('anon') } }), 401);
+    expectStatus('only R4 (claim covered): nothing to send -> 422 CREDIT_REMINDER_NOT_NEEDED', await rem({ invoiceIds: [R4.invoiceId] }, L.key('rem')), 422, 'CREDIT_REMINDER_NOT_NEEDED');
+    const nn = await rem({ invoiceIds: [R4.invoiceId] }, L.key('rem'));
+    eq('  ...details.reason CLAIM_COVERED', nn.error?.details?.reason, 'CLAIM_COVERED');
+    const nr3 = await rem({ invoiceIds: [R3.invoiceId] }, L.key('rem'));
+    expectStatus('only R3 (not due): nothing to send -> 422 CREDIT_REMINDER_NOT_NEEDED', nr3, 422, 'CREDIT_REMINDER_NOT_NEEDED');
+    eq('  ...details.reason NOTHING_DUE', nr3.error?.details?.reason, 'NOTHING_DUE');
+    // Rolling windows: age the earlier reminders so the next one is allowed, until the weekly limit of 3.
+    age(30);
+    const s2 = await rem({ note: 'Please pay by Friday' }, L.key('rem'));
+    expectStatus('a day later: the second reminder, with a note, is allowed (201)', s2, 201);
+    ok('  ...the note is appended to the message', (s2.data?.message || '').includes('Please pay by Friday'), s2.data?.message);
+    age(30);
+    expectStatus('another day later: the third reminder is allowed (201)', await rem({}, L.key('rem')), 201);
+    age(30);
+    const wk = await rem({}, L.key('rem'));
+    expectStatus('a fourth within 7 days -> 429 CREDIT_REMINDER_LIMIT', wk, 429, 'CREDIT_REMINDER_LIMIT');
+    eq('  ...details: limit WEEK, max 3, nextAllowedAt given', [wk.error?.details?.limit, wk.error?.details?.max, wk.error?.details?.nextAllowedAt != null], ['WEEK', 3, true]);
+    const pvWeek = await prev();
+    eq('preview now says WEEK_LIMIT', [pvWeek.data.canRemind, pvWeek.data.reason], [false, 'WEEK_LIMIT']);
+    eq('three manual reminders on the line in the last 7 days, no fourth', dbNum(`select count(*) from credit_reminder where credit_agreement_id=${aid} and kind='MANUAL' and requested_at > date_sub(utc_timestamp(), interval 7 day)`), 3);
+    skip('50 reminders per store per India day (STORE_DAY)', 'needs 50 sends in one day; the limit is covered by the API integration tests');
+    skip('a store manager (CREDIT_COLLECT) can send a reminder', FOREIGN_NOTE);
+
+    // ================= extend a due date =================
+    const E = await mk(1, -10, -5);
+    db(`update credit_invoice set status='OVERDUE', marked_overdue_at=utc_timestamp() where id=${E.invoiceId}`);   // what the hourly sweep would have done
+    eq('setup: E is OVERDUE (as the sweep would have marked it)', (await inv(E.invoiceId)).status, 'OVERDUE');
+    const grace = (await F.agr(aid, buyer)).gracePeriodDays;
+    const ovBefore = n((await G(`/supplier-stores/${store}/credit/receivables`, tok)).data.overdue);
+    const mExt = await mark(buyer);
+    const ext = (d, reason, k = L.key('ext'), t = tok) => P(`/credit/invoices/${E.invoiceId}/extend-due`, t, { newDueDate: d, reason }, k);
+    const KE = L.key('ext');
+    const e1 = await ext(istDate(2), 'restaurant asked for a few days', KE);
+    expectStatus('extend E to two days from now (200)', e1, [200, 201]);
+    eq('the invoice is back to ISSUED (no longer late), the due date and the overdue-after (due + grace) moved', [e1.data?.invoice?.status, e1.data?.invoice?.dueDate, e1.data?.invoice?.overdueAfter], ['ISSUED', istDate(2), istDate(2 + grace)]);
+    eq('the extension records old and new date, reason, who', [e1.data?.extension?.oldDueDate, e1.data?.extension?.newDueDate, e1.data?.extension?.reason, e1.data?.extension?.extendedBy != null], [istDate(-10), istDate(2), 'restaurant asked for a few days', true]);
+    eq('the line is not suspended by it', e1.data?.agreementStatus, 'ACTIVE');
+    eq('invoice detail: ISSUED, extensions listed, due state not overdue', [(await inv(E.invoiceId)).status, ((await inv(E.invoiceId)).extensions || []).length], ['ISSUED', 1]);
+    eq('receivables overdue fell by the invoice (it is no longer late)', n((await G(`/supplier-stores/${store}/credit/receivables`, tok)).data.overdue), money(ovBefore - E.amount));
+    eq('DB: one credit_due_extension row with the old and new dates', db(`select old_due_date, new_due_date from credit_due_extension where credit_invoice_id=${E.invoiceId}`), [[istDate(-10), istDate(2)]]);
+    ok('the restaurant is told the due date moved', (await notifs(buyer, 'CreditDueDateExtended', null, { after: mExt })).length >= 1, 'no CreditDueDateExtended');
+    const e1r = await ext(istDate(2), 'restaurant asked for a few days', KE);
+    eq('replay (same key): the same extension, not applied twice', [e1r.status, e1r.data?.extension?.id, dbNum(`select count(*) from credit_due_extension where credit_invoice_id=${E.invoiceId}`)], [e1.status, e1.data?.extension?.id, 1]);
+    expectStatus('same key, another date -> IDEMPOTENCY_KEY_REUSE', await ext(istDate(3), 'restaurant asked for a few days', KE), 409, 'IDEMPOTENCY_KEY_REUSE');
+    expectStatus('the same due date is refused (must be later)', await ext(istDate(2), 'same date again'), 400, 'VALIDATION_ERROR');
+    expectStatus('an earlier due date is refused', await ext(istDate(1), 'earlier date'), 400, 'VALIDATION_ERROR');
+    expectStatus('a reason of 2 characters is refused', await ext(istDate(5), 'ab'), 400);
+    expectStatus('no Idempotency-Key is refused', await api(`/credit/invoices/${E.invoiceId}/extend-due`, { token: tok, body: { newDueDate: istDate(5), reason: 'no key here' } }), 400);
+    const e2 = await ext(istDate(40), 'a longer extension');
+    expectStatus('a longer extension, still inside the cap (200)', e2, [200, 201]);
+    expectStatus('more than 60 days past the ORIGINAL due date (original -10, so day 51) -> 400', await ext(istDate(51), 'beyond the cap'), 400, 'VALIDATION_ERROR');
+    const e4 = await ext(istDate(50), 'exactly at the cap');
+    expectStatus('exactly 60 days past the original (day 50) is allowed', e4, [200, 201]);
+    eq('every extension is kept: three on the invoice, newest first', ((await inv(E.invoiceId)).extensions || []).map((x) => x.newDueDate), [istDate(50), istDate(40), istDate(2)]);
+    expectStatus('the restaurant cannot extend -> 404', await ext(istDate(55), 'by the restaurant', L.key('ext'), buyer), 404);
+    expectStatus('another store\'s owner cannot -> 404', await ext(istDate(55), 'by another store', L.key('ext'), SUP[3]), 404);
+    expectStatus('no token -> 401', await api(`/credit/invoices/${E.invoiceId}/extend-due`, { body: { newDueDate: istDate(55), reason: 'anon' }, headers: { 'Idempotency-Key': L.key('anon') } }), 401);
+    const sdone = await F.settle(aid, store, [E.invoiceId], 'S14E');
+    expectStatus('E is paid', sdone, 201);
+    expectStatus('extending a PAID invoice -> 409 INVALID_STATE_TRANSITION', await ext(istDate(60), 'extend a paid one'), 409, 'INVALID_STATE_TRANSITION');
+
+    // ================= close a line, then an offer =================
+    const aid5 = await F.ensureLine(3, OUTLET2, { log: note });
+    const others = dbNum(`select count(*) from credit_invoice where credit_agreement_id=${aid5} and status not in ('PAID','WRITTEN_OFF')`);
+    const Cl = await mk(1, null, null, { store: 3, aid: aid5 });
+    const close = (t = SUP[3], reason = 'e2e: closing the line') => P(`/credit/agreements/${aid5}/close`, t, { reason });
+    const refused = await close();
+    expectStatus('closing a line that still owes -> 409 INVALID_STATE_TRANSITION', refused, 409, 'INVALID_STATE_TRANSITION');
+    const owed5 = (await F.snap(aid5, buyer)).due;
+    eq('  ...details.owed is what is owed, reserved 0', [n(refused.error?.details?.owed), n(refused.error?.details?.reserved)], [owed5, 0]);
+    eq('  ...the line is still ACTIVE', (await F.agr(aid5, buyer)).status, 'ACTIVE');
+    expectStatus('a reason is required to close', await P(`/credit/agreements/${aid5}/close`, SUP[3], {}), 400);
+    expectStatus('the restaurant cannot close its own line -> 404', await close(buyer), 404);
+    expectStatus('another store\'s owner cannot -> 404', await close(SUP[1]), 404);
+    expectStatus('no token -> 401', await api(`/credit/agreements/${aid5}/close`, { body: { reason: 'anon' } }), 401);
+    if (others > 0) skip('close succeeds after the payoff', `line ${aid5} has ${others} other open invoice(s) that this scenario did not make`);
+    else {
+      expectStatus('the invoice is paid off (receipt)', await F.settle(aid5, 3, [Cl.invoiceId], 'S14C'), 201);
+      const mClose = await mark(buyer);
+      const cs = await close();
+      expectStatus('after the payoff the line closes (200)', cs, 200);
+      eq('  ...CLOSED, cannot fund', [cs.data?.status, cs.data?.canFund], ['CLOSED', false]);
+      eq('  ...closing again answers 200 and changes nothing', [(await close()).status, (await close()).data?.status], [200, 'CLOSED']);
+      ok('  ...the restaurant is told the line was closed', (await notifs(buyer, 'CreditClosed', aid5, { after: mClose })).length >= 1, 'no CreditClosed');
+      ok('  ...audit CREDIT_CLOSED written', dbNum(`select count(*) from audit_log where action='CREDIT_CLOSED' and entity_id=${aid5}`) >= 1, 'no audit row');
+      eq('  ...the restaurant sees it CLOSED', (await F.agr(aid5, buyer)).status, 'CLOSED');
+      const again = await P('/credit/requests', buyer, { supplierStoreId: 3, outletId: OUTLET2, requestedLimit: 7000, requestedDays: 20, purpose: 'E2E', note: `again ${RUN}` });
+      expectStatus('the restaurant may ask again after a close (200)', again, 200);
+      eq('  ...back to REQUESTED on the same agreement', [again.data?.id, again.data?.status], [aid5, 'REQUESTED']);
+      expectStatus('a request is declined, not closed (409)', await close(), 409);
+      // Offer expiry is time-based (14 India days); only the field is asserted here.
+      const own = { approvedLimit: 6000, creditPeriodDays: 20, gracePeriodDays: 2, maxSingleOrderCredit: 3000, maxOverdueAmount: 1000, note: `own terms ${RUN}` };
+      const ap = await P(`/credit/agreements/${aid5}/approve`, SUP[3], own);
+      expectStatus('the supplier approves on its own terms: an offer', ap, 200);
+      eq('  ...APPROVED, waiting for the restaurant, offerExpiresOn is 14 India days after the offer', [ap.data?.status, ap.data?.offerExpiresOn, ap.data?.offerMadeAt != null], ['APPROVED', istDate(14), true]);
+      eq('  ...the restaurant sees the same expiry date', (await F.agr(aid5, buyer)).offerExpiresOn, istDate(14));
+      eq('  ...the supplier\'s list shows it too', ((await G('/supplier-stores/3/credit/agreements', SUP[3])).data || []).find((x) => x.id === aid5)?.offerExpiresOn, istDate(14));
+      const wd = await P(`/credit/agreements/${aid5}/reject`, SUP[3], { reason: `E2E ${RUN}: offer withdrawn` });
+      expectStatus('the supplier withdraws the offer', wd, 200);
+      eq('  ...REJECTED, the expiry date is gone', [wd.data?.status, wd.data?.offerExpiresOn], ['REJECTED', null]);
+    }
+
+    // ================= what the supplier sees of a restaurant asking for credit =================
+    const reqLine = dbNum('select id from credit_agreement where supplier_store_id=2 and outlet_id=2');
+    const ctxOf = (storeId, agreementId, t) => G(`/supplier-stores/${storeId}/credit/requests/${agreementId}/context`, t);
+    const checkContext = async (label, storeId, agreementId, t) => {
+      const r = await ctxOf(storeId, agreementId, t);
+      if (!expectStatus(`${label}: the store's owner reads the context`, r, 200)) return;
+      const c = r.data;
+      const outlet = dbNum(`select outlet_id from credit_agreement where id=${agreementId}`);
+      const since = `date_sub('${istDate(-90)} 00:00:00', interval 330 minute)`;
+      const counted = `outlet_id=${outlet} and supplier_store_id=${storeId} and status not in ('DRAFT','CANCELLED')`;
+      const [cnt, val] = db(`select count(*), coalesce(sum(case when accepted_amount > 0 then accepted_amount else total_amount end), 0) from supplier_order where ${counted} and created_at >= ${since}`)[0];
+      const span = db(`select date(date_add(min(created_at), interval 330 minute)), date(date_add(max(created_at), interval 330 minute)) from supplier_order where ${counted}`)[0];
+      const cancelled = dbNum(`select count(*) from supplier_order where outlet_id=${outlet} and supplier_store_id=${storeId} and status='CANCELLED' and created_at >= ${since}`);
+      const late = dbNum(`select count(*) from credit_invoice where outlet_id=${outlet} and supplier_store_id=${storeId} and (marked_overdue_at is not null or status='OVERDUE')`);
+      eq(`${label}: orders in the last 90 days with THIS store only (count, value, average)`, [c.ordersCount90d, n(c.ordersValue90d), c.averageOrderValue == null ? null : n(c.averageOrderValue)],
+        [n(cnt), n(val), n(cnt) === 0 ? null : Math.round((n(val) / n(cnt)) * 100 + 1e-9) / 100]);
+      eq(`${label}: cancelled orders, first and last order dates (India days), invoices ever late`, [c.cancelledOrders90d, c.firstOrderDate, c.lastOrderDate, c.previousOverdueCount], [cancelled, span[0] === 'NULL' ? null : span[0], span[1] === 'NULL' ? null : span[1], late]);
+      eq(`${label}: window 90 days, as of today, the line's id and status`, [c.windowDays, c.asOf, c.agreementId, c.status], [90, today, agreementId, dbVal(`select status from credit_agreement where id=${agreementId}`)]);
+      const events = db(`select action from audit_log where entity_type='CREDIT_AGREEMENT' and entity_id=${agreementId} and action in ('CREDIT_REQUESTED','CREDIT_APPROVED','CREDIT_MODIFIED','CREDIT_REJECTED','CREDIT_SUSPENDED','CREDIT_REINSTATED','CREDIT_CLOSED','CREDIT_OFFER_EXPIRED') order by id desc limit 100`).map((x) => x[0].replace('CREDIT_', '').replace('OFFER_EXPIRED', 'EXPIRED'));
+      eq(`${label}: the history is this line's audit trail, newest first`, (c.history || []).map((x) => x.event), events);
+      const ownText = JSON.stringify(c);
+      ok(`${label}: nothing about another supplier or any phone number is in the answer`, !/Metro Fresh|Sri Balaji|Deccan|\+91\d{6,}|phone/i.test(ownText.replace(new RegExp(`"restaurantName":"[^"]*"`), '')), ownText.slice(0, 300));
+      eq(`${label}: only the documented fields`, Object.keys(c).sort(), ['agreementId', 'asOf', 'averageOrderValue', 'cancelledOrders90d', 'firstOrderDate', 'history', 'lastOrderDate', 'ordersCount90d', 'ordersValue90d', 'outletId', 'outletName', 'pastLineEndedAt', 'pastLineStatus', 'previousOverdueCount', 'restaurantName', 'status', 'windowDays']);
+      return c;
+    };
+    if (reqLine) {
+      const c2 = await checkContext('request context, store 2 / outlet 2', 2, reqLine, SUP[2]);
+      const allStores = dbNum(`select count(*) from supplier_order where outlet_id=2 and status not in ('DRAFT','CANCELLED') and created_at >= date_sub('${istDate(-90)} 00:00:00', interval 330 minute)`);
+      if (c2) ok(`privacy: outlet 2's orders across ALL stores (${allStores}) are not what store 2 is shown (${c2.ordersCount90d})`, allStores > c2.ordersCount90d || allStores === 0, `store 2 sees ${c2.ordersCount90d} of ${allStores}`);
+      expectStatus('another store\'s owner cannot read it -> 404', await ctxOf(2, reqLine, SUP[1]), 404);
+      expectStatus('the restaurant cannot -> 404', await ctxOf(2, reqLine, buyer), 404);
+      expectStatus('no token -> 401', await api(`/supplier-stores/2/credit/requests/${reqLine}/context`), 401);
+      expectStatus('an agreement of another store through this store\'s path -> 404', await ctxOf(2, aid, SUP[2]), 404);
+      expectStatus('store 1\'s owner on its own store with store 2\'s agreement -> 404', await ctxOf(1, reqLine, SUP[1]), 404);
+      expectStatus('an unknown agreement -> 404', await ctxOf(2, 999999999, SUP[2]), 404);
+    } else skip('request context for store 2 / outlet 2', 'no such line in the local data');
+    await checkContext('request context, store 1 / outlet 2 (a line with history)', 1, aid, SUP[1]);
+  } finally {
+    age(24 * 8);   // leave the line free to be reminded again (and the demo seed)
+    for (const [a, s, id] of made) {
+      const r = await F.settle(a, s, [id], 'S14');
+      if (r) note(`S14 leftover invoice ${id} settled: HTTP ${r.status}`);
+    }
+  }
+}
+
+
+// ── S15 ─ payouts list and the two CSV exports ──────────────────────────────────────
+const guarded = (v) => (v == null ? '' : /^[=+\-@\t\r]/.test(v) ? `'${v}` : v);
+const fixed2 = (v) => n(v).toFixed(2);
+
+async function allPages(path, tok, size = 100) {
+  const items = []; let page = 0; let r;
+  do {
+    r = await G(`${path}${path.includes('?') ? '&' : '?'}size=${size}&page=${page}`, tok);
+    if (r.status !== 200) return { status: r.status, items };
+    items.push(...(r.data.items || [])); page++;
+  } while (r.data.hasNext && page < 100);
+  return { status: 200, items, first: r.data };
+}
+
+async function s15() {
+  const today = istDate(0);
+  const made = [];
+  try {
+    // ================= A fresh wallet repayment shows up as one PENDING payout; a supplier-recorded receipt makes none =================
+    const aid3 = await F.ensureLine(2, OUTLET, { log: note });
+    const V = await F.newInvoice({ storeId: 2, outlet: OUTLET, qty: 1, aid: aid3, log: note });
+    made.push([aid3, 2, V.invoiceId]);
+    const before = (await G('/supplier-stores/2/credit/payouts?size=100', SUP[2])).data;
+    const nBefore = dbNum('select count(*) from credit_repayment_payout where supplier_store_id=2');
+    const wr = await P(`/credit/agreements/${aid3}/wallet-repayments`, T.rest, { amount: 10, invoiceIds: [V.invoiceId] }, L.key('s15wallet'));
+    if (wr.status !== 201) skip('a fresh wallet repayment makes one PENDING payout', `the wallet repayment answered HTTP ${wr.status} ${code(wr)}`);
+    else {
+      const rate = dbVal(`select commission_rate_percent from credit_repayment_payout where credit_repayment_id=${wr.data.repaymentId}`);
+      const after = (await G('/supplier-stores/2/credit/payouts?size=100', SUP[2])).data;
+      const mine = (after.items || []).filter((x) => x.repaymentId === wr.data.repaymentId);
+      eq('exactly one new payout row for the repayment', [mine.length, dbNum('select count(*) from credit_repayment_payout where supplier_store_id=2')], [1, nBefore + 1]);
+      const p = mine[0] || {};
+      const comm = rate === 'NULL' ? 0 : Math.min(10, Math.round((10 * n(rate)) / 100 * 100 + 1e-9) / 100);
+      eq('payout: PENDING, gross 10, commission snapshot (rate x gross, HALF_UP, never above the gross), net, not in a settlement', [p.status, n(p.grossAmount), n(p.commissionAmount), n(p.netAmount), p.settlementId, p.appliedAt],
+        ['PENDING', 10, comm, money(10 - comm), null, null]);
+      eq('payout: the commission rate is the snapshot taken at the time', p.commissionRatePercent == null ? null : n(p.commissionRatePercent), rate === 'NULL' ? null : n(rate));
+      eq('payout: the invoices it settled, with their share', (p.invoices || []).map((x) => [x.invoiceId, x.invoiceNumber, n(x.amount)]), [[V.invoiceId, V.invoiceNumber, 10]]);
+      eq('payout: the restaurant and outlet', [p.outletName, p.restaurantName, p.agreementId], ['Indiranagar', 'Spice Garden', aid3]);
+      eq('summary.pendingNet grew by the net of the new payout', n(after.summary.pendingNet), money(n(before.summary.pendingNet) + money(10 - comm)));
+      const one = await G(`/supplier-stores/2/credit/payouts/${p.payoutId}`, SUP[2]);
+      eq('the single payout equals the list row', one.data, p);
+      expectStatus('another store\'s owner cannot read it -> 404', await G(`/supplier-stores/2/credit/payouts/${p.payoutId}`, SUP[3]), 404);
+      expectStatus('store 3\'s own path with store 2\'s payout id -> 404', await G(`/supplier-stores/3/credit/payouts/${p.payoutId}`, SUP[3]), 404);
+      expectStatus('the restaurant cannot read it -> 404', await G(`/supplier-stores/2/credit/payouts/${p.payoutId}`, T.rest), 404);
+      expectStatus('an unknown payout -> 404', await G('/supplier-stores/2/credit/payouts/999999999', SUP[2]), 404);
+      const settled = await F.settle(aid3, 2, [V.invoiceId], 'S15');
+      expectStatus('the rest of the invoice is paid by a supplier-recorded receipt', settled, 201);
+      eq('...which makes no payout (the money did not go through Mandi)', dbNum('select count(*) from credit_repayment_payout where supplier_store_id=2'), nBefore + 1);
+    }
+
+    // ================= payouts against the table, for every store =================
+    for (const store of [1, 2, 3]) {
+      const tok = SUP[store], label = `store ${store}`;
+      const rows = db(`select p.id, p.credit_repayment_id, p.amount, p.commission_rate_percent, p.commission_amount, p.status, p.settlement_id, r.credit_agreement_id, r.outlet_id, p.applied_at,
+                              date(date_add(p.created_at, interval 330 minute))
+                         from credit_repayment_payout p join credit_repayment r on r.id=p.credit_repayment_id where p.supplier_store_id=${store} order by p.created_at desc, p.id desc`)
+        .map((r) => ({ id: n(r[0]), rep: n(r[1]), amount: n(r[2]), rate: r[3] === 'NULL' ? null : n(r[3]), comm: n(r[4]), status: r[5], settlement: r[6] === 'NULL' ? null : n(r[6]), aid: n(r[7]), outlet: n(r[8]), appliedAt: r[9] === 'NULL' ? null : r[9], day: r[10] }));
+      const list = await allPages(`/supplier-stores/${store}/credit/payouts`, tok);
+      eq(`${label}: the payouts list is readable`, list.status, 200);
+      eq(`${label}: totalElements == payout rows of the store (SQL)`, list.first?.totalElements, rows.length);
+      eq(`${label}: the same payouts (ids) are listed, newest first`, list.items.map((x) => x.payoutId), rows.map((r) => r.id));
+      const bad = [];
+      for (const it of list.items) {
+        const r = rows.find((x) => x.id === it.payoutId);
+        const pays = db(`select credit_invoice_id, amount from credit_payment where credit_repayment_id=${r.rep} order by id`).map((x) => [n(x[0]), n(x[1])]);
+        const got = [n(it.grossAmount), it.commissionRatePercent == null ? null : n(it.commissionRatePercent), n(it.commissionAmount), n(it.netAmount), it.status, it.settlementId, it.repaymentId, it.agreementId,
+          (it.invoices || []).map((x) => [x.invoiceId, n(x.amount)])];
+        const exp = [r.amount, r.rate, r.comm, money(r.amount - r.comm), r.status, r.settlement, r.rep, r.aid, pays];
+        if (JSON.stringify(got) !== JSON.stringify(exp)) bad.push({ id: it.payoutId, got, exp });
+        if (r.status === 'PENDING' && (it.settlementId != null || it.appliedAt != null)) bad.push({ id: it.payoutId, why: 'pending but settled' });
+        if (r.status === 'APPLIED' && (it.settlementNumber == null || it.appliedAt == null)) bad.push({ id: it.payoutId, why: 'applied without a settlement number / time' });
+        if (!(money(sum(it.invoices.map((x) => x.amount))) === money(n(it.grossAmount)))) bad.push({ id: it.payoutId, why: 'invoice shares do not add up to the gross' });
+      }
+      eq(`${label}: every payout matches its row (gross, rate snapshot, commission, net, status, settlement, repayment, line, invoices)`, bad, []);
+      const monthStart = today.slice(0, 7);
+      const pendingNet = sum(rows.filter((r) => r.status === 'PENDING').map((r) => money(r.amount - r.comm)));
+      const appliedNet = sum(rows.filter((r) => r.status === 'APPLIED' && r.appliedAt && r.appliedAt.slice(0, 7) >= monthStart).map((r) => money(r.amount - r.comm)));
+      eq(`${label}: summary.pendingNet == net of the PENDING rows`, n(list.first?.summary?.pendingNet), pendingNet);
+      ok(`${label}: summary.appliedNetThisMonth is the net of the rows applied this month (SQL day check is UTC-month approximate)`, Math.abs(n(list.first?.summary?.appliedNetThisMonth) - appliedNet) < 0.005 || rows.every((r) => r.status !== 'APPLIED'), `${list.first?.summary?.appliedNetThisMonth} vs ${appliedNet}`);
+      for (const st of ['PENDING', 'APPLIED']) {
+        const f = await allPages(`/supplier-stores/${store}/credit/payouts?status=${st}`, tok);
+        eq(`${label}: status=${st} lists only those, all of them`, f.items.map((x) => x.payoutId), rows.filter((r) => r.status === st).map((r) => r.id));
+      }
+      const day = await allPages(`/supplier-stores/${store}/credit/payouts?from=${today}&to=${today}`, tok);
+      eq(`${label}: from=to=today lists the payouts created today (India day)`, day.items.map((x) => x.payoutId), rows.filter((r) => r.day === today).map((r) => r.id));
+      expectStatus(`${label}: from after to is refused`, await G(`/supplier-stores/${store}/credit/payouts?from=${today}&to=${istDate(-3)}`, tok), 400);
+      const one = await allPages(`/supplier-stores/${store}/credit/payouts`, tok, 1);
+      eq(`${label}: paging one at a time returns the same payouts in the same order`, one.items.map((x) => x.payoutId), rows.map((r) => r.id));
+      eq(`${label}: size is capped at 100`, (await G(`/supplier-stores/${store}/credit/payouts?size=900`, tok)).data.size, 100);
+      for (const [who, t] of [['the restaurant', T.rest], ['the other tenant\'s restaurant', T.rest2], ['another store\'s owner', SUP[store === 1 ? 2 : 1]]]) {
+        expectStatus(`${label}: ${who} -> 404`, await G(`/supplier-stores/${store}/credit/payouts`, t), 404);
+      }
+      expectStatus(`${label}: no token -> 401`, await api(`/supplier-stores/${store}/credit/payouts`), 401);
+    }
+    const applied = dbNum("select count(*) from credit_repayment_payout where status='APPLIED'");
+    if (applied === 0) skip('APPLIED payouts show their settlement number and date', 'NOT-RUN: no payout has been applied yet (settlement generation runs once a day for the previous UTC day)');
+
+    // ================= the CSV exports =================
+    const store = 1, tok = SUP[1], buyer = T.rest2;
+    const aid = await F.ensureLine(1, OUTLET2, { log: note });
+    const K = await F.newInvoice({ storeId: store, outlet: OUTLET2, qty: 2, aid, log: note });
+    made.push([aid, store, K.invoiceId]);
+    const refs = ['=SUM(1,2)"q"', '+cmd', '-cmd', '@cmd'].map((x) => `${x}${RUN}`);
+    for (const r of refs) expectStatus(`setup: a receipt of 10 whose UTR is ${JSON.stringify(r)}`, await F.receipt(aid, tok, { amount: 10, method: 'UPI', reference: r, paidOn: today, invoiceIds: [K.invoiceId] }), 201);
+    const exportsOf = (type, id) => dbNum(`select count(*) from audit_log where action='CREDIT_EXPORT' and entity_type='${type}' and entity_id=${id}`);
+    const lastExport = (type, id) => dbVal(`select new_state from audit_log where action='CREDIT_EXPORT' and entity_type='${type}' and entity_id=${id} order by id desc limit 1`);
+
+    const feedAll = await allPages(`/supplier-stores/${store}/credit/payments`, tok);
+    const e0 = exportsOf('SUPPLIER_STORE', store);
+    const col = await F.raw(`/supplier-stores/${store}/credit/collections.csv`, tok);
+    eq('collections.csv: 200', col.status, 200);
+    ok('collections.csv: content type text/csv, UTF-8', /text\/csv/i.test(col.headers.get('content-type') || '') && /utf-8/i.test(col.headers.get('content-type') || ''), col.headers.get('content-type'));
+    eq('collections.csv: attachment named collections-store-1-start-<today>.csv, not cached', [/attachment/.test(col.headers.get('content-disposition') || '') && (col.headers.get('content-disposition') || '').includes(`collections-store-1-start-${today}.csv`), col.headers.get('cache-control')], [true, 'no-store']);
+    ok('collections.csv: no byte order mark, rows end with CRLF', !(col.buf[0] === 0xef && col.buf[1] === 0xbb && col.buf[2] === 0xbf) && col.text.includes('\r\n') && !/[^\r]\n/.test(col.text), 'BOM or bare LF');
+    const cr = F.parseCsv(col.text);
+    eq('collections.csv: the header row', cr[0], ['Payment id', 'Paid at (IST)', 'Restaurant', 'Outlet', 'Invoice', 'Amount', 'Source', 'Method', 'Reference']);
+    eq('collections.csv: one row per payment, the same count as the JSON feed', cr.length - 1, feedAll.items.length);
+    const diff = [];
+    feedAll.items.forEach((it, i) => {
+      const row = cr[i + 1] || [];
+      const exp = [String(it.id), null, it.restaurantName || '', it.outletName || '', it.invoiceNumber || '', fixed2(it.amount), it.source, it.method || '', guarded(it.reference)];
+      for (let c = 0; c < exp.length; c++) if (c !== 1 && row[c] !== exp[c]) diff.push({ row: i + 1, col: cr[0][c], got: row[c], exp: exp[c] });
+      if (Math.abs(Date.parse(row[1]) - Date.parse(it.paidAt)) > 1000) diff.push({ row: i + 1, col: 'Paid at', got: row[1], exp: it.paidAt });
+    });
+    eq('collections.csv: every cell equals the JSON feed (id, paid at, restaurant, outlet, invoice, amount, source, method, reference)', diff.slice(0, 5), []);
+    const dangerous = [];
+    cr.slice(1).forEach((row, i) => { for (const c of [2, 3, 4, 6, 7, 8]) if (/^[=+\-@\t\r]/.test(row[c] || '')) dangerous.push({ row: i + 1, col: cr[0][c], cell: row[c] }); });
+    eq('collections.csv: no text cell starts with = + - @ (formula injection guard)', dangerous, []);
+    eq('collections.csv: references that start with = + - @ carry a leading quote and nothing else changed (commas and quotes kept)', refs.map((r) => cr.some((row) => row[8] === `'${r}`)), [true, true, true, true]);
+    ok('collections.csv: amounts are plain two-decimal numbers', cr.slice(1).every((row) => /^-?\d+\.\d{2}$/.test(row[5])), 'a malformed amount');
+    eq('collections.csv: one CREDIT_EXPORT audit row, naming the row count', [exportsOf('SUPPLIER_STORE', store) - e0, lastExport('SUPPLIER_STORE', store)], [1, `COLLECTIONS_CSV rows=${feedAll.items.length}`]);
+    const bySrc = await F.raw(`/supplier-stores/${store}/credit/collections.csv?source=SUPPLIER_RECORDED`, tok);
+    const srcTotal = (await G(`/supplier-stores/${store}/credit/payments?source=SUPPLIER_RECORDED&size=1`, tok)).data.total;
+    eq('collections.csv?source=SUPPLIER_RECORDED: only those rows, as many as the filtered feed', [F.parseCsv(bySrc.text).length - 1, F.parseCsv(bySrc.text).slice(1).every((r) => r[6] === 'SUPPLIER_RECORDED')], [srcTotal, true]);
+    const byDay = await F.raw(`/supplier-stores/${store}/credit/collections.csv?from=${today}&to=${today}`, tok);
+    eq('collections.csv?from=to=today: the same rows as the feed for today', F.parseCsv(byDay.text).length - 1, (await G(`/supplier-stores/${store}/credit/payments?from=${today}&to=${today}&size=1`, tok)).data.total);
+    eq('collections.csv: to before from is refused (400)', (await F.raw(`/supplier-stores/${store}/credit/collections.csv?from=${today}&to=${istDate(-2)}`, tok)).status, 400);
+    for (const [who, t] of [['the restaurant', buyer], ['another store\'s owner', SUP[3]], ['nobody', undefined]]) {
+      eq(`collections.csv: ${who} -> ${t ? 404 : 401}`, (await F.raw(`/supplier-stores/${store}/credit/collections.csv`, t)).status, t ? 404 : 401);
+    }
+    const eA = exportsOf('SUPPLIER_STORE', store);
+    await F.raw(`/supplier-stores/${store}/credit/collections.csv`, buyer);
+    eq('collections.csv: a refused export writes no audit row', exportsOf('SUPPLIER_STORE', store), eA);
+
+    // The statement as a file, from both sides.
+    const from = istDate(-30);
+    const sj = (await G(`/credit/agreements/${aid}/statement?from=${from}&to=${today}`, tok)).data;
+    const agreement = await F.agr(aid, buyer);
+    for (const [side, t] of [['supplier', tok], ['restaurant', buyer]]) {
+      const a0 = exportsOf('CREDIT_AGREEMENT', aid);
+      const f = await F.raw(`/credit/agreements/${aid}/statement.csv?from=${from}&to=${today}`, t);
+      eq(`statement.csv (${side}): 200 and an attachment named statement-koramangala-<from>-<to>.csv`, [f.status, (f.headers.get('content-disposition') || '').includes(`statement-koramangala-${from}-${today}.csv`), f.headers.get('cache-control')], [200, true, 'no-store']);
+      const rows = F.parseCsv(f.text);
+      eq(`statement.csv (${side}): the heading lines name the restaurant, outlet, supplier, store and period`, rows.slice(0, 7).map((r) => r.slice(0, 2)),
+        [['Credit statement', 'Mandi credit reference, not a GST tax invoice'], ['Restaurant', 'Tandoor House'], ['Outlet', 'Koramangala'], ['Supplier', agreement.supplierName], ['Store', agreement.storeName], ['From', from], ['To', today]]);
+      eq(`statement.csv (${side}): Opening owed and Closing owed equal the JSON statement's`, [rows[7], rows[8]], [['Opening owed', fixed2(sj.openingOwed)], ['Closing owed', fixed2(sj.closingOwed)]]);
+      eq(`statement.csv (${side}): a blank line, then the column header`, [rows[9], rows[10]], [[''], ['At (IST)', 'Type', 'Description', 'Amount', 'Owed after', 'Order', 'Invoice', 'Paid by', 'Method', 'Reference']]);
+      const body = rows.slice(11);
+      eq(`statement.csv (${side}): one row per statement line (${sj.lines.length}), newest first`, body.length, sj.lines.length);
+      const bad = [];
+      sj.lines.forEach((ln, i) => {
+        const r = body[i] || [];
+        const exp = [ln.type, ln.label, fixed2(ln.amount), fixed2(ln.owedAfter), ln.orderNumber || '', ln.invoiceNumber || '', ln.source || '', ln.method || '', guarded(ln.reference)];
+        if (JSON.stringify(r.slice(1)) !== JSON.stringify(exp)) bad.push({ row: i, got: r.slice(1), exp });
+        if (Math.abs(Date.parse(r[0]) - Date.parse(ln.at)) > 1000) bad.push({ row: i, why: 'time', got: r[0], exp: ln.at });
+      });
+      eq(`statement.csv (${side}): every row equals its JSON line (type, description, amount, owed after, order, invoice, paid by, method, reference)`, bad.slice(0, 5), []);
+      eq(`statement.csv (${side}): the injected references are quoted and nothing else in the text columns starts with = + - @`, [refs.every((x) => body.some((r) => r[9] === `'${x}`)), body.filter((r) => [1, 2, 5, 6, 7, 8, 9].some((c) => /^[=+\-@\t\r]/.test(r[c] || ''))).length], [true, 0]);
+      eq(`statement.csv (${side}): one CREDIT_EXPORT audit row, naming the row count`, [exportsOf('CREDIT_AGREEMENT', aid) - a0, lastExport('CREDIT_AGREEMENT', aid)], [1, `STATEMENT_CSV rows=${sj.lines.length}`]);
+    }
+    for (const [who, t] of [['the other tenant\'s restaurant', T.rest], ['another store\'s owner', SUP[3]], ['nobody', undefined]]) {
+      eq(`statement.csv: ${who} -> ${t ? 404 : 401}`, (await F.raw(`/credit/agreements/${aid}/statement.csv`, t)).status, t ? 404 : 401);
+    }
+    eq('statement.csv: a window over 366 days is refused (400)', (await F.raw(`/credit/agreements/${aid}/statement.csv?from=2025-01-01&to=${today}`, tok)).status, 400);
+    eq('statement.csv: to before from is refused (400)', (await F.raw(`/credit/agreements/${aid}/statement.csv?from=${today}&to=${istDate(-2)}`, tok)).status, 400);
+    skip('more than 20,000 rows -> 413 CREDIT_EXPORT_TOO_LARGE', 'needs 20,000 rows or a lower costonomy.mp.credit.export-max-rows; covered by the API integration test');
+  } finally {
+    for (const [a, s, id] of made) {
+      const r = await F.settle(a, s, [id], 'S15');
+      if (r) note(`S15 leftover invoice ${id} settled: HTTP ${r.status}`);
+    }
+  }
+}
+
+
 // ── main ───────────────────────────────────────────────────────────────
 (async () => {
   const want = process.argv.slice(2).map((s) => s.toUpperCase());
@@ -1073,6 +2387,12 @@ async function s9() {
   if (run('S7')) await L.scenario('S7 multi-supplier', s7);
   if (run('S8')) await L.scenario('S8 settlement', s8);
   if (run('S9')) await L.scenario('S9 isolation', s9);
+  if (run('S10')) await L.scenario('S10 supplier receivables', s10);
+  if (run('S11')) await L.scenario('S11 receipts and reversal', s11);
+  if (run('S12')) await L.scenario('S12 notes, cancel, write-off', s12);
+  if (run('S13')) await L.scenario('S13 supplier permissions', s13);
+  if (run('S14')) await L.scenario('S14 reminders and lifecycle', s14);
+  if (run('S15')) await L.scenario('S15 payouts and CSV exports', s15);
   const failed = L.summary();
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error('FATAL', e); process.exit(2); });

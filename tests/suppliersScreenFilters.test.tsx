@@ -124,4 +124,48 @@ describe('SuppliersScreen filter and sort bar', () => {
 
     expect(await screen.findByText('Alpha Dairy Store')).toBeTruthy();
   });
+
+  it('names the filters, not the aisle, as the reason for an empty list, even with an aisle chosen', async () => {
+    (fetchPopularSuppliers as jest.Mock).mockImplementation((_t, _outlet, _limit, category, opts) =>
+      category != null && opts?.minRating === 4
+        ? Promise.resolve([])
+        : Promise.resolve([mockSupplier(1, 'Alpha Dairy')]),
+    );
+
+    setup();
+    expect(await screen.findByText('Alpha Dairy Store')).toBeTruthy();
+
+    // Choose an aisle (the first category tab), then a star filter that empties it.
+    const aisle = (await fetchCategories('token') as { name: string }[])[0]?.name as string;
+    fireEvent.press(await screen.findByText(aisle));
+    fireEvent.press(screen.getByText('4+ stars'));
+
+    expect(await screen.findByText('No suppliers found')).toBeTruthy();
+    expect(screen.queryByText(/Nobody stocks/)).toBeNull();
+  });
+
+  it('says suppliers with no ratings are not shown while a star filter is on', async () => {
+    setup();
+    await screen.findByText('Alpha Dairy Store');
+    expect(screen.queryByText('Suppliers with no ratings yet are not shown.')).toBeNull();
+
+    fireEvent.press(screen.getByText('4+ stars'));
+
+    expect(await screen.findByText('Suppliers with no ratings yet are not shown.')).toBeTruthy();
+  });
+
+  it('does not count the sort as a filter when explaining an empty list', async () => {
+    (fetchPopularSuppliers as jest.Mock).mockImplementation((_t, _outlet, _limit, _cat, opts) =>
+      opts?.radiusKm === 5 ? Promise.resolve([]) : Promise.resolve([mockSupplier(1, 'Alpha Dairy')]),
+    );
+    setup();
+    await screen.findByText('Alpha Dairy Store');
+
+    fireEvent.press(screen.getByText('Nearest'));
+    fireEvent.press(screen.getByText('5 km'));
+
+    expect(await screen.findByText(/within 5 km/)).toBeTruthy();
+    expect(screen.queryByText(/sorted by rating/)).toBeNull();
+  });
 });
+

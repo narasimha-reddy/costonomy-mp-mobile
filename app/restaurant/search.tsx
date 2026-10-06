@@ -34,6 +34,8 @@ import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'REST-SEARCH-02';
 const MIN_TERM = 2;
+/** The default distance for the supplier directory, in kilometres. */
+const NEARBY_KM = 10;
 
 type Tab = 'products' | 'skus' | 'suppliers';
 
@@ -67,7 +69,10 @@ export default function SearchScreen() {
   const { outletId } = useOutlet();
   const [term, setTerm] = useState('');
   const [tab, setTab] = useState<Tab>('products');
+  // Starts within 10 km, as the directory always did: "who is near me" is the question the tab answers, and the
+  // "N more deliver here, show them" row is how a kitchen widens it.
   const [supplierFilters, setSupplierFilters] = useState<SupplierFilters>({
+    radiusKm: NEARBY_KM,
     sort: 'nearest',
   });
   const { recent, remember, clear } = useRecentSearches();

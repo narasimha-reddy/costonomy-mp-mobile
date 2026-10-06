@@ -87,11 +87,19 @@ describe('the suppliers tab', () => {
     expect(screen.getByText('4+ stars')).toBeTruthy();
     expect(screen.getByText('Nearest')).toBeTruthy();
 
-    // Toggle 10 km distance chip
+    // Starts within 10 km (the directory's long-standing default), so the first call carries it.
+    expect((searchSuppliers as jest.Mock).mock.calls[0][3]).toBe(10);
+
+    // Pressing the selected chip clears it; pressing another picks that distance.
     fireEvent.press(screen.getByText('10 km'));
     await waitFor(() => {
       const lastCall = (searchSuppliers as jest.Mock).mock.calls.at(-1);
-      expect(lastCall[3]).toBe(10);
+      expect(lastCall[3]).toBeUndefined();
+    });
+    fireEvent.press(screen.getByText('25 km'));
+    await waitFor(() => {
+      const lastCall = (searchSuppliers as jest.Mock).mock.calls.at(-1);
+      expect(lastCall[3]).toBe(25);
     });
 
     // Toggle Open now

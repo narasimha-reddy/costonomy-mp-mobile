@@ -125,9 +125,10 @@ export default function SuppliersScreen() {
         <MandiEmptyState
           icon="storefront-outline"
           title={
-            category == null
-              ? (hasActiveFilters ? 'No suppliers found' : 'Nobody delivers here yet')
-              : `Nobody stocks ${tabName} here`
+            // With filters on, the filters are why the list is empty, whatever aisle is chosen.
+            hasActiveFilters
+              ? 'No suppliers found'
+              : category == null ? 'Nobody delivers here yet' : `Nobody stocks ${tabName} here`
           }
           description={
             hasActiveFilters

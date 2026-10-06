@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-supplier-filters-fixes] - Review fixes for the supplier filters (API D-147)
+#### Fixed
+- The search Suppliers tab starts within 10 km again, as the directory always did, so the "N more deliver here, show them" row works by default (it had become "no distance limit").
+- An empty list with filters on says "No suppliers found" whatever aisle is chosen (it said "Nobody stocks X here"), and the explanation no longer lists the sort as a filter.
+- A star filter now says "Suppliers with no ratings yet are not shown."
+
 ### [phase6/mobile-supplier-filters] - Filters and sort on buyer supplier lists (API D-147)
 #### Added
 - Filter bar on the Suppliers search tab and the Suppliers browse screen: 5, 10, and 25 km distance chips, "Open now" toggle, "4+ stars" toggle, and a sort toggle (`Nearest` vs `Rating`).

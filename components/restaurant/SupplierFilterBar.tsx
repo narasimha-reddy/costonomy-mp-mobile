@@ -140,6 +140,11 @@ export function SupplierFilterBar({
           </MandiText>
         </Pressable>
       </ScrollView>
+      {filters.minRating != null && (
+        <MandiText variant="caption" color={Colors.textSecondary} style={styles.hint}>
+          Suppliers with no ratings yet are not shown.
+        </MandiText>
+      )}
     </View>
   );
 }
@@ -155,9 +160,7 @@ export function activeFilterDescriptions(filters: SupplierFilters): string[] {
   if (filters.minRating != null) {
     list.push(`${filters.minRating}+ stars`);
   }
-  if (filters.sort === 'rating') {
-    list.push('sorted by rating');
-  }
+  // Sort is how the list is ordered, not something that removes suppliers, so it is not listed as a filter.
   return list;
 }
 
@@ -186,5 +189,9 @@ const styles = StyleSheet.create({
   chipActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+  },
+  hint: {
+    paddingHorizontal: Spacing.screenHorizontal,
+    paddingTop: Spacing.xs,
   },
 });

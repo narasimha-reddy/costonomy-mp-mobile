@@ -54,7 +54,8 @@ import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
-import { canRetryPartner, noPartnerNote, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
+import { SearchProgressBar } from '@/components/delivery/SearchProgressBar';
+import { canRetryPartner, noPartnerNote, searchProgress, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
@@ -205,6 +206,13 @@ export default function SupplierOrderScreen() {
     queryFn: () => fetchDelivery(accessToken as string, orderId),
     enabled: Number.isFinite(orderId) && accessToken != null && (order?.status === 'READY_FOR_PICKUP' || order?.status === 'OUT_FOR_DELIVERY'),
     retry: false,
+    // While a partner is being found the screen follows it, so the bar moves and a booking shows up without a tap.
+    refetchInterval: (query) => {
+      const found = query.state.data;
+      return found != null && found.mode !== 'SUPPLIER_OWN'
+        && (canRetryPartner(found.mode, found.status) || found.status === 'DELIVERY_REQUESTED'
+          || found.status === 'PROVIDER_SELECTED') ? 15000 : false;
+    },
   });
 
   const requestPartner = useMutation({
@@ -623,6 +631,8 @@ export default function SupplierOrderScreen() {
                       ? `Driver: ${delivery.data.driverName}${delivery.data.driverVehicle ? ` (${delivery.data.driverVehicle})` : ''}`
                       : delivery.data.status === 'PROVIDER_SELECTED'
                         ? 'Dispatch requested. Assigning nearest driver...'
+                        : canRetryPartner(delivery.data.mode, delivery.data.status)
+                        ? 'No partner yet'
                         : delivery.data.status.replace(/_/g, ' ')}
                   </MandiText>
                   {delivery.data.driverPhone ? (
@@ -635,8 +645,23 @@ export default function SupplierOrderScreen() {
                       Estimated Arrival: ~{delivery.data.etaMinutes} mins
                     </MandiText>
                   ) : null}
+                  {(delivery.data.status === 'DELIVERY_REQUESTED' || delivery.data.status === 'PROVIDER_SELECTED') && (
+                    <SearchProgressBar fraction={null} label="Assigning a driver…" />
+                  )}
                   {canRetryPartner(delivery.data.mode, delivery.data.status) && (
                     <View style={{ marginTop: Spacing.sm }}>
+                      {(() => {
+                        const progress = searchProgress(delivery.data.searchStartedAt, delivery.data.retryUntil);
+                        if (progress.fraction == null) return null;
+                        return (
+                          <SearchProgressBar
+                            fraction={progress.fraction}
+                            label={progress.finished
+                              ? 'Search finished. No partner was found.'
+                              : `Searching for a partner… ${progress.minutesElapsed} of ${progress.minutesTotal} min`}
+                          />
+                        );
+                      })()}
                       <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.xs }}>
                         {delivery.data.failureReason ?? 'No delivery partner is available right now.'}{' '}
                         {noPartnerNote(delivery.data.canSwitchToOwn, delivery.data.retryUntil)}

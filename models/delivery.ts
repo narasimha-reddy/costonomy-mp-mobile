@@ -64,6 +64,8 @@ export interface Delivery {
   timeline: DeliveryEvent[];
   /** While no partner is found: when the automatic retries stop (API D-151). */
   retryUntil?: string | null;
+  /** When the search for a partner began (API D-151). */
+  searchStartedAt?: string | null;
   /** The supplier may now deliver this order themselves (API D-151). */
   canSwitchToOwn?: boolean;
 }

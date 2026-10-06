@@ -1,4 +1,4 @@
-import { canRetryPartner, clockTime, noPartnerNote, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
+import { canRetryPartner, clockTime, noPartnerNote, searchProgress, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 
 describe('wantsDeliveryPartner', () => {
   it('is true only for an order sold with Costonomy delivery', () => {
@@ -48,5 +48,31 @@ describe('noPartnerNote', () => {
   it('falls back to a plain line when the retries have ended', () => {
     expect(noPartnerNote(false, '2026-10-06T09:00:00Z', now)).toMatch(/Try again in a few minutes/);
     expect(noPartnerNote(undefined, undefined, now)).toMatch(/Try again in a few minutes/);
+  });
+});
+
+describe('searchProgress', () => {
+  const start = '2026-10-06T10:00:00Z';
+  const end = '2026-10-06T10:30:00Z';
+
+  it('is how far through the window we are', () => {
+    const p = searchProgress(start, end, new Date('2026-10-06T10:15:00Z'));
+    expect(p.fraction).toBeCloseTo(0.5);
+    expect(p.minutesElapsed).toBe(15);
+    expect(p.minutesTotal).toBe(30);
+    expect(p.finished).toBe(false);
+  });
+
+  it('stops full at the end of the window and says it has finished', () => {
+    const p = searchProgress(start, end, new Date('2026-10-06T11:00:00Z'));
+    expect(p.fraction).toBe(1);
+    expect(p.minutesElapsed).toBe(30);
+    expect(p.finished).toBe(true);
+  });
+
+  it('has no span to measure when the server gave no times', () => {
+    expect(searchProgress(null, end).fraction).toBeNull();
+    expect(searchProgress(start, undefined).fraction).toBeNull();
+    expect(searchProgress(end, start).fraction).toBeNull();
   });
 });

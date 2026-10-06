@@ -45,3 +45,36 @@ export function noPartnerNote(
   }
   return 'The order stays ready. Try again in a few minutes.';
 }
+
+export interface SearchProgress {
+  /** 0 to 1, or null when there is no span to measure (an indeterminate bar). */
+  fraction: number | null;
+  minutesElapsed: number | null;
+  minutesTotal: number | null;
+  /** The search window has passed; the supplier is offered delivering it themselves. */
+  finished: boolean;
+}
+
+/**
+ * How far through the automatic search for a partner we are, from the server's start and end times. The bar fills to
+ * the end of the window and stops there; it never claims a partner was found (API D-151).
+ */
+export function searchProgress(
+  searchStartedAt: string | null | undefined,
+  retryUntil: string | null | undefined,
+  now: Date = new Date(),
+): SearchProgress {
+  const start = searchStartedAt ? new Date(searchStartedAt).getTime() : NaN;
+  const end = retryUntil ? new Date(retryUntil).getTime() : NaN;
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) {
+    return { fraction: null, minutesElapsed: null, minutesTotal: null, finished: false };
+  }
+  const elapsed = Math.max(0, now.getTime() - start);
+  const total = end - start;
+  return {
+    fraction: Math.min(1, elapsed / total),
+    minutesElapsed: Math.min(Math.round(total / 60000), Math.floor(elapsed / 60000)),
+    minutesTotal: Math.round(total / 60000),
+    finished: now.getTime() >= end,
+  };
+}

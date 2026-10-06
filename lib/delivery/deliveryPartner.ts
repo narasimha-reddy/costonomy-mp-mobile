@@ -8,3 +8,13 @@
 export function wantsDeliveryPartner(deliveryMode: string | null | undefined): boolean {
   return deliveryMode === 'COSTONOMY_DELIVERY';
 }
+
+const RETRYABLE = new Set(['QUOTE_FAILED', 'PROVIDER_UNAVAILABLE', 'DRIVER_CANCELLED', 'PICKUP_FAILED']);
+
+/**
+ * Whether a partner delivery has stopped without a driver, so the supplier can ask for another. A failed quote used
+ * to leave the order on "No partner available" with no way forward; the API re-quotes the same delivery on reassign.
+ */
+export function canRetryPartner(mode: string | null | undefined, status: string | null | undefined): boolean {
+  return mode !== 'SUPPLIER_OWN' && status != null && RETRYABLE.has(status);
+}

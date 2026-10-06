@@ -12,6 +12,7 @@ import { fetchSupplierOrder, newIdempotencyKey } from '@/services/procurement';
 import {
   fetchDelivery,
   requestDelivery,
+  reassignDelivery,
   markDeliveryDispatched,
   markDeliveryDelivered,
 } from '@/services/delivery';
@@ -52,7 +53,7 @@ import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
-import { wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
+import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
@@ -215,6 +216,17 @@ export default function SupplierOrderScreen() {
       show('Delivery partner requested', 'success');
     },
     onError: (caught) => onRefusal(caught, 'Could not request delivery partner.'),
+  });
+
+  const retryPartner = useMutation({
+    mutationFn: (deliveryId: number) => reassignDelivery(accessToken as string, deliveryId, newIdempotencyKey()),
+    onSuccess: (next) => {
+      track('delivery_partner_retried', { screen: SCREEN, entityId: orderId });
+      void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId, 'delivery'] });
+      show(canRetryPartner(next.mode, next.status) ? 'Still no partner available' : 'Delivery partner requested',
+        canRetryPartner(next.mode, next.status) ? 'info' : 'success');
+    },
+    onError: (caught) => onRefusal(caught, 'Could not request another partner.'),
   });
 
   const dispatchDelivery = useMutation({
@@ -598,6 +610,21 @@ export default function SupplierOrderScreen() {
                       Estimated Arrival: ~{delivery.data.etaMinutes} mins
                     </MandiText>
                   ) : null}
+                  {canRetryPartner(delivery.data.mode, delivery.data.status) && (
+                    <View style={{ marginTop: Spacing.sm }}>
+                      <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.xs }}>
+                        {delivery.data.failureReason ?? 'No delivery partner is available right now.'} The order stays
+                        ready; try again in a few minutes.
+                      </MandiText>
+                      <MandiButton
+                        label="Try again"
+                        icon="refresh-outline"
+                        size="md"
+                        loading={retryPartner.isPending}
+                        onPress={() => retryPartner.mutate(delivery.data!.id)}
+                      />
+                    </View>
+                  )}
                   <View style={{ marginTop: Spacing.sm, flexDirection: 'row', gap: Spacing.sm }}>
                     <MandiButton
                       label="Track Delivery"
@@ -794,6 +821,20 @@ export default function SupplierOrderScreen() {
               icon="bicycle-outline"
               loading={requestPartner.isPending}
               onPress={() => requestPartner.mutate()}
+            />
+          </MandiStickyBar>
+        );
+      }
+
+      if (delivery.data && canRetryPartner(delivery.data.mode, delivery.data.status)) {
+        return (
+          <MandiStickyBar>
+            <MandiButton
+              label="Try again to find a delivery partner"
+              size="lg"
+              icon="refresh-outline"
+              loading={retryPartner.isPending}
+              onPress={() => retryPartner.mutate(delivery.data!.id)}
             />
           </MandiStickyBar>
         );

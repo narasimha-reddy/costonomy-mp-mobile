@@ -97,6 +97,19 @@ export function fetchOutletDeliveries(
 }
 
 /**
+ * Ask for another partner for a delivery that stopped without a driver (no partner available, a refusal, a driver who
+ * cancelled). The API keeps the same delivery and re-quotes it.
+ */
+export function reassignDelivery(token: string, deliveryId: number, idempotencyKey: string): Promise<Delivery> {
+  return apiRequest<Delivery>(`/api/v1/deliveries/${deliveryId}/reassign`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+    body: {},
+  });
+}
+
+/**
  * Report that the supplier has set off with their own delivery.
  * Refused for COSTONOMY delivery mode.
  */

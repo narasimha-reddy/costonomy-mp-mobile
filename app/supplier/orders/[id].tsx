@@ -42,7 +42,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
-import { DeliveryMode, orderStatusFor, resolveStatus, SupplierOrderStatus as SupplierOrderStatusRegistry, DeliveryStatus as DeliveryStatusRegistry } from '@/models/status';
+import { DeliveryMode, resolveStatus } from '@/models/status';
 import type { SupplierOrder, SupplierOrderStatus } from '@/models/procurement';
 import { ApiError } from '@/lib/api/errors';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
@@ -54,8 +54,13 @@ import { formatDistance, orderValue } from '@/utils/orders';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
-import { SearchProgressBar } from '@/components/delivery/SearchProgressBar';
-import { canRetryPartner, noPartnerNote, searchProgress, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
+import { DeliveredSummaryCard } from '@/components/delivery/DeliveredSummaryCard';
+import { DeliveryPartnerCard } from '@/components/delivery/DeliveryPartnerCard';
+import { OrderProgressHero } from '@/components/delivery/OrderProgressHero';
+import { PartnerSearchPanel } from '@/components/delivery/PartnerSearchPanel';
+import { useServerNow } from '@/hooks/useServerNow';
+import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
+import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
@@ -127,6 +132,7 @@ export default function SupplierOrderScreen() {
   });
 
   const order = query.data;
+  const nowMs = useServerNow();
 
   const recordWeightsMutation = useMutation({
     mutationFn: (weights: RecordDispatchWeightItem[]) =>
@@ -204,7 +210,7 @@ export default function SupplierOrderScreen() {
   const delivery = useQuery({
     queryKey: ['supplier-order', orderId, 'delivery'],
     queryFn: () => fetchDelivery(accessToken as string, orderId),
-    enabled: Number.isFinite(orderId) && accessToken != null && (order?.status === 'READY_FOR_PICKUP' || order?.status === 'OUT_FOR_DELIVERY'),
+    enabled: Number.isFinite(orderId) && accessToken != null && (order?.status === 'READY_FOR_PICKUP' || order?.status === 'OUT_FOR_DELIVERY' || order?.status === 'DELIVERED'),
     retry: false,
     // While a partner is being found the screen follows it, so the bar moves and a booking shows up without a tap.
     refetchInterval: (query) => {
@@ -273,6 +279,11 @@ export default function SupplierOrderScreen() {
   });
 
   const mode = order?.deliveryMode ?? null;
+  const deliveryData = delivery.data ?? null;
+  const view = order == null
+    ? null
+    : orderTrackingView({ audience: 'supplier', order, delivery: deliveryData, nowMs });
+  const stopped = deliveryData != null && canRetryPartner(deliveryData.mode, deliveryData.status);
   const busy = advance.isPending || cancel.isPending;
   const catchWeightItems = catchWeightLines(order);
   const hasCatchWeight = catchWeightItems.length > 0;
@@ -379,13 +390,21 @@ export default function SupplierOrderScreen() {
         <MandiErrorState message="Couldn't load this order." onRetry={() => query.refetch()} />
       ) : (
         <>
+          {view != null && (
+            <MandiCard
+              accentColor={view.tone === 'danger' ? Colors.danger : view.tone === 'warning' ? Colors.warning : undefined}
+            >
+              <OrderProgressHero
+                view={view}
+                onTrack={() => router.push(`/supplier/tracking/${order.id}`)}
+              />
+            </MandiCard>
+          )}
+
           <MandiCard>
-            {/* Status leads. The reference used to sit beside it and now lives
+            {/* Where the order is leads, in the card above. The reference used to sit beside it and now lives
                 in the header, so repeating it here would be the same string
                 twice in forty points of screen. */}
-            <View style={styles.row}>
-              <MandiStatusChip {...orderStatusFor(order.status, mode)} />
-            </View>
             <MandiText variant="caption" color={Colors.textTertiary}>
               {formatMomentWithRecency(order.createdAt)}
             </MandiText>
@@ -576,141 +595,38 @@ export default function SupplierOrderScreen() {
             </MandiCard>
           )}
 
-          {order.status === 'READY_FOR_PICKUP' && !delivery.data && wantsDeliveryPartner(order.deliveryMode) && (
-            <MandiCard>
-              <View style={styles.deliveryRow}>
-                <MandiText variant="bodyEmphasis">Delivery Partner</MandiText>
-                <MandiText variant="captionEmphasis" color={Colors.warning}>
-                  Not Requested Yet
-                </MandiText>
-              </View>
-              <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.sm }}>
-                Order is packed and ready. Request a delivery partner to dispatch via Pidge Smart Dispatch.
-              </MandiText>
-              {order.hasColdChainItems && (
-                <ColdChainBanner text="Temperature-controlled: only a carrier verified for chilled goods can be assigned. If none can, the delivery fails and you will see why." />
-              )}
-              <MandiButton
-                label="Request Delivery Partner"
-                size="md"
-                icon="bicycle-outline"
-                loading={requestPartner.isPending}
-                onPress={() => requestPartner.mutate()}
-              />
-            </MandiCard>
+          {order.status === 'READY_FOR_PICKUP' && !deliveryData && wantsDeliveryPartner(order.deliveryMode)
+            && order.hasColdChainItems && (
+            <ColdChainBanner text="Temperature-controlled: only a carrier verified for chilled goods can be assigned. If none can, the delivery fails and you will see why." />
           )}
 
-          {delivery.data && (
-            <MandiCard>
-              <View style={styles.deliveryRow}>
-                <MandiText variant="bodyEmphasis">Delivery</MandiText>
-                <MandiText variant="captionEmphasis" color={Colors.primary}>
-                  {delivery.data.mode === 'SUPPLIER_OWN' ? 'Your own delivery' : 'Delivery Partner'}
-                </MandiText>
-              </View>
-              {delivery.data.mode === 'SUPPLIER_OWN' ? (
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  {delivery.data.status === 'DRIVER_ASSIGNED'
-                    ? 'Pack the goods and tap "Dispatch / Set off" once your driver leaves.'
-                    : delivery.data.status === 'PICKED_UP'
-                      ? 'Out for delivery. Tap "Confirm Delivered" when goods arrive at the restaurant.'
-                      : 'Delivery completed.'}
-                </MandiText>
-              ) : (
-                <View style={styles.partnerDeliveryInfo}>
-                  <View style={styles.deliveryStatusRow}>
-                    <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, delivery.data.status)} size="sm" />
-                    {delivery.data.fee != null && (
-                      <MandiText variant="caption" color={Colors.textSecondary}>
-                        Fee: {formatMoney(delivery.data.fee)}
-                      </MandiText>
-                    )}
-                  </View>
-                  <MandiText variant="bodyEmphasis" style={{ marginTop: Spacing.xs }}>
-                    {delivery.data.driverName
-                      ? `Driver: ${delivery.data.driverName}${delivery.data.driverVehicle ? ` (${delivery.data.driverVehicle})` : ''}`
-                      : delivery.data.status === 'PROVIDER_SELECTED'
-                        ? 'Dispatch requested. Assigning nearest driver...'
-                        : canRetryPartner(delivery.data.mode, delivery.data.status)
-                        ? 'No partner yet'
-                        : delivery.data.status.replace(/_/g, ' ')}
-                  </MandiText>
-                  {delivery.data.driverPhone ? (
-                    <MandiText variant="caption" color={Colors.textSecondary}>
-                      Contact: {delivery.data.driverPhone}
-                    </MandiText>
-                  ) : null}
-                  {delivery.data.etaMinutes != null ? (
-                    <MandiText variant="caption" color={Colors.textTertiary}>
-                      Estimated Arrival: ~{delivery.data.etaMinutes} mins
-                    </MandiText>
-                  ) : null}
-                  {(delivery.data.status === 'DELIVERY_REQUESTED' || delivery.data.status === 'PROVIDER_SELECTED') && (
-                    <SearchProgressBar fraction={null} label="Assigning a driver…" />
-                  )}
-                  {canRetryPartner(delivery.data.mode, delivery.data.status) && (
-                    <View style={{ marginTop: Spacing.sm }}>
-                      {(() => {
-                        const progress = searchProgress(delivery.data.searchStartedAt, delivery.data.retryUntil);
-                        if (progress.fraction == null) return null;
-                        return (
-                          <SearchProgressBar
-                            fraction={progress.fraction}
-                            label={progress.finished
-                              ? 'Search finished. No partner was found.'
-                              : `Searching for a partner… ${progress.minutesElapsed} of ${progress.minutesTotal} min`}
-                          />
-                        );
-                      })()}
-                      <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.xs }}>
-                        {delivery.data.failureReason ?? 'No delivery partner is available right now.'}{' '}
-                        {noPartnerNote(delivery.data.canSwitchToOwn, delivery.data.retryUntil)}
-                      </MandiText>
-                      {delivery.data.canSwitchToOwn && (
-                        <MandiButton
-                          label="I'll deliver it myself"
-                          icon="car-outline"
-                          size="md"
-                          variant="secondary"
-                          loading={switchToOwn.isPending}
-                          onPress={() => setConfirmingOwn(true)}
-                          style={{ marginBottom: Spacing.xs }}
-                        />
-                      )}
-                      <MandiButton
-                        label="Try again"
-                        icon="refresh-outline"
-                        size="md"
-                        loading={retryPartner.isPending}
-                        onPress={() => retryPartner.mutate(delivery.data!.id)}
-                      />
-                    </View>
-                  )}
-                  <View style={{ marginTop: Spacing.sm, flexDirection: 'row', gap: Spacing.sm }}>
-                    <MandiButton
-                      label="Track Delivery"
-                      icon="navigate-outline"
-                      size="sm"
-                      variant="secondary"
-                      onPress={() => router.push(`/supplier/tracking/${order.id}`)}
-                    />
-                    {delivery.data.trackingUrl ? (
-                      <MandiButton
-                        label="Carrier Map"
-                        icon="open-outline"
-                        size="sm"
-                        variant="neutral"
-                        onPress={() => {
-                          if (typeof window !== 'undefined' && delivery.data?.trackingUrl) {
-                            window.open(delivery.data.trackingUrl, '_blank');
-                          }
-                        }}
-                      />
-                    ) : null}
-                  </View>
-                </View>
-              )}
-            </MandiCard>
+          {deliveryData != null && view != null && (view.search != null || stopped) && (
+            <PartnerSearchPanel
+              audience="supplier"
+              delivery={deliveryData}
+              nowMs={nowMs}
+              onRetry={() => retryPartner.mutate(deliveryData.id)}
+              onSwitchOwn={() => setConfirmingOwn(true)}
+              retrying={retryPartner.isPending}
+              switching={switchToOwn.isPending}
+            />
+          )}
+
+          {view != null && view.showPartner && deliveryData?.driverName != null && (
+            <DeliveryPartnerCard
+              name={deliveryData.driverName}
+              vehicle={deliveryData.driverVehicle}
+              phone={deliveryData.driverPhone}
+              showCall={view.showCall}
+            />
+          )}
+
+          {view != null && view.complete && deliveryData != null && (
+            <DeliveredSummaryCard
+              audience="supplier"
+              deliveredAt={deliveryData.deliveredAt}
+              driverName={deliveryData.driverName}
+            />
           )}
 
           {cancelling ? (
@@ -872,82 +788,16 @@ export default function SupplierOrderScreen() {
       );
     }
 
-    if (order.status === 'READY_FOR_PICKUP') {
-      if (delivery.data == null && wantsDeliveryPartner(order.deliveryMode)) {
-        return (
-          <MandiStickyBar>
-            <MandiButton
-              label="Request Delivery Partner"
-              size="lg"
-              icon="bicycle-outline"
-              loading={requestPartner.isPending}
-              onPress={() => requestPartner.mutate()}
-            />
-          </MandiStickyBar>
-        );
-      }
-
-      if (delivery.data && canRetryPartner(delivery.data.mode, delivery.data.status)) {
-        return (
-          <MandiStickyBar>
-            <MandiButton
-              label="Try again to find a delivery partner"
-              size="lg"
-              icon="refresh-outline"
-              loading={retryPartner.isPending}
-              onPress={() => retryPartner.mutate(delivery.data!.id)}
-            />
-          </MandiStickyBar>
-        );
-      }
-
-      if (delivery.data && delivery.data.mode !== 'SUPPLIER_OWN') {
-        return (
-          <MandiStickyBar>
-            <View style={styles.partnerFooterRow}>
-              <View style={styles.flex}>
-                <MandiText variant="caption" color={Colors.textSecondary}>Delivery Partner</MandiText>
-                <MandiText variant="bodyEmphasis">
-                  {delivery.data.driverName
-                    ? `${delivery.data.driverName}${delivery.data.driverVehicle ? ` • ${delivery.data.driverVehicle}` : ''}`
-                    : delivery.data.status === 'PROVIDER_SELECTED'
-                      ? 'Assigning partner...'
-                      : delivery.data.status.replace(/_/g, ' ')}
-                </MandiText>
-              </View>
-              <MandiButton
-                label="Track"
-                size="md"
-                icon="navigate-outline"
-                variant="secondary"
-                onPress={() => router.push(`/supplier/tracking/${order.id}`)}
-              />
-            </View>
-          </MandiStickyBar>
-        );
-      }
-    }
-
-    if (order.status === 'OUT_FOR_DELIVERY' && delivery.data && delivery.data.mode !== 'SUPPLIER_OWN') {
+    if (order.status === 'READY_FOR_PICKUP' && delivery.data == null && wantsDeliveryPartner(order.deliveryMode)) {
       return (
         <MandiStickyBar>
-          <View style={styles.partnerFooterRow}>
-            <View style={styles.flex}>
-              <MandiText variant="caption" color={Colors.textSecondary}>Out for delivery</MandiText>
-              <MandiText variant="bodyEmphasis">
-                {delivery.data?.driverName
-                  ? `${delivery.data.driverName}${delivery.data.driverVehicle ? ` • ${delivery.data.driverVehicle}` : ''}`
-                  : 'Courier on the way to restaurant'}
-              </MandiText>
-            </View>
-            <MandiButton
-              label="Track"
-              size="md"
-              icon="navigate-outline"
-              variant="secondary"
-              onPress={() => router.push(`/supplier/tracking/${order.id}`)}
-            />
-          </View>
+          <MandiButton
+            label="Request Delivery Partner"
+            size="lg"
+            icon="bicycle-outline"
+            loading={requestPartner.isPending}
+            onPress={() => requestPartner.mutate()}
+          />
         </MandiStickyBar>
       );
     }
@@ -1137,10 +987,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
   },
   reasonActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  partnerDeliveryInfo: { gap: Spacing.xs, marginTop: Spacing.xs },
-  deliveryStatusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  trackingLink: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: Spacing.xs },
-  partnerFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
   itemCatchWeightRow: {
     flexDirection: 'row',
     alignItems: 'center',

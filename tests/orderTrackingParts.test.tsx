@@ -36,11 +36,11 @@ describe('DeliveryPartnerCard', () => {
 });
 
 describe('PartnerSearchPanel', () => {
-  it('fires retry and switch for the supplier, and shows the reason', () => {
+  it('fires retry and switch for the supplier, and leaves the reason to the hero', () => {
     const onRetry = jest.fn();
     const onSwitchOwn = jest.fn();
     render(<PartnerSearchPanel audience="supplier" delivery={stopped} nowMs={NOW} onRetry={onRetry} onSwitchOwn={onSwitchOwn} />);
-    expect(screen.getByText('No riders in range')).toBeTruthy();
+    expect(screen.queryByText('No riders in range')).toBeNull();
     fireEvent.press(screen.getByText('Try again'));
     fireEvent.press(screen.getByText("I'll deliver it myself"));
     expect(onRetry).toHaveBeenCalledTimes(1);

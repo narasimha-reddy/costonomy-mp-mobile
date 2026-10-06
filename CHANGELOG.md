@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### [phase6/mobile-live-tracking] - Live order tracking: stepper, partner card, map (API D-151)
 #### Added
 - A shared order-tracking view model (`lib/delivery/orderTracking.ts`) and components: a stage stepper, a headline with ETA, a partner card with call, a search panel, a delivered summary and a live map header. Both tracking screens use them.
+- The restaurant and supplier order screens use the same hero and stepper, a partner card, a collapsible items summary and a help row; Track Delivery appears only once a partner is assigned (it used to show from Preparing).
 - Track and the map appear only once a partner is assigned; the restaurant never sees the failure reason, the supplier gets Try again and I'll deliver it myself on the tracking screen.
 
 ### [phase6/mobile-delivery-search-progress] - A progress bar while a delivery partner is found (API D-151)

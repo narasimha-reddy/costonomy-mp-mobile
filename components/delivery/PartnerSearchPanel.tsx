@@ -33,9 +33,7 @@ export function PartnerSearchPanel({
       <MandiCard accentColor={Colors.warning}>
         <View style={styles.body}>
           <MandiText variant="bodyEmphasis">No partner found yet</MandiText>
-          {delivery.failureReason ? (
-            <MandiText variant="caption" color={Colors.textSecondary}>{delivery.failureReason}</MandiText>
-          ) : null}
+          {/* The reason is in the hero above; repeating it here read as two errors. */}
           <MandiText variant="caption" color={Colors.textSecondary}>
             {noPartnerNote(delivery.canSwitchToOwn, delivery.retryUntil, new Date(nowMs))}
           </MandiText>

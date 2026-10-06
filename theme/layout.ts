@@ -29,6 +29,22 @@ export const IconSize = {
   hero: 40,
 } as const;
 
+/** Order tracker stepper geometry. */
+export const Tracker = {
+  dot: 12,
+  dotCurrent: 16,
+  halo: 28,
+} as const;
+
+export const AvatarSize = {
+  md: 44,
+} as const;
+
+export const MapHeight = {
+  compact: 160,
+  full: 280,
+} as const;
+
 export const TouchTarget = {
   min: 44,
 } as const;

@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.
 
+### [phase6/mobile-live-tracking] - Live order tracking: stepper, partner card, map (API D-151)
+#### Added
+- A shared order-tracking view model (`lib/delivery/orderTracking.ts`) and components: a stage stepper, a headline with ETA, a partner card with call, a search panel, a delivered summary and a live map header. Both tracking screens use them.
+- Track and the map appear only once a partner is assigned; the restaurant never sees the failure reason, the supplier gets Try again and I'll deliver it myself on the tracking screen.
+
 ### [phase6/mobile-delivery-search-progress] - A progress bar while a delivery partner is found (API D-151)
 #### Added
 - The supplier's Delivery card shows a bar over the 30-minute automatic search ("Searching for a partner... 12 of 30 min"), a moving bar while a driver is assigned, and refreshes every 15 seconds meanwhile. The raw "QUOTE FAILED" text is gone.

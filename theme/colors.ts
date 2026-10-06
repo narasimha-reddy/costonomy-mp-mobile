@@ -142,6 +142,20 @@ export const Colors = {
   outOfStock: '#9CA3AF',
   outOfStockLight: '#F3F4F6',
 
+  // ── Marketplace: order tracker (stepper) ────────────────────────────
+  // Aliases of existing colours, named for the role so the tracker can be
+  // retuned in one place.
+  trackerStepDone: '#16A34A',
+  trackerStepCurrent: '#FF6000',
+  trackerStepTodo: '#E5E7EB',
+  trackerRail: '#E5E7EB',
+  trackerRailDone: '#16A34A',
+  trackerHalo: '#FFF7ED',
+  trackerProblem: '#D97706',
+  /** The delivery partner's initials avatar. */
+  partnerAvatarBg: '#FFF7ED',
+  partnerAvatarText: '#CC4D00',
+
   // ── Skeletons ───────────────────────────────────────────────────────
   skeletonBase: '#E5E7EB',
   skeletonHighlight: '#F3F4F6',

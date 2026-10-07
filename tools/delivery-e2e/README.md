@@ -46,11 +46,13 @@ export PATH=$HOME/.local/opt/docker:$PATH DOCKER_HOST=unix://$HOME/.colima/defau
 cd tools/delivery-e2e
 python3 driver.py --self-test          # prints the API/WEB/DB it would use; fails on 7070/7071/3306; no network, no writes
 python3 -m unittest test_selftest      # same wiring checks as unit tests
-python3 cases.py 1 3 5                 # Pidge regression cases (BLOCKED, not FAIL, if the stack is not on PIDGE)
+python3 cases.py 1 3 5                 # Pidge regression cases (BLOCKED, not FAIL, if the stack is on MOCK)
 python3 simulate_riders.py 25          # rider simulator: signed Pidge webhooks, one stage per 25 s
 python3 stage.py <orderId> assign      # one manual stage; or the supplier SandboxControlCard (POST /deliveries/{id}/sandbox/advance)
 ./android_shots.sh C3 01-searching     # screencap on emulator-5554 and emulator-5556 -> out/shots/C3-emu5554-01-searching.png
 ```
+
+Detection: when `delivery_provider` lists both the mocks and PIDGE as enabled (the merged DB does) and neither `DELIVERY_PROVIDER` nor `API_LOG` decides, the provider is UNKNOWN: Pidge tools proceed, the mock helper stays BLOCKED. Set `DELIVERY_PROVIDER=PIDGE` to be exact.
 
 Provider facts: the merged stack runs `DELIVERY_PROVIDER=PIDGE` (sandbox), which removes the mock partners. Pidge statuses
 only move through signed webhooks (`simulate_riders.py`, `stage.py`) or the supplier sandbox-advance endpoint. The mock-only

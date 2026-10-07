@@ -207,13 +207,29 @@ function Leg({
   const style: ViewStyle = horizontal
     ? { left: `${Math.min(from.x, to.x)}%`, top: `${from.y}%`, width: `${Math.abs(to.x - from.x)}%`, height: 5, marginTop: -2 }
     : { left: `${from.x}%`, top: `${Math.min(from.y, to.y)}%`, height: `${Math.abs(to.y - from.y)}%`, width: 5, marginLeft: -2 };
-  const look: ViewStyle = dashed
-    ? { backgroundColor: 'transparent', borderStyle: 'dashed', borderColor: Colors.routePending, ...(horizontal ? { borderTopWidth: 2 } : { borderLeftWidth: 2 }) }
-    : color != null
-      ? { backgroundColor: color }
-      : {};
+  if (dashed) {
+    // Android draws a dashed border on a thin View solid, so the dashes are real short segments, a gap between each.
+    return (
+      <View
+        testID={testID}
+        style={[styles.dashRun, style, { flexDirection: horizontal ? 'row' : 'column' }]}
+      >
+        {Array.from({ length: DASHES * 2 - 1 }, (_, i) => (
+          <View
+            key={i}
+            testID={i % 2 === 0 ? 'map-dash' : undefined}
+            style={[styles.dashPiece, i % 2 === 0 && styles.dash, horizontal ? styles.dashH : styles.dashV]}
+          />
+        ))}
+      </View>
+    );
+  }
+  const look: ViewStyle = color != null ? { backgroundColor: color } : {};
   return <View testID={testID} style={[styles.route, style, look]} />;
 }
+
+/** Dashes per leg: each is one equal share of the leg with an equal gap, so the pattern reads on any leg length. */
+const DASHES = 6;
 
 const styles = StyleSheet.create({
   panel: {
@@ -233,6 +249,11 @@ const styles = StyleSheet.create({
   },
   park: { position: 'absolute', borderRadius: Radius.md, backgroundColor: Colors.mapPark },
   road: { position: 'absolute', backgroundColor: Colors.mapRoad },
+  dashRun: { position: 'absolute' },
+  dashPiece: { flex: 1 },
+  dash: { backgroundColor: Colors.routePending, borderRadius: 1 },
+  dashH: { height: 2, alignSelf: 'center' },
+  dashV: { width: 2, alignSelf: 'center' },
   route: { position: 'absolute', borderRadius: 3, backgroundColor: Colors.primary },
   pin: {
     position: 'absolute',

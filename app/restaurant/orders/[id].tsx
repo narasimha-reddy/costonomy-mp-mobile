@@ -28,7 +28,8 @@ import { isApiError } from '@/lib/api/errors';
 import { useServerNow } from '@/hooks/useServerNow';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { buyerTrackingHeader } from '@/lib/delivery/trackingHeader';
-import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
+import { formatMoney, formatQuantity } from '@/utils/money';
+import { itemTaxLine } from '@/components/order/BillSummary';
 import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { paymentLine } from '@/lib/payments/paymentLine';
 import { skuSecondaryLine } from '@/utils/skuLabel';
@@ -339,7 +340,7 @@ export default function OrderDetailScreen() {
                       {skuSecondaryLine(item.sku, item.unitPriceInclusiveGst)}
                     </MandiText>
                     <MandiText variant="caption" color={Colors.textTertiary}>
-                      {item.unit} · Inc. {formatGstRate(item.gstRate)} GST
+                      {itemTaxLine(item)}
                     </MandiText>
                     {item.requiresColdChain && (
                       <ColdChainBanner compact text="Chilled goods" />

@@ -5,7 +5,8 @@ import { MandiText } from '@/components/common/MandiText';
 import { paymentLine, type CreditDates } from '@/lib/payments/paymentLine';
 import type { SupplierOrder } from '@/models/procurement';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
-import { formatMoney, type Money } from '@/utils/money';
+import { formatGstRate, formatMoney, type Money } from '@/utils/money';
+import { skuSecondaryLine, type SkuDescriptor } from '@/utils/skuLabel';
 
 export interface BillLine {
   label: string;
@@ -43,9 +44,11 @@ export function billSummaryFor(order: BillOrder, settled: boolean, credit?: Cred
   ];
   // A collected order has no delivery partner, so no fee line, not even a "Free" one.
   if (order.deliveryFee != null && order.deliveryMode != null && order.deliveryMode !== 'PICKUP') {
+    // Only a Costonomy delivery has a partner; a supplier's own run is just a "Delivery fee".
+    const label = order.deliveryMode === 'COSTONOMY_DELIVERY' ? 'Delivery partner fee' : 'Delivery fee';
     lines.push(Number(order.deliveryFee) > 0
-      ? { label: 'Delivery partner fee', amount: order.deliveryFee }
-      : { label: 'Delivery partner fee', amount: order.deliveryFee, valueText: 'Free', tone: 'saving' });
+      ? { label, amount: order.deliveryFee }
+      : { label, amount: order.deliveryFee, valueText: 'Free', tone: 'saving' });
   }
   const final = paymentLine(order, credit);
   return {
@@ -53,6 +56,21 @@ export function billSummaryFor(order: BillOrder, settled: boolean, credit?: Cred
     grandTotal: settled ? (order.acceptedAmount as Money) : order.totalAmount,
     finalLine: { label: final.label, amount: final.amount },
   };
+}
+
+/**
+ * The small line under an order item's pack line: "Inc. 5% GST". The pack line above already names the pack and
+ * its unit, so the ordering unit leads here only when there is no pack line to say it (it never stands alone).
+ */
+export function itemTaxLine(item: {
+  sku: SkuDescriptor | null | undefined;
+  unit: string | null | undefined;
+  unitPriceInclusiveGst: Money | null | undefined;
+  gstRate: Money;
+}): string {
+  const gst = `Inc. ${formatGstRate(item.gstRate)} GST`;
+  const packShown = skuSecondaryLine(item.sku, item.unitPriceInclusiveGst) !== '';
+  return !packShown && item.unit ? `${item.unit} · ${gst}` : gst;
 }
 
 /** "Bill Summary": one card, a row per server figure, the grand total, then what is left to pay or was paid. */

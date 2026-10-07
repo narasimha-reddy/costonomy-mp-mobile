@@ -1,6 +1,7 @@
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/contexts/SessionProvider';
@@ -87,7 +88,9 @@ export function BuyerTrackingLayout({
     return (
       <View style={styles.root}>
         <View style={{ paddingTop: insets.top, backgroundColor: Colors.surface }}>
-          <MandiHeader title="Tracking" subtitle={order.orderNumber} back onBack={onBack} right={help} />
+          {/* A white bar: the clock and icons must be dark, or they vanish into it. */}
+          <StatusBar style="dark" />
+          <MandiHeader title={supplier} subtitle={order.orderNumber} back onBack={onBack} right={help} />
         </View>
         <ScrollView contentContainerStyle={styles.grow} {...scrollProps}>
           <OrderPlacedHero
@@ -128,7 +131,8 @@ export function BuyerTrackingLayout({
     return (
       <View style={styles.root}>
         <View style={{ paddingTop: insets.top, backgroundColor: Colors.surface }}>
-          <MandiHeader title="Tracking" subtitle={supplier} back onBack={onBack} right={help} />
+          <StatusBar style="dark" />
+          <MandiHeader title={supplier} back onBack={onBack} right={help} />
         </View>
         <ScrollView contentContainerStyle={styles.scroll} {...scrollProps}>
           <ReceiptHero title={`Order delivered at ${outletLabel}`} subtitle={at != null ? `Delivered at ${at}` : null} />

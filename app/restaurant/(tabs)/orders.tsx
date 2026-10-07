@@ -15,7 +15,7 @@ import {
   MandiText,
   toneColors,
 } from '@/components/common';
-import { resolveStatus, SupplierOrderStatus } from '@/models/status';
+import { buyerOrderStatus, resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
 import { ActiveOrderPill } from '@/components/delivery/ActiveOrderPill';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
@@ -125,7 +125,7 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
         paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
         amount={order.totalAmount}
-        status={resolveStatus(SupplierOrderStatus, order.status)}
+        status={buyerOrderStatus(order.status, order.deliveryMode)}
       />
     </MandiCard>
   );

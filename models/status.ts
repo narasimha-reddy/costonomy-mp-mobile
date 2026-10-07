@@ -153,7 +153,7 @@ export const CreditAgreementStatus: Record<string, StatusDisplay> = {
 export const DeliveryStatus: Record<string, StatusDisplay> = {
   DELIVERY_REQUESTED: { label: 'Finding a delivery partner', tone: 'pending' },
   QUOTE_RECEIVED: { label: 'Finding a delivery partner', tone: 'pending' },
-  PROVIDER_SELECTED: { label: 'Assigning a partner', tone: 'pending' },
+  PROVIDER_SELECTED: { label: 'Finding partner', tone: 'pending' },
   DRIVER_ASSIGNED: { label: 'Partner assigned', tone: 'live' },
   DRIVER_AT_PICKUP: { label: 'At the supplier', tone: 'live' },
   PICKED_UP: { label: 'Picked up', tone: 'live' },

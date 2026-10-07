@@ -429,3 +429,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Arrival Radar situational widgets for restaurant kitchens: real-time driver ETA, vehicle type badge, and delivery issue notification alerts.
 - Delivery status `PROVIDER_SELECTED` now reads "Finding partner" (was "Assigning a partner"); regression tests for the platform-delivery copy (T1a).
 - [Restyle] Deliveries filters are one scrolling row of pills (Active, Late, Needs check-in, All) with counts from the radar summary, via the new FilterPills component.
+
+### [feat/restyle-p2a-primitives] - DetailRowCard and StickyActionBar
+#### Added
+- `DetailRowCard` (icon rows, 56dp minimum, one-line title, two-line subtitle, non-shrinking trailing slot) and `StickyActionBar` (`pay` and `continue` variants over `MandiStickyBar`). No screen uses them yet.

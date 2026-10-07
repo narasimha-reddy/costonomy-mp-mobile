@@ -6,11 +6,14 @@ import { fetchTaxInvoice, fetchCreditNotes, type TaxInvoice, type CreditNote } f
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder } from '@/services/procurement';
 import { fetchDelivery } from '@/services/delivery';
 import {
   MandiButton,
+  DetailRowCard,
+  type DetailRow,
   MandiCard,
   MandiErrorState,
   MandiChatAction,
@@ -20,19 +23,16 @@ import {
   MandiStickyBar,
   MandiText,
 } from '@/components/common';
-import { CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
+import { BillSummary, billSummaryFor, CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { isApiError } from '@/lib/api/errors';
-import { TrackingCards } from '@/components/delivery/TrackingCards';
-import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
-import { CollapsibleSection } from '@/components/order/CollapsibleSection';
 import { useServerNow } from '@/hooks/useServerNow';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
+import { buyerTrackingHeader } from '@/lib/delivery/trackingHeader';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { paymentLine } from '@/lib/payments/paymentLine';
 import { skuSecondaryLine } from '@/utils/skuLabel';
-import { DetailRow as Row } from '@/components/restaurant/DetailRow';
-import { Colors, Radius, Spacing, TrackingLayout } from '@/theme';
+import { Colors, IconSize, Spacing, TouchTarget } from '@/theme';
 
 const ACTIVE_POLL_MS = 15_000;
 const ENDED_ORDER = ['COMPLETED', 'CANCELLED'];
@@ -98,6 +98,13 @@ export default function OrderDetailScreen() {
     ? null
     : orderTrackingView({ audience: 'buyer', order, delivery: deliveryStatus, nowMs });
 
+  const header = order == null || view == null
+    ? null
+    : buyerTrackingHeader({ view, order, delivery: deliveryStatus, drop: null, nowMs });
+  // Track while the order is moving, or whenever the server says the partner can be followed. A DRAFT is not yet sent.
+  const showTrack = view != null && order != null && order.status !== 'DRAFT'
+    && (view.showTrack || !view.terminal);
+
   /**
    * The supplier answered, and for less than was asked.
    *
@@ -121,6 +128,50 @@ export default function OrderDetailScreen() {
       refundedAt: order.refundedAt,
     })
     : undefined;
+
+  /** Payment method, the delivery window, the address, and a way to report a problem once it has arrived. */
+  function detailRows(o: NonNullable<typeof order>): DetailRow[] {
+    const rows: DetailRow[] = [];
+    if (o.paymentMethod != null || payment != null) {
+      rows.push({
+        key: 'payment',
+        icon: 'card-outline',
+        title: 'Payment method',
+        // Said by the server's status and instrument, never guessed: a UPI order that was cancelled has been
+        // debited and is being refunded, which is not "no money was taken".
+        subtitle: payment == null ? null : [payment.label, payment.detail].filter(Boolean).join('. '),
+        right: o.paymentMethod != null ? <PaymentMethodPill method={o.paymentMethod} /> : undefined,
+      });
+    }
+    const when = o.deliverySlotName ?? o.scheduledDeliveryDate;
+    if (when) {
+      rows.push({
+        key: 'window',
+        icon: 'time-outline',
+        title: 'Delivery window',
+        subtitle: o.deliverySlotName && o.scheduledDeliveryDate
+          ? `${o.scheduledDeliveryDate}, ${o.deliverySlotName}`
+          : when,
+      });
+    }
+    if (o.isSubscriptionOrder) {
+      rows.push({ key: 'subscription', icon: 'repeat-outline', title: 'Order type', subtitle: 'Daily Subscription' });
+    }
+    const address = [o.outletName, o.outletLocality, o.outletCity].filter(Boolean).join(', ');
+    if (address) {
+      rows.push({ key: 'address', icon: 'location-outline', title: 'Delivery address', subtitle: address });
+    }
+    if (view?.complete) {
+      rows.push({
+        key: 'report',
+        icon: 'flag-outline',
+        title: 'Report an issue',
+        onPress: () => router.push(`/restaurant/dispute/${o.id}`),
+        right: <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />,
+      });
+    }
+    return rows;
+  }
 
   // ── Billing: statutory invoices & credit notes ──────────────────────
   const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
@@ -165,9 +216,29 @@ export default function OrderDetailScreen() {
     <MandiScreen
       header={
         <MandiHeader
-          title="Order"
-          subtitle={order?.orderNumber ?? undefined}
+          title="Order details"
           back
+          right={order != null && (
+            <MandiChatAction
+              outletId={order.outletId}
+              supplierStoreId={order.supplierStoreId}
+              side="RESTAURANT"
+              // What this conversation is about, offered for sharing once the thread opens rather than assumed.
+              suggest={{ type: 'ORDER', id: order.id }}
+            >
+              {({ onPress, label, busy }) => (
+                <Pressable
+                  onPress={onPress}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  style={styles.support}
+                >
+                  <MandiText variant="bodyEmphasis" color={Colors.primaryDark}>Support</MandiText>
+                </Pressable>
+              )}
+            </MandiChatAction>
+          )}
         />
       }
       onRefresh={() => query.refetch()}
@@ -180,29 +251,23 @@ export default function OrderDetailScreen() {
         <MandiErrorState message="Couldn't load this order." onRetry={() => query.refetch()} />
       ) : (
         <>
-          {/* The tracker: where the order is, from what the server said. The top is an illustration until a partner
-              is reporting, then a map preview that opens the live view. */}
-          {view != null && (
-            <View style={styles.tracker}>
-              <View style={styles.topClip}>
-                <TrackingTopArea
-                  view={view}
-                  delivery={deliveryStatus}
-                  destination={null}
-                  height={TrackingLayout.previewHeight}
-                  overlap={0}
-                  compact
-                  onPress={view.showTrack && view.showMap ? () => router.push(`/restaurant/tracking/${order.id}`) : undefined}
-                />
-              </View>
-              <TrackingCards
-                audience="buyer"
-                view={view}
-                delivery={deliveryStatus}
-                nowMs={nowMs}
-                onReport={() => router.push(`/restaurant/dispute/${order.id}`)}
-              />
-            </View>
+          {/* The status card: where the order is, in the buyer tracking header's own words. Hidden once cancelled,
+              when the payment row below carries the refund copy. */}
+          {header != null && order.status !== 'CANCELLED' && (
+            <DetailRowCard
+              rows={[{
+                key: 'status',
+                icon: 'navigate-outline',
+                title: header.title,
+                subtitle: header.pill?.text ?? null,
+                accessibilityLabel: `Order status, ${header.title}`,
+                // Track while the order is moving (or the server says it can be followed); nothing once it ended.
+                right: showTrack ? (
+                  <MandiText variant="bodyEmphasis" color={Colors.primaryDark}>Track ›</MandiText>
+                ) : undefined,
+                onPress: showTrack ? () => router.push(`/restaurant/tracking/${order.id}`) : undefined,
+              }]}
+            />
           )}
 
           <MandiCard>
@@ -212,49 +277,45 @@ export default function OrderDetailScreen() {
             {/* Through to the supplier's shelf. Somebody reading an order
                 often wants the next one, or to check what else this supplier
                 carries — and the name is where they reach for it. */}
-            <Pressable
-              onPress={() => router.push(`/restaurant/supplier/${order.supplierStoreId}`)}
-              accessibilityRole="button"
-              accessibilityLabel={`See everything ${order.storeName ?? order.supplierName} sells`}
-              style={({ pressed }) => [styles.partyRow, pressed && styles.pressed]}
-            >
-              <View style={styles.flex}>
-                <MandiText variant="bodyEmphasis" style={styles.party}>
-                  {order.supplierName}
-                </MandiText>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  {order.storeName}
-                </MandiText>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
-            </Pressable>
-          </MandiCard>
+            <View style={styles.partyRow}>
+              <Pressable
+                onPress={() => router.push(`/restaurant/supplier/${order.supplierStoreId}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`See everything ${order.storeName ?? order.supplierName} sells`}
+                style={({ pressed }) => [styles.partyLink, pressed && styles.pressed]}
+              >
+                <View style={styles.flex}>
+                  <MandiText variant="bodyEmphasis" style={styles.party}>
+                    {order.supplierName}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    {order.storeName}
+                  </MandiText>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+              </Pressable>
+              <MandiChatAction
+                outletId={order.outletId}
+                supplierStoreId={order.supplierStoreId}
+                side="RESTAURANT"
+                suggest={{ type: 'ORDER', id: order.id }}
+              />
+            </View>
+            <View style={styles.hairline} />
+            <View style={styles.orderIdRow}>
+              <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+                Order ID: {order.orderNumber}
+              </MandiText>
+              <Pressable
+                onPress={() => { void Clipboard.setStringAsync(order.orderNumber); }}
+                accessibilityRole="button"
+                accessibilityLabel="Copy order ID"
+                style={styles.copy}
+              >
+                <Ionicons name="copy-outline" size={IconSize.md} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
 
-          {(order.hasColdChainItems || order.scheduledDeliveryDate || order.deliverySlotName
-            || order.isSubscriptionOrder) && (
-            <MandiCard>
-              <MandiText variant="bodyEmphasis">Delivery</MandiText>
-              {order.hasColdChainItems && (
-                <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />
-              )}
-              {order.scheduledDeliveryDate && (
-                <Row label="Scheduled Date" value={order.scheduledDeliveryDate} />
-              )}
-              {order.deliverySlotName && (
-                <Row label="Delivery Window" value={order.deliverySlotName} />
-              )}
-              {order.isSubscriptionOrder && (
-                <Row label="Order Type" value="Daily Subscription" />
-              )}
-            </MandiCard>
-          )}
-
-          <CollapsibleSection
-            key={`summary-${view?.terminal ?? false}`}
-            title="Items and totals"
-            summary={`${order.items.length} ${order.items.length === 1 ? 'item' : 'items'} · ${formatMoney(settled ? order.acceptedAmount : order.totalAmount)}`}
-            defaultOpen={view?.terminal ?? false}
-          >
             {order.items.map((item) => {
               const short =
                 item.acceptedQuantity != null &&
@@ -270,16 +331,15 @@ export default function OrderDetailScreen() {
                     accessibilityLabel={`About ${item.productName}`}
                     style={styles.itemText}
                   >
-                    <MandiText variant="body">{item.productName}</MandiText>
-                    {/* The pack, as every other screen describes it. The
-                        quantity goes below: it belongs to this order, not to
-                        the pack. */}
+                    <MandiText variant="body">
+                      {formatQuantity(item.requestedQuantity)} x {item.productName}
+                    </MandiText>
+                    {/* The pack, as every other screen describes it. */}
                     <MandiText variant="caption" color={Colors.textSecondary}>
                       {skuSecondaryLine(item.sku, item.unitPriceInclusiveGst)}
                     </MandiText>
                     <MandiText variant="caption" color={Colors.textTertiary}>
-                      {formatQuantity(item.requestedQuantity)} {item.unit} ordered ·
-                      Inc. {formatGstRate(item.gstRate)} GST
+                      {item.unit} · Inc. {formatGstRate(item.gstRate)} GST
                     </MandiText>
                     {item.requiresColdChain && (
                       <ColdChainBanner compact text="Chilled goods" />
@@ -313,79 +373,15 @@ export default function OrderDetailScreen() {
                 </View>
               );
             })}
-            <View style={styles.sectionGap}>
-            {/* One figure per row: what this order actually comes to. The
-                ordered amounts are struck on the lines above, where the change is
-                a fact about a particular item — repeating them here turned a
-                summary into a second comparison, and a summary that shows two
-                numbers for every row is not a summary. */}
-            <Row
-              label="Item value"
-              value={formatMoney(settled ? order.acceptedSubtotal : order.subtotal)}
-            />
-            <Row
-              label="GST"
-              value={formatMoney(settled ? order.acceptedGst : order.gstAmount)}
-            />
-            {/* Where the request screen puts it. A charge is a line; free delivery is a line too (below). */}
-            {order.deliveryFee != null && Number(order.deliveryFee) > 0 && (
-              <Row label="Delivery" value={formatMoney(order.deliveryFee)} />
-            )}
-            {/* Said outright when somebody delivers for nothing: a missing line reads as "not charged yet". Still
-                nothing for a collected order, where it would state the obvious. */}
-            {order.deliveryFee != null && Number(order.deliveryFee) === 0
-              && order.deliveryMode != null && order.deliveryMode !== 'PICKUP' && (
-              <Row label="Delivery" value="Free" />
-            )}
-            <Row
-              label="Total"
-              value={formatMoney(settled ? order.acceptedAmount : order.totalAmount)}
-              emphasis
-            />
-            </View>
-          </CollapsibleSection>
-
-          <MandiCard>
-            {order.paymentStatus && (
-              <Row label="Payment" value={payment?.label ?? ''} />
-            )}
-            {/* Said by the server's status and instrument, never guessed: a
-                UPI order that was cancelled has been debited and is being
-                refunded, which is not "no money was taken". */}
-            {payment?.detail != null && (
-              <MandiText variant="caption" color={Colors.textSecondary}>{payment.detail}</MandiText>
-            )}
-            {/* How this one is funded — the restaurant is the party who either
-                paid or owes, and until now its own view of the order was the
-                only one that never said which. It takes a labelled row like
-                every other line in this block rather than floating under them,
-                and the same pill the card and the supplier's view carry, so the
-                two sides cannot describe one order's funding differently. */}
-            {order.paymentMethod != null && (
-              <View style={styles.totalsRow}>
-                <View style={styles.flex}>
-                  <MandiText variant="body" color={Colors.textSecondary}>Funded by</MandiText>
-                </View>
-                <PaymentMethodPill method={order.paymentMethod} />
-              </View>
-            )}
           </MandiCard>
 
-          <MandiCard>
-            <View style={styles.helpRow}>
-              <View style={styles.flex}>
-                <MandiText variant="bodyEmphasis">Need help?</MandiText>
-              </View>
-              <MandiChatAction
-                outletId={order.outletId}
-                supplierStoreId={order.supplierStoreId}
-                side="RESTAURANT"
-                // What this conversation is about, offered for sharing once the
-                // thread opens rather than assumed.
-                suggest={{ type: 'ORDER', id: order.id }}
-              />
-            </View>
-          </MandiCard>
+          {/* Each figure is a server field: nothing is added here. */}
+          <BillSummary {...billSummaryFor(order, settled)} />
+
+          {order.hasColdChainItems && (
+            <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />
+          )}
+          <DetailRowCard rows={detailRows(order)} />
 
           {/* ── Statutory Billing Documents ────────────────────────── */}
           {billingEligible && (
@@ -534,9 +530,12 @@ export default function OrderDetailScreen() {
 
 const styles = StyleSheet.create({
   partyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  partyLink: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: Colors.border, marginVertical: Spacing.sm },
+  orderIdRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  copy: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  support: { minHeight: 48, minWidth: TouchTarget.min, paddingHorizontal: Spacing.sm, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.7 },
-  tracker: { gap: Spacing.listGap },
-  topClip: { borderRadius: Radius.lg, overflow: 'hidden' },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   // The request screen's chip row, so the two read alike.

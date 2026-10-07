@@ -437,3 +437,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [restyle] GreenTrackingHeader and EtaPill components for the buyer tracking header (not wired into a screen yet).
 - Restyle T3: pure `buyerTrackingHeader()` adapter over `orderTrackingView` (title, pill, map mode, partner area for 18 buyer tracking states) with tests.
 - Delivery map modes (pending, live, arriving, reached), TruckIcon marker, Android tile watchdog with sketch fallback, and optional pickup/drop coordinates on Delivery.
+- [Restyle] Order details (buyer): status card with Track, Support in the header, Bill Summary card with server-sent lines and the payment line, details card; BillSummary component.

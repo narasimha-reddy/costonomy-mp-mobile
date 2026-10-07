@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MandiToastProvider } from '@/components/common';
@@ -7,6 +7,7 @@ import RestaurantOrderScreen from '@/app/restaurant/orders/[id]';
 import SupplierOrderScreen from '@/app/supplier/orders/[id]';
 import { fetchDelivery } from '@/services/delivery';
 import { fetchSupplierOrder } from '@/services/procurement';
+import { openThread } from '@/services/chat';
 import { ApiError } from '@/lib/api/errors';
 
 jest.mock('@expo/vector-icons', () => {
@@ -14,8 +15,11 @@ jest.mock('@expo/vector-icons', () => {
   return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
 });
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
+const mockPush = jest.fn();
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
+jest.mock('@/services/chat', () => ({ openThread: jest.fn(), openThreadFromStore: jest.fn() }));
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
   useLocalSearchParams: () => ({ id: '5' }),
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
@@ -71,6 +75,7 @@ const noDelivery = () => (fetchDelivery as jest.Mock).mockRejectedValue(
 );
 
 beforeEach(() => {
+  mockPush.mockClear();
   (fetchSupplierOrder as jest.Mock).mockResolvedValue(order);
   (fetchDelivery as jest.Mock).mockResolvedValue(delivery);
 });
@@ -93,33 +98,65 @@ describe('buyer order screen', () => {
     expect(screen.queryByText('You paid')).toBeNull();
   });
 
+  it('status card Track opens tracking', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
+    setup(RestaurantOrderScreen);
+    const track = await screen.findByText('Track ›');
+    fireEvent.press(track);
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/tracking/5');
+  });
+
+  it('hides the status card when cancelled and keeps the refund copy', async () => {
+    noDelivery();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({
+      ...order, status: 'CANCELLED', paymentStatus: 'CAPTURED', paymentInstrument: 'UPI',
+    });
+    setup(RestaurantOrderScreen);
+    await screen.findByText('Bill Summary');
+    expect(screen.queryByText('Track ›')).toBeNull();
+    expect(screen.queryByText('Order cancelled')).toBeNull();
+  });
+
+  it('Support opens chat', async () => {
+    noDelivery();
+    (openThread as jest.Mock).mockResolvedValue({ id: 77 });
+    setup(RestaurantOrderScreen);
+    fireEvent.press(await screen.findByText('Support'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/chat/77?suggestType=ORDER&suggestId=5'));
+    expect(screen.queryByText('Need help?')).toBeNull();
+  });
+
+  it('bill lines equal server fields to the paisa', async () => {
+    noDelivery();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({
+      ...order, subtotal: '1000.10', gstAmount: '180.20', totalAmount: '1234.56', deliveryFee: '49.00',
+      acceptedSubtotal: '0.00', acceptedGst: '0.00',
+    });
+    setup(RestaurantOrderScreen);
+    expect(await screen.findByText('₹1,000.10')).toBeTruthy();
+    expect(screen.getByText('₹180.20')).toBeTruthy();
+    expect(screen.getAllByText('₹1,234.56').length).toBeGreaterThan(0);
+    expect(screen.queryByText('₹1,229.30')).toBeNull();
+  });
+
   it('has no Track Delivery or partner card when ready with no partner', async () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
     noDelivery();
     setup(RestaurantOrderScreen);
-    expect(await screen.findByText('Finding a delivery partner')).toBeTruthy();
+    expect(await screen.findByText('Assigning a delivery partner')).toBeTruthy();
     expect(screen.queryByText('Track Delivery')).toBeNull();
     expect(screen.queryByLabelText('Call Ravi Kumar')).toBeNull();
   });
 
-  it('shows Track Delivery, partner card and call once a partner is assigned', async () => {
+  it('shows Track Delivery and the partner status once a partner is assigned', async () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
     setup(RestaurantOrderScreen);
     expect(await screen.findByText('Track Delivery')).toBeTruthy();
-    expect(screen.getByText('Ravi Kumar')).toBeTruthy();
-    expect(screen.getByLabelText('Call Ravi Kumar')).toBeTruthy();
-    expect(screen.getByText('1 item · ₹1,180.00')).toBeTruthy();
+    expect(screen.getByText('Ravi is on the way to the supplier')).toBeTruthy();
+    expect(screen.getByText('10 x Paneer')).toBeTruthy();
   });
 
-  it('opens tracking from a map preview only once a position is reported', async () => {
-    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
-    setup(RestaurantOrderScreen);
-    await screen.findByText('Track Delivery');
-    // A partner but no reported position: the top stays an illustration, not a tappable map.
-    expect(screen.queryByLabelText('Track delivery on the map')).toBeNull();
-  });
-
-  it('shows the map preview, which opens tracking, when the partner has a position', async () => {
+  it('the status card follows a live partner and opens tracking', async () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'OUT_FOR_DELIVERY' });
     (fetchDelivery as jest.Mock).mockResolvedValue({
       ...delivery, status: 'IN_TRANSIT',
@@ -127,7 +164,8 @@ describe('buyer order screen', () => {
       locationStale: false,
     });
     setup(RestaurantOrderScreen);
-    expect(await screen.findByLabelText('Track delivery on the map')).toBeTruthy();
+    fireEvent.press(await screen.findByLabelText('Order status, Order is on the way'));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/tracking/5');
   });
 
   it('never shows the failure reason to the buyer', async () => {
@@ -142,13 +180,14 @@ describe('buyer order screen', () => {
     expect(screen.queryByText('Track Delivery')).toBeNull();
   });
 
-  it('still offers check-in when the order is receivable, with Delivered by and a report link', async () => {
+  it('still offers check-in when the order is receivable, with a report link and no Track', async () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'DELIVERED' });
     (fetchDelivery as jest.Mock).mockResolvedValue({ ...delivery, status: 'DELIVERED', deliveredAt: null });
     setup(RestaurantOrderScreen);
     expect(await screen.findByText('Check in delivery')).toBeTruthy();
-    expect(screen.getByText('Delivered by Ravi Kumar')).toBeTruthy();
-    expect(screen.getByText('Report an issue')).toBeTruthy();
+    fireEvent.press(screen.getByText('Report an issue'));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/dispute/5');
+    expect(screen.queryByText('Track ›')).toBeNull();
     expect(screen.queryByText('Track Delivery')).toBeNull();
     expect(screen.queryByLabelText('Call Ravi Kumar')).toBeNull();
   });

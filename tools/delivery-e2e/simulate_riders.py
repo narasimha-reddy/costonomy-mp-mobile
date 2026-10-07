@@ -10,7 +10,7 @@ from driver import *
 from cases import LOC_NEAR_SUPPLIER, LOC_MID
 
 PACE = int(sys.argv[1]) if len(sys.argv) > 1 else 25
-OUTLET = (12.9784, 77.6408)
+OUTLET = OUTLET_LATLNG
 NEXT = {  # current delivery status -> (stage to report, where the rider is, label)
     'PROVIDER_SELECTED': ('fulfilled|out for pickup', LOC_NEAR_SUPPLIER, 'partner assigned'),
     'DRIVER_ASSIGNED': ('fulfilled|reached pickup', LOC_NEAR_SUPPLIER, 'at the supplier'),
@@ -19,6 +19,10 @@ NEXT = {  # current delivery status -> (stage to report, where the rider is, lab
     'IN_TRANSIT': ('fulfilled|reached delivery', OUTLET, 'arrived'),
     'ARRIVED_AT_DESTINATION': ('fulfilled|delivered', OUTLET, 'delivered'),
 }
+if delivery_provider() != 'PIDGE':
+    sys.exit('BLOCKED: the stack runs %s, not PIDGE; the rider simulator only posts signed Pidge webhooks' % delivery_provider())
+if not pidge_secret():
+    sys.exit('BLOCKED: PIDGE_WEBHOOK_SECRET is not set (environment first, then application-local.properties)')
 started = sys.argv[2] if len(sys.argv) > 2 else db1("select date_format(utc_timestamp(6), '%Y-%m-%d %H:%i:%s.%f')")
 seen = {}
 print('rider simulator on: deliveries booked from now on move one stage every %ds. Ctrl-C to stop.' % PACE, flush=True)

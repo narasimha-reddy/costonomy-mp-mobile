@@ -7,6 +7,7 @@ TRACK = '/restaurant/tracking/%d'
 STRACK = '/supplier/tracking/%d'
 LOC_NEAR_SUPPLIER = (12.9650, 77.6400)
 LOC_MID = (12.9700, 77.6395)
+OUTLET_LL = OUTLET_LATLNG
 
 def D(oid): return delivery_of(oid)
 def shot_pair(case, step, oid, bexp=(), bforbid=(), sexp=(), sforbid=(), extra=()):
@@ -400,6 +401,12 @@ if __name__ == '__main__':
     import driver
     which = sys.argv[1:] or [str(i) for i in range(1, 13)]
     driver.RESULTS[:] = [r for r in load_results() if r['case'] not in which]
+    prov = delivery_provider()
+    if prov != 'PIDGE':
+        # These cases drive Pidge (signed webhooks, sandbox stages); with the mock partners they cannot run.
+        for n in which:
+            rec(n, 'provider check', 'delivery provider PIDGE', prov, 'BLOCKED', 'cases 1-12 need PIDGE (sandbox); use the mock panel for MOCK stacks')
+        sys.exit(0)
     wait_health()
     r = widen_hours(); print('store hours widened:', r)
     try:

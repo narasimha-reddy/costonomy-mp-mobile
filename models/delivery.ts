@@ -62,6 +62,14 @@ export interface Delivery {
   pickedUpAt: string | null;
   deliveredAt: string | null;
   timeline: DeliveryEvent[];
+  /** While no partner is found: when the automatic retries stop (API D-151). */
+  retryUntil?: string | null;
+  /** When the search for a partner began (API D-151). */
+  searchStartedAt?: string | null;
+  /** The supplier may now deliver this order themselves (API D-151). */
+  canSwitchToOwn?: boolean;
+  /** Test-only (API D-154): the supplier may move a sandbox rider to the next step. Supplier screens only. */
+  sandboxControls?: boolean;
 }
 
 export type ArrivalStage =

@@ -29,6 +29,37 @@ export const IconSize = {
   hero: 40,
 } as const;
 
+/** Order tracker stepper geometry. */
+export const Tracker = {
+  dot: 12,
+  dotCurrent: 16,
+  halo: 28,
+} as const;
+
+export const AvatarSize = {
+  md: 44,
+  lg: 52,
+} as const;
+
+/** The tracking screen: what sits above the sheet, and how far the sheet rides up over it. */
+export const TrackingLayout = {
+  topHeight: 300,
+  /** The same area as a tappable preview on an order's detail screen. */
+  previewHeight: 180,
+  sheetOverlap: 26,
+  grabWidth: 38,
+  grabHeight: 4,
+  segmentHeight: 5,
+  /** The call button's drawn size; it claims 44pt with a hit slop. */
+  callButton: 42,
+  illustrationIcon: 88,
+} as const;
+
+export const MapHeight = {
+  compact: 160,
+  full: 280,
+} as const;
+
 export const TouchTarget = {
   min: 44,
 } as const;

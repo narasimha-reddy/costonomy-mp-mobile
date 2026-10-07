@@ -61,6 +61,14 @@ export const TextStyles = {
     letterSpacing: -0.8,
   },
 
+  /** The ETA headline on the tracking hero: the one thing the screen is for. */
+  trackerHeadline: {
+    fontFamily: FontFamily.extrabold,
+    fontSize: 30,
+    lineHeight: 34,
+    letterSpacing: -0.4,
+  },
+
   display: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.xxxl,

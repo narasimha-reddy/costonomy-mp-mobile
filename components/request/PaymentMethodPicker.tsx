@@ -38,6 +38,9 @@ export function PaymentMethodPicker({
   amount,
   selected,
   onSelect,
+  offered,
+  autoSelect = true,
+  title = 'How would you like to pay?',
 }: {
   outletId: number | null;
   supplierStoreId: number;
@@ -45,6 +48,11 @@ export function PaymentMethodPicker({
   amount: Money | null | undefined;
   selected: PaymentMethod | null;
   onSelect: (method: PaymentMethod) => void;
+  /** Only these methods are listed. All three by default; the pay screen offers wallet and credit (API D-152). */
+  offered?: PaymentMethod[];
+  /** Pick the first usable method on open. Off where choosing is a deliberate act. */
+  autoSelect?: boolean;
+  title?: string;
 }) {
   const { accessToken } = useSession();
   const due = amount == null ? null : Number(amount);
@@ -73,7 +81,7 @@ export function PaymentMethodPicker({
   const creditAvailable = line?.available ?? null;
   const creditShort = due != null && creditAvailable != null && Number(creditAvailable) < due;
 
-  const options: {
+  const allOptions: {
     key: PaymentMethod;
     label: string;
     hint: string;
@@ -108,10 +116,12 @@ export function PaymentMethodPicker({
     },
   ];
 
+  const options = offered == null ? allOptions : allOptions.filter((option) => offered.includes(option.key));
+
   // Default to the first thing that works, once. Never silently: whatever is
   // chosen is rendered as chosen.
   useEffect(() => {
-    if (selected != null) return;
+    if (selected != null || !autoSelect) return;
     const usable = options.find((option) => !option.disabled);
     if (usable != null) onSelect(usable.key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -119,7 +129,7 @@ export function PaymentMethodPicker({
 
   return (
     <MandiCard>
-      <MandiText variant="bodyEmphasis">How would you like to pay?</MandiText>
+      <MandiText variant="bodyEmphasis">{title}</MandiText>
       <View style={styles.options}>
         {options.map((option) => {
           const active = selected === option.key;

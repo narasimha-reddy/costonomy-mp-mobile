@@ -18,17 +18,26 @@ import {
   MandiScreen,
   MandiSkeletonList,
   MandiStickyBar,
-  MandiStatusChip,
   MandiText,
 } from '@/components/common';
 import { CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { isApiError } from '@/lib/api/errors';
-import { DeliveryMode, orderStatusFor, resolveStatus, DeliveryStatus as DeliveryStatusRegistry, SupplierOrderStatus } from '@/models/status';
+import { TrackingCards } from '@/components/delivery/TrackingCards';
+import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
+import { CollapsibleSection } from '@/components/order/CollapsibleSection';
+import { useServerNow } from '@/hooks/useServerNow';
+import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { DetailRow as Row } from '@/components/restaurant/DetailRow';
-import { Colors, Spacing } from '@/theme';
+import { Colors, Radius, Spacing, TrackingLayout } from '@/theme';
+
+const ACTIVE_POLL_MS = 15_000;
+const ENDED_ORDER = ['COMPLETED', 'CANCELLED'];
+const ENDED_DELIVERY = ['DELIVERED', 'CANCELLED', 'DELIVERY_FAILED'];
+/** Statuses from which a delivery can exist. A DRAFT or CANCELLED order never has one, so asking would only 404. */
+const DELIVERY_POSSIBLE = ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'];
 
 /**
  * REST-ORDERS-01 detail. Doc 05 §15–§16.
@@ -56,26 +65,37 @@ export default function OrderDetailScreen() {
     queryKey: ['supplier-order', orderId],
     queryFn: () => fetchSupplierOrder(accessToken as string, orderId),
     enabled: Number.isFinite(orderId) && accessToken != null,
-    // An order still moving is changing under us; a settled one is not. After
-    // D-091 nothing is waiting on an acceptance, so what is worth polling is the
-    // work itself — being prepared, or on its way.
+    // An order still moving is changing under us; a settled one is not. The tracker follows the partner, so it polls
+    // until the order is completed or cancelled.
     refetchInterval: (q) => {
       const status = q.state.data?.status;
-      return status === 'CONFIRMED' || status === 'PREPARING'
-        || status === 'OUT_FOR_DELIVERY' ? 30_000 : false;
+      return status != null && ENDED_ORDER.includes(status) ? false : ACTIVE_POLL_MS;
     },
   });
+
+  const order = query.data;
+  const nowMs = useServerNow();
 
   const delivery = useQuery({
     queryKey: ['supplier-order', orderId, 'delivery'],
     queryFn: () => fetchDelivery(accessToken as string, orderId),
-    enabled: Number.isFinite(orderId) && accessToken != null,
+    enabled: Number.isFinite(orderId) && accessToken != null
+      && order != null && DELIVERY_POSSIBLE.includes(order.status),
+    // A 404 is "no delivery yet"; retrying it would only delay the screen.
     retry: (count, error) => !isApiError(error) && count < 2,
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      if (status != null && ENDED_DELIVERY.includes(status)) return false;
+      const orderStatus = order?.status;
+      if (status == null && orderStatus != null && ENDED_ORDER.includes(orderStatus)) return false;
+      return ACTIVE_POLL_MS;
+    },
   });
 
-  const order = query.data;
-  const deliveryStatus = delivery.data;
-  const deliveryNotYet = delivery.error != null && isApiError(delivery.error);
+  const deliveryStatus = delivery.data ?? null;
+  const view = order == null
+    ? null
+    : orderTrackingView({ audience: 'buyer', order, delivery: deliveryStatus, nowMs });
 
   /**
    * The supplier answered, and for less than was asked.
@@ -147,16 +167,6 @@ export default function OrderDetailScreen() {
           title="Order"
           subtitle={order?.orderNumber ?? undefined}
           back
-          right={
-            <MandiChatAction
-              outletId={order?.outletId}
-              supplierStoreId={order?.supplierStoreId}
-              side="RESTAURANT"
-              // What this conversation is about, offered for sharing once the
-              // thread opens rather than assumed.
-              suggest={order == null ? undefined : { type: 'ORDER', id: order.id }}
-            />
-          }
         />
       }
       onRefresh={() => query.refetch()}
@@ -169,23 +179,32 @@ export default function OrderDetailScreen() {
         <MandiErrorState message="Couldn't load this order." onRetry={() => query.refetch()} />
       ) : (
         <>
-          <MandiCard>
-            {/* Laid out like the request this came from: both chips on one
-                line, then when, then who. An order and the request behind it
-                are two stages of one thing, and a reader should not have to
-                re-learn where to look when they move between them.
-                
-                The two chips answer different questions — where the order is,
-                and how it travels — which is why they sit together rather than
-                one being buried further down. */}
-            <View style={styles.statusRow}>
-              <MandiStatusChip {...orderStatusFor(order.status, order.deliveryMode)} />
-              {order.deliveryMode != null && (
-                <MandiStatusChip {...resolveStatus(DeliveryMode, order.deliveryMode)} />
-              )}
+          {/* The tracker: where the order is, from what the server said. The top is an illustration until a partner
+              is reporting, then a map preview that opens the live view. */}
+          {view != null && (
+            <View style={styles.tracker}>
+              <View style={styles.topClip}>
+                <TrackingTopArea
+                  view={view}
+                  delivery={deliveryStatus}
+                  destination={null}
+                  height={TrackingLayout.previewHeight}
+                  overlap={0}
+                  compact
+                  onPress={view.showTrack && view.showMap ? () => router.push(`/restaurant/tracking/${order.id}`) : undefined}
+                />
+              </View>
+              <TrackingCards
+                audience="buyer"
+                view={view}
+                delivery={deliveryStatus}
+                nowMs={nowMs}
+                onReport={() => router.push(`/restaurant/dispute/${order.id}`)}
+              />
             </View>
+          )}
 
-            {/* The number is the screen's title; only the date belongs here. */}
+          <MandiCard>
             <MandiText variant="caption" color={Colors.textTertiary}>
               {formatMomentWithRecency(order.createdAt)}
             </MandiText>
@@ -208,15 +227,33 @@ export default function OrderDetailScreen() {
               </View>
               <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
             </Pressable>
-
-            {/* No acceptance countdown. The supplier answered on the request,
-                and this order exists because they said yes — a clock here would
-                count down to nothing. The request's own clock is on the request.
-                D-091. */}
           </MandiCard>
 
-          <MandiCard>
-            <MandiText variant="bodyEmphasis">Items</MandiText>
+          {(order.hasColdChainItems || order.scheduledDeliveryDate || order.deliverySlotName
+            || order.isSubscriptionOrder) && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">Delivery</MandiText>
+              {order.hasColdChainItems && (
+                <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />
+              )}
+              {order.scheduledDeliveryDate && (
+                <Row label="Scheduled Date" value={order.scheduledDeliveryDate} />
+              )}
+              {order.deliverySlotName && (
+                <Row label="Delivery Window" value={order.deliverySlotName} />
+              )}
+              {order.isSubscriptionOrder && (
+                <Row label="Order Type" value="Daily Subscription" />
+              )}
+            </MandiCard>
+          )}
+
+          <CollapsibleSection
+            key={`summary-${view?.terminal ?? false}`}
+            title="Items and totals"
+            summary={`${order.items.length} ${order.items.length === 1 ? 'item' : 'items'} · ${formatMoney(settled ? order.acceptedAmount : order.totalAmount)}`}
+            defaultOpen={view?.terminal ?? false}
+          >
             {order.items.map((item) => {
               const short =
                 item.acceptedQuantity != null &&
@@ -275,61 +312,7 @@ export default function OrderDetailScreen() {
                 </View>
               );
             })}
-          </MandiCard>
-
-          <MandiCard>
-            <View style={styles.deliverySummaryHeader}>
-              <MandiText variant="bodyEmphasis">Delivery</MandiText>
-              {deliveryStatus && (
-                <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, deliveryStatus.status)} size="sm" />
-              )}
-            </View>
-
-            {order.hasColdChainItems && (
-              <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />
-            )}
-
-            {order.scheduledDeliveryDate && (
-              <Row label="Scheduled Date" value={order.scheduledDeliveryDate} />
-            )}
-            {order.deliverySlotName && (
-              <Row label="Delivery Window" value={order.deliverySlotName} />
-            )}
-            {order.isSubscriptionOrder && (
-              <Row label="Order Type" value="Daily Subscription" />
-            )}
-
-            {deliveryStatus ? (
-              <View style={styles.deliverySummaryBody}>
-                {deliveryStatus.etaMinutes != null && (
-                  <Row label="ETA" value={`${deliveryStatus.etaMinutes} min`} />
-                )}
-                {deliveryStatus.estimatedArrivalAt && (
-                  <Row label="Arriving" value={formatMoment(deliveryStatus.estimatedArrivalAt)} />
-                )}
-                {deliveryStatus.driverName && (
-                  <Row label="Driver" value={deliveryStatus.driverName} />
-                )}
-                {deliveryStatus.pickupAddress && (
-                  <Row label="Pickup" value={deliveryStatus.pickupAddress} />
-                )}
-                {deliveryStatus.dropAddress && (
-                  <Row label="Destination" value={deliveryStatus.dropAddress} />
-                )}
-                {!deliveryStatus.trackable && deliveryStatus.mode === 'SUPPLIER_OWN' && (
-                  <MandiText variant="caption" color={Colors.textSecondary}>
-                    Supplier own delivery does not show live tracking.
-                  </MandiText>
-                )}
-              </View>
-            ) : !deliveryNotYet ? (
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                Delivery details will appear once the supplier prepares this order.
-              </MandiText>
-            ) : null}
-          </MandiCard>
-
-          <MandiCard>
+            <View style={styles.sectionGap}>
             {/* One figure per row: what this order actually comes to. The
                 ordered amounts are struck on the lines above, where the change is
                 a fact about a particular item — repeating them here turned a
@@ -358,6 +341,10 @@ export default function OrderDetailScreen() {
               value={formatMoney(settled ? order.acceptedAmount : order.totalAmount)}
               emphasis
             />
+            </View>
+          </CollapsibleSection>
+
+          <MandiCard>
             {order.paymentStatus && (
               <Row label="Payment" value={payment?.label ?? ''} />
             )}
@@ -381,6 +368,22 @@ export default function OrderDetailScreen() {
                 <PaymentMethodPill method={order.paymentMethod} />
               </View>
             )}
+          </MandiCard>
+
+          <MandiCard>
+            <View style={styles.helpRow}>
+              <View style={styles.flex}>
+                <MandiText variant="bodyEmphasis">Need help?</MandiText>
+              </View>
+              <MandiChatAction
+                outletId={order.outletId}
+                supplierStoreId={order.supplierStoreId}
+                side="RESTAURANT"
+                // What this conversation is about, offered for sharing once the
+                // thread opens rather than assumed.
+                suggest={{ type: 'ORDER', id: order.id }}
+              />
+            </View>
           </MandiCard>
 
           {/* ── Statutory Billing Documents ────────────────────────── */}
@@ -458,12 +461,10 @@ export default function OrderDetailScreen() {
   function renderActions() {
     if (order == null) return undefined;
 
-    // There is something to track only when somebody else is carrying it.
-    // D-091 gave orders a mode, and this check predates it: a PICKUP order has
-    // no courier and no positions, so "Track Delivery" opened a map of nothing.
+    // Only somebody else carrying it can be received as a delivery; a collected order has no courier and no positions.
     const carried = order.deliveryMode != null && order.deliveryMode !== 'PICKUP';
-    const trackable = carried
-      && ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'PREPARING'].includes(order.status);
+    // From the tracker: a partner is assigned, not yet delivered, and the server says it can be followed.
+    const trackable = view?.showTrack ?? false;
 
     // A collected order is received when the restaurant has it, which is the
     // moment it is ready — nothing delivers it, so it never reaches DELIVERED.
@@ -499,15 +500,6 @@ export default function OrderDetailScreen() {
               onPress={() => router.push(`/restaurant/pay/${order.id}`)}
             />
           )}
-          {settled && (
-            <MandiButton
-              label="Something Was Wrong"
-              variant="tertiary"
-              size="lg"
-              style={styles.barAction}
-              onPress={() => router.push(`/restaurant/dispute/${order.id}`)}
-            />
-          )}
           {trackable && (
             <MandiButton
               label="Track Delivery"
@@ -519,7 +511,7 @@ export default function OrderDetailScreen() {
           )}
           {receivable && (
             <MandiButton
-              label={carried ? 'Check In Delivery' : 'Confirm Collection'}
+              label={carried ? 'Check in delivery' : 'Confirm Collection'}
               size="lg"
               style={styles.barAction}
               onPress={() => router.push(`/restaurant/receiving/${order.id}`)}
@@ -542,6 +534,8 @@ export default function OrderDetailScreen() {
 const styles = StyleSheet.create({
   partyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   pressed: { opacity: 0.7 },
+  tracker: { gap: Spacing.listGap },
+  topClip: { borderRadius: Radius.lg, overflow: 'hidden' },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   // The request screen's chip row, so the two read alike.
@@ -560,6 +554,9 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
   },
+  placed: { marginTop: Spacing.sm },
+  sectionGap: { gap: Spacing.xs },
+  helpRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   deliverySummaryHeader: {
     flexDirection: 'row',

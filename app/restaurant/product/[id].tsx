@@ -1,16 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useRequestBasket } from '@/hooks/useRequestBasket';
+import { useCartQuantity } from '@/hooks/useCartQuantity';
 import { fetchProduct, fetchRecommendations } from '@/services/catalog';
-import { addIntentItem, removeIntentItem, updateIntentItem } from '@/services/intent';
-import type { IntentItem } from '@/models/intent';
-import { draftsKey } from '@/lib/queryKeys';
 import { OfferCard } from '@/components/supplier/OfferCard';
+import {
+  ComparisonChoicesBar, DEFAULT_COMPARISON, comparisonIsFiltered, describeComparisonFilters,
+  type ComparisonChoices,
+} from '@/components/restaurant/ComparisonChoices';
+import { useDebounced } from '@/hooks/useDebounced';
 import { CartBar } from '@/components/restaurant/CartBar';
 import {
   MandiEmptyState,
@@ -18,10 +21,8 @@ import {
   MandiScreen,
   MandiSkeletonList,
   MandiText,
-  useToast,
   MandiSectionHeader,
 } from '@/components/common';
-import { ApiError } from '@/lib/api/errors';
 import { Colors, Spacing, TouchTarget } from '@/theme';
 
 /**
@@ -48,8 +49,6 @@ export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const productId = Number(id);
   const router = useRouter();
-  const toast = useToast();
-  const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
   const { basket, drafts } = useRequestBasket();
@@ -62,106 +61,29 @@ export default function ProductScreen() {
     enabled: Number.isFinite(productId) && accessToken != null,
   });
 
+  // What the buyer needs and how they want the suppliers shown. Both go to the server; the list is never sorted or
+  // filtered here (API D-149).
+  const [choices, setChoices] = useState<ComparisonChoices>(DEFAULT_COMPARISON);
+  const [need, setNeed] = useState('1');
+  const settledNeed = useDebounced(need, 400);
+  const quantityAsked = Number(settledNeed) > 0 ? settledNeed : '1';
+
   const recommendations = useQuery({
-    queryKey: ['product', productId, 'recommendations', outletId],
+    queryKey: ['product', productId, 'recommendations', outletId, quantityAsked, choices],
     queryFn: () =>
-      fetchRecommendations(accessToken as string, productId, outletId as number, '1'),
+      fetchRecommendations(accessToken as string, productId, outletId as number, quantityAsked, {
+        sort: choices.sort,
+        coversQuantity: choices.coversQuantity,
+        openNow: choices.openNow,
+        radiusKm: choices.radiusKm,
+      }),
     enabled: Number.isFinite(productId) && outletId != null && accessToken != null,
   });
 
-  /**
-   * Request lines by SKU.
-   *
-   * <p>The SKU is the join, and now it is also what the line stores: a request
-   * carries no offer and no price, because what a thing costs is the supplier's
-   * answer rather than something the basket can know.
-   */
-  const inCart = useMemo(() => {
-    const map = new Map<number, IntentItem>();
-    drafts.forEach((draft) =>
-      draft.items.forEach((item) => map.set(item.supplierSkuId, item)));
-    return map;
-  }, [drafts]);
-
-  /**
-   * What the stepper shows while the server catches up.
-   *
-   * <p>The cart is the truth, but it is a round trip away, and a stepper that
-   * waits for one counts wrong when tapped twice: the second tap reads a quantity
-   * the first has not yet changed. Three taps landed as two. So a tapped value is
-   * held here, shown immediately, and released once the cart has come back
-   * agreeing with it.
-   */
-  const [desired, setDesired] = useState<Record<number, number>>({});
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
-
-  useEffect(() => {
-    const pending = timers.current;
-    return () => Object.values(pending).forEach(clearTimeout);
-  }, []);
-
-  const change = useMutation({
-    mutationFn: async ({ skuId, packs }: {
-      offerId: number;
-      skuId: number;
-      packs: number;
-    }) => {
-      const line = inCart.get(skuId);
-      if (line == null) {
-        // The SKU decides which supplier, and therefore which request this
-        // lands on. Packs, because that is what is being asked for.
-        return addIntentItem(accessToken as string, outletId as number, {
-          supplierSkuId: skuId,
-          quantity: String(packs),
-        });
-      }
-      // Zero is not a quantity; it is the absence of the line.
-      return packs <= 0
-        ? removeIntentItem(accessToken as string, line.id)
-        : updateIntentItem(accessToken as string, line.id, String(packs));
-    },
-    onSuccess: async (_data, variables) => {
-      // Awaited, then released: dropping the local value before the cart has
-      // refetched would flash the old quantity for a frame.
-      await queryClient.invalidateQueries({ queryKey: draftsKey(outletId) });
-      setDesired((current) => {
-        const next = { ...current };
-        delete next[variables.skuId];
-        return next;
-      });
-    },
-    onError: (error, variables) => {
-      // Put the stepper back where the cart says it is, rather than leaving it
-      // showing a quantity the server refused.
-      setDesired((current) => {
-        const next = { ...current };
-        delete next[variables.skuId];
-        return next;
-      });
-      // The server's own words. §23A.8: a refusal explains itself, and a generic
-      // "something went wrong" is what makes a user try the same thing again.
-      toast.show(
-        error instanceof ApiError ? error.message : 'Could not update your cart.',
-        'error',
-      );
-    },
-  });
-
-  /**
-   * One write per burst of taps.
-   *
-   * <p>Tapping "+" four times is one decision, and four requests for it would
-   * race each other to set the last value. The quantity is absolute rather than
-   * an increment, so the final tap is the only one worth sending.
-   */
-  const queueChange = useCallback((offerId: number, skuId: number, packs: number) => {
-    setDesired((current) => ({ ...current, [skuId]: packs }));
-    clearTimeout(timers.current[skuId]);
-    timers.current[skuId] = setTimeout(
-      () => change.mutate({ offerId, skuId, packs }),
-      400,
-    );
-  }, [change]);
+  // The same quantity handling as the pack and supplier screens (useCartQuantity): a burst of taps is one write of the
+  // last value, writes for a line go in order, and a tap still waiting when the screen is left is sent, not dropped.
+  // This screen had its own copy, which cleared the timer on leaving and lost the tap.
+  const { packsFor, queueChange, inCart } = useCartQuantity(drafts);
 
   const offers = recommendations.data?.offers ?? [];
 
@@ -189,6 +111,20 @@ export default function ProductScreen() {
         subtitle="Prices exclude delivery, which is quoted when you order."
       />
 
+      <ComparisonChoicesBar
+        choices={choices}
+        onChange={setChoices}
+        need={need}
+        onNeedChange={setNeed}
+        unit={recommendations.data?.unit ?? null}
+        supplierCount={offers.length + (recommendations.data?.hiddenByFilters ?? 0)}
+      />
+      {(recommendations.data?.hiddenByFilters ?? 0) > 0 && offers.length > 0 && (
+        <MandiText variant="caption" color={Colors.textSecondary} style={styles.hidden}>
+          {recommendations.data?.hiddenByFilters} more hidden by your filters
+        </MandiText>
+      )}
+
       {recommendations.isPending ? (
         <MandiSkeletonList count={3} />
       ) : recommendations.error ? (
@@ -200,13 +136,17 @@ export default function ProductScreen() {
         // §23A.15: an unmet need is explained, never silently empty.
         <MandiEmptyState
           icon="storefront-outline"
-          title="No supplier has this right now"
+          title={comparisonIsFiltered(choices) ? 'No supplier matches' : 'No supplier has this right now'}
           description={
-            recommendations.data?.unservedReason ??
-            'Nobody delivering to this outlet is stocking it at the moment.'
+            comparisonIsFiltered(choices)
+              ? `No supplier matches: ${describeComparisonFilters(choices).join(', ')}.`
+              : recommendations.data?.unservedReason ??
+                'Nobody delivering to this outlet is stocking it at the moment.'
           }
-          actionLabel="Search something else"
-          onAction={() => router.push('/restaurant/search')}
+          actionLabel={comparisonIsFiltered(choices) ? 'Clear filters' : 'Search something else'}
+          onAction={comparisonIsFiltered(choices)
+            ? () => setChoices({ sort: choices.sort })
+            : () => router.push('/restaurant/search')}
         />
       ) : (
         offers.map((offer, index) => {
@@ -218,20 +158,17 @@ export default function ProductScreen() {
               // The server ranks; the first is the recommendation. The client
               // must never re-sort — doing so would quietly substitute its own
               // ranking for the one doc 07 specifies and tests.
-              recommended={index === 0}
-              quantity={desired[offer.supplierSkuId] ?? (line ? Number(line.requestedQuantity) : 0)}
+              // Only when the list is in the server's own ranking: under another sort the first card is the cheapest
+              // or nearest, not the recommendation.
+              recommended={index === 0 && choices.sort === 'best_value'}
+              quantity={packsFor(offer.supplierSkuId)}
               // `agreedLineTotal`, not `lineTotal`: the second is the
               // supplier's answer and is null on a draft, so the figure never
               // appeared. Both are the server's — nothing here multiplies.
               lineTotal={line?.agreedLineTotal}
-              quantityForSku={(skuId) => {
-                const l = inCart.get(skuId);
-                return desired[skuId] ?? (l ? Number(l.requestedQuantity) : 0);
-              }}
+              quantityForSku={packsFor}
               lineTotalForSku={(skuId) => inCart.get(skuId)?.agreedLineTotal}
-              busy={change.isPending && (change.variables?.offerId === offer.offerId || change.variables?.skuId === offer.supplierSkuId)}
-              onQuantity={(packs, skuId, offerId) =>
-                queueChange(offerId ?? offer.offerId, skuId ?? offer.supplierSkuId, packs)}
+              onQuantity={(packs, skuId) => queueChange(skuId ?? offer.supplierSkuId, packs)}
               // Comparing suppliers often ends in wanting to see one properly —
               // what else they carry, how far off they are, whether there is
               // credit. The seller panel is the way through.
@@ -290,6 +227,7 @@ function Header({ title, subtitle }: { title?: string; subtitle?: string | null 
 }
 
 const styles = StyleSheet.create({
+  hidden: { paddingHorizontal: Spacing.screenHorizontal },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

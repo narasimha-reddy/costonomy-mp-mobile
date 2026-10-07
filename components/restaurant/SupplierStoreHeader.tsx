@@ -76,9 +76,26 @@ export function SupplierStoreTitle({
         style={styles.titleBlock}
       >
         <View style={styles.titleRow}>
-          <MandiText variant="bodyEmphasis" numberOfLines={1} style={styles.flexShrink}>
+          <MandiText variant="storeTitle" numberOfLines={1} style={styles.flexShrink}>
             {title}
           </MandiText>
+          {/* Only a store somebody has rated. "0.0" beside a name reads as a
+              bad supplier rather than an unrated one. */}
+          {header != null && header.ratingCount > 0 && header.averageRating != null && (
+            <View
+              style={styles.ratingBadge}
+              accessible
+              accessibilityLabel={
+                `Rated ${formatQuantity(header.averageRating)} from ${header.ratingCount} `
+                + `${header.ratingCount === 1 ? 'rating' : 'ratings'}`
+              }
+            >
+              <MandiText variant="captionEmphasis" color={Colors.textInverse}>
+                {formatQuantity(header.averageRating)}
+              </MandiText>
+              <Ionicons name="star" size={IconSize.xs} color={Colors.textInverse} />
+            </View>
+          )}
           {branches > 0 && (
             <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
           )}
@@ -163,21 +180,15 @@ export function SupplierStoreFacts({
     <View style={styles.card}>
       <View style={styles.facts}>
         {header.distanceKm != null && (
-          <Fact icon="navigate-outline" text={`${formatQuantity(header.distanceKm)} km`} />
+          <Fact
+            icon="navigate-outline"
+            text={[`${formatQuantity(header.distanceKm)} km`, header.city].filter(Boolean).join(' · ')}
+          />
         )}
         {/* Absent rather than guessed: an ETA invented without coordinates is
             a number somebody plans a service around. */}
         {header.etaMinutes != null && (
           <Fact icon="time-outline" text={`~${header.etaMinutes} min`} />
-        )}
-        {header.ratingCount > 0 && header.averageRating != null ? (
-          <Fact
-            icon="star"
-            tint={Colors.warning}
-            text={`${formatQuantity(header.averageRating)} (${header.ratingCount})`}
-          />
-        ) : (
-          <Fact icon="star-outline" text="Not rated yet" />
         )}
         {!header.openNow && (
           <Fact
@@ -396,6 +407,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: Spacing.xs + 2,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.successGradientStart,
+  },
   card: {
     gap: Spacing.md,
     paddingHorizontal: Spacing.screenHorizontal,

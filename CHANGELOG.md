@@ -438,3 +438,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Restyle T3: pure `buyerTrackingHeader()` adapter over `orderTrackingView` (title, pill, map mode, partner area for 18 buyer tracking states) with tests.
 - Delivery map modes (pending, live, arriving, reached), TruckIcon marker, Android tile watchdog with sketch fallback, and optional pickup/drop coordinates on Delivery.
 - Restyle T10: white ActiveOrderPill (supplier, status, ETA badge only with minutes) on Home and Orders via shared useLatestInFlight; opens live tracking; replaces OrderInProgressBar.
+- Restyle T9: supplier menu: orange-outline ADD that becomes a filled stepper, 88dp picture on the right, rating badge only with ratings, FilterPills for aisles, Continue bar via StickyActionBar.

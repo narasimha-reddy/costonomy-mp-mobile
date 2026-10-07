@@ -441,3 +441,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Restyle T9: supplier menu: orange-outline ADD that becomes a filled stepper, 88dp picture on the right, rating badge only with ratings, FilterPills for aisles, Continue bar via StickyActionBar.
 - Restyle T8: checkout and cart bottom bars use StickyActionBar (PAY USING method column with scroll to the picker, server preview total, Place order); credit and wallet orders now open the tracking screen.
 - [Restyle] Order details (buyer): status card with Track, Support in the header, Bill Summary card with server-sent lines and the payment line, details card; BillSummary component.
+- Restyle T11: deliveries list cards show supplier, order number, status chip, "Arriving in N mins" or server-provided "N mins past slot", and a Track link.

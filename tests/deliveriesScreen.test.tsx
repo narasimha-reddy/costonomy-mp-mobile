@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView } from 'react-native';
-import { cleanup, render, screen, waitFor } from '@testing-library/react-native';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DeliveriesScreen from '@/app/restaurant/deliveries';
 import { fetchOutletDeliveryRadar } from '@/services/delivery';
@@ -14,8 +14,9 @@ jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, M
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
   usePathname: () => '/restaurant/deliveries',
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'tok' }) }));
@@ -30,7 +31,7 @@ jest.mock('@/services/delivery', () => ({
 
 const radar = fetchOutletDeliveryRadar as jest.Mock;
 const clients: QueryClient[] = [];
-afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); });
+afterEach(() => { mockPush.mockClear(); cleanup(); clients.splice(0).forEach((c) => c.clear()); });
 
 function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -76,5 +77,67 @@ describe('DeliveriesScreen filters', () => {
     expect(screen.getByLabelText('Late, 2')).toBeTruthy();
     expect(screen.getByLabelText('Needs check-in, 4')).toBeTruthy();
     expect(screen.queryByText(/^All \d/)).toBeNull();
+  });
+});
+
+function item(over: Record<string, unknown> = {}) {
+  return {
+    deliveryId: 1, supplierOrderId: 42, orderNumber: 'ORD-42', status: 'IN_TRANSIT',
+    arrivalStage: 'EN_ROUTE', arrivalRank: 0, scheduleStatus: 'ON_SCHEDULE', minutesOverdue: null,
+    etaMinutes: 12, estimatedArrivalAt: null, supplier: { supplierStoreName: 'Fresh Mandi' },
+    driver: { name: null, phone: null, vehicle: null }, recommendedAction: null, actionReason: '',
+    isCheckedIn: false, locationStale: false, locationAgeSeconds: null,
+    ...over,
+  };
+}
+function withItems(items: unknown[]) {
+  radar.mockResolvedValue({
+    outletId: 7,
+    summary: { totalActive: 1, atDoorCount: 0, approachingCount: 0, enRouteCount: 1, delayedCount: 0, pendingCheckInCount: 0, requiresEscalationCount: 0 },
+    items,
+  });
+}
+
+describe('DeliveriesScreen cards', () => {
+  it('live card shows Arriving in N mins and Track', async () => {
+    withItems([item()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Arriving in 12 mins')).toBeTruthy());
+    expect(screen.getByText('Fresh Mandi')).toBeTruthy();
+    expect(screen.getByText('Order ORD-42')).toBeTruthy();
+    expect(screen.getByLabelText('Track order ORD-42')).toBeTruthy();
+  });
+
+  it('late card shows N mins past slot', async () => {
+    withItems([item({ scheduleStatus: 'RUNNING_LATE', minutesOverdue: 17, etaMinutes: 5 })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('17 mins past slot')).toBeTruthy());
+    expect(screen.queryByText(/Arriving in/)).toBeNull();
+    expect(screen.queryByText(/5 mins/)).toBeNull();
+  });
+
+  it('Track opens tracking', async () => {
+    withItems([item()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('Track order ORD-42')).toBeTruthy());
+    fireEvent.press(screen.getByLabelText('Track order ORD-42'));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/tracking/42');
+  });
+
+  it('empty filter one-line state', async () => {
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('No active deliveries right now')).toBeTruthy());
+    expect(screen.queryByText(/New deliveries will appear/)).toBeNull();
+    fireEvent.press(screen.getByText('Late 2'));
+    await waitFor(() => expect(screen.getByText('No deliveries are running late')).toBeTruthy());
+    expect(screen.queryByText(/All incoming deliveries are on schedule/)).toBeNull();
+  });
+
+  it('card without eta shows the expected slot, not a made-up arrival', async () => {
+    withItems([item({ etaMinutes: null, estimatedArrivalAt: null })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Order ORD-42')).toBeTruthy());
+    expect(screen.queryByText(/Arriving in/)).toBeNull();
+    expect(screen.getByText('Slot to be confirmed')).toBeTruthy();
   });
 });

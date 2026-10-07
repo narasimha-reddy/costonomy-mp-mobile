@@ -154,6 +154,12 @@ export const TextStyles = {
     fontSize: FontSize.sm,
     lineHeight: Math.round(FontSize.sm * LineHeight.normal),
   },
+  /** A supplier store's name on its menu header: 22/800. */
+  storeTitle: {
+    fontFamily: FontFamily.extrabold,
+    fontSize: FontSize.xl,
+    lineHeight: Math.round(FontSize.xl * LineHeight.tight),
+  },
   /** The buyer tracking header's title. */
   trackHeaderTitle: {
     fontFamily: FontFamily.bold,

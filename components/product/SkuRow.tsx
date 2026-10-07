@@ -3,10 +3,14 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { StorefrontSku } from '@/models/discovery';
 import { ProductThumb } from './ProductThumb';
-import { MandiQuantityStepper, MandiButton, MandiText } from '@/components/common';
+import { MandiText } from '@/components/common';
 import { formatGstRate, formatMoney, formatQuantity, type Money } from '@/utils/money';
 import { skuSecondaryLine } from '@/utils/skuLabel';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, ControlHeight, Radius, Spacing, hitSlopFor } from '@/theme';
+
+/** The picture, right of the text. The Add control overlaps its bottom edge by {@link ADD_OVERLAP}. */
+const THUMB = 88;
+const ADD_OVERLAP = 12;
 
 /**
  * One buyable pack, in a list.
@@ -72,8 +76,6 @@ export function SkuRow({
 
   const body = (
     <>
-      <ProductThumb uri={sku.imageUrl} size={48} radius={Radius.sm} />
-
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <MandiText variant="bodyEmphasis" numberOfLines={2} style={styles.flexShrink}>{sku.skuName}</MandiText>
@@ -131,6 +133,13 @@ export function SkuRow({
         </View>
 
 
+        {/* What this line comes to, once there is a line. Only then: a total of
+            nothing is not a fact about this pack, and the unit price above
+            already says what one costs. */}
+        {onChangePacks != null && lineTotal != null && (packs ?? 0) > 0 && (
+          <MandiText variant="priceSmall">{formatMoney(lineTotal)}</MandiText>
+        )}
+
         {!hideSupplier && (
           <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
             {sku.supplierName}
@@ -142,12 +151,12 @@ export function SkuRow({
             single supplier's shelf the screen already says both, once, at the top. */}
         {!hideSupplier && (
           <View style={styles.signals}>
-            {sku.averageRating != null && (
+            {sku.averageRating != null && sku.ratingCount > 0 && (
               <View style={styles.rating}>
                 <Ionicons name="star" size={11} color={Colors.warning} />
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {formatQuantity(sku.averageRating)}
-                  {sku.ratingCount > 0 ? ` (${sku.ratingCount})` : ''}
+                  {` (${sku.ratingCount})`}
                 </MandiText>
               </View>
             )}
@@ -187,45 +196,38 @@ export function SkuRow({
           <View style={styles.main}>{body}</View>
         )}
 
-        <View style={styles.trailing}>
-          {/* What this line comes to, over the control that sets it. Only once
-              there is a line: a total of nothing is not a fact about this pack,
-              and the unit price beside the name already says what one costs. */}
-          {onChangePacks != null && lineTotal != null && (packs ?? 0) > 0 && (
-            <MandiText variant="priceSmall">{formatMoney(lineTotal)}</MandiText>
+        {/* The picture and its control. Add is a sibling of the picture's own
+            press target, not inside it, and hangs over the picture's bottom edge. */}
+        <View style={styles.media}>
+          {onPress ? (
+            <Pressable onPress={onPress} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <ProductThumb uri={sku.imageUrl} size={THUMB} radius={Radius.md} />
+            </Pressable>
+          ) : (
+            <ProductThumb uri={sku.imageUrl} size={THUMB} radius={Radius.md} />
           )}
 
-          {onChangePacks != null ? (
-            <>
-              <MandiQuantityStepper
-                value={packs ?? 0}
-                disabled={unavailable}
-                onChange={onChangePacks}
-              />
-              {/* The SKU's own unit, which is what the quantity is counted in
-                  everywhere else — a request line for this reads "2 KG".
-                  
-                  In the flow and right-aligned with the control, not floated
-                  under it: absolutely positioned it escaped the row's height and
-                  struck the divider below, and a caption sitting on a rule reads
-                  as belonging to the next row. */}
-              {sku.packUnit != null && (
-                <MandiText variant="caption" color={Colors.textTertiary}>
-                  {sku.packUnit.toLowerCase()}
-                </MandiText>
-              )}
-            </>
-          ) : onAdd ? (
-            <MandiButton
-              label={unavailable ? 'Out of stock' : 'Add'}
-              variant="secondary"
-              size="sm"
-              disabled={unavailable}
-              loading={adding}
-              onPress={onAdd}
-              fullWidth={false}
-            />
-          ) : null}
+          <View style={styles.control}>
+            {onChangePacks != null ? (
+              (packs ?? 0) > 0 ? (
+                <PackStepper
+                  packs={packs ?? 0}
+                  name={sku.skuName}
+                  unit={sku.packUnit}
+                  disabled={unavailable}
+                  onChange={onChangePacks}
+                />
+              ) : (
+                <AddButton
+                  name={sku.skuName}
+                  unavailable={unavailable}
+                  onPress={() => onChangePacks(1)}
+                />
+              )
+            ) : onAdd ? (
+              <AddButton name={sku.skuName} unavailable={unavailable} loading={adding} onPress={onAdd} />
+            ) : null}
+          </View>
         </View>
       </View>
 
@@ -312,6 +314,75 @@ export function SkuRow({
   );
 }
 
+/** The orange outline Add. "Out of stock" when it cannot be added, and then it does nothing. */
+function AddButton({ name, unavailable, loading, onPress }: {
+  name: string;
+  unavailable: boolean;
+  loading?: boolean;
+  onPress: () => void;
+}) {
+  const inert = unavailable || loading === true;
+  return (
+    <Pressable
+      onPress={inert ? undefined : onPress}
+      disabled={inert}
+      accessibilityRole="button"
+      accessibilityLabel={`Add ${name}`}
+      accessibilityState={{ disabled: inert, busy: loading === true }}
+      hitSlop={{ top: 2, bottom: 2 }}
+      style={[styles.add, unavailable && styles.addOff]}
+    >
+      <MandiText variant="bodyEmphasis" color={unavailable ? Colors.textDisabled : Colors.primaryDark} numberOfLines={1}>
+        {loading ? '...' : unavailable ? 'Out of stock' : 'ADD'}
+      </MandiText>
+    </Pressable>
+  );
+}
+
+/** The filled stepper that replaces Add once there is a pack in the basket. */
+function PackStepper({ packs, name, unit, disabled, onChange }: {
+  packs: number;
+  name: string;
+  unit: string | null;
+  disabled: boolean;
+  onChange: (packs: number) => void;
+}) {
+  const suffix = ` ${name}`;
+  return (
+    <View style={styles.stepper}>
+      <Pressable
+        onPress={() => onChange(packs - 1)}
+        accessibilityRole="button"
+        accessibilityLabel={`Decrease quantity${suffix}`}
+        hitSlop={hitSlopFor(ControlHeight.sm)}
+        style={styles.stepperHit}
+      >
+        <Ionicons name="remove" size={18} color={Colors.textInverse} />
+      </Pressable>
+      <MandiText
+        variant="bodyEmphasis"
+        color={Colors.textInverse}
+        center
+        accessibilityLabel={`${packs}${unit ? ` ${unit.toLowerCase()}` : ''}${suffix}`}
+        style={styles.stepperValue}
+      >
+        {packs}
+      </MandiText>
+      <Pressable
+        onPress={disabled ? undefined : () => onChange(packs + 1)}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={`Increase quantity${suffix}`}
+        accessibilityState={{ disabled }}
+        hitSlop={hitSlopFor(ControlHeight.sm)}
+        style={styles.stepperHit}
+      >
+        <Ionicons name="add" size={18} color={Colors.textInverse} />
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -320,11 +391,13 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    paddingTop: Spacing.sm,
+    // The Add control hangs below the picture; this is the room it hangs into.
+    paddingBottom: Spacing.sm + ADD_OVERLAP,
   },
-  main: { flex: 1, flexDirection: 'row', gap: Spacing.md, alignItems: 'center' },
+  main: { flex: 1, flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start' },
   body: { flex: 1, gap: 2 },
   flexShrink: { flexShrink: 1 },
   titleRow: {
@@ -367,11 +440,38 @@ const styles = StyleSheet.create({
   unitPrice: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.xs },
   signals: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  trailing: { alignItems: 'flex-end', gap: 2 },
+  media: { width: THUMB, height: THUMB },
+  control: {
+    position: 'absolute',
+    bottom: -ADD_OVERLAP,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  add: {
+    minWidth: 76,
+    minHeight: ControlHeight.sm + 4,
+    paddingHorizontal: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surface,
+  },
+  addOff: { borderColor: Colors.border },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: ControlHeight.sm + 4,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primary,
+  },
+  stepperHit: { width: 32, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  stepperValue: { minWidth: 24 },
   brandOptionsContainer: {
     marginTop: 2,
     marginBottom: Spacing.xs,
-    paddingLeft: 48 + Spacing.md,
     gap: 4,
   },
   brandOptionsHeader: {

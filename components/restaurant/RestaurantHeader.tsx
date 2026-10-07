@@ -37,6 +37,7 @@ export function RestaurantHeader({
   screen,
   subtitle,
   trailing,
+  location = false,
 }: {
   /**
    * The doc 05 code of the screen wearing this header, e.g. `REST-ORDERS-01`.
@@ -49,6 +50,11 @@ export function RestaurantHeader({
   /** The section, when the screen is one — "Orders", "Requirements". */
   subtitle?: string;
   trailing?: React.ReactNode;
+  /**
+   * Home's form: the outlet's own name on top, its address beneath. The default
+   * form drops the restaurant prefix and shows the restaurant underneath.
+   */
+  location?: boolean;
 }) {
   const router = useRouter();
   const { outlet, outlets, restaurantName, select } = useOutlet();
@@ -59,8 +65,13 @@ export function RestaurantHeader({
   const [open, setOpen] = useState(false);
 
   const multiOutlet = outlets.length > 1;
-  const title = placeLabel(outlet?.name, restaurantName) ?? restaurantName ?? 'Your restaurant';
-  const line = [subtitle, outlet?.name ? restaurantName : null].filter(Boolean).join(' · ');
+  const title = location
+    ? outlet?.name ?? restaurantName ?? 'Your restaurant'
+    : placeLabel(outlet?.name, restaurantName) ?? restaurantName ?? 'Your restaurant';
+  const address = [outlet?.addressLine1, outlet?.city].filter(Boolean).join(', ');
+  const line = location
+    ? address
+    : [subtitle, outlet?.name ? restaurantName : null].filter(Boolean).join(' · ');
 
   return (
     <View style={styles.header}>

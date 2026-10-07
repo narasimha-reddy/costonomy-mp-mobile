@@ -154,6 +154,18 @@ export const TextStyles = {
     fontSize: FontSize.sm,
     lineHeight: Math.round(FontSize.sm * LineHeight.normal),
   },
+  /** The buyer tracking header's title. */
+  trackHeaderTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 19,
+    lineHeight: 24,
+  },
+  /** Text inside the ETA pill. */
+  pillText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.sm,
+    lineHeight: 18,
+  },
   /** Badges, chips, overline labels. */
   label: {
     fontFamily: FontFamily.semibold,

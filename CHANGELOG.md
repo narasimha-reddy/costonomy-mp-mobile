@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [feat/restyle-p0-foundation] - Design tokens and map helpers for the buyer restyle
+#### Added
+- Additive tokens (`trackHeader`, `trackHeaderPill`, `onTrackHeader`, route, geofence, pickup pin and truck colours; `trackHeaderTitle` and `pillText` text styles; `TrackLayout`), `TruckIcon` (orange parcel, dark cab, muted and flip) and the pure `lib/delivery/mapGeometry` helpers. No screen uses them yet.
+
 ### [fix/native-delivery-map-fallback] - The delivery map is no longer blank on Android
 #### Fixed
 - Without a Google Maps key the native `MandiMap` showed a blank panel. It now draws the schematic map (moved to the shared `MandiMapSketch`, also the web build) unless `MAPS_CONFIGURED`, and keeps the real `MapView` when a key is set.

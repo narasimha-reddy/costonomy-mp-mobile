@@ -126,6 +126,28 @@ export const Colors = {
   /** The destination (outlet) marker. */
   deliveryDestination: '#16A34A',
 
+  // ── Marketplace: buyer tracking restyle ─────────────────────────────
+  // Orange is Colors.primary (#FF6000); orange text on white is primaryDark.
+  /** The live-tracking header bar. White text on it is 5.31:1. */
+  trackHeader: '#1E7B3C',
+  /** The ETA pill on the header: solid and darker, white text on it is 7.63:1. */
+  trackHeaderPill: '#17602F',
+  onTrackHeader: '#FFFFFF',
+  /** Supplier line on the header only (13/600). */
+  onTrackHeaderMuted: 'rgba(255,255,255,0.85)',
+  /** The not-yet-driven leg of the route: dashed, 2dp. */
+  routePending: '#1F2937',
+  geofenceFill: 'rgba(22,163,74,0.15)',
+  geofenceStroke: 'rgba(22,163,74,0.45)',
+  pickupPin: '#1F2937',
+  /** The truck marker: the parcel is the brand orange; stale uses the muted pair. */
+  truckParcel: '#FF6000',
+  truckParcelLight: '#FFB380',
+  truckCab: '#1F2937',
+  truckGlass: '#9CC9F5',
+  truckMuted: '#9CA3AF',
+  truckMutedLight: '#D1D5DB',
+
   // ── Marketplace: data freshness (PRD §23A.46, guardrail 16/17) ──────
   // Stale is deliberately *grey*, not amber: a stale price or an old GPS fix is
   // not an error, it is unverified. Amber would read as a warning the restaurant

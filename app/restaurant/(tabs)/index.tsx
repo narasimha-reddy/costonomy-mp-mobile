@@ -34,12 +34,16 @@ import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
 import { searchHints } from '@/lib/search/hints';
 import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
+import { ActiveOrderPill } from '@/components/delivery/ActiveOrderPill';
+import { useLatestInFlight } from '@/hooks/useLatestInFlight';
 import { useCreditAttention } from '@/hooks/useCreditAttention';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
 const SEARCH_HINTS = searchHints();
+/** Room under the content for the pill that floats over it. */
+const PILL_CLEARANCE = 96;
 
 /**
  * REST-HOME-01. Doc 05 §5.
@@ -55,10 +59,20 @@ const SEARCH_HINTS = searchHints();
 export default function RestaurantHome() {
   const router = useRouter();
   const { outletId } = useOutlet();
+  const inFlight = useLatestInFlight(outletId);
 
   return (
     <MandiScreen
       header={<RestaurantHeader screen={SCREEN} />}
+      contentStyle={inFlight != null ? { paddingBottom: PILL_CLEARANCE } : undefined}
+      floating={inFlight != null ? (
+        <ActiveOrderPill
+          supplierName={inFlight.order.supplierName}
+          statusText={inFlight.header.title}
+          etaMins={inFlight.etaMins}
+          onPress={() => router.push(`/restaurant/tracking/${inFlight.order.id}`)}
+        />
+      ) : undefined}
     >
       <MandiSearchBar
         value=""

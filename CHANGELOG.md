@@ -420,3 +420,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Added
 - Supplier delivery partner dispatch controls, live tracking map/webview integration, and safe navigation handling.
 - Arrival Radar situational widgets for restaurant kitchens: real-time driver ETA, vehicle type badge, and delivery issue notification alerts.
+
+### [feat/restyle-p2a-primitives] - DetailRowCard and StickyActionBar
+#### Added
+- `DetailRowCard` (icon rows, 56dp minimum, one-line title, two-line subtitle, non-shrinking trailing slot) and `StickyActionBar` (`pay` and `continue` variants over `MandiStickyBar`). No screen uses them yet.

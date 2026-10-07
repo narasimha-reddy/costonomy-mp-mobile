@@ -11,6 +11,8 @@ import { fetchSupplierOrder } from '@/services/procurement';
 import { DeliveryTimeline } from '@/components/delivery/DeliveryTimeline';
 import { OrderSummaryCard } from '@/components/delivery/OrderSummaryCard';
 import { TrackingCards } from '@/components/delivery/TrackingCards';
+import { SandboxControlCard } from '@/components/delivery/SandboxControlCard';
+import { useSandboxAdvance } from '@/hooks/useSandboxAdvance';
 import { TrackingSheet } from '@/components/delivery/TrackingSheet';
 import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
 import { CollapsibleSection } from '@/components/order/CollapsibleSection';
@@ -115,6 +117,8 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
     onError: (caught) => refuse(caught, 'Could not switch to your own delivery.'),
   });
 
+  const sandbox = useSandboxAdvance(orderId);
+
   const data = delivery.data ?? null;
   const noDeliveryYet = delivery.error != null && isApiError(delivery.error);
   const o = order.data;
@@ -211,6 +215,7 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
             retrying={retry.isPending}
             switching={switchOwn.isPending}
           />
+          {!buyer && <SandboxControlCard delivery={data} onAdvance={sandbox.advance} pending={sandbox.pending} />}
           <OrderSummaryCard
             orderNumber={o.orderNumber}
             summary={summary}

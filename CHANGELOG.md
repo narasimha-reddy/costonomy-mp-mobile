@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.
 
+### [phase6/mobile-sandbox-rider] - Test mode: move the rider along in Pidge's sandbox (API D-154)
+#### Added
+- Supplier only, and only when the API offers it (Pidge sandbox): a Test mode card on the order and tracking screens moves the delivery to its next stage, so the whole flow can be seen in the apps. Never shown to the restaurant or in production.
+
 ### [phase6/mobile-tracking-e2e-fixes] - Fixes from the end-to-end run (API D-153)
 #### Fixed
 - The supplier tracking screen crashed on open (it needed the restaurant's outlet).

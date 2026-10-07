@@ -55,6 +55,8 @@ import { formatMomentWithRecency } from '@/utils/dateRange';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { TrackingCards } from '@/components/delivery/TrackingCards';
+import { SandboxControlCard } from '@/components/delivery/SandboxControlCard';
+import { useSandboxAdvance } from '@/hooks/useSandboxAdvance';
 import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
 import { useServerNow } from '@/hooks/useServerNow';
 import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
@@ -218,6 +220,8 @@ export default function SupplierOrderScreen() {
           || found.status === 'PROVIDER_SELECTED') ? 15000 : false;
     },
   });
+
+  const sandbox = useSandboxAdvance(orderId);
 
   const requestPartner = useMutation({
     mutationFn: () =>
@@ -411,6 +415,7 @@ export default function SupplierOrderScreen() {
                 retrying={retryPartner.isPending}
                 switching={switchToOwn.isPending}
               />
+              <SandboxControlCard delivery={deliveryData} onAdvance={sandbox.advance} pending={sandbox.pending} />
             </View>
           )}
 

@@ -68,6 +68,8 @@ export interface Delivery {
   searchStartedAt?: string | null;
   /** The supplier may now deliver this order themselves (API D-151). */
   canSwitchToOwn?: boolean;
+  /** Test-only (API D-154): the supplier may move a sandbox rider to the next step. Supplier screens only. */
+  sandboxControls?: boolean;
 }
 
 export type ArrivalStage =

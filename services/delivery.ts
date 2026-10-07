@@ -122,6 +122,18 @@ export function switchToOwnDelivery(token: string, deliveryId: number, idempoten
 }
 
 /**
+ * TEST ONLY (API D-154): move a sandbox rider to the next step. The API answers 404 anywhere but the Pidge sandbox, and
+ * the app only offers it when the delivery says `sandboxControls`.
+ */
+export function advanceSandboxDelivery(token: string, deliveryId: number, idempotencyKey: string): Promise<Delivery> {
+  return apiRequest<Delivery>(`/api/v1/deliveries/${deliveryId}/sandbox/advance`, {
+    method: 'POST',
+    token,
+    idempotencyKey,
+  });
+}
+
+/**
  * Report that the supplier has set off with their own delivery.
  * Refused for COSTONOMY delivery mode.
  */

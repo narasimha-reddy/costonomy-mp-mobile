@@ -30,6 +30,10 @@ describe('status registry', () => {
     expect(DeliveryStatus.QUOTE_RECEIVED?.label).toBe('Finding a delivery partner');
   });
 
+  it('PROVIDER_SELECTED reads Finding partner', () => {
+    expect(resolveStatus(DeliveryStatus, 'PROVIDER_SELECTED').label).toBe('Finding partner');
+  });
+
   it('degrades an unknown status to readable copy', () => {
     // Mobile releases lag the API, so a new backend state must still render.
     expect(unknownStatus('AWAITING_SOMETHING_NEW')).toEqual({

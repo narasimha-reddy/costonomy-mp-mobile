@@ -32,6 +32,37 @@ describe('stagesFor', () => {
   });
 });
 
+describe('platform delivery copy while a partner is found', () => {
+  it('never says the supplier delivers a COSTONOMY delivery while a partner is found', () => {
+    for (const audience of ['buyer', 'supplier'] as const) {
+      for (const status of ['DELIVERY_REQUESTED', 'QUOTE_RECEIVED', 'PROVIDER_SELECTED'] as DeliveryStatus[]) {
+        const view = orderTrackingView({
+          audience, order: order('COSTONOMY_DELIVERY'), delivery: delivery(status, {}, 'COSTONOMY'), nowMs: NOW,
+        });
+        if (audience === 'buyer') expect(view.headline).toBe('Finding a delivery partner');
+        expect(view.headline).not.toMatch(/themselves/);
+        expect(view.subline ?? '').not.toMatch(/themselves/);
+      }
+    }
+  });
+});
+
+describe('platform delivery never gets the supplier-own copy', () => {
+  it('never says the supplier delivers a COSTONOMY delivery in any status or audience', () => {
+    for (const audience of ['buyer', 'supplier'] as const) {
+      for (const orderStatus of ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY']) {
+        for (const status of ALL) {
+          const view = orderTrackingView({
+            audience, order: order('COSTONOMY_DELIVERY', orderStatus), delivery: delivery(status, {}, 'COSTONOMY'), nowMs: NOW,
+          });
+          expect(view.headline).not.toMatch(/themselves/);
+          expect(view.subline ?? '').not.toMatch(/themselves/);
+        }
+      }
+    }
+  });
+});
+
 describe('stageIndex', () => {
   it('takes the higher of order and delivery status', () => {
     expect(stageIndex('CONFIRMED', null)).toBe(0);

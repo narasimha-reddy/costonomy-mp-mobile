@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### [feat/restyle-p0-foundation] - Design tokens and map helpers for the buyer restyle
 #### Added
 - Additive tokens (`trackHeader`, `trackHeaderPill`, `onTrackHeader`, route, geofence, pickup pin and truck colours; `trackHeaderTitle` and `pillText` text styles; `TrackLayout`), `TruckIcon` (orange parcel, dark cab, muted and flip) and the pure `lib/delivery/mapGeometry` helpers. No screen uses them yet.
+- Restyled `DeliveryPartnerCard` (name, "Delivery partner", call only with a phone, an Assigning placeholder; the supplier plate layout is kept), new `OrderPlacedHero` and `ReceiptHero` (react-native-svg zigzag edge). Not wired into a screen yet.
 
 ### [fix/native-delivery-map-fallback] - The delivery map is no longer blank on Android
 #### Fixed

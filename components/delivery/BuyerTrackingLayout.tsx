@@ -1,21 +1,28 @@
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSession } from '@/contexts/SessionProvider';
 import { MandiChatAction, MandiHeader, MandiText } from '@/components/common';
 import { DetailRowCard, type DetailRow } from '@/components/common/DetailRowCard';
 import { CollapsibleSection } from '@/components/order/CollapsibleSection';
 import { DeliveryPartnerCard } from '@/components/delivery/DeliveryPartnerCard';
 import { DeliveryTimeline } from '@/components/delivery/DeliveryTimeline';
+import { ReceiptHero } from '@/components/delivery/ReceiptHero';
+import { ReportIssueCard } from '@/components/delivery/ReportIssueCard';
 import { GreenTrackingHeader } from '@/components/delivery/GreenTrackingHeader';
 import { MandiMap } from '@/components/delivery/MandiMap';
 import { OrderPlacedHero } from '@/components/delivery/OrderPlacedHero';
 import { TrackingBanner } from '@/components/delivery/TrackingBanner';
+import { isApiError } from '@/lib/api/errors';
+import { clockTime } from '@/lib/delivery/deliveryPartner';
 import { haversineM, toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
 import { stagesFor, type OrderTrackingView } from '@/lib/delivery/orderTracking';
 import { buyerTrackingHeader, placeholderCopy } from '@/lib/delivery/trackingHeader';
 import type { Delivery } from '@/models/delivery';
 import type { SupplierOrder } from '@/models/procurement';
+import { fetchRating } from '@/services/trust';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing, TrackLayout } from '@/theme';
 
@@ -39,8 +46,7 @@ function distanceText(metres: number): string {
  * The buyer's live tracking screen (restyle spec 4.A): the green header, the map, then the cards.
  *
  * <p>Every decision about what to show comes from `buyerTrackingHeader`; this component only lays it out and wires
- * the taps. The receipt layout (delivered and completed) is not drawn here: the screen body does not hand those
- * states to this component (TODO(T6)). Where the placeholder would read as a promise that cannot be kept (a pickup
+ * the taps. Delivered and completed draw the receipt (restyle spec 4.B) instead of the map. Where the placeholder would read as a promise that cannot be kept (a pickup
  * or the supplier's own delivery has no partner to assign) the "we'll assign a partner soon" pill is left out.
  */
 export function BuyerTrackingLayout({
@@ -58,11 +64,21 @@ export function BuyerTrackingLayout({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { accessToken } = useSession();
 
   // The drop: the server's own coordinates when it sends them (API B1), else the outlet the app already knows.
   const drop: LatLng | null = point(delivery?.dropLocation) ?? outlet;
   const header = buyerTrackingHeader({ view, order, delivery, drop, nowMs });
   const supplier = header.supplierLine;
+  // Only a COMPLETED order can be rated (the API refuses otherwise). A GET: the row shows on a 404, "not rated yet".
+  const receipt = header.layout === 'receipt';
+  const rating = useQuery({
+    queryKey: ['supplier-order', order.id, 'rating'],
+    queryFn: () => fetchRating(accessToken as string, order.id),
+    enabled: receipt && order.status === 'COMPLETED' && accessToken != null,
+    retry: (count, error) => !isApiError(error) && count < 2,
+  });
+  const unrated = rating.isError && isApiError(rating.error) && rating.error.status === 404;
   const scrollProps = {
     refreshControl: <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />,
   };
@@ -82,6 +98,83 @@ export function BuyerTrackingLayout({
             segments={view.segments}
             segmentIndex={view.segmentIndex}
           />
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (receipt) {
+    const outletLabel = order.outletName ?? 'your outlet';
+    const address = delivery?.dropAddress ?? ([order.outletName, order.outletLocality].filter(Boolean).join(', ') || null);
+    const at = clockTime(delivery?.deliveredAt);
+    const orderSummary = `${order.items.length} ${order.items.length === 1 ? 'item' : 'items'} · ${formatMoney(order.totalAmount)}`;
+    const canChatHere = order.outletId != null && order.supplierStoreId != null;
+    const rateRow: DetailRow[] = unrated ? [{
+      key: 'rate',
+      icon: 'star-outline',
+      title: 'Rate this order',
+      subtitle: 'Quality, packaging and delivery',
+      right: <MandiText variant="caption" color={Colors.textSecondary}>›</MandiText>,
+      onPress: () => router.push(`/restaurant/rating/${order.id}`),
+    }] : order.status === 'DELIVERED' ? [{
+      key: 'checkin',
+      icon: 'star-outline',
+      title: 'Check in the delivery to rate it',
+    }] : [];
+    const supplierRows = (chatRow: DetailRow | null): DetailRow[] => [
+      ...(chatRow ? [chatRow] : [{ key: 'supplier', icon: 'storefront-outline' as const, title: order.storeName ?? supplier }]),
+      ...rateRow,
+    ];
+    return (
+      <View style={styles.root}>
+        <View style={{ paddingTop: insets.top, backgroundColor: Colors.surface }}>
+          <MandiHeader title="Tracking" subtitle={supplier} back onBack={onBack} right={help} />
+        </View>
+        <ScrollView contentContainerStyle={styles.scroll} {...scrollProps}>
+          <ReceiptHero title={`Order delivered at ${outletLabel}`} subtitle={at != null ? `Delivered at ${at}` : null} />
+          <View style={styles.cards}>
+            {canChatHere ? (
+              <MandiChatAction
+                outletId={order.outletId}
+                supplierStoreId={order.supplierStoreId}
+                side="RESTAURANT"
+                suggest={{ type: 'ORDER', id: order.id }}
+              >
+                {({ onPress, label }) => (
+                  <DetailRowCard
+                    rows={supplierRows({
+                      key: 'supplier',
+                      icon: 'chatbubble-outline',
+                      title: order.storeName ?? supplier,
+                      subtitle: 'Message about this order',
+                      onPress,
+                      accessibilityLabel: label,
+                    })}
+                  />
+                )}
+              </MandiChatAction>
+            ) : (
+              <DetailRowCard rows={supplierRows(null)} />
+            )}
+            {delivery?.driverName != null && (
+              <DeliveryPartnerCard name={delivery.driverName} showCall={false} delivered />
+            )}
+            <DetailRowCard
+              rows={[
+                { key: 'drop', icon: 'location-outline', title: `Delivery at ${outletLabel}`, subtitle: address },
+                {
+                  key: 'order',
+                  icon: 'receipt-outline',
+                  title: `Order ${order.orderNumber}`,
+                  subtitle: orderSummary,
+                  right: <MandiText variant="caption" color={Colors.textSecondary}>›</MandiText>,
+                  onPress: () => router.push(`/restaurant/orders/${order.id}`),
+                  accessibilityLabel: `Order ${order.orderNumber}, ${orderSummary}`,
+                },
+              ]}
+            />
+            {view.complete && <ReportIssueCard onReport={() => router.push(`/restaurant/dispute/${order.id}`)} />}
+          </View>
         </ScrollView>
       </View>
     );

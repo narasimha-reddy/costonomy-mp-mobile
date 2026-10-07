@@ -33,7 +33,6 @@ import { useServerNow } from '@/hooks/useServerNow';
 import { ApiError, isApiError } from '@/lib/api/errors';
 import { canRetryPartner } from '@/lib/delivery/deliveryPartner';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
-import { buyerTrackingHeader } from '@/lib/delivery/trackingHeader';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { Colors, Radius, Spacing, TrackingLayout } from '@/theme';
 import { newIdempotencyKey } from '@/lib/api/client';
@@ -188,8 +187,7 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
       )}
     </MandiChatAction>
   );
-  // TODO(T6): the delivered and completed receipt layout. Until it lands those states keep the existing layout.
-  const buyerLayout = buyer && buyerTrackingHeader({ view, order: o, delivery: data, drop: destination, nowMs }).layout !== 'receipt';
+  const buyerLayout = buyer;
   const draft = buyer && o.status === 'DRAFT';
 
   return (

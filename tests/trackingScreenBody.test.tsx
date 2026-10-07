@@ -133,7 +133,7 @@ describe('TrackingScreenBody', () => {
     expect(mockPush).toHaveBeenCalledWith('/restaurant/receiving/5');
     fireEvent.press(screen.getByText('Report an issue'));
     expect(mockPush).toHaveBeenCalledWith('/restaurant/dispute/5');
-    expect(screen.queryByText(/rate/i)).toBeNull();
+    expect(screen.queryByText('Rate this order')).toBeNull();
   });
 
   it('does not offer Check in delivery before delivery', async () => {
@@ -197,7 +197,8 @@ describe('TrackingScreenBody', () => {
 
   it('polling pauses when not focused', async () => {
     // The refetch interval each query was given on its latest render, asked the way react-query asks it.
-    const intervals = () => mockUseQuery.mock.calls.slice(-2).map(([options]: any[]) =>
+    // (The layout's own rating query has no interval, so it is left out.)
+    const intervals = () => mockUseQuery.mock.calls.filter(([options]: any[]) => options.refetchInterval).slice(-2).map(([options]: any[]) =>
       options.refetchInterval({ state: { data: { status: 'IN_TRANSIT' } } }));
     const view = setup('buyer');
     await screen.findByText('Order is on the way');

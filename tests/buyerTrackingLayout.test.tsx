@@ -1,10 +1,11 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MandiToastProvider } from '@/components/common/MandiToast';
 import { BuyerTrackingLayout } from '@/components/delivery/BuyerTrackingLayout';
+import { ApiError } from '@/lib/api/errors';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { Colors } from '@/theme';
 
@@ -23,6 +24,8 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
 }));
+const mockApi = jest.fn();
+jest.mock('@/lib/api/client', () => ({ ...jest.requireActual('@/lib/api/client'), apiRequest: (...a: unknown[]) => mockApi(...a) }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
 
 const NOW = Date.parse('2026-01-01T10:00:00Z');
@@ -66,7 +69,8 @@ function setup(orderOver: object = {}, deliveryOver: object | null = {}) {
   );
 }
 
-beforeEach(() => { mockPush.mockClear(); mockMap.mockClear(); });
+const notRated = () => mockApi.mockRejectedValue(new ApiError({ code: 'NOT_FOUND', message: 'No rating', status: 404 }));
+beforeEach(() => { mockPush.mockClear(); mockMap.mockClear(); mockApi.mockReset(); notRated(); });
 
 describe('BuyerTrackingLayout', () => {
   it('buyer IN_TRANSIT renders green header, ETA pill, map, partner card', () => {
@@ -158,5 +162,78 @@ describe('BuyerTrackingLayout', () => {
     // Without the server's drop the outlet the app knows is used.
     setup({}, { status: 'IN_TRANSIT' });
     expect(last()).toMatchObject({ pickup: null, destination: OUTLET });
+  });
+
+  describe('receipt (DELIVERED and COMPLETED)', () => {
+    const delivered = { status: 'DELIVERED', deliveredAt: '2026-01-01T10:10:00' };
+    const rateRow = () => screen.queryByText('Rate this order');
+
+    it('DELIVERED shows the receipt with Delivered at time', () => {
+      setup({ status: 'DELIVERED' }, delivered);
+      expect(screen.getByText('Order delivered at Cafe Mocha')).toBeTruthy();
+      expect(screen.getByText(/^Delivered at \d{1,2}:\d{2} (AM|PM)$/)).toBeTruthy();
+      expect(screen.getByTestId('receipt-zigzag', { includeHiddenElements: true })).toBeTruthy();
+      expect(screen.getByText('Delivered by Ravi Kumar')).toBeTruthy();
+      expect(screen.queryByLabelText('Call Ravi Kumar')).toBeNull();
+      expect(screen.queryByTestId('tracking-header')).toBeNull();
+      expect(screen.queryByLabelText(/^Map/)).toBeNull();
+      expect(screen.getByText('FF')).toBeTruthy();
+      expect(screen.getByText('Delivery at Cafe Mocha')).toBeTruthy();
+      fireEvent.press(screen.getByLabelText('Order ORD-5, 1 item · ₹1,180.00'));
+      expect(mockPush).toHaveBeenCalledWith('/restaurant/orders/5');
+      fireEvent.press(screen.getByText('Report an issue'));
+      expect(mockPush).toHaveBeenCalledWith('/restaurant/dispute/5');
+    });
+
+    it('DELIVERED shows Check in to rate', () => {
+      setup({ status: 'DELIVERED' }, delivered);
+      expect(screen.getByText('Check in the delivery to rate it')).toBeTruthy();
+      expect(rateRow()).toBeNull();
+      // Nothing to press: the sticky Check in delivery bar (screen body) is the action.
+      fireEvent.press(screen.getByTestId('detail-row-checkin'));
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it('hides the partner card when there is no driver name', () => {
+      setup({ status: 'DELIVERED' }, { ...delivered, driverName: null });
+      expect(screen.queryByText(/^Delivered by/)).toBeNull();
+    });
+
+    it('COMPLETED unrated shows Rate this order', async () => {
+      setup({ status: 'COMPLETED' }, delivered);
+      expect(await screen.findByText('Rate this order')).toBeTruthy();
+      expect(screen.getByText('Quality, packaging and delivery')).toBeTruthy();
+      expect(screen.queryByText('Check in the delivery to rate it')).toBeNull();
+      fireEvent.press(screen.getByTestId('detail-row-rate'));
+      expect(mockPush).toHaveBeenCalledWith('/restaurant/rating/5');
+    });
+
+    it('COMPLETED rated hides it', async () => {
+      mockApi.mockResolvedValue({ id: 1, overall: 5 });
+      setup({ status: 'COMPLETED' }, delivered);
+      await waitFor(() => expect(mockApi).toHaveBeenCalled());
+      await screen.findByText('Order delivered at Cafe Mocha');
+      await waitFor(() => expect(mockApi).toHaveBeenCalledTimes(1));
+      expect(rateRow()).toBeNull();
+      expect(screen.queryByText('Check in the delivery to rate it')).toBeNull();
+    });
+
+    it('does not offer Rate while the rating is still loading', () => {
+      mockApi.mockReturnValue(new Promise(() => {}));
+      setup({ status: 'COMPLETED' }, delivered);
+      expect(rateRow()).toBeNull();
+    });
+
+    it('no rating API call is a POST', async () => {
+      setup({ status: 'COMPLETED' }, delivered);
+      await screen.findByText('Rate this order');
+      fireEvent.press(screen.getByTestId('detail-row-rate'));
+      expect(mockApi).toHaveBeenCalled();
+      for (const [path, options] of mockApi.mock.calls) {
+        expect(path).toBe('/api/v1/supplier-orders/5/rating');
+        expect((options?.method ?? 'GET')).toBe('GET');
+      }
+    });
   });
 });

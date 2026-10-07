@@ -8,6 +8,7 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import {
   MandiButton,
   MandiCard,
+  FilterPills,
   MandiEmptyState,
   MandiErrorState,
   MandiHeader,
@@ -22,16 +23,16 @@ import {
   fetchOutletDeliveries,
   fetchOutletDeliveryRadar,
 } from '@/services/delivery';
-import type { KitchenAction, OutletDeliveryRadarItem } from '@/models/delivery';
+import type { KitchenAction, OutletDeliveryRadarItem, RadarSummary } from '@/models/delivery';
 import { Colors, Radius, Spacing } from '@/theme';
 
 type DeliveryFilter = 'radar' | 'late' | 'check_in' | 'all';
 
 const FILTERS: { key: DeliveryFilter; label: string }[] = [
-  { key: 'radar', label: 'Active Radar' },
+  { key: 'radar', label: 'Active' },
   { key: 'late', label: 'Late' },
-  { key: 'check_in', label: 'Needs Check-in' },
-  { key: 'all', label: 'All History' },
+  { key: 'check_in', label: 'Needs check-in' },
+  { key: 'all', label: 'All' },
 ];
 
 export default function DeliveriesScreen() {
@@ -107,19 +108,11 @@ export default function DeliveriesScreen() {
         placeholder="Search order, supplier, or driver"
       />
 
-      <View style={styles.filterRow}>
-        {FILTERS.map((entry) => {
-          const selected = entry.key === filter;
-          return (
-            <MandiChip
-              key={entry.key}
-              label={entry.label}
-              active={selected}
-              onPress={() => setFilter(entry.key)}
-            />
-          );
-        })}
-      </View>
+      <FilterPills
+        items={FILTERS.map((entry) => ({ key: entry.key, label: entry.label, count: filterCount(entry.key, summary) }))}
+        selected={filter}
+        onSelect={(key) => setFilter(key as DeliveryFilter)}
+      />
 
       {summary && !isHistory && (
         <View style={styles.summaryBar}>
@@ -292,12 +285,13 @@ export default function DeliveriesScreen() {
   );
 }
 
-function MandiChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <MandiCard compact outlined={!active} accentColor={active ? Colors.primary : undefined} style={styles.filterChip} onPress={onPress}>
-      <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>{label}</MandiText>
-    </MandiCard>
-  );
+// "All" is history and has no summary count.
+function filterCount(key: DeliveryFilter, summary: RadarSummary | undefined): number | null {
+  if (!summary) return null;
+  if (key === 'radar') return summary.totalActive;
+  if (key === 'late') return summary.delayedCount;
+  if (key === 'check_in') return summary.pendingCheckInCount;
+  return null;
 }
 
 function SummaryBadge({ count, label, tone }: { count: number; label: string; tone: 'primary' | 'warning' | 'danger' | 'info' | 'neutral' }) {
@@ -386,13 +380,6 @@ function actionBannerStyle(action: KitchenAction) {
 }
 
 const styles = StyleSheet.create({
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  filterChip: { minWidth: 72, alignItems: 'center' },
   summaryBar: {
     flexDirection: 'row',
     alignItems: 'center',

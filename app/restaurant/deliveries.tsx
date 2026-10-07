@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -161,19 +161,11 @@ export default function DeliveriesScreen() {
                   ? 'All delivered orders are checked in'
                   : 'No active deliveries right now'
           }
-          description={
-            search.trim()
-              ? 'Try a different order number, supplier, or driver name.'
-              : filter === 'late'
-                ? 'All incoming deliveries are on schedule.'
-                : filter === 'check_in'
-                  ? 'There are no delivered orders awaiting dock verification.'
-                  : 'New deliveries will appear here as soon as suppliers pack your orders.'
-          }
         />
       ) : (
         visibleItems.map((item) => {
-          const late = item.scheduleStatus === 'RUNNING_LATE' || item.scheduleStatus === 'CRITICALLY_DELAYED' || (item.minutesOverdue != null && item.minutesOverdue > 0);
+          // The server decides lateness and how late; the app only displays it.
+          const late = item.scheduleStatus !== 'ON_SCHEDULE';
           const needsCheckIn = item.recommendedAction === 'CHECK_IN' && !item.isCheckedIn;
 
           return (
@@ -183,23 +175,25 @@ export default function DeliveriesScreen() {
               onPress={() => router.push(`/restaurant/tracking/${item.supplierOrderId}`)}
             >
               <View style={styles.cardTop}>
+                <MandiText variant="bodyEmphasis" style={styles.flex} numberOfLines={1}>
+                  {item.supplier?.supplierStoreName ?? item.supplier?.supplierOrgName ?? 'Supplier'}
+                </MandiText>
+                <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, item.status)} size="sm" />
+              </View>
+
+              <View style={styles.metaRow}>
                 <View style={styles.orderNumberRow}>
-                  <MandiText variant="bodyEmphasis">{item.orderNumber}</MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    {`Order ${item.orderNumber}`}
+                  </MandiText>
                   {item.arrivalRank > 0 && !isHistory && (
                     <View style={styles.rankBadge}>
-                      <MandiText variant="captionEmphasis" color={Colors.primary}>
+                      <MandiText variant="captionEmphasis" color={Colors.primaryDark}>
                         #{item.arrivalRank}
                       </MandiText>
                     </View>
                   )}
                 </View>
-                <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, item.status)} size="sm" />
-              </View>
-
-              <View style={styles.metaRow}>
-                <MandiText variant="body" color={Colors.textPrimary}>
-                  {item.supplier?.supplierStoreName ?? item.supplier?.supplierOrgName ?? 'Supplier'}
-                </MandiText>
                 {item.arrivalStage && (
                   <MandiText variant="captionEmphasis" color={stageColor(item.arrivalStage)}>
                     {formatStage(item.arrivalStage)}
@@ -229,29 +223,30 @@ export default function DeliveriesScreen() {
                 </View>
               )}
 
-              <View style={styles.detailsRow}>
-                <View style={styles.detailBlock}>
-                  <MandiText variant="caption" color={Colors.textTertiary}>ETA</MandiText>
-                  <MandiText variant="bodyEmphasis" color={late ? Colors.warning : undefined}>
-                    {late
-                      ? `${item.minutesOverdue ?? 0}m overdue`
-                      : item.etaMinutes != null
-                        ? `${item.etaMinutes} min`
-                        : 'Pending'}
+              <View style={styles.hairline} />
+              <View style={styles.bottomRow}>
+                {late ? (
+                  <MandiText variant="bodyEmphasis" color={Colors.primaryDark} style={styles.flex}>
+                    {item.minutesOverdue != null ? `${item.minutesOverdue} mins past slot` : 'Past slot'}
                   </MandiText>
-                </View>
-                <View style={styles.detailBlock}>
-                  <MandiText variant="caption" color={Colors.textTertiary}>Expected</MandiText>
-                  <MandiText variant="bodyEmphasis">
-                    {item.estimatedArrivalAt ? formatClock(item.estimatedArrivalAt) : '—'}
+                ) : item.etaMinutes != null ? (
+                  <MandiText variant="bodyEmphasis" color={Colors.successText} style={styles.flex}>
+                    {`Arriving in ${item.etaMinutes} mins`}
                   </MandiText>
-                </View>
-                <View style={styles.detailBlock}>
-                  <MandiText variant="caption" color={Colors.textTertiary}>Freshness</MandiText>
-                  <MandiText variant="caption" color={item.locationStale ? Colors.warning : Colors.textSecondary}>
-                    {item.locationStale ? 'Stale GPS' : item.locationAgeSeconds != null ? `${item.locationAgeSeconds}s ago` : 'Live'}
+                ) : (
+                  <MandiText variant="body" color={Colors.textSecondary} style={styles.flex}>
+                    {item.estimatedArrivalAt ? `Expected by ${formatClock(item.estimatedArrivalAt)}` : 'Slot to be confirmed'}
                   </MandiText>
-                </View>
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Track order ${item.orderNumber}`}
+                  hitSlop={8}
+                  style={styles.trackBtn}
+                  onPress={() => router.push(`/restaurant/tracking/${item.supplierOrderId}`)}
+                >
+                  <MandiText variant="bodyEmphasis" color={Colors.primaryDark}>Track ›</MandiText>
+                </Pressable>
               </View>
 
               {/* Recommended Kitchen Action */}
@@ -431,17 +426,24 @@ const styles = StyleSheet.create({
     gap: 4,
     flex: 1,
   },
-  detailsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
+  flex: { flex: 1 },
+  hairline: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.border,
     marginTop: Spacing.sm,
-    marginBottom: Spacing.sm,
   },
-  detailBlock: {
-    flex: 1,
-    gap: 2,
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    minHeight: 48,
+  },
+  trackBtn: {
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
   actionBanner: {
     flexDirection: 'row',

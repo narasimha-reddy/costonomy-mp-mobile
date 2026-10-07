@@ -420,3 +420,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Added
 - Supplier delivery partner dispatch controls, live tracking map/webview integration, and safe navigation handling.
 - Arrival Radar situational widgets for restaurant kitchens: real-time driver ETA, vehicle type badge, and delivery issue notification alerts.
+- Restyle T3: pure `buyerTrackingHeader()` adapter over `orderTrackingView` (title, pill, map mode, partner area for 18 buyer tracking states) with tests.

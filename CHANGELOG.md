@@ -428,3 +428,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Supplier delivery partner dispatch controls, live tracking map/webview integration, and safe navigation handling.
 - Arrival Radar situational widgets for restaurant kitchens: real-time driver ETA, vehicle type badge, and delivery issue notification alerts.
 - Delivery status `PROVIDER_SELECTED` now reads "Finding partner" (was "Assigning a partner"); regression tests for the platform-delivery copy (T1a).
+- [Restyle] Deliveries filters are one scrolling row of pills (Active, Late, Needs check-in, All) with counts from the radar summary, via the new FilterPills component.

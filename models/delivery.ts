@@ -70,6 +70,8 @@ export interface Delivery {
   canSwitchToOwn?: boolean;
   /** Test-only (API D-188): the supplier may move a sandbox rider to the next step. Supplier screens only. */
   sandboxControls?: boolean;
+  /** Test-only (API D-189): seconds between the rider's automatic moves; null/absent when it does not move on its own. */
+  sandboxAutoAdvanceSeconds?: number | null;
 }
 
 export type ArrivalStage =

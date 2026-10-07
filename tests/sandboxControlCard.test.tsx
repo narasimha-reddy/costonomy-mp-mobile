@@ -70,6 +70,15 @@ describe('sandbox rider control (test only)', () => {
     await waitFor(() => expect((fetchDelivery as jest.Mock).mock.calls.length).toBeGreaterThan(1));
   });
 
+  it('says the rider moves on its own when the API gives an interval', async () => {
+    (fetchDelivery as jest.Mock).mockResolvedValue({ ...delivery, sandboxAutoAdvanceSeconds: 30 });
+    setup('supplier');
+    expect(await screen.findByText(
+      'Pidge sandbox has no real riders. The rider moves to the next step on its own every 30 s. Tap to skip ahead.',
+    )).toBeTruthy();
+    expect(screen.getByText('Assign a rider')).toBeTruthy();
+  });
+
   it('never renders it for the buyer', async () => {
     setup('buyer');
     await screen.findByText('Assigning a partner');

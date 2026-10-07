@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react-native';
 import { MandiMap } from '@/components/delivery/MandiMap';
 import { MandiMap as MandiMapWeb } from '@/components/delivery/MandiMap.web';
 import { MandiMapSketch } from '@/components/delivery/MandiMapSketch';
+import { TruckIcon } from '@/components/delivery/TruckIcon';
 import { Colors } from '@/theme';
 
 let mockConfigured = false;
@@ -20,6 +21,8 @@ jest.mock('react-native-maps', () => ({
   __esModule: true,
   default: 'MapView',
   Marker: 'Marker',
+  Polyline: 'Polyline',
+  Circle: 'Circle',
   PROVIDER_DEFAULT: null,
 }));
 
@@ -78,5 +81,101 @@ describe('MandiMapSketch honesty', () => {
 
   it('is what the web build exports', () => {
     expect(MandiMapWeb).toBe(MandiMapSketch);
+  });
+});
+
+const pickup = { latitude: 12.95, longitude: 77.57 };
+type P = { props: Record<string, unknown> };
+
+describe('MandiMap modes (native)', () => {
+  beforeEach(() => {
+    mockConfigured = true;
+  });
+
+  it('no mode behaves as before', () => {
+    const { UNSAFE_queryByType, UNSAFE_queryAllByType } = render(
+      <MandiMap driver={fix} destination={outlet} stale={false} pickup={pickup} />,
+    );
+    expect(UNSAFE_queryByType('MapView' as never)).not.toBeNull();
+    expect(UNSAFE_queryAllByType('Polyline' as never)).toHaveLength(0);
+    expect(UNSAFE_queryAllByType('Circle' as never)).toHaveLength(0);
+    expect(UNSAFE_queryAllByType('Marker' as never)).toHaveLength(2);
+  });
+
+  it('pending draws a dashed line pickup to drop', () => {
+    const { UNSAFE_getAllByType } = render(
+      <MandiMap driver={null} destination={outlet} pickup={pickup} stale={false} mode="pending" />,
+    );
+    const lines = UNSAFE_getAllByType('Polyline' as never) as unknown as P[];
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.props.lineDashPattern).toEqual([6, 5]);
+    expect(lines[0]?.props.strokeColor).toBe(Colors.routePending);
+    expect(lines[0]?.props.coordinates).toEqual([pickup, outlet]);
+  });
+
+  it('live after pickup draws a solid line truck to drop', () => {
+    const { UNSAFE_getAllByType, UNSAFE_queryAllByType } = render(
+      <MandiMap driver={fix} destination={outlet} stale={false} mode="live" />,
+    );
+    const lines = UNSAFE_getAllByType('Polyline' as never) as unknown as P[];
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.props.lineDashPattern).toBeUndefined();
+    expect(lines[0]?.props.strokeColor).toBe(Colors.deliveryRoute);
+    expect(lines[0]?.props.strokeWidth).toBe(4);
+    expect(lines[0]?.props.coordinates).toEqual([{ latitude: 12.97, longitude: 77.59 }, outlet]);
+    expect(UNSAFE_queryAllByType('Circle' as never)).toHaveLength(0);
+    expect(screen.getByTestId('truck-icon')).toBeTruthy();
+  });
+
+  it('arriving draws a 300 m circle', () => {
+    const { UNSAFE_getAllByType } = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="arriving" />);
+    const circles = UNSAFE_getAllByType('Circle' as never) as unknown as P[];
+    expect(circles).toHaveLength(1);
+    expect(circles[0]?.props.radius).toBe(300);
+    expect(circles[0]?.props.center).toEqual(outlet);
+    expect(circles[0]?.props.fillColor).toBe(Colors.geofenceFill);
+  });
+
+  it('reached draws a 50 m circle', () => {
+    const { UNSAFE_getAllByType } = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="reached" />);
+    expect((UNSAFE_getAllByType('Circle' as never)[0] as unknown as P).props.radius).toBe(50);
+  });
+
+  it('stale mutes the truck', () => {
+    const { UNSAFE_getByType } = render(<MandiMap driver={fix} destination={outlet} stale mode="live" />);
+    expect(UNSAFE_getByType(TruckIcon).props.muted).toBe(true);
+  });
+});
+
+describe('MandiMapSketch modes', () => {
+  it('no mode behaves as before: no pickup pin, no truck, no ring', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} stale={false} pickup={pickup} />);
+    expect(screen.queryByTestId('truck-icon')).toBeNull();
+    expect(screen.queryByTestId('map-geofence')).toBeNull();
+    expect(screen.queryByTestId('map-route-pending')).toBeNull();
+  });
+
+  it('pending draws the dashed route and no truck', () => {
+    render(<MandiMapSketch driver={null} destination={outlet} pickup={pickup} stale={false} mode="pending" />);
+    expect(screen.getByTestId('map-route-pending')).toBeTruthy();
+    expect(screen.getByTestId('map-pickup')).toBeTruthy();
+    expect(screen.queryByTestId('truck-icon')).toBeNull();
+  });
+
+  it('live draws the solid route to the truck, and the truck', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="live" />);
+    expect(screen.getByTestId('truck-icon')).toBeTruthy();
+    expect(screen.getByTestId('map-route-live')).toBeTruthy();
+    expect(screen.queryByTestId('map-route-pending')).toBeNull();
+  });
+
+  it('arriving and reached draw the geofence ring', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="arriving" />);
+    expect(screen.getByTestId('map-geofence')).toBeTruthy();
+  });
+
+  it('stale mutes the truck', () => {
+    const { UNSAFE_getByType } = render(<MandiMapSketch driver={fix} destination={outlet} stale mode="live" />);
+    expect(UNSAFE_getByType(TruckIcon).props.muted).toBe(true);
   });
 });

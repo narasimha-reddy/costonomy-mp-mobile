@@ -437,3 +437,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [restyle] GreenTrackingHeader and EtaPill components for the buyer tracking header (not wired into a screen yet).
 - Restyle T3: pure `buyerTrackingHeader()` adapter over `orderTrackingView` (title, pill, map mode, partner area for 18 buyer tracking states) with tests.
 - Delivery map modes (pending, live, arriving, reached), TruckIcon marker, Android tile watchdog with sketch fallback, and optional pickup/drop coordinates on Delivery.
+- Restyle T5: the buyer tracking screen now uses `BuyerTrackingLayout` (green header, ETA pill, map, partner card or placeholder, delivery and order rows, activity; the placed hero for a just-confirmed order). Polling pauses while the screen is not focused. Delivered and completed keep the old layout until T6; the supplier layout is unchanged.

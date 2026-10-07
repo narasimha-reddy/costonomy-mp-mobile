@@ -16,6 +16,7 @@ jest.mock('@expo/vector-icons', () => {
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useIsFocused: () => true,
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
 jest.mock('@/contexts/OutletProvider', () => ({ useOptionalOutlet: () => ({ outlet: { latitude: '12.9', longitude: '77.6' } }) }));
@@ -72,7 +73,7 @@ describe('sandbox rider control (test only)', () => {
 
   it('never renders it for the buyer', async () => {
     setup('buyer');
-    await screen.findByText('Assigning a partner');
+    await screen.findByText('Assigning a delivery partner');
     expect(screen.queryByText('Test mode')).toBeNull();
     expect(screen.queryByText('Assign a rider')).toBeNull();
   });
@@ -80,7 +81,7 @@ describe('sandbox rider control (test only)', () => {
   it('is absent when the API does not offer it', async () => {
     (fetchDelivery as jest.Mock).mockResolvedValue({ ...delivery, sandboxControls: false });
     setup('supplier');
-    await screen.findByText('Assigning a partner').catch(() => undefined);
+    await screen.findByText('Assigning a delivery partner').catch(() => undefined);
     await waitFor(() => expect(fetchDelivery).toHaveBeenCalled());
     expect(screen.queryByText('Test mode')).toBeNull();
   });

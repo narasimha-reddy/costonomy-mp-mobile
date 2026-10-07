@@ -16,6 +16,8 @@ import {
 import { intentKey, orderPaymentKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { StickyActionBar } from '@/components/common/StickyActionBar';
+import { DetailRowCard } from '@/components/common/DetailRowCard';
+import { fetchAvailableSlots } from '@/services/delivery';
 import {
   MandiButton,
   MandiCard,
@@ -46,7 +48,7 @@ import { formatGstRate, formatMoney, formatQuantity, type Money } from '@/utils/
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { track } from '@/analytics';
-import { Colors, Spacing } from '@/theme';
+import { Colors, Radius, Spacing } from '@/theme';
 import { CatchWeightNote } from '@/components/order';
 import { feeNeedsRefreshing } from '@/lib/delivery/quoteMessages';
 
@@ -147,7 +149,21 @@ export default function RequestDetailScreen() {
 
   // Where the payment picker sits, so the bar's method column can scroll to it. Presentation only.
   const [pickerY, setPickerY] = React.useState(0);
+  // The same for the mode and slot pickers and the totals card, for the rows near the top.
+  const [modeY, setModeY] = React.useState(0);
+  const [slotY, setSlotY] = React.useState(0);
+  const [totalsY, setTotalsY] = React.useState(0);
   const [pickerScroll, setPickerScroll] = React.useState<{ y: number; token: number } | null>(null);
+  const scrollTo = (y: number) => setPickerScroll((current) => ({ y, token: (current?.token ?? 0) + 1 }));
+
+  // The chosen slot's hours, for the header and the delivery row. Same key as the picker's own query, so one fetch.
+  const slotsQuery = useQuery({
+    queryKey: ['available-slots', request?.supplierStoreId, slot.scheduledDate],
+    queryFn: () => fetchAvailableSlots(accessToken as string, request?.supplierStoreId as number, slot.scheduledDate as string),
+    enabled: accessToken != null && request != null && slot.slotId != null && slot.scheduledDate != null,
+  });
+  const chosenSlot = slotsQuery.data?.find((s) => s.id === slot.slotId);
+  const windowText = deliveryWindowText(delivery?.mode ?? null, slot, chosenSlot);
 
   /**
    * What this order comes to, carriage included, computed by the server.
@@ -333,6 +349,11 @@ export default function RequestDetailScreen() {
       toast.show(caught instanceof ApiError ? caught.message : 'Could not copy that.', 'error'),
   });
 
+  const orderableNow = request != null
+    && request.status === 'RESPONSES_RECEIVED'
+    && request.withinOrderWindow
+    && request.fulfilment !== 'NOT_FULFILLED';
+
   return (
     <MandiScreen
       header={
@@ -366,6 +387,40 @@ export default function RequestDetailScreen() {
         <MandiErrorState message="Couldn't load this request." onRetry={() => query.refetch()} />
       ) : (
         <>
+          {orderableNow && (
+            <MandiCard testID="checkout-header">
+              <MandiText variant="captionEmphasis" color={Colors.textSecondary} numberOfLines={1}>
+                {request.storeName}
+              </MandiText>
+              <MandiText variant="bodyEmphasis" color={Colors.trackHeader} numberOfLines={1}>
+                {windowText}
+              </MandiText>
+              <MandiText variant="body" numberOfLines={1}>
+                {`to ${[request.outletName, request.outletLocality].filter(Boolean).join(' · ')}`}
+              </MandiText>
+              {/* The reply's clock moved here from the status card below. The small chip carries no
+                  trailing "to order" (it wrapped under the time); its spoken label still says it. */}
+              {request.orderCreationDeadline && (
+                <View style={styles.headerTimer}>
+                  <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1} style={styles.flex}>
+                    Order from this reply within
+                  </MandiText>
+                  <MandiCountdown
+                    size="sm"
+                    tone="ready"
+                    deadlineAt={request.orderCreationDeadline}
+                    slaSeconds={request.orderCreationWindowSeconds ?? undefined}
+                    action="to order"
+                    onExpire={() => void refresh()}
+                  />
+                </View>
+              )}
+              <MandiText variant="caption" color={Colors.textTertiary}>
+                The supplier is holding this stock until then.
+              </MandiText>
+            </MandiCard>
+          )}
+
           <MandiCard>
             {/* Status first. What a kitchen checks on opening this screen is
                 whether the supplier has answered yet — the store name is
@@ -423,7 +478,7 @@ export default function RequestDetailScreen() {
               </View>
             )}
 
-            {request.status === 'RESPONSES_RECEIVED' && request.orderCreationDeadline && (
+            {!orderableNow && request.status === 'RESPONSES_RECEIVED' && request.orderCreationDeadline && (
               <View style={styles.countdown}>
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   Order from this reply within
@@ -464,19 +519,23 @@ export default function RequestDetailScreen() {
             && request.withinOrderWindow
             && request.fulfilment !== 'NOT_FULFILLED' && (
             <>
-              <DeliveryModePicker
-                request={request}
-                selected={delivery?.mode ?? null}
-                onSelect={(mode, fee, quoteReference) =>
-                  setDelivery({ mode, fee, quoteReference })}
-              />
-              {delivery?.mode !== 'PICKUP' && (
-                <DeliverySlotPicker
-                  supplierStoreId={request.supplierStoreId}
-                  selectedSlotId={slot.slotId}
-                  selectedDate={slot.scheduledDate}
-                  onSelect={(slotId, scheduledDate) => setSlot({ slotId, scheduledDate })}
+              <View onLayout={(e) => setModeY(e.nativeEvent.layout.y)}>
+                <DeliveryModePicker
+                  request={request}
+                  selected={delivery?.mode ?? null}
+                  onSelect={(mode, fee, quoteReference) =>
+                    setDelivery({ mode, fee, quoteReference })}
                 />
+              </View>
+              {delivery?.mode !== 'PICKUP' && (
+                <View onLayout={(e) => setSlotY(e.nativeEvent.layout.y)}>
+                  <DeliverySlotPicker
+                    supplierStoreId={request.supplierStoreId}
+                    selectedSlotId={slot.slotId}
+                    selectedDate={slot.scheduledDate}
+                    onSelect={(slotId, scheduledDate) => setSlot({ slotId, scheduledDate })}
+                  />
+                </View>
               )}
               {/* Below delivery, because the amount it has to cover depends on
                   the mode: a wallet that covers a collected order may not cover
@@ -551,6 +610,48 @@ export default function RequestDetailScreen() {
             ))}
           </MandiCard>
 
+          {orderableNow && (
+            <>
+              {/* No note field exists on this request, so no "Add a note" chip. */}
+              <View style={styles.chipRow}>
+                <Pressable
+                  onPress={() => router.push(`/restaurant/supplier/${request.supplierStoreId}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add more items"
+                  style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+                >
+                  <MandiText variant="captionEmphasis" color={Colors.primaryDark}>+ Add more items</MandiText>
+                </Pressable>
+              </View>
+              <View testID="checkout-rows">
+                <DetailRowCard
+                  rows={[
+                    {
+                      key: 'window',
+                      icon: 'time-outline',
+                      title: 'Delivery window',
+                      subtitle: windowText,
+                      onPress: () => scrollTo(delivery?.mode === 'PICKUP' ? modeY : slotY || modeY),
+                    },
+                    {
+                      key: 'address',
+                      icon: 'location-outline',
+                      title: `Delivery at ${request.outletName ?? 'your outlet'}`,
+                      subtitle: [request.outletLocality, request.outletCity].filter(Boolean).join(', ') || null,
+                    },
+                    {
+                      key: 'total',
+                      icon: 'receipt-outline',
+                      title: `Total bill ${formatMoney(preview.data?.grandTotal ?? request.acceptance?.offeredTotal ?? '0')}`,
+                      subtitle: 'Incl. taxes and charges',
+                      onPress: () => scrollTo(totalsY),
+                    },
+                  ]}
+                />
+              </View>
+            </>
+          )}
+
           {request.acceptance == null && request.agreedTotal != null && (
             <MandiCard>
               <Row label="Items" value={formatMoney(request.agreedValue ?? '0')} />
@@ -560,6 +661,7 @@ export default function RequestDetailScreen() {
           )}
 
           {request.acceptance != null && (
+            <View onLayout={(e) => setTotalsY(e.nativeEvent.layout.y)}>
             <MandiCard>
               {/* Only real once the supplier has answered. Before that there is
                   no price on this request at all. */}
@@ -586,6 +688,7 @@ export default function RequestDetailScreen() {
                 </MandiText>
               )}
             </MandiCard>
+            </View>
           )}
         </>
       )}
@@ -658,7 +761,7 @@ export default function RequestDetailScreen() {
           left={{
             eyebrow: 'PAY USING',
             label: method == null ? 'Choose a method' : METHOD_BAR_LABEL[method],
-            onPress: () => setPickerScroll((current) => ({ y: pickerY, token: (current?.token ?? 0) + 1 })),
+            onPress: () => scrollTo(pickerY),
           }}
           amount={formatMoney(preview.data?.grandTotal ?? request.acceptance?.offeredTotal ?? '0')}
           amountCaption="TOTAL"
@@ -700,6 +803,20 @@ export default function RequestDetailScreen() {
       </MandiStickyBar>
     );
   }
+}
+
+/** Where and when it arrives, in words: pickup, as soon as possible, or the day and the slot's hours. */
+function deliveryWindowText(
+  mode: DeliveryMode | null,
+  slot: { slotId: number | null; scheduledDate: string | null },
+  chosen: { startTime: string; endTime: string } | undefined,
+): string {
+  if (mode === 'PICKUP') return 'Pickup';
+  if (slot.scheduledDate == null) return 'As soon as possible';
+  const day = slot.scheduledDate === istDay(0) ? 'Today'
+    : slot.scheduledDate === istDay(1) ? 'Tomorrow'
+      : slot.scheduledDate === istDay(2) ? 'In 2 days' : slot.scheduledDate;
+  return chosen == null ? day : `${day} · ${chosen.startTime.substring(0, 5)} - ${chosen.endTime.substring(0, 5)}`;
 }
 
 /**
@@ -867,6 +984,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.xs,
     marginBottom: Spacing.sm,
+  },
+  headerTimer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  chip: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
   },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   noteRow: {

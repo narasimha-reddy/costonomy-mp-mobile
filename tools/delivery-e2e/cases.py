@@ -402,7 +402,7 @@ if __name__ == '__main__':
     which = sys.argv[1:] or [str(i) for i in range(1, 13)]
     driver.RESULTS[:] = [r for r in load_results() if r['case'] not in which]
     prov = delivery_provider()
-    if prov != 'PIDGE':
+    if prov == 'MOCK':
         # These cases drive Pidge (signed webhooks, sandbox stages); with the mock partners they cannot run.
         for n in which:
             rec(n, 'provider check', 'delivery provider PIDGE', prov, 'BLOCKED', 'cases 1-12 need PIDGE (sandbox); use the mock panel for MOCK stacks')

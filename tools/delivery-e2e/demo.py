@@ -8,7 +8,7 @@ def show(name, oid):
     print('%-26s order %-5d restaurant: %s/restaurant/orders/%d   supplier: %s/supplier/orders/%d'
           % (name, oid, WEB, oid, WEB, oid))
 
-if delivery_provider() != 'PIDGE':
+if delivery_provider() == 'MOCK':
     sys.exit('BLOCKED: demo.py books Pidge deliveries; the stack runs %s' % delivery_provider())
 widen_hours()
 try:

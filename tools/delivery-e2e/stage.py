@@ -23,7 +23,7 @@ STAGES = {
 
 if len(sys.argv) != 3 or (sys.argv[2] not in STAGES and sys.argv[2] != 'cancel-rider'):
     sys.exit(__doc__)
-if delivery_provider() != 'PIDGE':
+if delivery_provider() == 'MOCK':
     sys.exit('BLOCKED: the stack runs %s, not PIDGE; stage.py posts signed Pidge webhooks' % delivery_provider())
 if not pidge_secret():
     sys.exit('BLOCKED: PIDGE_WEBHOOK_SECRET is not set (environment first, then application-local.properties)')

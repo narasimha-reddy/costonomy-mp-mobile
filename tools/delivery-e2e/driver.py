@@ -77,6 +77,8 @@ def db1(sql):
 # ---------------- delivery provider detection ----------------
 def delivery_provider():
     """'PIDGE', 'MOCK' or 'UNKNOWN'. The merged stack may run Pidge (sandbox), where the mock partners are not registered.
+    UNKNOWN (table lists both mocks and PIDGE enabled, no env or log to decide): Pidge-only tools go ahead with a warning,
+    the mock-only helper stays BLOCKED. Set DELIVERY_PROVIDER or API_LOG to be exact.
     Order: DELIVERY_PROVIDER env, then the API log (API_LOG file, if given), then the delivery_provider table and the
     latest delivery's provider_code. Read-only."""
     forced = os.environ.get('DELIVERY_PROVIDER', '').upper()
@@ -95,8 +97,8 @@ def delivery_provider():
         mock = any(c.startswith('MOCK') for c in enabled); pidge = 'PIDGE' in enabled
         if mock and not pidge: return 'MOCK'
         if pidge and not mock: return 'PIDGE'
-        last = db1("select provider_code from delivery where provider_code is not null order by id desc limit 1")
-        if last: return 'MOCK' if last.upper().startswith('MOCK') else last.upper()
+        # Both rows enabled: the table cannot say which one the running API registered (PIDGE removes the mocks).
+        if mock and pidge: return 'UNKNOWN'
         return 'PIDGE' if pidge else 'UNKNOWN'
     except Exception:
         return 'UNKNOWN'
@@ -104,7 +106,7 @@ def delivery_provider():
 def blocked_unless(provider, case, step, expected):
     """Record BLOCKED (not FAIL) when the stack runs a different delivery provider than the helper needs."""
     have = delivery_provider()
-    if have == provider: return True
+    if have == provider or (have == 'UNKNOWN' and provider == 'PIDGE'): return True
     rec(case, step, expected, 'not run', 'BLOCKED', 'stack delivery provider is %s, this step needs %s' % (have, provider))
     return False
 

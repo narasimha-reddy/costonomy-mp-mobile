@@ -19,7 +19,7 @@ NEXT = {  # current delivery status -> (stage to report, where the rider is, lab
     'IN_TRANSIT': ('fulfilled|reached delivery', OUTLET, 'arrived'),
     'ARRIVED_AT_DESTINATION': ('fulfilled|delivered', OUTLET, 'delivered'),
 }
-if delivery_provider() != 'PIDGE':
+if delivery_provider() == 'MOCK':
     sys.exit('BLOCKED: the stack runs %s, not PIDGE; the rider simulator only posts signed Pidge webhooks' % delivery_provider())
 if not pidge_secret():
     sys.exit('BLOCKED: PIDGE_WEBHOOK_SECRET is not set (environment first, then application-local.properties)')

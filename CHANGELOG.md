@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/mobile-gst-notices] - GST document messages show on the web (API D-133)
+#### Fixed
+- Generate Invoice, View Invoice and Credit Notes on both order screens now show why they can't proceed (for example "Add the supplier's GSTIN, an HSN code for Basmati Rice") inside the GST Documents card. They used `Alert.alert`, which never appears on the web, so a refusal looked like nothing happened.
+
 ### [phase6/mobile-product-quantity] - A tap is not lost on the product screen (API D-137)
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.

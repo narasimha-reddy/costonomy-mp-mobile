@@ -1,6 +1,6 @@
 import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { billingFailureMessage } from '@/lib/billing/messages';
 import { fetchTaxInvoice, fetchCreditNotes, generateTaxInvoice, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -124,6 +124,8 @@ export default function SupplierOrderScreen() {
   const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
   const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  // Shown in the card, not with Alert.alert: on web an Alert never appears, so a refusal looked like nothing happened.
+  const [billingNotice, setBillingNotice] = useState<{ tone: 'error' | 'info'; text: string } | null>(null);
 
   const query = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -295,12 +297,13 @@ export default function SupplierOrderScreen() {
 
   async function handleViewInvoice() {
     if (!accessToken || !orderId) return;
+    setBillingNotice(null);
     setBillingLoading(true);
     try {
       const inv = await fetchTaxInvoice(accessToken, orderId);
       setInvoice(inv);
     } catch (caught) {
-      Alert.alert('Invoice', billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
+      setBillingNotice({ tone: 'error', text: billingFailureMessage(caught, 'Tax invoice is not yet available for this order.') });
     } finally {
       setBillingLoading(false);
     }
@@ -308,12 +311,13 @@ export default function SupplierOrderScreen() {
 
   async function handleGenerateInvoice() {
     if (!accessToken || !orderId) return;
+    setBillingNotice(null);
     setBillingLoading(true);
     try {
       const inv = await generateTaxInvoice(accessToken, orderId);
       setInvoice(inv);
     } catch (caught) {
-      Alert.alert('Invoice', billingFailureMessage(caught, 'Could not generate tax invoice for this order.'));
+      setBillingNotice({ tone: 'error', text: billingFailureMessage(caught, 'Could not generate tax invoice for this order.') });
     } finally {
       setBillingLoading(false);
     }
@@ -321,16 +325,17 @@ export default function SupplierOrderScreen() {
 
   async function handleViewCreditNotes() {
     if (!accessToken || !orderId) return;
+    setBillingNotice(null);
     setBillingLoading(true);
     try {
       const notes = await fetchCreditNotes(accessToken, orderId);
       if (notes.length === 0) {
-        Alert.alert('Credit Notes', 'No credit notes have been issued for this order.');
+        setBillingNotice({ tone: 'info', text: 'No credit notes have been issued for this order.' });
       } else {
         setCreditNotes(notes);
       }
     } catch (caught) {
-      Alert.alert('Credit Notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
+      setBillingNotice({ tone: 'error', text: billingFailureMessage(caught, 'Could not load credit notes for this order.') });
     } finally {
       setBillingLoading(false);
     }
@@ -547,6 +552,17 @@ export default function SupplierOrderScreen() {
                   disabled={billingLoading}
                 />
               </View>
+
+              {billingNotice != null && (
+                <MandiText
+                  variant="caption"
+                  color={billingNotice.tone === 'error' ? Colors.danger : Colors.textSecondary}
+                  style={{ marginTop: 8 }}
+                  accessibilityRole={billingNotice.tone === 'error' ? 'alert' : undefined}
+                >
+                  {billingNotice.text}
+                </MandiText>
+              )}
 
               {invoice != null && (
                 <View style={{ marginTop: 12 }}>

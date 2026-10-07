@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MandiToastProvider } from '@/components/common';
@@ -8,6 +8,7 @@ import SupplierOrderScreen from '@/app/supplier/orders/[id]';
 import { fetchDelivery } from '@/services/delivery';
 import { fetchSupplierOrder } from '@/services/procurement';
 import { ApiError } from '@/lib/api/errors';
+import { fetchCreditNotes, fetchTaxInvoice, generateTaxInvoice } from '@/services/billing';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
@@ -171,5 +172,35 @@ describe('supplier order screen', () => {
     setup(SupplierOrderScreen);
     expect(await screen.findByText('Ravi Kumar')).toBeTruthy();
     expect(screen.getByText('Track')).toBeTruthy();
+  });
+});
+
+// On web Alert.alert never appears, so these must show in the GST card itself.
+describe('GST documents card', () => {
+  it('shows the supplier why an invoice cannot be generated yet', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'DELIVERED' });
+    (generateTaxInvoice as jest.Mock).mockRejectedValue(new ApiError({
+      status: 422, code: 'TAX_INVOICE_DATA_MISSING', message: 'missing',
+      details: { missing: ['supplier.gstin', 'line[76 Basmati Rice].hsnCode'] },
+    }));
+    setup(SupplierOrderScreen);
+    fireEvent.press(await screen.findByText('Generate Invoice'));
+    expect(await screen.findByText(/This invoice can't be issued yet\. Add .*Basmati Rice/)).toBeTruthy();
+  });
+
+  it('tells the supplier when there are no credit notes', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'DELIVERED' });
+    (fetchCreditNotes as jest.Mock).mockResolvedValue([]);
+    setup(SupplierOrderScreen);
+    fireEvent.press(await screen.findByText('Credit Notes'));
+    expect(await screen.findByText('No credit notes have been issued for this order.')).toBeTruthy();
+  });
+
+  it('shows the buyer that the invoice is not available yet', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'DELIVERED' });
+    (fetchTaxInvoice as jest.Mock).mockRejectedValue(new ApiError({ status: 404, code: 'RESOURCE_NOT_FOUND', message: 'x' }));
+    setup(RestaurantOrderScreen);
+    fireEvent.press(await screen.findByText('View Invoice'));
+    expect(await screen.findByText("Tax invoices aren't available for this order yet.")).toBeTruthy();
   });
 });

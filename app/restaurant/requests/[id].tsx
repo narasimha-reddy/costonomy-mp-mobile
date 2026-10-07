@@ -15,6 +15,7 @@ import {
 } from '@/services/intent';
 import { intentKey, orderPaymentKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
+import { StickyActionBar } from '@/components/common/StickyActionBar';
 import {
   MandiButton,
   MandiCard,
@@ -50,6 +51,13 @@ import { CatchWeightNote } from '@/components/order';
 import { feeNeedsRefreshing } from '@/lib/delivery/quoteMessages';
 
 const SCREEN = 'REST-REQ-02';
+
+/** The pay bar's name for each way of paying (the pickers keep their longer ones). */
+const METHOD_BAR_LABEL: Record<PaymentMethod, string> = {
+  CREDIT: 'Mandi Credit',
+  WALLET: 'Wallet',
+  PREPAID: 'Pay online',
+};
 
 /**
  * One request, and the decision at the end of it. D-088.
@@ -137,6 +145,10 @@ export default function RequestDetailScreen() {
   const [method, setMethod] = React.useState<PaymentMethod | null>(null);
   const refresh = () => queryClient.invalidateQueries({ queryKey: intentKey(intentId) });
 
+  // Where the payment picker sits, so the bar's method column can scroll to it. Presentation only.
+  const [pickerY, setPickerY] = React.useState(0);
+  const [pickerScroll, setPickerScroll] = React.useState<{ y: number; token: number } | null>(null);
+
   /**
    * What this order comes to, carriage included, computed by the server.
    *
@@ -204,8 +216,9 @@ export default function RequestDetailScreen() {
         // being left with no way to pay.
         router.replace(`/restaurant/pay/${created.supplierOrderId}`);
       } else {
-        // Credit funds inside the creating transaction, so there is nothing to pay.
-        router.replace(`/restaurant/orders/${created.supplierOrderId}`);
+        // Credit and wallet settle inside the creating transaction, so there is nothing to pay:
+        // land on the tracking screen, which opens on the "order placed" state.
+        router.replace(`/restaurant/tracking/${created.supplierOrderId}`);
       }
     },
     onError: (caught) => {
@@ -345,6 +358,7 @@ export default function RequestDetailScreen() {
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
       footer={renderActions()}
+      scrollTarget={pickerScroll}
     >
       {query.isPending ? (
         <MandiSkeletonList count={3} />
@@ -467,12 +481,21 @@ export default function RequestDetailScreen() {
               {/* Below delivery, because the amount it has to cover depends on
                   the mode: a wallet that covers a collected order may not cover
                   the same order with a courier on it. */}
-              <PaymentMethodPicker
-                outletId={request.outletId}
-                supplierStoreId={request.supplierStoreId}
-                amount={preview.data?.grandTotal ?? request.acceptance?.offeredTotal}
-                selected={method}
-                onSelect={setMethod}
+              <View onLayout={(e) => setPickerY(e.nativeEvent.layout.y)}>
+                <PaymentMethodPicker
+                  outletId={request.outletId}
+                  supplierStoreId={request.supplierStoreId}
+                  amount={preview.data?.grandTotal ?? request.acceptance?.offeredTotal}
+                  selected={method}
+                  onSelect={setMethod}
+                />
+              </View>
+              {/* The bar below is the order button only, so withdrawing sits with the choices. */}
+              <MandiButton
+                label="Withdraw Request"
+                variant="tertiary"
+                size="lg"
+                onPress={() => setConfirmCancel(true)}
               />
             </>
           )}
@@ -626,23 +649,31 @@ export default function RequestDetailScreen() {
 
     if (!orderable && !withdrawable && !repeatable) return undefined;
 
+    // Answered and orderable: the pay bar. The amount is the server's preview, falling back to the
+    // acceptance total the same way the totals card does; nothing here adds money.
+    if (orderable) {
+      return (
+        <StickyActionBar
+          variant="pay"
+          left={{
+            eyebrow: 'PAY USING',
+            label: method == null ? 'Choose a method' : METHOD_BAR_LABEL[method],
+            onPress: () => setPickerScroll((current) => ({ y: pickerY, token: (current?.token ?? 0) + 1 })),
+          }}
+          amount={formatMoney(preview.data?.grandTotal ?? request.acceptance?.offeredTotal ?? '0')}
+          amountCaption="TOTAL"
+          ctaLabel="Place order"
+          // Until both are chosen there is no fee and no funding, and an
+          // order cannot be created without either.
+          disabled={delivery == null || method == null}
+          loading={order.isPending}
+          onPress={placeOrder}
+        />
+      );
+    }
+
     return (
       <MandiStickyBar>
-        {orderable && (
-          <>
-            <View style={styles.barRow}>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                You pay
-              </MandiText>
-              {/* One figure, from the server. It read "₹1,642.70 + ₹65.94",
-                  which asked the reader to do the sum and named no number the
-                  order would actually be for. */}
-              <MandiText variant="priceLarge">
-                {formatMoney(preview.data?.grandTotal ?? request.acceptance?.offeredTotal ?? '0')}
-              </MandiText>
-            </View>
-          </>
-        )}
         {/* Side by side: the two things a kitchen can do with an answered
             request are opposites, and stacking them put the destructive one
             directly under the thumb that had just reached for the other. */}
@@ -656,22 +687,7 @@ export default function RequestDetailScreen() {
               onPress={() => setConfirmCancel(true)}
             />
           )}
-          {orderable && (
-            <MandiButton
-              label="Create Order"
-              size="lg"
-              // The card, its chip and this button are the same violet: the
-              // state and the act on it belong together.
-              tone="ready"
-              style={styles.barAction}
-              // Until both are chosen there is no fee and no funding, and an
-              // order cannot be created without either.
-              disabled={delivery == null || method == null}
-              loading={order.isPending}
-              onPress={placeOrder}
-            />
-          )}
-          {!orderable && repeatable && (
+          {repeatable && (
             <MandiButton
               label="Ask Again"
               size="lg"
@@ -888,10 +904,4 @@ const styles = StyleSheet.create({
   },
   barActions: { flexDirection: 'row', gap: Spacing.sm },
   barAction: { flex: 1 },
-  barRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.sm,
-  },
 });

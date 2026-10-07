@@ -2,7 +2,12 @@ import React from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { DeliveryLocation } from '@/models/delivery';
-import { Colors, Radius } from '@/theme';
+import { haversineM, mirrored } from '@/lib/delivery/mapGeometry';
+import { TruckIcon } from '@/components/delivery/TruckIcon';
+import { Colors, Radius, TrackLayout } from '@/theme';
+
+/** What the tracking screen is showing: before a partner (pending), on the way, close, at the door. */
+export type MapMode = 'placed' | 'pending' | 'live' | 'arriving' | 'reached';
 
 export interface MandiMapProps {
   /** The driver's last known fix, or null when there is none yet. */
@@ -14,6 +19,12 @@ export interface MandiMapProps {
   height?: number;
   /** Fill the space it is given: no rounded corners, for use as the top of the tracking screen. */
   bare?: boolean;
+  /** The supplier store. Pass it only before pickup: after pickup the route runs from the truck to the drop. */
+  pickup?: { latitude: number; longitude: number } | null;
+  /** Without a mode the map behaves as it always has (the supplier and order previews). */
+  mode?: MapMode;
+  /** Replaces the default label. */
+  accessibilityLabel?: string;
 }
 
 /**
@@ -44,22 +55,42 @@ const ROUTE = [
 const PIN = 20;
 const DOT = 18;
 const HALO = 40;
+/** Not to scale: the sketch only shows that a ring exists, and that it is smaller at the door. */
+const RING_ARRIVE = 96;
+const RING_REACH = 44;
 
-export function MandiMapSketch({ driver, destination, stale, height = 220, bare = false }: MandiMapProps) {
+export function MandiMapSketch({
+  driver,
+  destination,
+  stale,
+  height = 220,
+  bare = false,
+  pickup = null,
+  mode,
+  accessibilityLabel,
+}: MandiMapProps) {
   if (!driver && !destination) return null;
 
   const distanceKm = driver && destination
-    ? haversineKm(Number(driver.latitude), Number(driver.longitude), destination.latitude, destination.longitude)
+    ? haversineM({ latitude: Number(driver.latitude), longitude: Number(driver.longitude) }, destination) / 1000
     : null;
   // With no outlet to measure against (a supplier has none) the dot sits mid-route: the sketch cannot place it.
   const progress = distanceKm == null ? 0.5 : Math.min(0.95, Math.max(0.05, 1 - distanceKm / FULL_SCALE_KM));
   const dot = pointAlong(progress);
+  const dashed = mode === 'pending' && pickup != null;
+  // In a mode the solid route is what is left: from the truck to the drop.
+  const remaining = mode != null && mode !== 'placed' && mode !== 'pending' && driver != null;
+  const showPickup = mode == null || pickup != null;
+  const ring = mode === 'arriving' ? RING_ARRIVE : mode === 'reached' ? RING_REACH : null;
 
   return (
     <View
       style={[styles.panel, bare && styles.bare, { height }]}
       accessible
-      accessibilityLabel={driver ? (stale ? 'Last known partner position' : 'Partner position') : 'Waiting for the partner'}
+      accessibilityLabel={
+        accessibilityLabel ??
+        (driver ? (stale ? 'Last known partner position' : 'Partner position') : 'Waiting for the partner')
+      }
     >
       <View style={[styles.water]} />
       <View style={[styles.park, { left: '56%', top: '66%', width: '40%', height: '30%' }]} />
@@ -70,21 +101,44 @@ export function MandiMapSketch({ driver, destination, stale, height = 220, bare 
         <View key={`v${left}`} style={[styles.road, { left: `${left}%`, top: 0, bottom: 0, width: 10 }]} />
       ))}
 
-      {ROUTE.slice(1).map((to, i) => {
-        const from = ROUTE[i] as { x: number; y: number };
-        return <Leg key={i} from={from} to={to} />;
-      })}
+      {mode == null &&
+        ROUTE.slice(1).map((to, i) => {
+          const from = ROUTE[i] as { x: number; y: number };
+          return <Leg key={i} from={from} to={to} />;
+        })}
+      {dashed &&
+        ROUTE.slice(1).map((to, i) => {
+          const from = ROUTE[i] as { x: number; y: number };
+          return <Leg key={i} from={from} to={to} dashed testID={i === 0 ? 'map-route-pending' : undefined} />;
+        })}
+      {remaining &&
+        legsFrom(progress).map(([from, to], i) => (
+          <Leg key={i} from={from} to={to} color={Colors.deliveryRoute} testID={i === 0 ? 'map-route-live' : undefined} />
+        ))}
 
-      <View style={[styles.pin, styles.pickup, at(ROUTE[0].x, ROUTE[0].y)]} />
+      {ring != null && (
+        <View
+          testID="map-geofence"
+          style={[styles.ring, at(ROUTE[4].x, ROUTE[4].y), { width: ring, height: ring, borderRadius: ring / 2, marginLeft: -ring / 2, marginTop: -ring / 2 }]}
+        />
+      )}
+      {showPickup && <View testID="map-pickup" style={[styles.pin, styles.pickup, at(ROUTE[0].x, ROUTE[0].y)]} />}
       <View style={[styles.pin, styles.drop, at(ROUTE[4].x, ROUTE[4].y)]} />
 
-      {driver && (
+      {driver && mode != null && mode !== 'placed' && mode !== 'pending' ? (
         <View testID="map-driver" style={[styles.dotSlot, at(dot.x, dot.y)]}>
-          {!stale && <View style={styles.halo} />}
-          <View style={[styles.dot, stale && styles.dotStale]}>
-            <Ionicons name="bicycle" size={12} color={Colors.textInverse} />
-          </View>
+          <TruckIcon width={TrackLayout.truckWidth} muted={stale} flip={mirrored(driver.bearing)} />
         </View>
+      ) : (
+        driver &&
+        mode == null && (
+          <View testID="map-driver" style={[styles.dotSlot, at(dot.x, dot.y)]}>
+            {!stale && <View style={styles.halo} />}
+            <View style={[styles.dot, stale && styles.dotStale]}>
+              <Ionicons name="bicycle" size={12} color={Colors.textInverse} />
+            </View>
+          </View>
+        )
       )}
     </View>
   );
@@ -110,25 +164,55 @@ function pointAlong(progress: number): { x: number; y: number } {
   return ROUTE[0];
 }
 
+/** The route from `progress` of the way to the end, as axis-aligned legs. */
+function legsFrom(progress: number): [{ x: number; y: number }, { x: number; y: number }][] {
+  const start = pointAlong(progress);
+  const total = ROUTE.slice(1).reduce((sum, to, i) => {
+    const from = ROUTE[i] as { x: number; y: number };
+    return sum + Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
+  }, 0);
+  let walked = 0;
+  const target = progress * total;
+  const out: [{ x: number; y: number }, { x: number; y: number }][] = [];
+  let cursor = start;
+  ROUTE.slice(1).forEach((to, i) => {
+    const from = ROUTE[i] as { x: number; y: number };
+    const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
+    if (walked + length > target) {
+      if (cursor.x !== to.x || cursor.y !== to.y) out.push([cursor, to]);
+      cursor = to;
+    }
+    walked += length;
+  });
+  return out;
+}
+
 const at = (x: number, y: number): ViewStyle => ({ left: `${x}%`, top: `${y}%` });
 
 /** One straight stretch of the route, always horizontal or vertical. */
-function Leg({ from, to }: { from: { x: number; y: number }; to: { x: number; y: number } }) {
+function Leg({
+  from,
+  to,
+  dashed = false,
+  color,
+  testID,
+}: {
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  dashed?: boolean;
+  color?: string;
+  testID?: string;
+}) {
   const horizontal = from.y === to.y;
   const style: ViewStyle = horizontal
     ? { left: `${Math.min(from.x, to.x)}%`, top: `${from.y}%`, width: `${Math.abs(to.x - from.x)}%`, height: 5, marginTop: -2 }
     : { left: `${from.x}%`, top: `${Math.min(from.y, to.y)}%`, height: `${Math.abs(to.y - from.y)}%`, width: 5, marginLeft: -2 };
-  return <View style={[styles.route, style]} />;
-}
-
-/** Great-circle distance in km. Display only: nothing decides anything on it. */
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
+  const look: ViewStyle = dashed
+    ? { backgroundColor: 'transparent', borderStyle: 'dashed', borderColor: Colors.routePending, ...(horizontal ? { borderTopWidth: 2 } : { borderLeftWidth: 2 }) }
+    : color != null
+      ? { backgroundColor: color }
+      : {};
+  return <View testID={testID} style={[styles.route, style, look]} />;
 }
 
 const styles = StyleSheet.create({
@@ -161,6 +245,12 @@ const styles = StyleSheet.create({
   },
   pickup: { borderRadius: PIN / 2, backgroundColor: Colors.textPrimary },
   drop: { borderRadius: Radius.sm - 3, backgroundColor: Colors.deliveryDestination },
+  ring: {
+    position: 'absolute',
+    borderWidth: 2,
+    backgroundColor: Colors.geofenceFill,
+    borderColor: Colors.geofenceStroke,
+  },
   dotSlot: { position: 'absolute', width: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
   halo: {
     position: 'absolute',

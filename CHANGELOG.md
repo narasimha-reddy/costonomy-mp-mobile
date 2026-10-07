@@ -433,3 +433,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### [feat/restyle-p2a-primitives] - DetailRowCard and StickyActionBar
 #### Added
 - `DetailRowCard` (icon rows, 56dp minimum, one-line title, two-line subtitle, non-shrinking trailing slot) and `StickyActionBar` (`pay` and `continue` variants over `MandiStickyBar`). No screen uses them yet.
+- [restyle] GreenTrackingHeader and EtaPill components for the buyer tracking header (not wired into a screen yet).

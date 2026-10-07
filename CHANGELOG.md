@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/restyle-p1b-payment-line] - An unpaid credit order no longer says "You paid"
+#### Fixed
+- The order screen's bar label comes from the new pure `paymentLine()` (credit says "On credit" until the server sends `creditSettledAt`, then "Paid on credit"); `SupplierOrder` gains the optional B3 fields `creditDueDate`, `creditSettledAt`, `creditDueState`.
+
 ### [feat/restyle-p0-foundation] - Design tokens and map helpers for the buyer restyle
 #### Added
 - Additive tokens (`trackHeader`, `trackHeaderPill`, `onTrackHeader`, route, geofence, pickup pin and truck colours; `trackHeaderTitle` and `pillText` text styles; `TrackLayout`), `TruckIcon` (orange parcel, dark cab, muted and flip) and the pure `lib/delivery/mapGeometry` helpers. No screen uses them yet.

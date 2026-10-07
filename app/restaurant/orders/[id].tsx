@@ -29,6 +29,7 @@ import { useServerNow } from '@/hooks/useServerNow';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
 import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
+import { paymentLine } from '@/lib/payments/paymentLine';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { DetailRow as Row } from '@/components/restaurant/DetailRow';
 import { Colors, Radius, Spacing, TrackingLayout } from '@/theme';
@@ -484,7 +485,7 @@ export default function OrderDetailScreen() {
             pay": by the time an order exists the money has moved. */}
         <View style={styles.barRow}>
           <MandiText variant="caption" color={Colors.textSecondary}>
-            {unpaid ? 'To pay' : 'You paid'}
+            {paymentLine(order).barLabel}
           </MandiText>
           <MandiText variant="priceLarge">
             {formatMoney(settled ? order.acceptedAmount : order.totalAmount)}

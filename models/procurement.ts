@@ -295,6 +295,14 @@ export interface SupplierOrder {
    */
   refundAmount?: Money | number | null;
   refundedAt?: string | null;
+  /**
+   * Credit orders only (API B3): when the supplier's invoice is due, and when it was
+   * settled. Null before the invoice is raised and for other methods; absent from an
+   * older API. Display only: the app never compares them.
+   */
+  creditDueDate?: string | null;
+  creditSettledAt?: string | null;
+  creditDueState?: string | null;
   /** How the goods travel, and what the carriage cost. D-091. */
   deliveryMode: DeliveryMode | null;
   deliveryFee: Money | null;

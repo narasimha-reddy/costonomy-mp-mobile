@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/native-delivery-map-fallback] - The delivery map is no longer blank on Android
+#### Fixed
+- Without a Google Maps key the native `MandiMap` showed a blank panel. It now draws the schematic map (moved to the shared `MandiMapSketch`, also the web build) unless `MAPS_CONFIGURED`, and keeps the real `MapView` when a key is set.
+- `app.config.js` writes `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` into the Android Google Maps config at build time (no key committed; unchanged when unset). See `docs/GOOGLE_MAPS.md`.
+
 ### [phase6/mobile-product-quantity] - A tap is not lost on the product screen (API D-137)
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.

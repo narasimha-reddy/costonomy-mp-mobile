@@ -32,21 +32,23 @@ EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=AIza...
 Expo reads `EXPO_PUBLIC_*` at **build time**, so the dev server must be restarted
 after changing it. A running server will not pick it up.
 
-For the native builds the platform SDKs read their own keys, not this one:
+For the Android build, `app.config.js` (next to `app.json`) copies that same
+`EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` into `android.config.googleMaps.apiKey` at build
+time, which becomes `com.google.android.geo.API_KEY` in the manifest. Nothing is
+committed; with the variable empty the config is left as `app.json` has it. Set the
+variable in the environment of the EAS/Gradle build, not only in a local `.env`.
 
-```jsonc
-// app.json
-{
-  "expo": {
-    "ios":     { "config": { "googleMapsApiKey": "AIza..." } },
-    "android": { "config": { "googleMaps": { "apiKey": "AIza..." } } }
-  }
-}
-```
+The Android key needs the **Maps SDK for Android** enabled, and should be restricted
+to package `com.costonomy.mp` plus the signing certificate's SHA-1 (the upload key
+and, for Play App Signing, the Play-signed key). iOS is not wired: there the native
+map also falls back to the schematic until a key is added under
+`ios.config.googleMapsApiKey`.
 
-Use a **separate key per platform** with the matching application restriction
-(bundle id / SHA-1). One key shared across web, iOS and Android can only be
-restricted to the loosest of the three.
+**Without a key**, the delivery tracking screen draws the schematic map (streets,
+route, outlet, driver dot; not to scale) instead of a blank Google map. The same
+sketch is the web build. Because one variable now feeds web and Android, either use
+one key restricted to both (the loosest of the two) or build Android with its own
+value of the variable.
 
 Any key used for server-side geocoding stays out of all of this and is never
 shipped to a client.

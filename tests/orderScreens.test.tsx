@@ -83,6 +83,16 @@ describe('buyer order screen', () => {
     expect(screen.queryByText('Track Delivery')).toBeNull();
   });
 
+  it('credit order bar says On credit', async () => {
+    noDelivery();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({
+      ...order, status: 'COMPLETED', paymentMethod: 'CREDIT', paymentStatus: 'ON_CREDIT', acceptedAmount: '1180.00',
+    });
+    setup(RestaurantOrderScreen);
+    expect((await screen.findAllByText('On credit')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('You paid')).toBeNull();
+  });
+
   it('has no Track Delivery or partner card when ready with no partner', async () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
     noDelivery();

@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### [chore/restyle-e2e-tools] - Delivery e2e tooling runs against the merged stack
 #### Changed
 - `tools/delivery-e2e`: env overrides (`API`, `WEB`, `MYSQL_CMD`, `PIDGE_WEBHOOK_SECRET` from the environment first), provider detection (PIDGE vs MOCK, BLOCKED instead of FAIL), screenshots at 360/390/412, `android_shots.sh` (adb `-s` per emulator) and `driver.py --self-test` that refuses ports 7070/7071/3306.
+### [fix/restyle-p1b-payment-line] - An unpaid credit order no longer says "You paid"
+#### Fixed
+- The order screen's bar label comes from the new pure `paymentLine()` (credit says "On credit" until the server sends `creditSettledAt`, then "Paid on credit"); `SupplierOrder` gains the optional B3 fields `creditDueDate`, `creditSettledAt`, `creditDueState`.
 
 ### [feat/restyle-p0-foundation] - Design tokens and map helpers for the buyer restyle
 #### Added

@@ -14,7 +14,8 @@ jest.mock('@expo/vector-icons', () => {
   return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
 });
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
-jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+const mockStatusBar = jest.fn();
+jest.mock('expo-status-bar', () => ({ StatusBar: (p: unknown) => { mockStatusBar(p); return null; } }));
 const mockMap = jest.fn();
 jest.mock('@/components/delivery/MandiMap', () => {
   const { View } = jest.requireActual('react-native');
@@ -70,7 +71,7 @@ function setup(orderOver: object = {}, deliveryOver: object | null = {}) {
 }
 
 const notRated = () => mockApi.mockRejectedValue(new ApiError({ code: 'NOT_FOUND', message: 'No rating', status: 404 }));
-beforeEach(() => { mockPush.mockClear(); mockMap.mockClear(); mockApi.mockReset(); notRated(); });
+beforeEach(() => { mockStatusBar.mockClear(); mockPush.mockClear(); mockMap.mockClear(); mockApi.mockReset(); notRated(); });
 
 describe('BuyerTrackingLayout', () => {
   it('buyer IN_TRANSIT renders green header, ETA pill, map, partner card', () => {
@@ -234,6 +235,39 @@ describe('BuyerTrackingLayout', () => {
         expect(path).toBe('/api/v1/supplier-orders/5/rating');
         expect((options?.method ?? 'GET')).toBe('GET');
       }
+    });
+  });
+
+  describe('white header layouts (T15 items 1 and 6)', () => {
+    const lastStyles = () => mockStatusBar.mock.calls.map((c) => (c[0] as { style: string }).style);
+
+    it('receipt uses dark status bar icons on the white bar', () => {
+      setup({ status: 'DELIVERED' }, { status: 'DELIVERED', deliveredAt: '2026-01-01T09:58:00Z' });
+      expect(lastStyles()).toContain('dark');
+      expect(lastStyles()).not.toContain('light');
+    });
+
+    it('placed uses dark status bar icons on the white bar', () => {
+      setup({ status: 'CONFIRMED' }, null);
+      expect(lastStyles()).toContain('dark');
+    });
+
+    it('live keeps the light icons on the green header', () => {
+      setup();
+      expect(lastStyles()).toContain('light');
+      expect(lastStyles()).not.toContain('dark');
+    });
+
+    it('receipt header title is the supplier name', () => {
+      setup({ status: 'DELIVERED' }, { status: 'DELIVERED', deliveredAt: '2026-01-01T09:58:00Z' });
+      expect(screen.getByText('Fresh Farms')).toBeTruthy();
+      expect(screen.queryByText('Tracking')).toBeNull();
+    });
+
+    it('placed header title is the supplier name', () => {
+      setup({ status: 'CONFIRMED' }, null);
+      expect(screen.getAllByText('Fresh Farms').length).toBeGreaterThan(0);
+      expect(screen.queryByText('Tracking')).toBeNull();
     });
   });
 });

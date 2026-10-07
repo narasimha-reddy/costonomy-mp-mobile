@@ -84,6 +84,21 @@ export function orderStatusFor(
   return resolveStatus(SupplierOrderStatus, status);
 }
 
+/**
+ * The status label on the buyer's own lists. A Costonomy delivery that is ready but has no partner yet is not
+ * "ready for pickup" to the buyer (nobody is collecting it); it reads as the tracking screen does, "arranging
+ * delivery". Everything else is the plain status.
+ */
+export function buyerOrderStatus(
+  status: string,
+  mode: DeliveryModeCode | null | undefined,
+): StatusDisplay {
+  if (status === 'READY_FOR_PICKUP' && mode === 'COSTONOMY_DELIVERY') {
+    return { label: 'Arranging delivery', tone: 'info' };
+  }
+  return resolveStatus(SupplierOrderStatus, status);
+}
+
 /** How the goods travel, named for the person reading it. D-091. */
 export const DeliveryMode = widen({
   PICKUP: { label: 'You collect', tone: 'neutral' },

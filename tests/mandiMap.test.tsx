@@ -162,6 +162,19 @@ describe('MandiMapSketch modes', () => {
     expect(screen.queryByTestId('truck-icon')).toBeNull();
   });
 
+  it('pending route is drawn as dashes (several short segments), live is one solid run', () => {
+    // Android renders borderStyle dashed on a thin View as solid, so the dashes are real segments.
+    const { unmount } = render(<MandiMapSketch driver={null} destination={outlet} pickup={pickup} stale={false} mode="pending" />);
+    expect(screen.getAllByTestId('map-dash').length).toBeGreaterThan(4);
+    for (const d of screen.getAllByTestId('map-dash')) {
+      expect(StyleSheet.flatten(d.props.style).borderStyle).toBeUndefined();
+    }
+    unmount();
+    render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="live" />);
+    expect(screen.queryAllByTestId('map-dash')).toHaveLength(0);
+    expect(screen.getByTestId('map-route-live')).toBeTruthy();
+  });
+
   it('live draws the solid route to the truck, and the truck', () => {
     render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="live" />);
     expect(screen.getByTestId('truck-icon')).toBeTruthy();

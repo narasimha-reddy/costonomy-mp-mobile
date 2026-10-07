@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import {
   approveCredit,
+  closeCredit,
   fetchAgreement,
+  fetchAgreementClaims,
+  fetchAgreementPayments,
   fetchInvoices,
   fetchLedger,
   modifyCredit,
@@ -14,14 +18,26 @@ import {
   rejectCredit,
   suspendCredit,
 } from '@/services/credit';
-import { CreditPosition } from '@/components/credit/CreditPosition';
-import { RecordPaymentModal } from '@/components/credit/RecordPaymentModal';
+import { AgreementCreditNotes } from '@/components/credit/AgreementCreditNotes';
+import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
+import { ClaimReviewSheet } from '@/components/credit/ClaimReviewSheet';
+import { LineReasonSheet } from '@/components/credit/LineReasonSheet';
+import { RecordPaymentSheet } from '@/components/credit/RecordPaymentSheet';
+import { ReminderHistory } from '@/components/credit/ReminderHistory';
+import { RemindSheet } from '@/components/credit/RemindSheet';
+import { SupplierLineActions, SupplierMoreSheet, type MoreEntry } from '@/components/credit/SupplierLineActions';
+import { SupplierLineHero } from '@/components/credit/SupplierLineHero';
+import { SupplierPaymentRow } from '@/components/credit/SupplierPaymentRow';
+import { TermsEditorSheet } from '@/components/credit/TermsEditorSheet';
+import { UndoPaymentSheet } from '@/components/credit/UndoPaymentSheet';
+import { WriteOffSheet } from '@/components/credit/WriteOffSheet';
 import {
   MandiButton,
   MandiCard,
+  MandiEmptyState,
   MandiErrorState,
-  MandiFormField,
   MandiHeader,
+  MandiOfflineBanner,
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
@@ -30,32 +46,57 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { useDecideClaim } from '@/hooks/useDecideClaim';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { usePermissions } from '@/hooks/usePermissions';
+import { mayDecideClaims } from '@/lib/credit/claimInbox';
+import { claimMethodLabel } from '@/lib/credit/claims';
+import { mayWriteOff } from '@/lib/credit/creditNotes';
+import { queuedText } from '@/lib/credit/remind';
+import { splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
+import {
+  approveInputFrom, lineBanner, modifyInputFrom, reinstateNote, type TermsDraft,
+} from '@/lib/credit/supplierLine';
+import {
+  agreementClaimsKey, agreementKey, agreementPaymentsKey, receivablesRootKey, supplierWriteKeys,
+} from '@/lib/queryKeys';
+import { serverNow } from '@/lib/server-clock';
 import { CreditAgreementStatus, resolveStatus } from '@/models/status';
+import type { ClaimResponse, Reminder, ReversalResult, StorePayment } from '@/models/credit';
 import { ApiError } from '@/lib/api/errors';
+import { formatDay, relative } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, IconSize, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'SUP-CREDIT-02';
-const PERIODS = [7, 15, 30, 45, 60];
+const PAYMENTS_PAGE = 20;
 
-type Mode = 'view' | 'edit' | 'suspend' | 'counter' | 'decline';
+type Sheet = null | 'more' | 'terms' | 'approveTerms' | 'suspend' | 'reinstate' | 'decline' | 'close';
+
+/** The next step when a close is refused because something is still owed or on hold. */
+const CLOSE_NEXT_STEP = 'Suspend it to stop new orders, close it once it is paid.';
+
+/** Statuses where the line carries a position (what is owed, held, available). */
+const HAS_POSITION = new Set(['ACTIVE', 'SUSPENDED', 'CLOSED']);
 
 /**
- * One credit line, from the supplier's side. Doc 05 §32.
+ * One credit line, from the supplier's side. Doc 05 §32, plan S2, S10.
  *
- * <p><b>Every change needs a reason, because the restaurant sees it.</b> Doc 01
- * §18 makes each adjustment auditable, and an unexplained limit cut is precisely
- * what that requirement exists to stop — so the reason is a required field here
- * rather than a note the screen quietly omits.
+ * <p><b>Every figure is the server's.</b> The hero, the banners and the lists show what the
+ * API sent; the app adds nothing up. What the API does not send (who suspended the line, the
+ * auto-pause threshold, the lowest allowed limit) is shown only when it arrives.
  *
- * <p><b>A cut does not claw anything back.</b> Commitments already made stand: the
- * server refuses a limit below reserved + utilized (D-024) and says what the floor
- * is. The screen shows current exposure while editing so that refusal is
- * predictable rather than a surprise.
+ * <p><b>Every change needs a reason, because the restaurant sees it.</b> Terms, suspend and
+ * reinstate each go through a sheet that asks for one. A cut does not claw anything back:
+ * the server refuses a limit below what is drawn or on hold and says what the floor is; its
+ * message is shown as sent.
  *
- * <p>Suspending stops new orders and leaves existing debt and reservations
- * untouched — which is the honest description, and what the screen says.
+ * <p><b>Hiding is a courtesy.</b> People without CREDIT_MODIFY (or CREDIT_COLLECT for
+ * payments) see the line but not the buttons; the server checks again.
+ *
+ * <p>Extension points: `SupplierLineActions` takes `onRecord` and `onRemind`, and the More
+ * menu lists only the entries passed in, so later screens wire in without reshaping this one.
  */
 export default function SupplierCreditAgreementScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,474 +105,548 @@ export default function SupplierCreditAgreementScreen() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
-  const { storeId } = useStore();
+  const { storeId, store } = useStore();
+  const { offline } = useNetworkStatus();
+  const { canForStore } = usePermissions();
+  const canModify = store != null && canForStore('CREDIT_MODIFY', store);
+  const canCollect = mayDecideClaims(canForStore, store);
+  const decide = useDecideClaim();
 
-  const [mode, setMode] = useState<Mode>('view');
-  const [limit, setLimit] = useState<string | null>(null);
-  const [days, setDays] = useState<number | null>(null);
-  const [reason, setReason] = useState('');
-  const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
+  const [sheet, setSheet] = useState<Sheet>(null);
+  const [settledOpen, setSettledOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [review, setReview] = useState<{ id: number; mode: 'review' | 'reject' } | null>(null);
+  const busy = useRef(false);
+  // Recording a payment: one sheet per opening (`recordSession` is its key); `picked` are the
+  // invoices ticked for "Record for selected".
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [recordSession, setRecordSession] = useState(0);
+  const [recordTargets, setRecordTargets] = useState<number[]>([]);
+  const [previewNonce, setPreviewNonce] = useState(0);
+  // Undo and Remind: one sheet each, for the payment being undone and for the line.
+  const [undoing, setUndoing] = useState<StorePayment | null>(null);
+  const [remindOpen, setRemindOpen] = useState(false);
+  // Write off everything owed: owner and admin only (CREDIT_WRITE_OFF), one sheet per opening.
+  const [writeOffOpen, setWriteOffOpen] = useState(false);
+  const [writeOffSession, setWriteOffSession] = useState(0);
+  const canWriteOff = mayWriteOff(canForStore, store);
+  const [picked, setPicked] = useState<number[]>([]);
+  const enabled = Number.isFinite(agreementId) && accessToken != null;
 
   const agreement = useQuery({
-    queryKey: ['credit-agreement', agreementId],
+    queryKey: agreementKey(agreementId),
     queryFn: () => fetchAgreement(accessToken as string, agreementId),
-    enabled: Number.isFinite(agreementId) && accessToken != null,
+    enabled,
   });
-
-  const ledger = useQuery({
-    queryKey: ['credit-agreement', agreementId, 'ledger'],
-    queryFn: () => fetchLedger(accessToken as string, agreementId),
-    enabled: Number.isFinite(agreementId) && accessToken != null,
-  });
+  const data = agreement.data;
+  const hasPosition = data != null && HAS_POSITION.has(data.status);
 
   const invoices = useQuery({
-    queryKey: ['credit-agreement', agreementId, 'invoices'],
+    queryKey: [...agreementKey(agreementId), 'invoices'],
     queryFn: () => fetchInvoices(accessToken as string, agreementId),
-    enabled: Number.isFinite(agreementId) && accessToken != null,
+    enabled: enabled && hasPosition,
+  });
+  const claims = useQuery({
+    queryKey: agreementClaimsKey(agreementId),
+    queryFn: () => fetchAgreementClaims(accessToken as string, agreementId, 'SUBMITTED'),
+    enabled: enabled && hasPosition,
+  });
+  const payments = useInfiniteQuery({
+    queryKey: agreementPaymentsKey(agreementId),
+    queryFn: ({ pageParam }) =>
+      fetchAgreementPayments(accessToken as string, agreementId, { page: pageParam, size: PAYMENTS_PAGE }),
+    initialPageParam: 0,
+    getNextPageParam: (last, all) => (last.hasNext ? all.length : undefined),
+    enabled: enabled && hasPosition,
+  });
+  const ledger = useQuery({
+    queryKey: [...agreementKey(agreementId), 'ledger'],
+    queryFn: () => fetchLedger(accessToken as string, agreementId),
+    enabled: enabled && hasPosition && activityOpen,
   });
 
-  const data = agreement.data;
-  const asked = data?.latestRequest;
-  const limitValue = limit
-    ?? (asked != null && data?.status === 'REQUESTED'
-      ? String(Number(asked.requestedLimit))
-      : data ? String(Number(data.approvedLimit)) : '');
-  const daysValue = days
-    ?? (asked != null && data?.status === 'REQUESTED'
-      ? asked.requestedPeriodDays
-      : data?.creditPeriodDays)
-    ?? 30;
-
-  function invalidate() {
-    void queryClient.invalidateQueries({ queryKey: ['credit-agreement', agreementId] });
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: agreementKey(agreementId) });
     void queryClient.invalidateQueries({ queryKey: ['store', storeId, 'credit-agreements'] });
+    void queryClient.invalidateQueries({ queryKey: receivablesRootKey(storeId) });
+  }
+  function refetchAll() {
+    void agreement.refetch();
+    void invoices.refetch();
+    void claims.refetch();
+    void payments.refetch();
+    if (activityOpen) void ledger.refetch();
   }
 
-  function onFailure(caught: unknown, fallback: string) {
-    // The server's message names the floor on a refused cut (D-024) and the
-    // reason on a refused transition. Replacing it with "failed" would leave a
-    // supplier guessing at a number only the server knows.
-    toast.show(caught instanceof ApiError ? caught.message : fallback, 'error');
+  /** The server's own words win: they name the floor on a refused cut and the reason on a refused transition. */
+  function messageOf(caught: unknown, fallback: string): string {
+    return caught instanceof ApiError && caught.message !== '' ? caught.message : fallback;
   }
+  /** A refused transition means the screen was out of date: show what is true now. */
+  function onFailure(caught: unknown) {
+    if (caught instanceof ApiError && (caught.status === 409 || caught.status === 404)) refresh();
+  }
+  /** One write at a time: a double tap in the same instant reaches the server once. */
+  function once<T>(run: () => Promise<T>): Promise<T | undefined> {
+    if (busy.current) return Promise.resolve(undefined);
+    busy.current = true;
+    return run().finally(() => { busy.current = false; });
+  }
+
+  const close = useMutation({
+    mutationFn: (reason: string) => closeCredit(accessToken as string, agreementId, reason),
+    onSuccess: () => {
+      track('credit_closed', { screen: SCREEN, entityId: agreementId });
+      void Promise.all(supplierWriteKeys(storeId, agreementId).map((queryKey) =>
+        queryClient.invalidateQueries({ queryKey: [...queryKey] })));
+      setSheet(null);
+      toast.show('Credit line closed', 'info');
+    },
+    onError: onFailure,
+  });
 
   const modify = useMutation({
-    mutationFn: () =>
-      modifyCredit(accessToken as string, agreementId, {
-        approvedLimit: limitValue,
-        creditPeriodDays: daysValue,
-        reason: reason.trim(),
-      }),
+    mutationFn: (draft: TermsDraft) =>
+      modifyCredit(accessToken as string, agreementId, modifyInputFrom(draft)),
     onSuccess: () => {
       track('credit_modified', { screen: SCREEN, entityId: agreementId });
-      invalidate();
-      setMode('view');
-      setReason('');
-      toast.show('Terms updated — the restaurant has been told', 'success');
+      refresh();
+      setSheet(null);
+      toast.show('Terms updated. The restaurant has been told.', 'success');
     },
-    onError: (caught) => onFailure(caught, 'Could not change the terms.'),
-  });
-
-  const suspend = useMutation({
-    mutationFn: () => suspendCredit(accessToken as string, agreementId, reason.trim()),
-    onSuccess: () => {
-      track('credit_suspended', { screen: SCREEN, entityId: agreementId });
-      invalidate();
-      setMode('view');
-      setReason('');
-      toast.show('Credit suspended', 'info');
-    },
-    onError: (caught) => onFailure(caught, 'Could not suspend this line.'),
+    onError: onFailure,
   });
 
   const approve = useMutation({
-    // Values make it a modification; no values approves what was asked for.
-    // Doc 04 §13: a modification is explicit and versioned, and the credit does
-    // not work until the restaurant accepts it — so the copy says so rather than
-    // letting a supplier believe they have simply trimmed a number.
-    mutationFn: (modified: boolean) =>
-      approveCredit(accessToken as string, agreementId,
-        modified
-          ? { approvedLimit: limitValue, creditPeriodDays: daysValue, note: reason.trim() || undefined }
-          : {}),
-    onSuccess: (_data, modified) => {
-      track('credit_approved', { screen: SCREEN, entityId: agreementId }, { modified });
-      invalidate();
-      setMode('view');
-      setReason('');
+    // No values approves what was asked for; values make it a modification the
+    // restaurant has to accept (doc 04 §13), so the copy says so.
+    mutationFn: (draft: TermsDraft | null) =>
+      approveCredit(accessToken as string, agreementId, draft == null ? {} : approveInputFrom(draft)),
+    onSuccess: (_data, draft) => {
+      track('credit_approved', { screen: SCREEN, entityId: agreementId }, { modified: draft != null });
+      refresh();
+      setSheet(null);
       toast.show(
-        modified ? 'Sent back with your terms — they have to accept' : 'Credit approved',
+        draft != null ? 'Sent back with your terms. They have to accept.' : 'Credit approved',
         'success',
       );
     },
-    onError: (caught) => onFailure(caught, 'Could not approve this request.'),
+    onError: onFailure,
   });
 
-  const decline = useMutation({
-    mutationFn: () => rejectCredit(accessToken as string, agreementId, reason.trim()),
+  const suspend = useMutation({
+    mutationFn: (reason: string) => suspendCredit(accessToken as string, agreementId, reason),
     onSuccess: () => {
-      track('credit_rejected', { screen: SCREEN, entityId: agreementId });
-      invalidate();
-      toast.show('Request declined', 'info');
-      router.replace('/supplier/credit');
+      track('credit_suspended', { screen: SCREEN, entityId: agreementId });
+      refresh();
+      setSheet(null);
+      toast.show('Credit suspended', 'info');
     },
-    onError: (caught) => onFailure(caught, 'Could not decline this request.'),
+    onError: onFailure,
   });
 
   const reinstate = useMutation({
-    mutationFn: () => reinstateCredit(accessToken as string, agreementId),
+    mutationFn: (reason: string) => reinstateCredit(accessToken as string, agreementId, reason),
     onSuccess: () => {
       track('credit_reinstated', { screen: SCREEN, entityId: agreementId });
-      invalidate();
+      refresh();
+      setSheet(null);
       toast.show('Credit reinstated', 'success');
     },
-    onError: (caught) => onFailure(caught, 'Could not reinstate this line.'),
+    onError: onFailure,
   });
 
-  const exposure = data ? Number(data.reserved) + Number(data.utilized) : 0;
-  const cutsBelowExposure = Number(limitValue) < exposure;
+  const decline = useMutation({
+    mutationFn: (reason: string) => rejectCredit(accessToken as string, agreementId, reason),
+    onSuccess: () => {
+      track('credit_rejected', { screen: SCREEN, entityId: agreementId });
+      refresh();
+      setSheet(null);
+      toast.show('Request declined', 'info');
+      router.replace('/supplier/credit');
+    },
+    onError: onFailure,
+  });
 
-  // A REQUESTED agreement is a question, not a credit line: it has no position
-  // to show and a different set of answers.
-  /**
-   * Why the edit cannot be saved yet, or null when it can.
-   *
-   * <p>A greyed-out button with no explanation is a dead end: the reason is
-   * always knowable here, so it gets said. Returning the sentence rather than a
-   * boolean keeps the check and its explanation from drifting apart.
-   */
-  const editBlockedBy: string | null = (() => {
-    if (Number(limitValue) <= 0) return 'Enter a credit limit above zero.';
-    if (cutsBelowExposure) return 'That limit is below what they have already committed.';
-    if (reason.trim().length < 3) return 'Add a reason — the restaurant sees it.';
-    return null;
-  })();
+  function openSheet(next: Sheet) {
+    modify.reset(); approve.reset(); suspend.reset(); reinstate.reset(); decline.reset(); close.reset();
+    setSheet(next);
+  }
+  function closeSheet() { setSheet(null); }
+
+  /** The server's refusal as sent; when it is about what is owed or held, the next step is added. */
+  function closeError(caught: unknown): string | null {
+    if (caught == null) return null;
+    const text = messageOf(caught, 'Could not close this line.');
+    return caught instanceof ApiError && caught.code === 'INVALID_STATE_TRANSITION'
+      ? `${text} ${CLOSE_NEXT_STEP}` : text;
+  }
+
+  const errorOf = (m: { error: unknown }, fallback: string) =>
+    m.error == null ? null : messageOf(m.error, fallback);
+
+  // The claims waiting on this line; looked up by id so a refetch that drops one closes the sheet.
+  const waiting = claims.data ?? [];
+  const reviewed = review == null ? null : waiting.find((c) => c.id === review.id) ?? null;
+  function closeReview() {
+    setReview(null);
+    decide.reset();
+    // Back to the receipt form it was opened from; what the claim did changes the preview.
+    if (recordOpen) setPreviewNonce((n) => n + 1);
+  }
+
+  async function confirmClaimFor(claim: ClaimResponse, amount: string | null) {
+    const response = await decide.confirm(claim, amount);
+    if (response != null) {
+      closeReview();
+      toast.show(`Confirmed. ${formatMoney(response.confirmedAmount ?? response.amount)} recorded from ${claim.restaurantName ?? 'the restaurant'}.`, 'success');
+    }
+  }
+  async function rejectClaimFor(claim: ClaimResponse, reason: string) {
+    const response = await decide.reject(claim, reason);
+    if (response != null) {
+      closeReview();
+      toast.show('Done. The restaurant is told you did not receive it.', 'success');
+    }
+  }
+
+  const split = splitInvoices<CreditInvoiceListItem>(invoices.data ?? []);
+  const paymentItems = (payments.data?.pages ?? []).flatMap((p) => p.items);
+  const openInvoices = split.open;
+  // Ticks only count while the invoice is still open: a refetch that settles one drops it.
+  const chosen = openInvoices.filter((i) => picked.includes(i.id));
+  const mayRecord = canCollect && data != null && (data.status === 'ACTIVE' || data.status === 'SUSPENDED');
+  function openRecord(ids: number[]) {
+    setRecordTargets(ids);
+    setRecordSession((n) => n + 1);
+    setPreviewNonce(0);
+    setRecordOpen(true);
+  }
+  function closeRecord() {
+    setRecordOpen(false);
+    setPicked([]);
+  }
+  const recordTargetRows = openInvoices
+    .filter((i) => recordTargets.includes(i.id))
+    .map((i) => ({ id: i.id, invoiceNumber: i.invoiceNumber, outstanding: i.outstanding }));
+  function onUndone(result: ReversalResult) {
+    setUndoing(null);
+    track('credit_payment_reversed', { screen: SCREEN, entityId: agreementId });
+    toast.show(`Payment cancelled. They owe ${formatMoney(result.amount)} again.`, 'success');
+  }
+  function onReminded(reminder: Reminder) {
+    setRemindOpen(false);
+    track('credit_reminder_sent', { screen: SCREEN, entityId: agreementId });
+    toast.show(reminder.status === 'QUEUED' ? queuedText(reminder.sendAt) : 'Reminder sent', 'success');
+  }
+  const notFound = agreement.error instanceof ApiError && agreement.error.status === 404;
 
   const pending = data?.status === 'REQUESTED';
-  const request = data?.latestRequest;
+  const sentAgo = data?.latestRequest?.respondedAt != null
+    ? relative(new Date(data.latestRequest.respondedAt), new Date(serverNow()))
+    : null;
+  const banner = data == null ? null : lineBanner(data, sentAgo);
+  const chip = data == null ? null : resolveStatus(CreditAgreementStatus, data.status);
 
-  /**
-   * Approved, but not yet usable.
-   *
-   * <p>`canFund` is the server's answer and the only one worth trusting. An
-   * APPROVED agreement whose terms were modified sits here until the restaurant
-   * accepts — doc 04 §13 — so showing "₹50,000 available to spend" would tell a
-   * supplier they have extended credit that nobody can draw on. The restaurant's
-   * side learned this as D-067; this is the same rule from the other direction.
-   */
-  const awaitingAcceptance = data != null && !pending && !data.canFund
-    && data.status !== 'SUSPENDED' && data.status !== 'REJECTED';
+  const moreEntries: MoreEntry[] = [];
+  if (data != null && canModify) {
+    if (data.status === 'ACTIVE' || data.status === 'SUSPENDED' || data.status === 'APPROVED') {
+      moreEntries.push({ key: 'terms', label: 'Edit terms', hint: 'Limit, period, grace', onPress: () => openSheet('terms') });
+    }
+    if (data.status === 'ACTIVE') {
+      moreEntries.push({ key: 'suspend', label: 'Suspend', hint: 'Stop new orders', onPress: () => openSheet('suspend') });
+    }
+    if (data.status === 'SUSPENDED') {
+      moreEntries.push({ key: 'reinstate', label: 'Reinstate', hint: 'Allow new orders again', onPress: () => openSheet('reinstate') });
+    }
+    if (data.status === 'ACTIVE' || data.status === 'SUSPENDED') {
+      moreEntries.push({
+        key: 'close', label: 'Close line', hint: 'End this line for good', destructive: true,
+        onPress: () => openSheet('close'),
+      });
+    }
+  }
+  if (data != null && canWriteOff && (data.status === 'ACTIVE' || data.status === 'SUSPENDED') && Number(data.due) > 0) {
+    moreEntries.push({
+      key: 'write-off', label: 'Write off everything owed', hint: 'Give up on what they owe', destructive: true,
+      onPress: () => { setWriteOffSession((n) => n + 1); setWriteOffOpen(true); },
+    });
+  }
 
   return (
     <MandiScreen
       header={
         <MandiHeader
-          title={data?.outletName ?? 'Credit line'}
-          subtitle={
-            // Who and where, and nothing else.
-            //
-            // <p>It used to carry the distance and the terms as well, and at
-            // four facts on one line the end of it — the terms — was the part
-            // that truncated. Both are stated in full below: the distance is
-            // not a credit fact at all, and the terms have a row of their own.
-            data == null ? undefined : [
-              data.restaurantName,
-              data.outletLocality,
-            ].filter(Boolean).join(' · ')
-          }
+          title={data?.restaurantName ?? data?.outletName ?? 'Credit line'}
+          subtitle={data == null ? undefined
+            : [data.outletName, data.outletLocality].filter(Boolean).join(' · ') || undefined}
           back
           onBack={() => {
-            if (mode !== 'view') {
-              setMode('view');
-            } else if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/supplier/credit' as any);
-            }
+            if (router.canGoBack()) router.back();
+            else router.replace('/supplier/credit' as never);
           }}
         />
       }
+      onRefresh={refetchAll}
+      refreshing={agreement.isRefetching}
       footer={renderFooter()}
     >
+      <MandiOfflineBanner visible={offline} />
       {agreement.isPending ? (
         <MandiSkeletonList count={3} />
-      ) : agreement.error || data == null ? (
-        <MandiErrorState
-          message="Couldn't load this credit line."
-          onRetry={() => agreement.refetch()}
+      ) : notFound ? (
+        <MandiEmptyState
+          icon="lock-closed-outline"
+          title="This credit line is not available to you"
+          description="It may belong to another store. Go back to your receivables to pick one."
         />
+      ) : agreement.error || data == null ? (
+        <MandiErrorState message="Couldn't load this credit line." onRetry={() => agreement.refetch()} />
       ) : (
         <>
-          {data.status === 'SUSPENDED' && (
-            <MandiCard accentColor={Colors.warning}>
-              <MandiText variant="bodyEmphasis">This line is suspended</MandiText>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                {data.suspensionReason ?? 'No new orders can draw on it.'} Existing debt and
-                reservations are untouched.
-              </MandiText>
-            </MandiCard>
-          )}
-
           <View style={styles.row}>
             <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
               {pending ? 'Waiting on your answer' : 'Credit line'}
             </MandiText>
-            {/* The shared map, not a lowercased enum and a hand-picked tone:
-                "active" read as a stray word, and REJECTED and SUSPENDED both
-                came out amber when one of them is a refusal. */}
-            <MandiStatusChip
-              label={resolveStatus(CreditAgreementStatus, data.status).label}
-              tone={resolveStatus(CreditAgreementStatus, data.status).tone}
-              size="sm"
-            />
+            {chip != null && <MandiStatusChip label={chip.label} tone={chip.tone} size="sm" />}
           </View>
 
-          {awaitingAcceptance && (
-            <MandiCard accentColor={Colors.info}>
-              <MandiText variant="bodyEmphasis">Waiting for them to accept</MandiText>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                You approved {formatMoney(data.approvedLimit)} over {data.creditPeriodDays} days.
-                Because those terms differ from what they asked for, nothing can be drawn
-                until the restaurant accepts them.
-              </MandiText>
+          {banner != null && (
+            <MandiCard accentColor={banner.tone === 'warning' ? Colors.warning : Colors.info} testID="line-banner">
+              <MandiText variant="bodyEmphasis">{banner.title}</MandiText>
+              {banner.body != null && (
+                <MandiText variant="caption" color={Colors.textSecondary}>{banner.body}</MandiText>
+              )}
             </MandiCard>
           )}
 
-          {pending ? (
+          {pending && (
             <MandiCard>
               <MandiText variant="caption" color={Colors.textSecondary}>They are asking for</MandiText>
-              <MandiText variant="display">{formatMoney(request?.requestedLimit)}</MandiText>
+              <MandiText variant="display">{formatMoney(data.latestRequest?.requestedLimit)}</MandiText>
               <MandiText variant="caption" color={Colors.textSecondary}>
-                payable in {request?.requestedPeriodDays ?? '—'} days
+                payable in {data.latestRequest?.requestedPeriodDays ?? '—'} days
               </MandiText>
-              {request?.purpose != null && (
+              {data.latestRequest?.purpose != null && (
                 <MandiText variant="body" color={Colors.textSecondary} style={styles.spacedTop}>
-                  {request.purpose}
+                  {data.latestRequest.purpose}
                 </MandiText>
               )}
-              {request?.note != null && (
+              {data.latestRequest?.note != null && (
                 <MandiText variant="caption" color={Colors.textTertiary}>
-                  &ldquo;{request.note}&rdquo;
+                  &ldquo;{data.latestRequest.note}&rdquo;
                 </MandiText>
               )}
             </MandiCard>
-          ) : awaitingAcceptance ? (
-            <MandiCard>
-              <Row label="Limit you approved" value={formatMoney(data.approvedLimit)} />
-              <Row label="Payment period" value={`${data.creditPeriodDays ?? '—'} days`} />
-              <Row label="Terms version" value={`v${data.termsVersion ?? 1}`} />
-            </MandiCard>
-          ) : (
-            <CreditPosition
-              approvedLimit={data.approvedLimit}
-              reserved={data.reserved}
-              utilized={data.utilized}
-              available={data.available}
-              due={data.due}
-              overdue={data.overdue}
+          )}
+
+          {hasPosition && <SupplierLineHero agreement={data} />}
+
+          {hasPosition && (
+            <SupplierLineActions
+              canCollect={canCollect}
+              offline={offline}
+              onRecord={mayRecord ? () => openRecord([]) : undefined}
+              onRemind={mayRecord ? () => setRemindOpen(true) : undefined}
+              onStatement={() => router.push({
+                pathname: '/supplier/credit/statement', params: { agreementId: String(agreementId) },
+              } as never)}
+              onMore={moreEntries.length > 0 ? () => openSheet('more') : undefined}
             />
           )}
 
-          {mode === 'edit' && (
-            <MandiCard>
-              <MandiText variant="bodyEmphasis">Change the terms</MandiText>
-
-              <MandiFormField
-                label="Credit limit"
-                value={limitValue}
-                onChangeText={(text) => setLimit(text.replace(/[^\d.]/g, ''))}
-                keyboardType="decimal-pad"
-                required
-                error={cutsBelowExposure
-                  ? `They have ${formatMoney(String(exposure))} committed. A limit below that is refused — suspend the line instead if you need to stop new orders.`
-                  : undefined}
-                hint="A cut never claws back what is already committed."
-              />
-
-              <View>
-                <MandiText variant="label">Payment period</MandiText>
-                <View style={styles.chips}>
-                  {PERIODS.map((option) => {
-                    const active = option === daysValue;
-                    return (
-                      <Pressable
-                        key={option}
-                        onPress={() => setDays(option)}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: active }}
-                        style={[styles.chip, active && styles.chipActive]}
-                      >
-                        <MandiText
-                          variant="captionEmphasis"
-                          color={active ? Colors.primary : Colors.textSecondary}
-                        >
-                          {option} days
-                        </MandiText>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              <MandiFormField
-                label="Why are you changing this?"
-                value={reason}
-                onChangeText={setReason}
-                placeholder="Good payment history"
-                required
-                hint="The restaurant sees this. Every adjustment is on the record."
-              />
+          {!pending && data.status !== 'REJECTED' && (
+            <MandiCard testID="terms-summary">
+              <Row label="Approved limit" value={formatMoney(data.approvedLimit)} />
+              <Row label="Payment period" value={`${data.creditPeriodDays ?? '—'} days`} />
+              <Row label="Grace period" value={`${data.gracePeriodDays ?? 0} days`} />
+              {data.maxSingleOrderCredit != null && (
+                <Row label="Per-order cap" value={formatMoney(data.maxSingleOrderCredit)} />
+              )}
+              {data.maxOverdueAmount != null && (
+                <Row label="Pauses when overdue passes" value={formatMoney(data.maxOverdueAmount)} />
+              )}
+              {data.termsVersion != null && <Row label="Terms version" value={`v${data.termsVersion}`} />}
             </MandiCard>
           )}
 
-          {mode === 'counter' && (
-            <MandiCard>
-              <MandiText variant="bodyEmphasis">Approve on your terms</MandiText>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                Anything you change makes this a modification — the restaurant has to accept
-                it before the credit works.
-              </MandiText>
+          {data.status === 'APPROVED' && canModify && (
+            <MandiButton
+              testID="edit-terms"
+              label="Edit Terms"
+              variant="secondary"
+              size="md"
+              icon="create-outline"
+              onPress={() => openSheet('terms')}
+            />
+          )}
 
-              <MandiFormField
-                label="Credit limit"
-                value={limitValue}
-                onChangeText={(text) => setLimit(text.replace(/[^\d.]/g, ''))}
-                keyboardType="decimal-pad"
-                required
-                hint={`They asked for ${formatMoney(request?.requestedLimit)}.`}
-              />
+          {hasPosition && waiting.length > 0 && (
+            <View style={styles.section} testID="claims-section">
+              <MandiSectionHeader title="Payments to confirm" count={waiting.length} />
+              {waiting.map((claim) => (
+                <MandiCard key={claim.id} compact testID={`detail-claim-${claim.id}`}>
+                  <MandiText variant="bodyEmphasis">{`${claim.invoiceNumber} · ${formatMoney(claim.amount)}`}</MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    {[claimMethodLabel(claim.method), claim.reference].filter((p) => p != null && p !== '').join(' · ')}
+                    {` · paid ${formatDay(claim.paidOn) ?? claim.paidOn}`}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.warning}>
+                    {`Sent ${relative(new Date(claim.createdAt), new Date(serverNow()))}`}
+                  </MandiText>
+                  {canCollect && (
+                    <View style={styles.actions}>
+                      <MandiButton
+                        testID={`detail-claim-${claim.id}-confirm`}
+                        label="Confirm"
+                        size="md"
+                        disabled={offline}
+                        onPress={() => { decide.reset(); setReview({ id: claim.id, mode: 'review' }); }}
+                        style={styles.flex}
+                      />
+                      <MandiButton
+                        testID={`detail-claim-${claim.id}-reject`}
+                        label="Reject"
+                        variant="neutral"
+                        size="md"
+                        disabled={offline}
+                        onPress={() => { decide.reset(); setReview({ id: claim.id, mode: 'reject' }); }}
+                        style={styles.flex}
+                      />
+                    </View>
+                  )}
+                </MandiCard>
+              ))}
+            </View>
+          )}
 
-              <View>
-                <MandiText variant="label">Payment period</MandiText>
-                <View style={styles.chips}>
-                  {PERIODS.map((option) => {
-                    const active = option === daysValue;
-                    return (
-                      <Pressable
-                        key={option}
-                        onPress={() => setDays(option)}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: active }}
-                        style={[styles.chip, active && styles.chipActive]}
-                      >
-                        <MandiText
-                          variant="captionEmphasis"
-                          color={active ? Colors.primary : Colors.textSecondary}
-                        >
-                          {option} days
-                        </MandiText>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+          {hasPosition && (
+            <View style={styles.section}>
+              <MandiSectionHeader title="Open invoices" />
+              {invoices.isPending ? (
+                <MandiSkeletonList count={2} />
+              ) : invoices.error ? (
+                <MandiErrorState message="Couldn't load the invoices." onRetry={() => invoices.refetch()} />
+              ) : (invoices.data ?? []).length === 0 ? (
                 <MandiText variant="caption" color={Colors.textTertiary}>
-                  They asked for {request?.requestedPeriodDays ?? '—'} days.
+                  Nothing invoiced on this line yet.
                 </MandiText>
-              </View>
-
-              <MandiFormField
-                label="Note (optional)"
-                value={reason}
-                onChangeText={setReason}
-                placeholder="Happy to start here and review in three months"
-                hint="The restaurant sees this alongside your terms."
-              />
-            </MandiCard>
-          )}
-
-          {mode === 'decline' && (
-            <MandiCard>
-              <MandiText variant="bodyEmphasis">Decline this request</MandiText>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                They can ask again later. Nothing else about your relationship changes.
-              </MandiText>
-              <MandiFormField
-                label="Reason"
-                value={reason}
-                onChangeText={setReason}
-                placeholder="Not extending credit to new accounts yet"
-                required
-                hint="The restaurant sees this."
-              />
-            </MandiCard>
-          )}
-
-          {mode === 'suspend' && (
-            <MandiCard accentColor={Colors.warning}>
-              <MandiText variant="bodyEmphasis">Suspend this line</MandiText>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                No new order can draw on it. What they already owe, and anything reserved
-                against orders in flight, is unaffected.
-              </MandiText>
-              <MandiFormField
-                label="Reason"
-                value={reason}
-                onChangeText={setReason}
-                placeholder="Overdue balance"
-                required
-                hint="The restaurant sees this."
-              />
-            </MandiCard>
-          )}
-
-          {mode === 'view' && !pending && !awaitingAcceptance && (
-            <>
-              <MandiCard>
-                <Row label="Approved limit" value={formatMoney(data.approvedLimit)} />
-                <Row label="Payment period" value={`${data.creditPeriodDays ?? '—'} days`} />
-                <Row label="Grace period" value={`${data.gracePeriodDays ?? 0} days`} />
-                {data.maxSingleOrderCredit && (
-                  <Row label="Per-order cap" value={formatMoney(data.maxSingleOrderCredit)} />
-                )}
-                {data.termsVersion != null && (
-                  <Row label="Terms version" value={`v${data.termsVersion}`} />
-                )}
-              </MandiCard>
-
-              <View style={styles.section}>
-                <MandiSectionHeader title="Invoices" />
-                {(invoices.data ?? []).length === 0 ? (
-                  <MandiText variant="caption" color={Colors.textTertiary}>
-                    Nothing invoiced on this line yet.
-                  </MandiText>
-                ) : (
-                  (invoices.data ?? []).map((invoice) => {
-                    const isSettled = Number(invoice.outstanding) <= 0 || invoice.status === 'PAID';
+              ) : split.open.length === 0 ? (
+                <MandiText variant="caption" color={Colors.textTertiary}>Nothing is open. They are all paid up.</MandiText>
+              ) : (
+                <>
+                  {split.open.map((invoice) => {
+                    const ticked = picked.includes(invoice.id);
                     return (
-                      <MandiCard key={invoice.id} compact>
-                        <View style={styles.row}>
-                          <MandiText variant="body">{invoice.invoiceNumber}</MandiText>
-                          <MandiText variant="bodyEmphasis">
-                            {formatMoney(invoice.outstanding)}
-                          </MandiText>
-                        </View>
-                        <View style={[styles.row, styles.invoiceMetaRow]}>
-                          <MandiText variant="caption" color={Colors.textTertiary}>
-                            {invoice.status.replace(/_/g, ' ').toLowerCase()} · due {invoice.dueDate ?? '—'}
-                          </MandiText>
-                          {!isSettled && (
-                            <MandiButton
-                              label="Record Payment"
-                              variant="secondary"
-                              size="sm"
-                              onPress={() => setPayingInvoice(invoice)}
+                      <View key={invoice.id} style={styles.pickRow}>
+                        {mayRecord && (
+                          <Pressable
+                            testID={`pick-invoice-${invoice.id}`}
+                            onPress={() => setPicked((p) => (p.includes(invoice.id)
+                              ? p.filter((x) => x !== invoice.id) : [...p, invoice.id]))}
+                            accessibilityRole="checkbox"
+                            accessibilityLabel={`Select ${invoice.invoiceNumber} to record a payment`}
+                            accessibilityState={{ checked: ticked }}
+                            style={styles.check}
+                          >
+                            <Ionicons
+                              name={ticked ? 'checkbox' : 'square-outline'}
+                              size={IconSize.lg}
+                              color={ticked ? Colors.primary : Colors.textTertiary}
                             />
-                          )}
+                          </Pressable>
+                        )}
+                        <View style={styles.flex}>
+                          <CreditInvoiceRow
+                            invoice={invoice}
+                            selected={mayRecord ? ticked : undefined}
+                            onPress={() => router.push(`/supplier/credit/invoice/${invoice.id}` as never)}
+                          />
                         </View>
-                      </MandiCard>
+                      </View>
                     );
-                  })
-                )}
-              </View>
+                  })}
+                  {mayRecord && chosen.length > 0 && (
+                    <MandiButton
+                      testID="record-for-selected"
+                      label={`Record for ${chosen.length} selected`}
+                      icon="cash-outline"
+                      size="md"
+                      disabled={offline}
+                      onPress={() => openRecord(chosen.map((i) => i.id))}
+                    />
+                  )}
+                </>
+              )}
+            </View>
+          )}
 
-              <View style={styles.section}>
-                <MandiSectionHeader
-                  title="Activity"
-                  subtitle="Every movement, with the balance it left"
+          {hasPosition && (
+            <View style={styles.section}>
+              <MandiSectionHeader title="Recent payments" />
+              {payments.isPending ? (
+                <MandiSkeletonList count={2} />
+              ) : payments.error ? (
+                <MandiErrorState message="Couldn't load the payments." onRetry={() => payments.refetch()} />
+              ) : paymentItems.length === 0 ? (
+                <MandiText variant="caption" color={Colors.textTertiary}>No payments yet.</MandiText>
+              ) : (
+                <MandiCard>
+                  {paymentItems.map((p, i) => (
+                    <SupplierPaymentRow
+                      key={p.id}
+                      payment={p}
+                      last={i === paymentItems.length - 1}
+                      onUndo={canCollect ? (target) => setUndoing(target) : undefined}
+                      undoDisabled={offline}
+                    />
+                  ))}
+                </MandiCard>
+              )}
+              {payments.hasNextPage && (
+                <MandiButton
+                  testID="payments-more"
+                  label="Show more payments"
+                  variant="neutral"
+                  size="md"
+                  loading={payments.isFetchingNextPage}
+                  onPress={() => { void payments.fetchNextPage(); }}
                 />
-                {(ledger.data ?? []).length === 0 ? (
-                  <MandiText variant="caption" color={Colors.textTertiary}>
-                    No activity yet.
-                  </MandiText>
+              )}
+            </View>
+          )}
+
+          {hasPosition && <AgreementCreditNotes agreementId={agreementId} />}
+
+          {hasPosition && <ReminderHistory agreementId={agreementId} />}
+
+          {hasPosition && split.paid.length > 0 && (
+            <View style={styles.section}>
+              <Fold
+                testID="settled-toggle"
+                title={`Settled invoices (${split.paid.length})`}
+                open={settledOpen}
+                onPress={() => setSettledOpen((v) => !v)}
+              />
+              {settledOpen && split.paid.map((invoice) => <CreditInvoiceRow key={invoice.id} invoice={invoice} />)}
+            </View>
+          )}
+
+          {hasPosition && (
+            <View style={styles.section}>
+              <Fold
+                testID="activity-toggle"
+                title="Activity"
+                open={activityOpen}
+                onPress={() => setActivityOpen((v) => !v)}
+              />
+              {activityOpen && (
+                ledger.isPending ? (
+                  <MandiSkeletonList count={2} />
+                ) : ledger.error ? (
+                  <MandiErrorState message="Couldn't load the activity." onRetry={() => ledger.refetch()} />
+                ) : (ledger.data ?? []).length === 0 ? (
+                  <MandiText variant="caption" color={Colors.textTertiary}>No activity yet.</MandiText>
                 ) : (
                   (ledger.data ?? []).slice(0, 20).map((entry) => (
                     <MandiCard key={entry.id} compact>
@@ -546,174 +661,199 @@ export default function SupplierCreditAgreementScreen() {
                       </MandiText>
                     </MandiCard>
                   ))
-                )}
-              </View>
+                )
+              )}
+            </View>
+          )}
+
+          {mayRecord && (
+            <RecordPaymentSheet
+              key={recordSession}
+              visible={recordOpen && review == null}
+              onClose={closeRecord}
+              agreementId={agreementId}
+              due={data.due}
+              overdue={data.overdue}
+              targets={recordTargetRows}
+              offline={offline}
+              previewNonce={previewNonce}
+              reviewableInvoiceIds={waiting.map((c) => c.invoiceId)}
+              onReviewClaim={(invoiceId) => {
+                const target = waiting.find((c) => c.invoiceId === invoiceId);
+                if (target != null) { decide.reset(); setReview({ id: target.id, mode: 'review' }); }
+              }}
+            />
+          )}
+
+          {mayRecord && (
+            <RemindSheet
+              visible={remindOpen}
+              onClose={() => setRemindOpen(false)}
+              agreementId={agreementId}
+              offline={offline}
+              onSent={onReminded}
+            />
+          )}
+
+          {canCollect && (
+            <UndoPaymentSheet
+              visible={undoing != null}
+              onClose={() => setUndoing(null)}
+              payment={undoing}
+              offline={offline}
+              onDone={(result) => onUndone(result)}
+            />
+          )}
+
+          <SupplierMoreSheet visible={sheet === 'more'} onClose={closeSheet} entries={moreEntries} />
+
+          {canWriteOff && (
+            <WriteOffSheet
+              key={`write-off-${writeOffSession}`}
+              visible={writeOffOpen}
+              onClose={() => setWriteOffOpen(false)}
+              target={{
+                kind: 'line', id: agreementId, agreementId, title: data.restaurantName ?? data.outletName ?? 'This credit line',
+                outstanding: data.due,
+              }}
+              offline={offline}
+            />
+          )}
+
+          {canModify && (
+            <>
+              <TermsEditorSheet
+                visible={sheet === 'terms'}
+                onClose={closeSheet}
+                agreement={data}
+                mode="modify"
+                pending={modify.isPending}
+                error={errorOf(modify, 'Could not change the terms.')}
+                offline={offline}
+                onSubmit={(draft) => { void once(() => modify.mutateAsync(draft).catch(() => undefined)); }}
+              />
+              <TermsEditorSheet
+                visible={sheet === 'approveTerms'}
+                onClose={closeSheet}
+                agreement={data}
+                mode="approve"
+                pending={approve.isPending}
+                error={errorOf(approve, 'Could not approve this request.')}
+                offline={offline}
+                onSubmit={(draft) => { void once(() => approve.mutateAsync(draft).catch(() => undefined)); }}
+              />
+              <LineReasonSheet
+                testID="suspend-sheet"
+                visible={sheet === 'suspend'}
+                onClose={closeSheet}
+                title="Suspend this line"
+                intro="No new order can draw on it. What they already owe, and anything held for orders in progress, is unaffected."
+                reasonLabel="Reason"
+                placeholder="Overdue balance"
+                confirmLabel="Suspend This Line"
+                destructive
+                pending={suspend.isPending}
+                error={errorOf(suspend, 'Could not suspend this line.')}
+                offline={offline}
+                onSubmit={(reason) => { void once(() => suspend.mutateAsync(reason).catch(() => undefined)); }}
+              />
+              <LineReasonSheet
+                testID="reinstate-sheet"
+                visible={sheet === 'reinstate'}
+                onClose={closeSheet}
+                title="Reinstate this line"
+                intro="New orders can draw on it again, within the limit."
+                note={reinstateNote(data)}
+                reasonLabel="Reason"
+                placeholder="They paid what was overdue"
+                confirmLabel="Reinstate This Line"
+                pending={reinstate.isPending}
+                error={errorOf(reinstate, 'Could not reinstate this line.')}
+                offline={offline}
+                onSubmit={(reason) => { void once(() => reinstate.mutateAsync(reason).catch(() => undefined)); }}
+              />
+              <LineReasonSheet
+                testID="close-sheet"
+                visible={sheet === 'close'}
+                onClose={closeSheet}
+                title="Close this line"
+                intro="No new order can use it and it cannot be reopened. They can ask you for credit again later."
+                reasonLabel="Reason"
+                placeholder="Relationship ended"
+                confirmLabel="Close This Line"
+                destructive
+                pending={close.isPending}
+                error={closeError(close.error)}
+                offline={offline}
+                onSubmit={(reason) => { void once(() => close.mutateAsync(reason).catch(() => undefined)); }}
+              />
+              <LineReasonSheet
+                testID="decline-sheet"
+                visible={sheet === 'decline'}
+                onClose={closeSheet}
+                title="Decline this request"
+                intro="They can ask again later. Nothing else about your relationship changes."
+                reasonLabel="Reason"
+                placeholder="Not extending credit to new accounts yet"
+                confirmLabel="Decline This Request"
+                destructive
+                pending={decline.isPending}
+                error={errorOf(decline, 'Could not decline this request.')}
+                offline={offline}
+                onSubmit={(reason) => { void once(() => decline.mutateAsync(reason).catch(() => undefined)); }}
+              />
             </>
           )}
+
+          <ClaimReviewSheet
+            claim={reviewed}
+            visible={reviewed != null}
+            initialMode={review?.mode ?? 'review'}
+            onClose={closeReview}
+            canAct={canCollect}
+            offline={offline}
+            pending={decide.pending}
+            error={decide.error}
+            onConfirm={(c, a) => { void confirmClaimFor(c, a); }}
+            onReject={(c, r) => { void rejectClaimFor(c, r); }}
+            onEdit={decide.reset}
+          />
         </>
       )}
-      <RecordPaymentModal
-        visible={payingInvoice != null}
-        onClose={() => setPayingInvoice(null)}
-        invoice={payingInvoice}
-        agreementId={agreementId}
-        storeId={storeId as number}
-      />
     </MandiScreen>
   );
 
   function renderFooter() {
-    if (data == null) return undefined;
-
-    if (pending) {
-      if (mode === 'counter') {
-        return (
-          <MandiStickyBar>
-            <View style={styles.confirmRow}>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                Approving
-              </MandiText>
-              <MandiText variant="bodyEmphasis">
-                {Number(limitValue) > 0 ? formatMoney(limitValue) : '—'} · {daysValue} days
-              </MandiText>
-            </View>
-            <MandiButton
-              label="Approve At These Terms"
-              size="lg"
-              disabled={Number(limitValue) <= 0}
-              loading={approve.isPending}
-              onPress={() => approve.mutate(true)}
-            />
-            {Number(limitValue) <= 0 && (
-              <MandiText variant="caption" color={Colors.textTertiary} center>
-                Enter a limit above zero to approve.
-              </MandiText>
-            )}
-            <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
-          </MandiStickyBar>
-        );
-      }
-
-      if (mode === 'decline') {
-        return (
-          <MandiStickyBar>
-            <MandiButton
-              label="Decline This Request"
-              size="lg"
-              variant="destructive"
-              disabled={reason.trim().length < 3}
-              loading={decline.isPending}
-              onPress={() => decline.mutate()}
-            />
-            <MandiButton label="Back" variant="neutral" size="md" onPress={() => setMode('view')} />
-          </MandiStickyBar>
-        );
-      }
-
-      return (
-        <MandiStickyBar>
-          <MandiButton
-            label="Approve As Asked"
-            size="lg"
-            loading={approve.isPending}
-            onPress={() => approve.mutate(false)}
-          />
-          <View style={styles.actions}>
-            <MandiButton
-              label="Approve On My Terms"
-              variant="secondary"
-              size="md"
-              onPress={() => setMode('counter')}
-              style={styles.flex}
-            />
-            <MandiButton
-              label="Decline"
-              variant="neutral"
-              size="md"
-              onPress={() => setMode('decline')}
-              style={styles.flex}
-            />
-          </View>
-        </MandiStickyBar>
-      );
-    }
-
-    if (mode === 'edit') {
-      return (
-        <MandiStickyBar>
-          <MandiButton
-            label="Save New Terms"
-            size="lg"
-            disabled={editBlockedBy != null}
-            loading={modify.isPending}
-            onPress={() => modify.mutate()}
-          />
-          {editBlockedBy != null && (
-            <MandiText variant="caption" color={Colors.textTertiary} center>
-              {editBlockedBy}
-            </MandiText>
-          )}
-          <MandiButton
-            label="Cancel"
-            variant="neutral"
-            size="md"
-            onPress={() => setMode('view')}
-          />
-        </MandiStickyBar>
-      );
-    }
-
-    if (mode === 'suspend') {
-      return (
-        <MandiStickyBar>
-          <MandiButton
-            label="Suspend This Line"
-            size="lg"
-            variant="destructive"
-            disabled={reason.trim().length < 3}
-            loading={suspend.isPending}
-            onPress={() => suspend.mutate()}
-          />
-          <MandiButton
-            label="Cancel"
-            variant="neutral"
-            size="md"
-            onPress={() => setMode('view')}
-          />
-        </MandiStickyBar>
-      );
-    }
-
+    if (data == null || !pending || !canModify) return undefined;
     return (
       <MandiStickyBar>
+        <MandiButton
+          label="Approve As Asked"
+          size="lg"
+          disabled={offline}
+          loading={approve.isPending}
+          onPress={() => { void once(() => approve.mutateAsync(null).catch(() => undefined)); }}
+        />
+        {approve.error != null && sheet == null && (
+          <MandiText variant="caption" color={Colors.danger} center>
+            {messageOf(approve.error, 'Could not approve this request.')}
+          </MandiText>
+        )}
         <View style={styles.actions}>
           <MandiButton
-            label="Edit Terms"
+            label="Approve On My Terms"
             variant="secondary"
             size="md"
-            icon="create-outline"
-            onPress={() => setMode('edit')}
+            onPress={() => openSheet('approveTerms')}
             style={styles.flex}
           />
-          {data.status === 'SUSPENDED' ? (
-            <MandiButton
-              label="Reinstate"
-              size="md"
-              icon="play-outline"
-              loading={reinstate.isPending}
-              onPress={() => reinstate.mutate()}
-              style={styles.flex}
-            />
-          ) : (
-            <MandiButton
-              label="Suspend"
-              variant="neutral"
-              size="md"
-              icon="pause-outline"
-              onPress={() => setMode('suspend')}
-              style={styles.flex}
-            />
-          )}
+          <MandiButton
+            label="Decline"
+            variant="neutral"
+            size="md"
+            onPress={() => openSheet('decline')}
+            style={styles.flex}
+          />
         </View>
       </MandiStickyBar>
     );
@@ -723,9 +863,26 @@ export default function SupplierCreditAgreementScreen() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.totalsRow}>
-      <MandiText variant="body" color={Colors.textSecondary}>{label}</MandiText>
+      <MandiText variant="body" color={Colors.textSecondary} style={styles.flex}>{label}</MandiText>
       <MandiText variant="body">{value}</MandiText>
     </View>
+  );
+}
+
+/** A section header that folds: tap to open or close. */
+function Fold({ title, open, onPress, testID }: { title: string; open: boolean; onPress: () => void; testID: string }) {
+  return (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ expanded: open }}
+      style={styles.fold}
+    >
+      <MandiText variant="bodyEmphasis" style={styles.flex}>{title}</MandiText>
+      <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={IconSize.sm} color={Colors.textTertiary} />
+    </Pressable>
   );
 }
 
@@ -738,7 +895,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   section: { gap: Spacing.listGap },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  invoiceMetaRow: { marginTop: Spacing.xs },
   totalsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -746,17 +902,14 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginTop: Spacing.xs,
   },
-  actions: { flexDirection: 'row', gap: Spacing.sm },
+  actions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  pickRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  check: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   spacedTop: { marginTop: Spacing.sm },
-  confirmRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.xs },
-  chip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+  fold: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    minHeight: TouchTarget.min + 4,
   },
-  chipActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
 });

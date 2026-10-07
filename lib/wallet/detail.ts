@@ -63,6 +63,8 @@ export interface ReferenceLine {
 export function referenceLines(references: WalletReference[] | null | undefined): ReferenceLine[] {
   return (references ?? [])
     .filter((r) => r != null && String(r.value ?? '').trim() !== '')
+    // A credit repayment shows its invoices and credit line in their own block.
+    .filter((r) => r.label !== CREDIT_INVOICE_LABEL && r.label !== CREDIT_LINE_LABEL)
     .map((r, i) => ({
       key: `${i}-${r.label}`,
       text: `Reference: ${r.label ? `${r.label} ` : ''}${r.value}`,
@@ -70,6 +72,31 @@ export function referenceLines(references: WalletReference[] | null | undefined)
       copyable: r.copyable === true,
     }));
 }
+
+/** The reference labels the API gives a CREDIT_REPAYMENT (WalletEntryDetailService). */
+const CREDIT_INVOICE_LABEL = 'Credit invoice';
+const CREDIT_LINE_LABEL = 'Credit line';
+
+export interface CreditRepaymentInfo {
+  /** Invoice numbers the repayment settled, oldest first. */
+  invoices: string[];
+  /** The credit line's agreement id, or null when the server did not say. */
+  agreementId: string | null;
+}
+
+/** What a CREDIT_REPAYMENT's references say; null for every other kind. */
+export function creditRepaymentInfo(entry: Pick<WalletTransactionDetail, 'kind' | 'references'>): CreditRepaymentInfo | null {
+  if (entry.kind !== 'CREDIT_REPAYMENT') return null;
+  const refs = (entry.references ?? []).filter((r) => r != null && String(r.value ?? '').trim() !== '');
+  const line = refs.find((r) => r.label === CREDIT_LINE_LABEL);
+  return {
+    invoices: refs.filter((r) => r.label === CREDIT_INVOICE_LABEL).map((r) => String(r.value)),
+    agreementId: line != null && /^\d+$/.test(String(line.value).trim()) ? String(line.value).trim() : null,
+  };
+}
+
+/** The credit line screen for an agreement id. */
+export const creditLineRoute = (agreementId: string) => `/restaurant/credit/${agreementId}`;
 
 /** "costonomy-receipt-184.png"; anything in the id that is not safe in a file name becomes "-". */
 export function receiptFileName(transactionId: string | number): string {

@@ -90,3 +90,103 @@ export function invoiceLookupKey(
 ) {
   return ['outlet', outletId, 'invoice-lookups', kind, q, supplierId] as const;
 }
+
+/** The supplier store's waiting "Paid direct" claims: the Credit tab's count and the claims inbox share it. */
+export function claimsKey(storeId: number | null | undefined) {
+  return ['store', storeId, 'credit-claims', 'SUBMITTED'] as const;
+}
+
+/** The supplier store's payouts list for one status and day range (S8). */
+export function payoutsKey(
+  storeId: number | null | undefined, status: string, from: string | null, to: string | null,
+) {
+  return ['store', storeId, 'credit-payouts', status, from, to] as const;
+}
+
+/** The supplier store's payments feed for one source and day range (S8). */
+export function storePaymentsKey(
+  storeId: number | null | undefined, source: string | null, from: string | null, to: string | null,
+) {
+  return ['store', storeId, 'credit-payments', source, from, to] as const;
+}
+
+// ── Supplier receivables (M17) ────────────────────────────────────────
+
+/** Every receivables read of a store (home totals, restaurant list, ageing): invalidate this after any credit write. */
+export function receivablesRootKey(storeId: number | null | undefined) {
+  return ['store', storeId, 'credit', 'receivables'] as const;
+}
+
+export function receivablesKey(storeId: number | null | undefined) {
+  return [...receivablesRootKey(storeId), 'totals'] as const;
+}
+
+/** The restaurant list under one sort, status filter and search; page-runs live in the infinite query. */
+export function receivableRestaurantsKey(
+  storeId: number | null | undefined, sort: string, status: string | null, q: string,
+) {
+  return [...receivablesRootKey(storeId), 'restaurants', sort, status, q] as const;
+}
+
+export function ageingKey(storeId: number | null | undefined) {
+  return [...receivablesRootKey(storeId), 'ageing'] as const;
+}
+
+// ── Supplier restaurant detail (M18) ──────────────────────────────────
+
+/** Everything of one credit line. Under the prefix `useDecideClaim` already refreshes after a claim. */
+export function agreementKey(agreementId: number) {
+  return ['credit-agreement', agreementId] as const;
+}
+
+/** The line's waiting "Paid direct" claims. */
+export function agreementClaimsKey(agreementId: number) {
+  return [...agreementKey(agreementId), 'claims', 'SUBMITTED'] as const;
+}
+
+/** Page-runs of the line's payments. */
+export function agreementPaymentsKey(agreementId: number) {
+  return [...agreementKey(agreementId), 'payments'] as const;
+}
+
+/** Page-runs of the reminders sent on the line. */
+export function agreementRemindersKey(agreementId: number) {
+  return [...agreementKey(agreementId), 'reminders'] as const;
+}
+
+/** One line's statement for a range, read by the supplier. */
+export function supplierStatementKey(
+  storeId: number | null | undefined, agreementId: number, from: string | null, to: string | null,
+) {
+  return ['store', storeId, 'credit', 'statement', agreementId, from, to] as const;
+}
+
+/** The store's refunds due to restaurants, by status. Under `['store', id, 'credit-refunds']` so a mark refreshes them all. */
+export function refundsDueKey(storeId: number | null | undefined, status: 'OPEN' | 'REFUNDED') {
+  return ['store', storeId, 'credit-refunds', status] as const;
+}
+
+// ── Supplier writes (M19, M25) ────────────────────────────────────────
+
+/** One invoice as the supplier reads it. Not under the line's key: its screen opens before the line is known. */
+export function supplierInvoiceKey(invoiceId: number) {
+  return ['credit-invoice', invoiceId] as const;
+}
+
+/**
+ * Everything a supplier write can change: invalidate all of these after recording a payment,
+ * moving a due date or closing a line. The store's receivables, restaurant list, ageing and
+ * statements (all under `['store', id, 'credit']`), the claims inbox, the payments feed, the
+ * agreements list, the line itself (its invoices, payments, claims, previews) and every
+ * invoice detail.
+ */
+export function supplierWriteKeys(storeId: number | null | undefined, agreementId: number | null) {
+  return [
+    ['store', storeId, 'credit'],
+    ['store', storeId, 'credit-claims'],
+    ['store', storeId, 'credit-payments'],
+    ['store', storeId, 'credit-agreements'],
+    ...(agreementId != null ? [agreementKey(agreementId)] : []),
+    ['credit-invoice'],
+  ] as const;
+}

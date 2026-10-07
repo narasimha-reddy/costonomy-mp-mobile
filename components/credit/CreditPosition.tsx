@@ -1,8 +1,9 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from '@/components/common';
 import { formatMoney } from '@/utils/money';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, IconSize, Radius, Spacing } from '@/theme';
 
 /**
  * A credit position — limit, reserved, utilized, available, due, overdue.
@@ -31,6 +32,8 @@ export function CreditPosition({
   due,
   overdue,
   compact = false,
+  barOnly = false,
+  pastDueNote = null,
 }: {
   approvedLimit: string;
   reserved: string;
@@ -39,6 +42,10 @@ export function CreditPosition({
   due: string;
   overdue: string;
   compact?: boolean;
+  /** Only the thin utilisation bar: the host screen already says the figures in words. */
+  barOnly?: boolean;
+  /** Replaces "nothing overdue" when invoices are past due but inside grace (nothing overdue yet). */
+  pastDueNote?: string | null;
 }) {
   const isOverdue = Number(overdue) > 0;
 
@@ -53,6 +60,20 @@ export function CreditPosition({
   const limit = Number(approvedLimit);
   const committed = Number(reserved) + Number(utilized);
   const fraction = limit > 0 ? Math.min(1, Math.max(0, committed / limit)) : 0;
+
+  if (barOnly) {
+    return limit > 0 ? (
+      <View
+        style={styles.track}
+        accessibilityRole="progressbar"
+        accessibilityLabel="Credit used"
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(fraction * 100) }}
+        testID="credit-utilisation-bar"
+      >
+        <View style={[styles.fill, { width: `${fraction * 100}%` }]} />
+      </View>
+    ) : null;
+  }
 
   return (
     <View style={[styles.panel, compact && styles.panelCompact]}>
@@ -89,6 +110,12 @@ export function CreditPosition({
           <MandiText variant="body" color={Colors.textSecondary}>Due</MandiText>
           <MandiText variant="bodyEmphasis">{formatMoney(due)}</MandiText>
         </View>
+        {!isOverdue && pastDueNote != null ? (
+          <View style={styles.noteRow} testID="credit-past-due-note" accessible accessibilityLabel={pastDueNote}>
+            <Ionicons name="warning" size={IconSize.sm} color={Colors.warning} />
+            <MandiText variant="caption" color={Colors.warning} style={styles.noteText}>{pastDueNote}</MandiText>
+          </View>
+        ) : (
         <View style={styles.row}>
           <MandiText variant="caption" color={isOverdue ? Colors.danger : Colors.textTertiary}>
             {isOverdue ? 'of which overdue' : 'nothing overdue'}
@@ -99,6 +126,7 @@ export function CreditPosition({
             </MandiText>
           )}
         </View>
+        )}
       </View>
       )}
     </View>
@@ -118,6 +146,8 @@ function Cell({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 const styles = StyleSheet.create({
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs },
+  noteText: { flex: 1 },
   track: {
     height: 6,
     borderRadius: Radius.full,

@@ -30,9 +30,11 @@ import {
   MandiText,
 } from '@/components/common';
 import { track } from '@/analytics';
+import { searchHints } from '@/lib/search/hints';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'REST-SEARCH-02';
+const SEARCH_HINTS = searchHints();
 const MIN_TERM = 2;
 /** The default distance for the supplier directory, in kilometres. */
 const NEARBY_KM = 10;
@@ -417,6 +419,7 @@ function Header({
           value={term}
           onChangeText={onTerm}
           placeholder="Search for paneer, rice, oil and more"
+          rotatingHints={SEARCH_HINTS}
           autoFocus
           pill
           loading={loading}

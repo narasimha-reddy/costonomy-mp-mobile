@@ -10,11 +10,15 @@ import { WalletColors, WalletLayout, WalletType } from '@/theme';
  */
 export function HistorySearch({
   value, onChangeText, onOpenFilters, activeFilters = 0,
+  placeholder = 'Search', searchLabel = 'Search your wallet history',
 }: {
   value: string;
   onChangeText: (text: string) => void;
   onOpenFilters: () => void;
   activeFilters?: number;
+  /** Shared with the credit statement, which words these for its own lines. */
+  placeholder?: string;
+  searchLabel?: string;
 }) {
   return (
     <View style={styles.field} testID="history-search">
@@ -23,9 +27,9 @@ export function HistorySearch({
         testID="history-search-input"
         value={value}
         onChangeText={onChangeText}
-        placeholder="Search"
+        placeholder={placeholder}
         placeholderTextColor={WalletColors.placeholder}
-        accessibilityLabel="Search your wallet history"
+        accessibilityLabel={searchLabel}
         returnKeyType="search"
         autoCapitalize="none"
         autoCorrect={false}

@@ -36,22 +36,34 @@ export function MandiCard({
   // — which is how a `width: '31%'` grid renders as a column of slivers.
   const [outer, inner] = splitLayout(style);
 
+  // Android can flatten a View that only draws a background (or merge it into its
+  // parent's layer), and an elevated, clipped, rounded View is the one most often
+  // caught by that: the box paints, its children do not, until the next layout
+  // pass. `collapsable={false}` keeps a real native view for the card body and for
+  // the Pressable's wrapper. It has no visual effect and is ignored on iOS and web.
+  // The accent is a separate absolutely positioned stripe rather than a one-sided
+  // border, so the card keeps one uniform border and radius.
   const body = (
     <View
+      collapsable={false}
+      testID={onPress ? undefined : testID}
       style={[
         styles.card,
         outlined ? styles.outlined : Elevation[elevation],
         { padding: compact ? Spacing.cardPaddingCompact : Spacing.cardPadding },
-        accentColor != null && {
-          borderLeftWidth: 3,
-          borderLeftColor: accentColor,
-          paddingLeft: (compact ? Spacing.cardPaddingCompact : Spacing.cardPadding) - 3,
-        },
         inner,
         // Fill the wrapper when the wrapper is the one that was sized.
         onPress != null && outer != null ? styles.fill : null,
       ]}
     >
+      {accentColor != null && (
+        <View
+          pointerEvents="none"
+          collapsable={false}
+          testID={testID ? `card-accent-${testID}` : 'card-accent'}
+          style={[styles.accent, { backgroundColor: accentColor }]}
+        />
+      )}
       {children}
     </View>
   );
@@ -64,6 +76,7 @@ export function MandiCard({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      collapsable={false}
       style={({ pressed }) => [outer, pressed && styles.pressed]}
     >
       {body}
@@ -108,6 +121,13 @@ const styles = StyleSheet.create({
   outlined: {
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  accent: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 3,
   },
   pressed: { opacity: 0.9 },
 });

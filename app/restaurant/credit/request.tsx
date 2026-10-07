@@ -1,29 +1,32 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchStorefrontHeader, searchSuppliers } from '@/services/catalog';
 import { useDebounced } from '@/hooks/useDebounced';
-import { requestCredit } from '@/services/credit';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { fetchCreditSummary, requestCredit } from '@/services/credit';
 import {
   MandiButton,
   MandiCard,
   MandiErrorState,
   MandiFormField,
   MandiHeader,
+  MandiOfflineBanner,
   MandiScreen,
   MandiSearchBar,
   MandiSkeletonList,
   MandiStickyBar,
   MandiText,
-  useToast,
 } from '@/components/common';
-import { ApiError } from '@/lib/api/errors';
+import { agreementsByStore, requestErrorMessage, supplierCreditState } from '@/lib/credit/request';
+import { scaledToAmount, toScaled } from '@/lib/wallet/amount';
+import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'REST-CREDIT-02';
 
@@ -39,9 +42,10 @@ const PERIODS = [7, 15, 30, 45];
  */
 export default function CreditRequestScreen() {
   const router = useRouter();
-  const toast = useToast();
+  const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { outletId, outlet } = useOutlet();
+  const { offline } = useNetworkStatus();
 
   /**
    * Arriving from a supplier's own shelf, the supplier is already decided.
@@ -54,11 +58,15 @@ export default function CreditRequestScreen() {
 
   const [storeId, setStoreId] = useState<number | null>(
     presetId != null && Number.isFinite(presetId) ? presetId : null);
+  const [storeName, setStoreName] = useState<string | null>(null);
   const [picking, setPicking] = useState(storeId == null);
   const [supplierTerm, setSupplierTerm] = useState('');
   const [limit, setLimit] = useState('');
   const [days, setDays] = useState(30);
   const [purpose, setPurpose] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const sending = useRef(false);
 
   // There is no "suppliers serving this outlet" endpoint — supplier search is
   // search, and returns nothing under two characters. Asking for a name is
@@ -74,6 +82,15 @@ export default function CreditRequestScreen() {
     enabled: searching && accessToken != null,
   });
 
+  // The credit the restaurant already has, from the overview's own cache entry:
+  // what each search result says about itself comes from here, not a new call.
+  const summary = useQuery({
+    queryKey: ['outlet', outletId, 'credit'],
+    queryFn: () => fetchCreditSummary(accessToken as string, outletId as number),
+    enabled: outletId != null && accessToken != null,
+  });
+  const byStore = useMemo(() => agreementsByStore(summary.data?.agreements ?? []), [summary.data]);
+
   // Only to name the preselected store. The shelf header already answers it,
   // and a second endpoint for "what is this store called" would be a third
   // place that could disagree.
@@ -84,38 +101,96 @@ export default function CreditRequestScreen() {
     enabled: !picking && storeId != null && accessToken != null,
   });
 
+  const chosenName = storeName ?? presetStore.data?.supplierName ?? presetStore.data?.storeName ?? null;
+  const chosenState = storeId != null ? supplierCreditState(byStore.get(storeId)) : null;
+  const chosenBlocked = chosenState?.block != null;
+
+  const scaled = limit.trim() === '' ? null : toScaled(limit, 2);
+  const limitError = limit.trim() === '' ? null
+    : scaled == null ? 'Use a number with at most 2 decimal places.'
+      : scaled < 10_000 ? 'Enter at least ₹1.' : null;
+  const amount = scaled != null && scaled >= 10_000 ? scaledToAmount(scaled) : null;
+  const valid = storeId != null && amount != null && !chosenBlocked;
+
   const submit = useMutation({
     mutationFn: () =>
       requestCredit(accessToken as string, {
         supplierStoreId: storeId as number,
         outletId: outletId as number,
-        requestedLimit: limit,
+        requestedLimit: amount as string,
         requestedDays: days,
-        purpose: purpose || undefined,
+        purpose: purpose.trim() || undefined,
       }),
     onSuccess: () => {
       track('credit_requested', { screen: SCREEN, outletId }, { days });
-      toast.show('Request sent to the supplier', 'success');
-      router.replace('/restaurant/credit');
+      void queryClient.invalidateQueries({ queryKey: ['outlet', outletId, 'credit'] });
+      setSentTo(chosenName ?? 'the supplier');
     },
-    onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not send that.', 'error'),
+    onError: (caught) => {
+      setProblem(requestErrorMessage(caught));
+      // The server's answer may mean the picture here is stale.
+      void queryClient.invalidateQueries({ queryKey: ['outlet', outletId, 'credit'] });
+    },
+    onSettled: () => { sending.current = false; },
   });
 
-  const amount = Number(limit);
-  const valid = storeId != null && Number.isFinite(amount) && amount > 0;
+  function send() {
+    // A second tap while the first is in flight must not send a second request.
+    if (!valid || offline || sending.current) return;
+    sending.current = true;
+    setProblem(null);
+    submit.mutate();
+  }
+
+  const openAgreement = (id: number) => router.push(`/restaurant/credit/${id}`);
+  const edit = <T,>(set: (v: T) => void) => (v: T) => { set(v); setProblem(null); };
+
+  if (sentTo != null) {
+    return (
+      <MandiScreen
+        header={<MandiHeader title="Request credit" subtitle={outlet?.name} />}
+        footer={
+          <MandiStickyBar>
+            <MandiButton
+              testID="back-to-credit"
+              label="Back to Credit"
+              size="lg"
+              onPress={() => router.replace('/restaurant/credit')}
+            />
+          </MandiStickyBar>
+        }
+      >
+        <View style={styles.sent} accessibilityLiveRegion="polite" testID="request-sent">
+          <Ionicons name="checkmark-circle" size={IconSize.xl} color={Colors.success} />
+          <MandiText variant="subtitle" center>{`Request sent to ${sentTo}`}</MandiText>
+          <MandiText variant="body" color={Colors.textSecondary} center>
+            {`They usually reply within a day. We'll notify you.`}
+          </MandiText>
+        </View>
+      </MandiScreen>
+    );
+  }
+
+  const summaryLine = valid && chosenName != null && amount != null
+    ? `You are asking ${chosenName} for ${formatMoney(amount, true)} credit, to pay within ${days} days.`
+    : null;
 
   return (
+    // The whole screen lifts above the keyboard: the focused field is in the
+    // scroll area and the submit button is in the footer, so neither is hidden.
+    <KeyboardAvoidingView style={styles.flex} behavior="padding" testID="request-keyboard-avoiding">
     <MandiScreen
+      contentStyle={styles.content}
       header={<MandiHeader title="Request credit" subtitle={outlet?.name} back />}
       footer={
         <MandiStickyBar>
           <MandiButton
+            testID="send-request"
             label="Send Request"
             size="lg"
-            disabled={!valid}
+            disabled={!valid || offline}
             loading={submit.isPending}
-            onPress={() => submit.mutate()}
+            onPress={send}
           />
           <MandiText variant="caption" color={Colors.textTertiary} center>
             The supplier decides. They may approve a different limit or period, which you
@@ -124,20 +199,34 @@ export default function CreditRequestScreen() {
         </MandiStickyBar>
       }
     >
+      <MandiOfflineBanner visible={offline} />
       <MandiCard>
-        <MandiText variant="bodyEmphasis">Which supplier?</MandiText>
+        <MandiText variant="captionEmphasis" muted>Supplier</MandiText>
         {!picking ? (
           <View style={styles.chosen}>
             <View style={styles.flex}>
               <MandiText variant="body">
-                {presetStore.data?.storeName ?? 'This supplier'}
+                {chosenName ?? 'This supplier'}
               </MandiText>
-              {presetStore.data?.supplierName != null && (
+              {presetStore.data?.storeName != null && storeName == null && (
                 <MandiText variant="caption" color={Colors.textSecondary}>
-                  {presetStore.data.supplierName}
+                  {presetStore.data.storeName}
+                </MandiText>
+              )}
+              {chosenState?.block != null && (
+                <MandiText variant="captionEmphasis" color={Colors.danger} testID="chosen-blocked">
+                  {chosenState.block.label}
                 </MandiText>
               )}
             </View>
+            {chosenState?.agreementId != null && (
+              <MandiButton
+                label="Open"
+                variant="tertiary"
+                size="sm"
+                onPress={() => openAgreement(chosenState.agreementId as number)}
+              />
+            )}
             <MandiButton
               label="Change"
               variant="tertiary"
@@ -145,6 +234,7 @@ export default function CreditRequestScreen() {
               onPress={() => {
                 setPicking(true);
                 setStoreId(null);
+                setStoreName(null);
               }}
             />
           </View>
@@ -174,23 +264,65 @@ export default function CreditRequestScreen() {
           </MandiText>
         ) : (
           (suppliers.data?.suppliers ?? []).map((supplier) => {
+            const state = supplierCreditState(byStore.get(supplier.supplierStoreId));
+            const block = state.block;
             const active = supplier.supplierStoreId === storeId;
+            // Only a supplier with nothing in the way can be picked; an approved
+            // line is a different job (accept the terms), so it opens instead.
+            const disabled = block != null && block.kind !== 'review';
+            const onPress = () => {
+              if (block == null) {
+                setStoreId(supplier.supplierStoreId);
+                setStoreName(supplier.supplierName);
+                setProblem(null);
+              } else if (block.kind === 'review' && state.agreementId != null) {
+                openAgreement(state.agreementId);
+              }
+            };
             return (
-              <Pressable
+              <View
                 key={supplier.supplierStoreId}
-                onPress={() => setStoreId(supplier.supplierStoreId)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
-                style={[styles.option, active && styles.optionActive]}
+                style={[styles.option, active && styles.optionActive, disabled && styles.optionDisabled]}
               >
-                <View style={styles.flex}>
-                  <MandiText variant="body">{supplier.supplierName}</MandiText>
-                  <MandiText variant="caption" color={Colors.textSecondary}>
-                    {supplier.storeName}
-                  </MandiText>
-                </View>
-                {active && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
-              </Pressable>
+                <Pressable
+                  testID={`supplier-row-${supplier.supplierStoreId}`}
+                  onPress={onPress}
+                  disabled={disabled}
+                  accessibilityRole={block == null ? 'radio' : 'button'}
+                  accessibilityLabel={[supplier.supplierName, supplier.storeName, block?.label, state.detail]
+                    .filter(Boolean).join(', ')}
+                  accessibilityState={{ selected: active, disabled }}
+                  style={styles.optionMain}
+                >
+                  <View style={styles.flex}>
+                    <MandiText variant="body">{supplier.supplierName}</MandiText>
+                    <MandiText variant="caption" color={Colors.textSecondary}>
+                      {supplier.storeName}
+                    </MandiText>
+                    {block != null && (
+                      <MandiText
+                        variant="captionEmphasis"
+                        color={block.kind === 'review' ? Colors.primary : Colors.textSecondary}
+                      >
+                        {block.label}
+                      </MandiText>
+                    )}
+                    {state.detail != null && (
+                      <MandiText variant="caption" color={Colors.textSecondary}>{state.detail}</MandiText>
+                    )}
+                  </View>
+                  {active && <Ionicons name="checkmark-circle" size={IconSize.md} color={Colors.primary} />}
+                </Pressable>
+                {block?.kind === 'open' && block.link && state.agreementId != null && (
+                  <MandiButton
+                    testID={`supplier-open-${supplier.supplierStoreId}`}
+                    label="Open"
+                    variant="tertiary"
+                    size="sm"
+                    onPress={() => openAgreement(state.agreementId as number)}
+                  />
+                )}
+              </View>
             );
           })
         )}
@@ -199,17 +331,20 @@ export default function CreditRequestScreen() {
       </MandiCard>
 
       <MandiFormField
-        label="Credit limit"
+        label="Credit limit you need (₹)"
         value={limit}
-        onChangeText={(text) => setLimit(text.replace(/[^\d.]/g, ''))}
+        onChangeText={edit((text: string) => setLimit(text.replace(/[^\d.]/g, '')))}
         placeholder="50000"
         keyboardType="decimal-pad"
+        maxLength={12}
         required
-        hint="What you would want to owe at most at any one time."
+        error={limitError}
+        hint="The most you would want to owe this supplier at any one time."
+        testID="limit-field"
       />
 
       <MandiCard>
-        <MandiText variant="bodyEmphasis">Payment period</MandiText>
+        <MandiText variant="bodyEmphasis">Days to pay</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>
           How long after an order you would settle it.
         </MandiText>
@@ -219,8 +354,10 @@ export default function CreditRequestScreen() {
             return (
               <Pressable
                 key={option}
-                onPress={() => setDays(option)}
+                testID={`days-${option}`}
+                onPress={() => { setDays(option); setProblem(null); }}
                 accessibilityRole="radio"
+                accessibilityLabel={`${option} days`}
                 accessibilityState={{ selected: active }}
                 style={[styles.chip, active && styles.chipActive]}
               >
@@ -237,16 +374,32 @@ export default function CreditRequestScreen() {
       </MandiCard>
 
       <MandiFormField
-        label="Purpose (optional)"
+        label="What will you buy? (optional)"
         value={purpose}
-        onChangeText={setPurpose}
+        onChangeText={edit(setPurpose)}
         placeholder="Daily vegetables, monthly staples…"
+        testID="purpose-field"
       />
+
+      {summaryLine != null && (
+        <MandiText variant="bodyEmphasis" testID="request-summary">{summaryLine}</MandiText>
+      )}
+
+      {problem != null && (
+        <View style={styles.problem} accessibilityRole="alert" accessibilityLiveRegion="polite" testID="request-error">
+          <Ionicons name="alert-circle" size={IconSize.md} color={Colors.danger} />
+          <MandiText variant="bodyEmphasis" color={Colors.danger} style={styles.flex}>{problem}</MandiText>
+        </View>
+      )}
     </MandiScreen>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  content: { gap: Spacing.listGap },
+  sent: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xxl },
+  problem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.dangerLight },
   chosen: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   flex: { flex: 1 },
   search: { marginTop: Spacing.sm },
@@ -254,12 +407,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    minHeight: TouchTarget.min,
     marginTop: Spacing.sm,
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  optionMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+  },
+  optionDisabled: { backgroundColor: Colors.surfaceSunken },
   optionActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
   periods: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.sm },
   chip: {

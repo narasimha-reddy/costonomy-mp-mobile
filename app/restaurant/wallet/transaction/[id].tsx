@@ -91,6 +91,7 @@ export default function TransactionDetailScreen() {
         billBusy={waive.isPending || undo.isPending}
         onAddBill={() => router.push({ pathname: '/restaurant/wallet/transaction/bill', params: { id } })}
         onInvoice={() => router.push({ pathname: '/restaurant/wallet/transaction/invoice', params: { id } })}
+        onViewCredit={(agreementId) => router.push(`/restaurant/credit/${agreementId}`)}
         onSupport={() => toast.show('Support is coming soon', 'info')}
         onError={(message) => toast.show(message, 'error')}
       />

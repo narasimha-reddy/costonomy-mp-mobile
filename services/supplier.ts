@@ -528,6 +528,8 @@ export interface CreditPolicy {
   maxSingleOrderCredit: Money | null;
   maxOverdueAmount: Money | null;
   autoSuspendEnabled: boolean | null;
+  /** Whether restaurants are reminded automatically. Absent from an older server: treat as on. */
+  autoRemindersEnabled?: boolean | null;
 }
 
 export function fetchCreditPolicy(token: string, storeId: number): Promise<CreditPolicy> {
@@ -546,6 +548,8 @@ export function saveCreditPolicy(
     maxSingleOrderCredit?: string | null;
     maxOverdueAmount?: string | null;
     autoSuspendEnabled?: boolean;
+    /** Left out keeps what it is now. */
+    autoRemindersEnabled?: boolean;
   },
 ): Promise<CreditPolicy> {
   return apiRequest<CreditPolicy>(

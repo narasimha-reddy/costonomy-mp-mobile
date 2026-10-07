@@ -6,7 +6,7 @@ import { ApiError } from '@/lib/api/errors';
 import { advanceSandboxDelivery } from '@/services/delivery';
 
 /**
- * TEST ONLY (API D-154): the supplier's "move the rider to the next step". On success the order and delivery queries
+ * TEST ONLY (API D-188): the supplier's "move the rider to the next step". On success the order and delivery queries
  * are invalidated so the screen shows what the server now says; nothing is advanced locally.
  */
 export function useSandboxAdvance(orderId: number) {

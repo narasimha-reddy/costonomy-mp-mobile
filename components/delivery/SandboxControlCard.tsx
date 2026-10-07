@@ -6,7 +6,7 @@ import type { Delivery } from '@/models/delivery';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
- * TEST ONLY (API D-154). The sandbox has no real riders, so the supplier side offers a way to move the rider along
+ * TEST ONLY (API D-188). The sandbox has no real riders, so the supplier side offers a way to move the rider along
  * and watch the flow. Shown only when the API says `sandboxControls`, never to a buyer (callers render it for the
  * supplier alone), and styled as a dashed info card so it cannot be mistaken for product UI.
  */

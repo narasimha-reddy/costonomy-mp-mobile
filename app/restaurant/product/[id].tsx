@@ -62,7 +62,7 @@ export default function ProductScreen() {
   });
 
   // What the buyer needs and how they want the suppliers shown. Both go to the server; the list is never sorted or
-  // filtered here (API D-149).
+  // filtered here (API D-183).
   const [choices, setChoices] = useState<ComparisonChoices>(DEFAULT_COMPARISON);
   const [need, setNeed] = useState('1');
   const settledNeed = useDebounced(need, 400);

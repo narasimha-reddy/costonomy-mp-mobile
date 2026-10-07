@@ -6,7 +6,7 @@ import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 export type ComparisonSort = 'best_value' | 'price' | 'nearest' | 'rating';
 
-/** What the buyer chose on a product's supplier comparison (API D-149). */
+/** What the buyer chose on a product's supplier comparison (API D-183). */
 export interface ComparisonChoices {
   sort: ComparisonSort;
   coversQuantity?: boolean;

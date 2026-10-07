@@ -48,7 +48,7 @@ export function PaymentMethodPicker({
   amount: Money | null | undefined;
   selected: PaymentMethod | null;
   onSelect: (method: PaymentMethod) => void;
-  /** Only these methods are listed. All three by default; the pay screen offers wallet and credit (API D-152). */
+  /** Only these methods are listed. All three by default; the pay screen offers wallet and credit (API D-186). */
   offered?: PaymentMethod[];
   /** Pick the first usable method on open. Off where choosing is a deliberate act. */
   autoSelect?: boolean;

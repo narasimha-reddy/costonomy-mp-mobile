@@ -29,7 +29,7 @@ export function clockTime(iso: string | null | undefined): string | null {
   return `${hour}:${String(when.getMinutes()).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
 }
 
-/** What the supplier is told while no partner is found, from what the server says (API D-151). */
+/** What the supplier is told while no partner is found, from what the server says (API D-185). */
 export function noPartnerNote(
   canSwitchToOwn: boolean | undefined,
   retryUntil: string | null | undefined,
@@ -57,7 +57,7 @@ export interface SearchProgress {
 
 /**
  * How far through the automatic search for a partner we are, from the server's start and end times. The bar fills to
- * the end of the window and stops there; it never claims a partner was found (API D-151).
+ * the end of the window and stops there; it never claims a partner was found (API D-185).
  */
 export function searchProgress(
   searchStartedAt: string | null | undefined,

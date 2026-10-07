@@ -70,7 +70,7 @@ export interface OrderPaymentIntent {
   /** Whether a checkout can still be opened. False once funded or ended. */
   payable: boolean;
   failureReason: string | null;
-  /** The order's status and funding method, so a screen reopened after a switch knows (API D-152). */
+  /** The order's status and funding method, so a screen reopened after a switch knows (API D-186). */
   orderStatus?: string | null;
   orderPaymentMethod?: string | null;
   /** The unpaid card order can still be paid another way, or cancelled. */
@@ -89,7 +89,7 @@ export function fetchPaymentIntent(token: string, orderId: number): Promise<Orde
 }
 
 /**
- * Pay an unpaid card order from the wallet or on credit instead (API D-152). 200 when it is funded and released;
+ * Pay an unpaid card order from the wallet or on credit instead (API D-186). 200 when it is funded and released;
  * 409 when the card payment got there first (refetch the intent); 4xx with the server's message when the wallet or
  * credit cannot cover it.
  */

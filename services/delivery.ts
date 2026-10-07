@@ -111,7 +111,7 @@ export function reassignDelivery(token: string, deliveryId: number, idempotencyK
 
 /**
  * Deliver an order yourself because no partner was found. The same delivery becomes the supplier's own; the charge
- * the buyer paid is unchanged (API D-151).
+ * the buyer paid is unchanged (API D-185).
  */
 export function switchToOwnDelivery(token: string, deliveryId: number, idempotencyKey: string): Promise<Delivery> {
   return apiRequest<Delivery>(`/api/v1/deliveries/${deliveryId}/switch-to-own`, {
@@ -122,7 +122,7 @@ export function switchToOwnDelivery(token: string, deliveryId: number, idempoten
 }
 
 /**
- * TEST ONLY (API D-154): move a sandbox rider to the next step. The API answers 404 anywhere but the Pidge sandbox, and
+ * TEST ONLY (API D-188): move a sandbox rider to the next step. The API answers 404 anywhere but the Pidge sandbox, and
  * the app only offers it when the delivery says `sandboxControls`.
  */
 export function advanceSandboxDelivery(token: string, deliveryId: number, idempotencyKey: string): Promise<Delivery> {

@@ -10,46 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.
 
-### [phase6/mobile-sandbox-rider] - Test mode: move the rider along in Pidge's sandbox (API D-154)
+### [phase6/mobile-sandbox-rider] - Test mode: move the rider along in Pidge's sandbox (API D-188)
 #### Added
 - Supplier only, and only when the API offers it (Pidge sandbox): a Test mode card on the order and tracking screens moves the delivery to its next stage, so the whole flow can be seen in the apps. Never shown to the restaurant or in production.
 
-### [phase6/mobile-tracking-e2e-fixes] - Fixes from the end-to-end run (API D-153)
+### [phase6/mobile-tracking-e2e-fixes] - Fixes from the end-to-end run (API D-187)
 #### Fixed
 - The supplier tracking screen crashed on open (it needed the restaurant's outlet).
 - A supplier's own delivery was shown to the restaurant as a delivery partner with an ON TIME tag; it now reads 'delivering this themselves. No live tracking.'
 #### Added
 - tools/delivery-e2e: the end-to-end driver (API, database, Pidge sandbox stages, screenshots).
 
-### [phase6/mobile-map-first-tracking] - Map-first order tracking, as approved in the design mockup (API D-151)
+### [phase6/mobile-map-first-tracking] - Map-first order tracking, as approved in the design mockup (API D-185)
 #### Changed
 - Tracking screen and both order screens: an illustration band until a partner is assigned, then the map; a sheet with one big headline and ETA, an on-time / late / searching / delivered tag and five progress segments; a bigger partner card with call; amber banners for a delay or a changed partner; a green delivered state with Check in delivery and Report an issue; supplier search, Try again and I will deliver it myself cards.
 - Orders list: an order-in-progress bar with Track.
 - No partner chat, handover code, star rating or share link (decided with the product owner).
 
-### [phase6/mobile-live-tracking] - Live order tracking: stepper, partner card, map (API D-151)
+### [phase6/mobile-live-tracking] - Live order tracking: stepper, partner card, map (API D-185)
 #### Added
 - A shared order-tracking view model (`lib/delivery/orderTracking.ts`) and components: a stage stepper, a headline with ETA, a partner card with call, a search panel, a delivered summary and a live map header. Both tracking screens use them.
 - The restaurant and supplier order screens use the same hero and stepper, a partner card, a collapsible items summary and a help row; Track Delivery appears only once a partner is assigned (it used to show from Preparing).
 - Track and the map appear only once a partner is assigned; the restaurant never sees the failure reason, the supplier gets Try again and I'll deliver it myself on the tracking screen.
 
-### [phase6/mobile-delivery-search-progress] - A progress bar while a delivery partner is found (API D-151)
+### [phase6/mobile-delivery-search-progress] - A progress bar while a delivery partner is found (API D-185)
 #### Added
 - The supplier's Delivery card shows a bar over the 30-minute automatic search ("Searching for a partner... 12 of 30 min"), a moving bar while a driver is assigned, and refreshes every 15 seconds meanwhile. The raw "QUOTE FAILED" text is gone.
 
-### [phase6/mobile-pay-another-way] - Pay another way, or cancel, on an unpaid card order (API D-152)
+### [phase6/mobile-pay-another-way] - Pay another way, or cancel, on an unpaid card order (API D-186)
 #### Added
 - The "Pay for this order" screen offers wallet or credit and "Cancel order" while the order is unpaid.
 
-### [phase6/mobile-delivery-fallback] - Still looking, then "I'll deliver it myself" (API D-151)
+### [phase6/mobile-delivery-fallback] - Still looking, then "I'll deliver it myself" (API D-185)
 #### Added
 - While no partner is found the order screen says it keeps looking until a time, and after the offer shows "I'll deliver it myself" with a confirmation.
 
-### [phase6/mobile-delivery-retry] - Try again when no delivery partner is available (API D-150)
+### [phase6/mobile-delivery-retry] - Try again when no delivery partner is available (API D-184)
 #### Fixed
 - An order with Costonomy delivery that found no partner sat on "No partner available" with no way forward. The supplier's order screen now shows the reason and a "Try again" button.
 
-### [phase6/mobile-comparison-choices] - Sort and filters on a product's supplier comparison (API D-149)
+### [phase6/mobile-comparison-choices] - Sort and filters on a product's supplier comparison (API D-183)
 #### Added
 - An "I need [qty]" box and chips on the comparison: sort by best value, lowest price, nearest or top rated; "Covers my quantity" and "Open now"; 5, 10 and 25 km only when six or more suppliers could serve the outlet. The empty state names the filters and offers Clear filters; "N more hidden by your filters" shows when some were left out. Nothing is sorted or filtered on the device. Under another sort the first card is not badged "recommended".
 

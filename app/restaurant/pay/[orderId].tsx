@@ -88,7 +88,7 @@ export default function PayForOrderScreen() {
     enabled: Number.isFinite(orderId) && accessToken != null,
   });
 
-  // Pay another way, or cancel, while the order is still unpaid (API D-152). One key per choice, so a retry of the
+  // Pay another way, or cancel, while the order is still unpaid (API D-186). One key per choice, so a retry of the
   // same tap is the same request.
   const [otherMethod, setOtherMethod] = useState<PaymentMethod | null>(null);
   const [otherError, setOtherError] = useState<string | null>(null);

@@ -1,7 +1,7 @@
 import type { DeliveryStatus } from '@/models/delivery';
 
 /**
- * TEST ONLY (API D-154). The label of the button that moves a sandbox rider to the next step, by the delivery's
+ * TEST ONLY (API D-188). The label of the button that moves a sandbox rider to the next step, by the delivery's
  * current status. Mirrors the API's table; the API decides whether the button is offered at all (`sandboxControls`).
  */
 const NEXT_STEP: Partial<Record<DeliveryStatus, string>> = {

@@ -111,7 +111,7 @@ export interface ProductRecommendation {
   offers: RecommendedOffer[];
   /** Why the list is empty, when it is. §23A.15: an unmet item is shown, never dropped. */
   unservedReason: string | null;
-  /** Suppliers who could serve this outlet but were left out by the filters passed (API D-149). */
+  /** Suppliers who could serve this outlet but were left out by the filters passed (API D-183). */
   hiddenByFilters?: number;
 }
 

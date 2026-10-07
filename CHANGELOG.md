@@ -442,3 +442,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Restyle T8: checkout and cart bottom bars use StickyActionBar (PAY USING method column with scroll to the picker, server preview total, Place order); credit and wallet orders now open the tracking screen.
 - [Restyle] Order details (buyer): status card with Track, Support in the header, Bill Summary card with server-sent lines and the payment line, details card; BillSummary component.
 - Restyle T11: deliveries list cards show supplier, order number, status chip, "Arriving in N mins" or server-provided "N mins past slot", and a Track link.
+- Restyle T5: the buyer tracking screen now uses `BuyerTrackingLayout` (green header, ETA pill, map, partner card or placeholder, delivery and order rows, activity; the placed hero for a just-confirmed order). Polling pauses while the screen is not focused. Delivered and completed keep the old layout until T6; the supplier layout is unchanged.

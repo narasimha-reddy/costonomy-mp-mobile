@@ -3,6 +3,7 @@ import { stagesFor } from '@/lib/delivery/orderTracking';
 import { haversineM, type LatLng } from '@/lib/delivery/mapGeometry';
 import { paymentStatusCopy } from '@/lib/payments/statusLabel';
 import type { SupplierOrder } from '@/models/procurement';
+import type { MapMode } from '@/components/delivery/MandiMapSketch';
 
 /**
  * The buyer's tracking header as one pure function of what `orderTrackingView` already decided, plus the three things
@@ -12,8 +13,8 @@ import type { SupplierOrder } from '@/models/procurement';
  * named, and a Costonomy delivery is never described as the supplier delivering it themselves.
  */
 
-/** What the map should draw; mirrors `MapMode` on MandiMap. */
-export type MapMode = 'placed' | 'pending' | 'live' | 'arriving' | 'reached';
+/** What the map should draw: the one definition, on the sketch. */
+export type { MapMode };
 
 export type BuyerTrackState = 'draft' | 'placed' | 'preparing' | 'searching' | 'partner_changed' | 'no_partner'
   | 'assigned' | 'at_pickup' | 'on_the_way' | 'arriving' | 'reached' | 'delivered' | 'completed' | 'failed'

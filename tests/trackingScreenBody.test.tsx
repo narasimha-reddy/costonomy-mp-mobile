@@ -7,6 +7,7 @@ import { MandiToastProvider } from '@/components/common';
 import { TrackingScreenBody } from '@/components/delivery/TrackingScreenBody';
 import { fetchDelivery, reassignDelivery, switchToOwnDelivery } from '@/services/delivery';
 import { fetchSupplierOrder } from '@/services/procurement';
+import { openThread } from '@/services/chat';
 import { ApiError } from '@/lib/api/errors';
 
 jest.mock('@expo/vector-icons', () => {
@@ -14,10 +15,18 @@ jest.mock('@expo/vector-icons', () => {
   return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
 });
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
+const mockUseQuery = jest.fn();
+jest.mock('@tanstack/react-query', () => {
+  const actual = jest.requireActual('@tanstack/react-query');
+  return { ...actual, useQuery: (...args: unknown[]) => { mockUseQuery(...args); return actual.useQuery(...args); } };
+});
 const mockPush = jest.fn();
+let mockFocused = true;
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useIsFocused: () => mockFocused,
 }));
+jest.mock('@/services/chat', () => ({ openThread: jest.fn(), openThreadFromStore: jest.fn() }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
 jest.mock('@/contexts/OutletProvider', () => ({ useOptionalOutlet: () => ({ outlet: { latitude: '12.9', longitude: '77.6' } }) }));
 jest.mock('@/contexts/RealtimeProvider', () => ({ useRealtime: () => ({ transport: 'poll' }) }));
@@ -38,18 +47,21 @@ const delivery = {
 const metrics = { frame: { x: 0, y: 0, width: 360, height: 805 }, insets: { top: 24, left: 0, right: 0, bottom: 0 } };
 
 function setup(audience: 'buyer' | 'supplier') {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return render(
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { gcTime: 0 } } });
+  const tree = () => (
     <SafeAreaProvider initialMetrics={metrics}>
       <QueryClientProvider client={client}>
         <MandiToastProvider><TrackingScreenBody audience={audience} orderId={5} /></MandiToastProvider>
       </QueryClientProvider>
-    </SafeAreaProvider>,
+    </SafeAreaProvider>
   );
+  const view = render(tree());
+  return { ...view, again: () => view.rerender(tree()) };
 }
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockFocused = true;
   (fetchSupplierOrder as jest.Mock).mockResolvedValue(order);
   (fetchDelivery as jest.Mock).mockResolvedValue(delivery);
 });
@@ -57,12 +69,12 @@ beforeEach(() => {
 describe('TrackingScreenBody', () => {
   it('shows the buyer the ETA headline, partner card and a waiting line with no location', async () => {
     setup('buyer');
-    expect(await screen.findByText('Arriving in 12 mins')).toBeTruthy();
+    expect(await screen.findByText('Order is on the way')).toBeTruthy();
     expect(screen.getByLabelText('Call Ravi Kumar')).toBeTruthy();
+    expect(screen.getByLabelText("Arriving in 12 mins · On time, Waiting for the partner's location")).toBeTruthy();
     expect(screen.getByText("Waiting for the partner's location")).toBeTruthy();
     expect(screen.getByText('1 item · ₹1,180.00')).toBeTruthy();
-    expect(screen.getByText('Ravi is on the way')).toBeTruthy();
-    expect(screen.getByText('Step 4 of 5 · On the way')).toBeTruthy();
+    expect(screen.getByText('Delivery partner')).toBeTruthy();
   });
 
   it('has a call button with the partner number, and no partner chat, share or masked-number line', async () => {
@@ -92,7 +104,8 @@ describe('TrackingScreenBody', () => {
       ...delivery, status: 'QUOTE_FAILED', driverName: null, trackable: false, canSwitchToOwn: true,
     });
     setup('buyer');
-    expect(await screen.findByText('Still arranging delivery')).toBeTruthy();
+    expect((await screen.findAllByText('Still arranging delivery')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Your supplier is on it.')).toBeTruthy();
     expect(screen.queryByText(/secret/)).toBeNull();
     expect(screen.queryByText('Try again')).toBeNull();
     expect(screen.queryByText('I will deliver it myself')).toBeNull();
@@ -105,8 +118,8 @@ describe('TrackingScreenBody', () => {
     });
     setup('buyer');
     expect(await screen.findByText('Finding a new delivery partner')).toBeTruthy();
-    expect(screen.getByText('Partner changed')).toBeTruthy();
-    expect(screen.getByText('Assigning a partner')).toBeTruthy();
+    expect(screen.getByText('Your previous partner could not make it')).toBeTruthy();
+    expect(screen.getByText('A new partner is being assigned.')).toBeTruthy();
     expect(screen.queryByText(/secret/)).toBeNull();
   });
 
@@ -170,5 +183,40 @@ describe('TrackingScreenBody', () => {
     setup('supplier');
     expect(await screen.findByText('Ready to send')).toBeTruthy();
     expect(screen.getByText('Back to order')).toBeTruthy();
+  });
+
+  it('supplier audience still renders develop\'s layout', async () => {
+    setup('supplier');
+    // Develop's supplier screen: the hero's "Step n of 5" line, and no green buyer header.
+    expect(await screen.findByText('Back to order')).toBeTruthy();
+    expect(screen.getByText('Step 4 of 5 · On the way')).toBeTruthy();
+    expect(screen.getByText('Order ORD-5')).toBeTruthy();
+    expect(screen.queryByTestId('tracking-header')).toBeNull();
+    expect(screen.queryByTestId('eta-pill')).toBeNull();
+  });
+
+  it('polling pauses when not focused', async () => {
+    // The refetch interval each query was given on its latest render, asked the way react-query asks it.
+    const intervals = () => mockUseQuery.mock.calls.slice(-2).map(([options]: any[]) =>
+      options.refetchInterval({ state: { data: { status: 'IN_TRANSIT' } } }));
+    const view = setup('buyer');
+    await screen.findByText('Order is on the way');
+    expect(intervals()).toEqual([15_000, 15_000]);
+
+    mockFocused = false;
+    view.again();
+    expect(intervals()).toEqual([false, false]);
+
+    mockFocused = true;
+    view.again();
+    expect(intervals()).toEqual([15_000, 15_000]);
+  });
+
+  it('Help opens chat', async () => {
+    (openThread as jest.Mock).mockResolvedValue({ id: 77 });
+    setup('buyer');
+    fireEvent.press(await screen.findByText('Help'));
+    await waitFor(() => expect(openThread).toHaveBeenCalledWith('token', 1, 2));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/chat/77?suggestType=ORDER&suggestId=5'));
   });
 });

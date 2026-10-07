@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
@@ -13,6 +13,7 @@ import { OrderSummaryCard } from '@/components/delivery/OrderSummaryCard';
 import { TrackingCards } from '@/components/delivery/TrackingCards';
 import { SandboxControlCard } from '@/components/delivery/SandboxControlCard';
 import { useSandboxAdvance } from '@/hooks/useSandboxAdvance';
+import { BuyerTrackingLayout } from '@/components/delivery/BuyerTrackingLayout';
 import { TrackingSheet } from '@/components/delivery/TrackingSheet';
 import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
 import { CollapsibleSection } from '@/components/order/CollapsibleSection';
@@ -32,6 +33,7 @@ import { useServerNow } from '@/hooks/useServerNow';
 import { ApiError, isApiError } from '@/lib/api/errors';
 import { canRetryPartner } from '@/lib/delivery/deliveryPartner';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
+import { buyerTrackingHeader } from '@/lib/delivery/trackingHeader';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { Colors, Radius, Spacing, TrackingLayout } from '@/theme';
 import { newIdempotencyKey } from '@/lib/api/client';
@@ -62,7 +64,10 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
   const nowMs = useServerNow();
   const buyer = audience === 'buyer';
   const enabled = Number.isFinite(orderId) && accessToken != null;
+  // A tracking screen left underneath another one stops polling; coming back refetches (the query is stale by then).
+  const focused = useIsFocused();
   const pollMs = transport === 'socket' ? BACKSTOP_POLL_MS : ACTIVE_POLL_MS;
+  const livePollMs = buyer && !focused ? false : pollMs;
 
   const order = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -70,7 +75,7 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
     enabled,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status != null && ENDED_ORDER.includes(status) ? false : pollMs;
+      return status != null && ENDED_ORDER.includes(status) ? false : livePollMs;
     },
   });
 
@@ -86,7 +91,7 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
       if (status != null && ENDED_DELIVERY.includes(status)) return false;
       const orderStatus = order.data?.status;
       if (status == null && orderStatus != null && ENDED_ORDER.includes(orderStatus)) return false;
-      return pollMs;
+      return livePollMs;
     },
   });
 
@@ -167,79 +172,102 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
     orderId: o.id,
   };
 
+  const helpPill = (
+    <MandiChatAction outletId={chat.outletId} supplierStoreId={chat.supplierStoreId} side={chat.side}
+      suggest={{ type: 'ORDER', id: chat.orderId }}>
+      {({ onPress, label }) => (
+        <Pressable
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          hitSlop={Spacing.xs}
+          style={styles.help}
+        >
+          <MandiText variant="captionEmphasis">Help</MandiText>
+        </Pressable>
+      )}
+    </MandiChatAction>
+  );
+  // TODO(T6): the delivered and completed receipt layout. Until it lands those states keep the existing layout.
+  const buyerLayout = buyer && buyerTrackingHeader({ view, order: o, delivery: data, drop: destination, nowMs }).layout !== 'receipt';
+  const draft = buyer && o.status === 'DRAFT';
+
   return (
     <View style={styles.root}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        refreshControl={
-          <RefreshControl
-            refreshing={delivery.isRefetching || order.isRefetching}
-            onRefresh={onRefresh}
-            tintColor={Colors.primary}
-          />
-        }
-      >
-        <TrackingTopArea
-          view={view}
+      {buyerLayout ? (
+        <BuyerTrackingLayout
+          order={o}
           delivery={data}
-          destination={destination}
-          height={TrackingLayout.topHeight + insets.top}
-          insetTop={insets.top}
+          view={view}
+          nowMs={nowMs}
+          outlet={destination}
+          onRefresh={onRefresh}
+          refreshing={delivery.isRefetching || order.isRefetching}
           onBack={back}
-          help={(
-            <MandiChatAction outletId={chat.outletId} supplierStoreId={chat.supplierStoreId} side={chat.side}
-              suggest={{ type: 'ORDER', id: chat.orderId }}>
-              {({ onPress, label }) => (
-                <Pressable
-                  onPress={onPress}
-                  accessibilityRole="button"
-                  accessibilityLabel={label}
-                  hitSlop={Spacing.xs}
-                  style={styles.help}
-                >
-                  <MandiText variant="captionEmphasis">Help</MandiText>
-                </Pressable>
-              )}
-            </MandiChatAction>
-          )}
+          help={helpPill}
         />
-        <TrackingSheet>
-          <TrackingCards
-            audience={audience}
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          refreshControl={
+            <RefreshControl
+              refreshing={delivery.isRefetching || order.isRefetching}
+              onRefresh={onRefresh}
+              tintColor={Colors.primary}
+            />
+          }
+        >
+          <TrackingTopArea
             view={view}
             delivery={data}
-            nowMs={nowMs}
-            onReport={buyer ? () => router.push(`/restaurant/dispute/${orderId}`) : undefined}
-            onRetry={data == null ? undefined : () => retry.mutate(data.id)}
-            onSwitchOwn={data == null ? undefined : () => setConfirmingOwn(true)}
-            retrying={retry.isPending}
-            switching={switchOwn.isPending}
+            destination={destination}
+            height={TrackingLayout.topHeight + insets.top}
+            insetTop={insets.top}
+            onBack={back}
+            help={helpPill}
           />
-          {!buyer && <SandboxControlCard delivery={data} onAdvance={sandbox.advance} pending={sandbox.pending} />}
-          <OrderSummaryCard
-            orderNumber={o.orderNumber}
-            summary={summary}
-            lines={o.items.map((item) => ({
-              id: item.id,
-              name: item.productName,
-              quantity: formatQuantity(item.acceptedQuantity ?? item.requestedQuantity, item.unit),
-            }))}
-            total={formatMoney(o.totalAmount)}
-            deliveringTo={deliveringTo}
-            chat={chat}
-          />
-          {data != null && data.timeline.length > 0 && (
-            <CollapsibleSection
-              title="Activity"
-              summary={`${data.timeline.length} ${data.timeline.length === 1 ? 'update' : 'updates'}`}
-            >
-              <DeliveryTimeline events={data.timeline} />
-            </CollapsibleSection>
-          )}
-        </TrackingSheet>
-      </ScrollView>
+          <TrackingSheet>
+            <TrackingCards
+              audience={audience}
+              view={view}
+              delivery={data}
+              nowMs={nowMs}
+              onReport={buyer ? () => router.push(`/restaurant/dispute/${orderId}`) : undefined}
+              onRetry={data == null ? undefined : () => retry.mutate(data.id)}
+              onSwitchOwn={data == null ? undefined : () => setConfirmingOwn(true)}
+              retrying={retry.isPending}
+              switching={switchOwn.isPending}
+            />
+            {!buyer && <SandboxControlCard delivery={data} onAdvance={sandbox.advance} pending={sandbox.pending} />}
+            <OrderSummaryCard
+              orderNumber={o.orderNumber}
+              summary={summary}
+              lines={o.items.map((item) => ({
+                id: item.id,
+                name: item.productName,
+                quantity: formatQuantity(item.acceptedQuantity ?? item.requestedQuantity, item.unit),
+              }))}
+              total={formatMoney(o.totalAmount)}
+              deliveringTo={deliveringTo}
+              chat={chat}
+            />
+            {data != null && data.timeline.length > 0 && (
+              <CollapsibleSection
+                title="Activity"
+                summary={`${data.timeline.length} ${data.timeline.length === 1 ? 'update' : 'updates'}`}
+              >
+                <DeliveryTimeline events={data.timeline} />
+              </CollapsibleSection>
+            )}
+          </TrackingSheet>
+        </ScrollView>
+      )}
 
-      {buyer && view.showReceive ? (
+      {draft ? (
+        <MandiStickyBar>
+          <MandiButton label="Pay now" size="lg" onPress={() => router.push(`/restaurant/pay/${orderId}`)} />
+        </MandiStickyBar>
+      ) : buyer && view.showReceive ? (
         <MandiStickyBar>
           <MandiButton label="Check in delivery" size="lg" onPress={receive} />
         </MandiStickyBar>

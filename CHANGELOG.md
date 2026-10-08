@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/p21-supplier follow-up] - Review fixes on the supplier screens
+#### Fixed
+- Home inbox splits a Ready order by delivery mode ("Ready to send out" when the supplier delivers, "Waiting for rider", "Waiting for pickup", plain "Ready" when the list does not say) and adds an "Other" catch-all so no order is unreachable; the request screen keeps Accept off until the delivery options load (retry message if they fail) and puts the outlet on the subtitle; supplier tracking names restaurant and outlet; payout status CALCULATED reads "Scheduled"; the duplicated "restaurant pays" note is gone; the press guard restarts in a layout effect.
+#### Known tradeoff
+- The manual "Request Delivery Partner" button still appears after a client 60 s timer, not a server signal; a server flag (autoDispatchFailed / readyAt) would be the clean fix.
 ### [feat/restyle-p17-supplier-tracking] - The supplier's tracking screen matches the restaurant's
 #### Changed
 - `/supplier/tracking/:id` now uses the green header, ETA pill, map, partner card (with plate), placed hero and delivered receipt via `BuyerTrackingLayout audience="supplier"` and a new `supplierTrackingHeader`; the sandbox card, partner search, retry and switch-to-own controls are kept. Supplier tracking polling now also pauses when the screen is not focused.

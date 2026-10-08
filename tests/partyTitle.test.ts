@@ -1,4 +1,4 @@
-import { partyTitle } from '@/lib/supplier/partyTitle';
+import { partyHeading, partyTitle } from '@/lib/supplier/partyTitle';
 
 describe('who a supplier is dealing with', () => {
   it('names the restaurant first and the outlet after it', () => {
@@ -14,5 +14,18 @@ describe('who a supplier is dealing with', () => {
     expect(partyTitle('Spice Garden', null)).toBe('Spice Garden');
     expect(partyTitle(null, null, 'The restaurant')).toBe('The restaurant');
     expect(partyTitle('  ', '', undefined)).toBe('');
+  });
+});
+
+describe('heading split for a narrow header', () => {
+  it('puts the restaurant in the title and the outlet in the subtitle', () => {
+    expect(partyHeading('Spice Garden', 'Indiranagar')).toEqual({ title: 'Spice Garden', outlet: 'Indiranagar' });
+  });
+
+  it('has no outlet line when the names match or one is missing', () => {
+    expect(partyHeading('Spice Garden', 'spice garden')).toEqual({ title: 'Spice Garden', outlet: null });
+    expect(partyHeading('Spice Garden', null)).toEqual({ title: 'Spice Garden', outlet: null });
+    expect(partyHeading(null, 'Indiranagar')).toEqual({ title: 'Indiranagar', outlet: null });
+    expect(partyHeading(null, null, 'Request')).toEqual({ title: 'Request', outlet: null });
   });
 });

@@ -37,7 +37,7 @@ import { formatMoney, formatQuantity } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { describeDeliveryDay } from '@/lib/delivery/deliveryDay';
-import { partyTitle } from '@/lib/supplier/partyTitle';
+import { partyHeading } from '@/lib/supplier/partyTitle';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -146,6 +146,10 @@ export default function SupplierRequestScreen() {
 
   const everythingDeclined = request != null && totals.declined === totals.lines;
   // The delivery card is on screen and nothing is picked yet.
+  // A delivery request cannot be answered before the store's delivery options are known: the reply would go out with no
+  // deliveryOffer. Declining everything needs no delivery answer, so it is never blocked here.
+  const policyUnavailable = request != null && request.deliveryPreference !== 'PICKUP' && !everythingDeclined
+    && (deliveryPolicy.isPending || deliveryPolicy.isError);
   const needsDeliveryChoice = request != null && request.deliveryPreference !== 'PICKUP'
     && deliveryPolicy.data != null && deliveryOffer == null && !everythingDeclined;
 
@@ -185,12 +189,16 @@ export default function SupplierRequestScreen() {
     },
   });
 
+  // The restaurant leads; the outlet rides on the subtitle so a long pair is not cut at 360 px.
+  const heading = partyHeading(request?.restaurantName, request?.outletName, 'Request');
+  const subtitle = [heading.outlet, request?.reference].filter(Boolean).join(' · ') || undefined;
+
   return (
     <MandiScreen
       header={
         <MandiHeader
-          title={request == null ? 'Request' : partyTitle(request.restaurantName, request.outletName, 'Request')}
-          subtitle={request?.reference ?? undefined}
+          title={heading.title}
+          subtitle={subtitle}
           back
           right={
             <MandiChatAction
@@ -388,6 +396,14 @@ export default function SupplierRequestScreen() {
             </MandiText>
           </View>
         )}
+        {policyUnavailable && deliveryPolicy.isError && (
+          <View style={styles.choiceHint}>
+            <MandiText variant="caption" color={Colors.warning} accessibilityLiveRegion="polite">
+              Couldn&apos;t load your delivery options.
+            </MandiText>
+            <MandiButton label="Try again" variant="secondary" size="md" onPress={() => void deliveryPolicy.refetch()} />
+          </View>
+        )}
         {needsDeliveryChoice && (
           <MandiText variant="caption" color={Colors.warning} accessibilityLiveRegion="polite" style={styles.choiceHint}>
             Choose how this will be delivered
@@ -407,7 +423,7 @@ export default function SupplierRequestScreen() {
           size="lg"
           variant={everythingDeclined ? 'destructive' : 'primary'}
           loading={reply.isPending}
-          disabled={needsDeliveryChoice || (!everythingDeclined && deliveryOffer === 'SELF' && !chargeValid)}
+          disabled={policyUnavailable || needsDeliveryChoice || (!everythingDeclined && deliveryOffer === 'SELF' && !chargeValid)}
           onPress={() => (everythingDeclined ? setConfirmDecline(true) : reply.mutate())}
         />
       </MandiStickyBar>

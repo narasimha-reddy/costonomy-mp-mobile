@@ -2,7 +2,14 @@ import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPa
 
 /** How often the supplier's order screen asks for the delivery while none exists yet (auto-dispatch is committing). */
 export const FIND_POLL_MS = 2500;
-/** After this long with still no delivery the supplier is offered the manual "Request Delivery Partner". */
+/**
+ * After this long with still no delivery the supplier is offered the manual "Request Delivery Partner".
+ *
+ * <p>Tradeoff, accepted: this is a client timer (useTimeoutFlag), not a server signal. It starts when this screen sees
+ * the order Ready with no delivery, so a supplier who opens the order late waits one more minute before the button
+ * shows, and a slow auto-dispatch can show it while the server is still trying. The clean fix is a server flag
+ * (autoDispatchFailed, or a readyAt to measure from) that the screen simply reads.
+ */
 export const FIND_TIMEOUT_MS = 60000;
 const TRACK_POLL_MS = 15000;
 

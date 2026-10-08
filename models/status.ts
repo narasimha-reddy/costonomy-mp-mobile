@@ -110,7 +110,8 @@ export const DeliveryMode = widen({
 /** A settlement's raw status, named for the supplier reading the payouts list. */
 export const SettlementStatus = widen({
   PENDING: { label: 'Pending', tone: 'pending' },
-  CALCULATED: { label: 'Calculated', tone: 'info' },
+  // The payout is worked out and queued for release, which is what the supplier cares about.
+  CALCULATED: { label: 'Scheduled', tone: 'info' },
   APPROVED: { label: 'Approved', tone: 'info' },
   PROCESSING: { label: 'Processing', tone: 'pending' },
   PAID: { label: 'Paid', tone: 'success' },

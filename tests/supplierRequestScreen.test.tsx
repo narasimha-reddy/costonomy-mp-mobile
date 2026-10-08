@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MandiToastProvider } from '@/components/common';
@@ -68,7 +68,9 @@ describe('supplier request screen', () => {
 
   it('titles the screen with the restaurant and outlet', async () => {
     setup();
-    expect(await screen.findByText('Spice Garden · Indiranagar')).toBeTruthy();
+    // The restaurant is the title and the outlet rides on the subtitle, so neither is cut at 360 px.
+    expect(await screen.findByText('Spice Garden')).toBeTruthy();
+    expect(screen.getByText('Indiranagar · RQ-7')).toBeTruthy();
   });
 
   it('keeps the status chip and the summary on separate lines so neither is clipped', async () => {
@@ -96,6 +98,48 @@ describe('supplier request screen', () => {
   });
 });
 
+describe('Accept waits for the delivery policy', () => {
+  const accept = () => screen.getByRole('button', { name: 'Accept request' });
+
+  it('keeps Accept disabled while the delivery policy is still loading', async () => {
+    (fetchDeliveryPolicy as jest.Mock).mockReturnValue(new Promise(() => undefined));
+    setup();
+    await screen.findByText('What can you supply?');
+    expect(accept().props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(accept());
+    expect(respondToIntent).not.toHaveBeenCalled();
+  });
+
+  it('shows a retry message in the bar when the policy fails to load, and Accept stays off', async () => {
+    (fetchDeliveryPolicy as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    setup();
+    expect(await screen.findByText("Couldn't load your delivery options.")).toBeTruthy();
+    expect(accept().props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(screen.getByText('Try again'));
+    await waitFor(() => expect(fetchDeliveryPolicy).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Choose how this will be delivered')).toBeTruthy();
+  });
+
+  it('lets a PICKUP request be accepted with no delivery choice', async () => {
+    (fetchIntent as jest.Mock).mockResolvedValue({ ...request, deliveryPreference: 'PICKUP' });
+    (fetchDeliveryPolicy as jest.Mock).mockReturnValue(new Promise(() => undefined));
+    setup();
+    await screen.findByText('The restaurant will collect this');
+    expect(accept().props.accessibilityState.disabled).toBe(false);
+    fireEvent.press(accept());
+    await waitFor(() => expect(respondToIntent).toHaveBeenCalledTimes(1));
+    expect((respondToIntent as jest.Mock).mock.calls[0][2].deliveryOffer).toBeUndefined();
+  });
+
+  it('sends the chosen delivery offer when Accept is pressed after choosing', async () => {
+    setup();
+    fireEvent.press(await screen.findByText('Use Costonomy delivery'));
+    fireEvent.press(accept());
+    await waitFor(() => expect(respondToIntent).toHaveBeenCalledTimes(1));
+    expect((respondToIntent as jest.Mock).mock.calls[0][2]).toMatchObject({ deliveryOffer: 'COSTONOMY' });
+  });
+});
+
 describe('delivery choice', () => {
   it('puts the delivery charge under "I will deliver it", before "I can\'t deliver this order"', () => {
     render(<DeliveryOfferChoice policy={policy as never} value="SELF" onChange={jest.fn()} fee="" onFeeChange={jest.fn()} />);
@@ -106,6 +150,11 @@ describe('delivery choice', () => {
 
   it('says Costonomy arranges a delivery partner and the restaurant pays, without inventing a fee', () => {
     render(<DeliveryOfferChoice policy={policy as never} value="COSTONOMY" onChange={jest.fn()} />);
-    expect(screen.getByText('Costonomy arranges a delivery partner; the restaurant pays the delivery fee')).toBeTruthy();
+    expect(screen.getByText(/The restaurant pays the delivery fee/)).toBeTruthy();
+  });
+
+  it('says the restaurant pays only once when Costonomy delivery is selected', () => {
+    render(<DeliveryOfferChoice policy={policy as never} value="COSTONOMY" onChange={jest.fn()} />);
+    expect(screen.getAllByText(/restaurant pays the delivery fee/i)).toHaveLength(1);
   });
 });

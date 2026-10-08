@@ -65,7 +65,7 @@ export function DeliveryOfferChoice({
   const offers = deliveryOffersFor(policy);
   if (offers.length === 0) return null;
 
-  const labels: Record<DeliveryOffer, { title: string; detail: string; note?: string }> = {
+  const labels: Record<DeliveryOffer, { title: string; detail: string }> = {
     SELF_FREE: {
       title: 'I will deliver it',
       detail: 'You handle the delivery yourself.',
@@ -81,7 +81,6 @@ export function DeliveryOfferChoice({
     COSTONOMY: {
       title: 'Use Costonomy delivery',
       detail: 'Riders are requested after you mark the order Ready for Pickup. The restaurant pays the delivery fee.',
-      note: 'Costonomy arranges a delivery partner; the restaurant pays the delivery fee',
     },
   };
 
@@ -103,9 +102,6 @@ export function DeliveryOfferChoice({
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {labels[offer].detail}
                 </MandiText>
-                {active && labels[offer].note != null && (
-                  <MandiText variant="captionEmphasis" color={Colors.textSecondary}>{labels[offer].note}</MandiText>
-                )}
               </Pressable>
               {/* The charge belongs to this option, so it sits right under it and not under the last one. */}
               {offer === 'SELF' && active && onFeeChange != null && (

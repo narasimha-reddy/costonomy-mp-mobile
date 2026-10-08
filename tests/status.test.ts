@@ -100,7 +100,7 @@ describe('supplier-side labels (flow review 23)', () => {
   });
 
   it('maps every settlement status to a human label, including calculated', () => {
-    expect(resolveStatus(SettlementStatus, 'CALCULATED').label).toBe('Calculated');
+    expect(resolveStatus(SettlementStatus, 'CALCULATED').label).toBe('Scheduled');
     expect(resolveStatus(SettlementStatus, 'PAID').label).toBe('Paid');
     expect(resolveStatus(SettlementStatus, 'PENDING').label).toBe('Pending');
     expect(resolveStatus(SettlementStatus, 'FAILED').tone).toBe('danger');

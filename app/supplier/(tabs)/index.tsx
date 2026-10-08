@@ -38,7 +38,7 @@ const SECTION_LIMIT = 5;
  * answer only this store can give, and until it comes nothing else happens.
  *
  * <p><b>Orders are an action inbox.</b> One section per stage that needs the
- * store — new orders to start, packing, waiting for the rider, out for delivery —
+ * store — new orders to start, packing, ready to send out, waiting for the rider or the pickup, out for delivery, plus an "Other" catch-all —
  * newest first inside each, empty ones hidden. The home used to list the five
  * oldest orders, so a new order was not on the screen at all. Each order is in
  * exactly one section (the stage is its status), so none can appear twice.
@@ -85,7 +85,7 @@ export default function SupplierHome() {
       ) : (
         <>
           {sections.map((section) => (
-            <View key={section.status} style={styles.section}>
+            <View key={section.key} style={styles.section}>
               <MandiSectionHeader title={section.title} count={section.orders.length} />
               {section.orders.slice(0, SECTION_LIMIT).map((order) => (
                 <MandiCard

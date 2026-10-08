@@ -353,6 +353,8 @@ export interface IncomingOrder {
   totalAmount: Money;
   /** What the store committed to. Zero before they answer, below the total after a partial. */
   acceptedAmount: Money;
+  /** How the goods travel. Absent until the API's IncomingOrderResponse carries it; the Home inbox copes without it. */
+  deliveryMode?: DeliveryMode | null;
   paymentMethod: PaymentMethod | null;
   hasColdChainItems?: boolean | null;
   items: SupplierOrderItem[];

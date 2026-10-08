@@ -213,8 +213,6 @@ export default function SupplierOrderScreen() {
   // A Costonomy-delivery order that is Ready gets its delivery from auto-dispatch a few seconds later: until the row
   // exists the read 404s, so the screen keeps asking (fast) rather than offering a button for something in progress.
   const awaitingDelivery = order?.status === 'READY_FOR_PICKUP' && wantsDeliveryPartner(order.deliveryMode);
-  const [hasDelivery, setHasDelivery] = useState(false);
-  const findTimedOut = useTimeoutFlag(awaitingDelivery && !hasDelivery, FIND_TIMEOUT_MS);
   const delivery = useQuery({
     queryKey: ['supplier-order', orderId, 'delivery'],
     queryFn: () => fetchDelivery(accessToken as string, orderId),
@@ -223,8 +221,10 @@ export default function SupplierOrderScreen() {
     // While a partner is being found the screen follows it, so the bar moves and a booking shows up without a tap.
     refetchInterval: (query) => deliveryPollMs(query.state.data, awaitingDelivery, findTimedOut),
   });
+  // Computed from the query's own data (not a state mirrored by an effect, which lags a render behind it). The poll
+  // interval above reads findTimedOut lazily, after this render has set it.
   const deliveryExists = delivery.data != null;
-  React.useEffect(() => { setHasDelivery(deliveryExists); }, [deliveryExists]);
+  const findTimedOut = useTimeoutFlag(awaitingDelivery && !deliveryExists, FIND_TIMEOUT_MS);
   const partnerPhase = partnerAwaitPhase({
     orderStatus: order?.status, deliveryMode: order?.deliveryMode, hasDelivery: deliveryExists, timedOut: findTimedOut,
   });

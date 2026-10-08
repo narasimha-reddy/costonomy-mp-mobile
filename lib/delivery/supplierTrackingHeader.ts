@@ -1,3 +1,4 @@
+import { partyTitle } from '@/lib/supplier/partyTitle';
 import { haversineM } from '@/lib/delivery/mapGeometry';
 import type { LatLng } from '@/lib/delivery/mapGeometry';
 import type { OrderTrackingView, TrackingDelivery, TrackingOrder } from '@/lib/delivery/orderTracking';
@@ -49,19 +50,21 @@ const COPY = {
   partner: 'The partner',
 } as const;
 
+/** TrackingOrder (owned by orderTracking.ts) plus the restaurant's own name, which the supplier's DTO carries. */
+type SupplierTrackingOrder = TrackingOrder & { createdAt?: string; restaurantName?: string | null };
+
 type Pill = NonNullable<BuyerTrackHeader['pill']>;
 
 export function supplierTrackingHeader(i: {
   view: OrderTrackingView;
-  order: TrackingOrder & { createdAt?: string };
+  order: SupplierTrackingOrder;
   delivery: TrackingDelivery | null;
   drop: LatLng | null;
   nowMs: number;
 }): BuyerTrackHeader {
   const { view, order, delivery, drop } = i;
-  // The restaurant's own name (the supplier asks "who is this for?"); the outlet name only when the DTO lacks it.
-  const restaurant = (order as { restaurantName?: string | null }).restaurantName?.trim()
-    || order.outletName || COPY.restaurantFallback;
+  // Who it is for: the restaurant's name and its outlet (a restaurant can have several), whichever the DTO carries.
+  const restaurant = partyTitle(order.restaurantName, order.outletName, COPY.restaurantFallback);
   const oStatus = order.status;
   const dStatus = delivery?.status ?? null;
   const kind = kindOf(order, delivery);

@@ -24,6 +24,7 @@ import { buyerTrackingHeader, placeholderCopy } from '@/lib/delivery/trackingHea
 import { supplierTrackingHeader } from '@/lib/delivery/supplierTrackingHeader';
 import type { Delivery } from '@/models/delivery';
 import type { SupplierOrder } from '@/models/procurement';
+import { partyTitle } from '@/lib/supplier/partyTitle';
 import { fetchRating } from '@/services/trust';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing, TrackLayout } from '@/theme';
@@ -82,6 +83,8 @@ export function BuyerTrackingLayout({
     : supplierTrackingHeader({ view, order, delivery, drop, nowMs });
   // The line under the back button: the supplier for the restaurant, the restaurant for the supplier.
   const supplier = header.supplierLine;
+  // Who the order is for, as the supplier names it: restaurant and outlet (a restaurant can have several outlets).
+  const supplierPartyName = partyTitle(order.restaurantName, order.outletName, 'the restaurant');
   const chatSide = buyer ? 'RESTAURANT' as const : 'SUPPLIER' as const;
   const orderRoute = buyer ? `/restaurant/orders/${order.id}` : `/supplier/orders/${order.id}`;
   // Only a COMPLETED order can be rated (the API refuses otherwise). A GET: the row shows on a 404, "not rated yet".
@@ -110,7 +113,7 @@ export function BuyerTrackingLayout({
             placedAt={order.createdAt ?? null}
             supplier={buyer ? supplier : order.supplierName ?? order.storeName ?? supplier}
             caption={buyer ? undefined : 'Ready for you to start preparing'}
-            outletName={order.outletName ?? (buyer ? 'Your outlet' : 'The restaurant')}
+            outletName={buyer ? order.outletName ?? 'Your outlet' : partyTitle(order.restaurantName, order.outletName, 'The restaurant')}
             address={delivery?.dropAddress ?? ([order.outletName, order.outletLocality].filter(Boolean).join(', ') || null)}
             segments={view.segments}
             segmentIndex={view.segmentIndex}
@@ -121,7 +124,7 @@ export function BuyerTrackingLayout({
   }
 
   if (receipt) {
-    const outletLabel = order.outletName ?? (buyer ? 'your outlet' : 'the restaurant');
+    const outletLabel = buyer ? order.outletName ?? 'your outlet' : supplierPartyName;
     const address = delivery?.dropAddress ?? ([order.outletName, order.outletLocality].filter(Boolean).join(', ') || null);
     const at = clockTime(delivery?.deliveredAt);
     const orderSummary = `${order.items.length} ${order.items.length === 1 ? 'item' : 'items'} · ${formatMoney(order.totalAmount)}`;
@@ -218,7 +221,7 @@ export function BuyerTrackingLayout({
   const pickup = beforePickup ? point(delivery?.pickupLocation) : null;
   const driver = header.map === 'pending' ? null : delivery?.location ?? null;
   const away = driver != null && drop != null ? haversineM(toLatLng(driver), drop) : null;
-  const outletName = order.outletName ?? (buyer ? 'your outlet' : 'the restaurant');
+  const outletName = buyer ? order.outletName ?? 'your outlet' : supplierPartyName;
   const mapLabel = away != null
     ? `Map. Delivery partner ${distanceText(away)} away from ${outletName}`
     : 'Map of the route';

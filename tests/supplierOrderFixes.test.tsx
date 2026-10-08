@@ -146,11 +146,18 @@ describe('issue 3: finding a delivery partner after Ready', () => {
 describe('issue 23 / 28 / 16: the order card', () => {
   it('has no tall decorative hero and no sandbox card, and Track opens the tracking page', async () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
-    (fetchDelivery as jest.Mock).mockResolvedValue(delivery);
+    // A real fix and the sandbox flag: the old order page drew the tall hero and the sandbox card for exactly this.
+    (fetchDelivery as jest.Mock).mockResolvedValue({
+      ...delivery,
+      sandboxControls: true,
+      location: { latitude: '12.97', longitude: '77.59', bearing: null, recordedAt: '2026-01-01T09:59:30Z' },
+    });
     setup();
     await screen.findByText('Ravi Kumar');
     expect(screen.queryByLabelText('Track delivery on the map')).toBeNull();
-    expect(screen.queryByText(/Sandbox/i)).toBeNull();
+    expect(screen.queryByText('Test mode')).toBeNull();
+    expect(screen.queryByLabelText('Test mode')).toBeNull();
+    expect(screen.queryByTestId('tracking-map')).toBeNull();
     fireEvent.press(screen.getByText('Track'));
     expect(mockPush).toHaveBeenCalledWith('/supplier/tracking/5');
   });

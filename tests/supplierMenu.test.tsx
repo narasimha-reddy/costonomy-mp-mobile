@@ -121,6 +121,18 @@ describe('the supplier menu header and cart bar', () => {
     expect(screen.getAllByText('Metro')).toHaveLength(1);
   });
 
+  it('a store named "Supplier — Locality" shows the supplier once as the title, the locality as the caption', async () => {
+    (fetchStorefrontHeader as jest.Mock).mockResolvedValue({
+      ...header(0, null), storeName: 'Sri Balaji Traders — Domlur', supplierName: 'Sri Balaji Traders',
+    });
+    setup();
+    await screen.findByText('3.2 km · Bengaluru');
+    expect(screen.getAllByText(/Sri Balaji Traders/)).toHaveLength(1);
+    expect(screen.getByText('Sri Balaji Traders')).toBeTruthy();
+    expect(screen.getByText('Domlur')).toBeTruthy();
+    expect(screen.queryByText(/—/)).toBeNull();
+  });
+
   it('still names the supplier when the store has its own name', async () => {
     setup();
     await screen.findByText('3.2 km · Bengaluru');

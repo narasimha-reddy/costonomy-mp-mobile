@@ -31,7 +31,7 @@ import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { buyerTrackingHeader } from '@/lib/delivery/trackingHeader';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { itemTaxLine } from '@/components/order/BillSummary';
-import { formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
+import { formatDay, formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { paymentLine } from '@/lib/payments/paymentLine';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, IconSize, Spacing, TouchTarget } from '@/theme';
@@ -145,7 +145,9 @@ export default function OrderDetailScreen() {
     const rows: DetailRow[] = [];
     // A plain on-credit order already says "On credit" on the bar and in the bill: no row for it. Any other status on a
     // credit order (Refunded, Cancelled · being settled, Refund delayed) is news, and keeps its row, label and pill.
-    const plainCredit = o.paymentStatus === 'ON_CREDIT';
+    // The same goes for a plain wallet or card payment ("Paid from wallet" is the bill's own last line): one payment
+    // line, not three. Only a status that is news (held, refunded, delayed, failed) gets a row.
+    const plainCredit = o.paymentStatus === 'ON_CREDIT' || o.paymentStatus === 'PAID' || o.paymentStatus === 'CAPTURED';
     if (!plainCredit && (o.paymentMethod != null || payment != null)) {
       rows.push({
         key: 'payment',
@@ -164,8 +166,8 @@ export default function OrderDetailScreen() {
         icon: 'time-outline',
         title: 'Delivery window',
         subtitle: o.deliverySlotName && o.scheduledDeliveryDate
-          ? `${o.scheduledDeliveryDate}, ${o.deliverySlotName}`
-          : when,
+          ? `${formatDay(o.scheduledDeliveryDate) ?? o.scheduledDeliveryDate}, ${o.deliverySlotName}`
+          : o.deliverySlotName ?? formatDay(o.scheduledDeliveryDate) ?? when,
       });
     }
     if (o.isSubscriptionOrder) {
@@ -501,7 +503,7 @@ export default function OrderDetailScreen() {
             {paymentLine(order).barLabel}
           </MandiText>
           <MandiText variant="priceLarge">
-            {formatMoney(settled ? order.acceptedAmount : order.totalAmount)}
+            {formatMoney(paymentLine(order).amount)}
           </MandiText>
         </View>
 

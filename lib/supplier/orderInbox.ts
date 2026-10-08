@@ -37,6 +37,10 @@ const SECTIONS: SectionDef[] = [
 /** Orders that are finished or never reached the store: they sit behind "See all orders", not in the inbox. */
 const NOT_IN_INBOX = new Set(['DRAFT', 'DELIVERED', 'COMPLETED', 'CANCELLED']);
 
+/** Newest placed first: the order a supplier most likely has not seen yet is at the top. */
+export const newestFirst = (a: { createdAt: string }, b: { createdAt: string }) =>
+  Date.parse(b.createdAt) - Date.parse(a.createdAt);
+
 /**
  * The supplier Home's orders as an action inbox: one section per stage that needs the store, newest first within it,
  * empty sections left out. Finished orders are not in any section (they sit behind "See all orders"). An order in a
@@ -44,7 +48,6 @@ const NOT_IN_INBOX = new Set(['DRAFT', 'DELIVERED', 'COMPLETED', 'CANCELLED']);
  * "Other" section so it can never be unreachable from Home.
  */
 export function orderInbox(orders: readonly IncomingOrder[]): InboxSection[] {
-  const newestFirst = (a: IncomingOrder, b: IncomingOrder) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
   const placed = new Set<IncomingOrder>();
   const sections = SECTIONS.map(({ key, title, matches }) => {
     const inSection = orders.filter(matches).sort(newestFirst);

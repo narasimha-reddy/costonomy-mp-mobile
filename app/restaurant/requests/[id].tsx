@@ -174,6 +174,8 @@ export default function RequestDetailScreen() {
   // Handed to the payment picker, which only takes it up once the balances say it can still be used.
   const [restoredMethod, setRestoredMethod] = React.useState<PaymentMethod | null>(null);
   const orderPlaced = React.useRef(false);
+  // The same fact as state, so the preview query stops being enabled (a ref change does not re-render).
+  const [placed, setPlaced] = React.useState(false);
   React.useEffect(() => {
     if (!Number.isFinite(intentId)) return;
     let live = true;
@@ -216,6 +218,11 @@ export default function RequestDetailScreen() {
     void setJsonPreference(checkoutKey(intentId), choices);
   }, [restored, requestLoaded, orderableNow, delivery?.mode, slot.slotId, slot.scheduledDate, method, restoredMode, restoredMethod, intentId]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: intentKey(intentId) });
+  // After placing: the request is re-read, but its preview is not (the server answers 400 for an order that exists).
+  const refreshPlaced = () => queryClient.invalidateQueries({
+    queryKey: intentKey(intentId),
+    predicate: (q) => q.queryKey[intentKey(intentId).length] !== 'preview',
+  });
 
   // Where the payment picker sits, so the bar's method column can scroll to it. Presentation only.
   const [pickerY, setPickerY] = React.useState(0);
@@ -251,9 +258,8 @@ export default function RequestDetailScreen() {
       deliveryMode: delivery?.mode,
       deliveryQuoteReference: delivery?.quoteReference,
     }),
-    enabled: accessToken != null
-      && request?.status === 'RESPONSES_RECEIVED'
-      && request.withinOrderWindow,
+    // Not once it is placed or no longer orderable: the server answers 400 to a preview of an order that exists.
+    enabled: accessToken != null && !placed && orderableNow,
   });
 
   /**
@@ -289,8 +295,9 @@ export default function RequestDetailScreen() {
       track('intent_ordered', { screen: SCREEN, entityId: intentId });
       // Placed: these choices belong to an order that now exists, not to the next visit.
       orderPlaced.current = true;
+      setPlaced(true);
       void removePreference(checkoutKey(intentId));
-      void refresh();
+      void refreshPlaced();
       // Navigate to the authoritative state rather than claiming success here.
       // If payment is still outstanding the payment screen is where it belongs;
       // a toast saying "ordered" would be the app deciding something the backend

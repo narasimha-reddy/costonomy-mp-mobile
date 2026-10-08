@@ -33,13 +33,18 @@ export function invalidationKeys(event: RealtimeEvent): unknown[][] {
   switch (event.aggregateType) {
     case 'SUPPLIER_ORDER':
       if (event.aggregateId != null) keys.push(['supplier-order', event.aggregateId]);
-      keys.push(['outlet'], ['store']);
+      keys.push(['outlet'], ['store'], ['supplier-store'], ['supplier-orders']);
       break;
     case 'DELIVERY':
-      keys.push(['supplier-order'], ['deliveries'], ['outlet-delivery-radar'], ['outlet-deliveries'], ['outlet']);
+      keys.push(
+        ['supplier-order'], ['deliveries'], ['outlet-delivery-radar'], ['outlet-deliveries'], ['outlet'],
+        ['supplier-store'], ['supplier-orders'],
+      );
       break;
     case 'INTENT':
-      keys.push(['outlet'], ['store']);
+      // ['supplier-store'] covers the supplier's request carousel and list; ['intent', id] the single request.
+      if (event.aggregateId != null) keys.push(['intent', event.aggregateId]);
+      keys.push(['outlet'], ['store'], ['supplier-store']);
       break;
     case 'PROCUREMENT':
       if (event.aggregateId != null) keys.push(['procurement', event.aggregateId]);
@@ -58,6 +63,47 @@ export function invalidationKeys(event: RealtimeEvent): unknown[][] {
   // Every event can produce a notification, and the badge is server-backed.
   keys.push(['notifications']);
   return keys;
+}
+
+/** Drop repeated keys, keeping first-seen order. */
+export function dedupeKeys(keys: unknown[][]): unknown[][] {
+  const seen = new Set<string>();
+  return keys.filter((key) => {
+    const id = JSON.stringify(key);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+const BATCH_MS = 75;
+
+/**
+ * Collects the keys of every event in one burst (a drain page, a socket flurry) and invalidates each distinct key
+ * once, after a short window. Without it one event fired the same eight GETs four times over.
+ */
+export function createInvalidationBatcher(invalidate: (key: unknown[]) => void, windowMs: number = BATCH_MS) {
+  let pending: unknown[][] = [];
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const flush = () => {
+    if (timer != null) clearTimeout(timer);
+    timer = null;
+    const keys = dedupeKeys(pending);
+    pending = [];
+    keys.forEach(invalidate);
+  };
+  return {
+    add(keys: unknown[][]) {
+      pending.push(...keys);
+      if (timer == null) timer = setTimeout(flush, windowMs);
+    },
+    flush,
+    cancel() {
+      if (timer != null) clearTimeout(timer);
+      timer = null;
+      pending = [];
+    },
+  };
 }
 
 const RealtimeContext = createContext<RealtimeState>({ transport: 'connecting', cursor: null });
@@ -92,6 +138,14 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const socketRef = useRef<WebSocket | null>(null);
   const attemptRef = useRef(0);
   const stoppedRef = useRef(false);
+  /** True from the ticket POST until the socket is built or the attempt failed: never two tickets at once. */
+  const connectingRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const batcher = useMemo(
+    () => createInvalidationBatcher((key) => void queryClient.invalidateQueries({ queryKey: key })),
+    [queryClient],
+  );
+  useEffect(() => () => batcher.cancel(), [batcher]);
 
   /**
    * React to an event by invalidating what it touches.
@@ -107,8 +161,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       setCursor(event.cursor);
     }
 
-    invalidationKeys(event).forEach((key) => void queryClient.invalidateQueries({ queryKey: key }));
-  }, [queryClient]);
+    batcher.add(invalidationKeys(event));
+  }, [batcher]);
 
   /** Catch up over REST. Also the whole transport when the socket is down. */
   const drain = useCallback(async () => {
@@ -132,10 +186,24 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   }, [accessToken, apply]);
 
   const connect = useCallback(async () => {
-    if (accessToken == null || stoppedRef.current) return;
+    if (accessToken == null || stoppedRef.current || connectingRef.current) return;
+    if (socketRef.current != null) return;
+    connectingRef.current = true;
+
+    const retry = () => {
+      setTransport('polling');
+      const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attemptRef.current);
+      attemptRef.current += 1;
+      if (retryTimerRef.current != null) clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = setTimeout(() => void connect(), delay);
+    };
 
     try {
       const ticket = await fetchRealtimeTicket(accessToken);
+      if (stoppedRef.current) {
+        connectingRef.current = false;
+        return;
+      }
       if (cursorRef.current == null && ticket.cursor != null) {
         cursorRef.current = ticket.cursor;
         setCursor(ticket.cursor);
@@ -143,6 +211,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
       const socket = new WebSocket(socketUrl(ticket.url, ticket.ticket));
       socketRef.current = socket;
+      connectingRef.current = false;
 
       socket.onopen = () => {
         attemptRef.current = 0;
@@ -187,21 +256,14 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       socket.onclose = () => {
         socketRef.current = null;
         if (stoppedRef.current) return;
-        setTransport('polling');
-        const delay = Math.min(
-          RECONNECT_MAX_MS,
-          RECONNECT_BASE_MS * 2 ** attemptRef.current,
-        );
-        attemptRef.current += 1;
-        setTimeout(() => void connect(), delay);
+        // A handshake that never opened (403, wrong origin) backs off like a failed ticket.
+        retry();
       };
     } catch {
+      connectingRef.current = false;
       // No ticket — an expired session, or the server is unreachable. Polling
       // carries on regardless, which is the point of having it.
-      setTransport('polling');
-      const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attemptRef.current);
-      attemptRef.current += 1;
-      setTimeout(() => void connect(), delay);
+      retry();
     }
   }, [accessToken, apply, drain]);
 
@@ -209,6 +271,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!authenticated || accessToken == null) {
       stoppedRef.current = true;
+      if (retryTimerRef.current != null) clearTimeout(retryTimerRef.current);
       socketRef.current?.close();
       socketRef.current = null;
       setTransport('offline');
@@ -222,6 +285,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       stoppedRef.current = true;
+      if (retryTimerRef.current != null) clearTimeout(retryTimerRef.current);
       socketRef.current?.close();
       socketRef.current = null;
     };

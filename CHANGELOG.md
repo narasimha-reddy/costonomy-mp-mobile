@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [feat/fix-p23-restaurant] - Restaurant after-order, Home, search and login fixes
+#### Changed
+- Placed hero shows the real caption, total, payment line, View order and Back to Home; Home pill prefers an answered request in its window and ignores orders in flight over 24 h (the order model has no status-changed time); Active Orders uses the buyer status ("Arranging delivery") and a count that matches the pill; recommended names shrink to fit at 360 px.
+- Order details hide Rate once rated, say "On credit" once, use a document icon; rating returns to the order; stars read "{n} stars"; check-in shows a summary with Rate this order / Done before rating.
+- Deliveries: one filter row, one status chip, delivered time, "Arrival #n" only among several. Search says "N suppliers match" with View suppliers when Products is empty and has no web focus ring. Sign-in fields autofocus, the code submits on the sixth digit, and the phone screen has a back arrow.
+
 ### [feat/restyle-p17-supplier-tracking] - The supplier's tracking screen matches the restaurant's
 #### Changed
 - `/supplier/tracking/:id` now uses the green header, ETA pill, map, partner card (with plate), placed hero and delivered receipt via `BuyerTrackingLayout audience="supplier"` and a new `supplierTrackingHeader`; the sandbox card, partner search, retry and switch-to-own controls are kept. Supplier tracking polling now also pauses when the screen is not focused.

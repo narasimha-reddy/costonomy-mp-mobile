@@ -101,6 +101,13 @@ describe('home restyle', () => {
     expect(StyleSheet.flatten(cell.props.style).height).toBeUndefined();
   });
 
+  it('supplier names shrink to fit two lines on a narrow phone', async () => {
+    mount();
+    const name = await screen.findByText(LONG);
+    expect(name.props.adjustsFontSizeToFit).toBe(true);
+    expect(name.props.minimumFontScale).toBeLessThan(1);
+  });
+
   it('category scroller marks the selected category', async () => {
     mount();
     const dairy = await screen.findByLabelText('Dairy');

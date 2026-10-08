@@ -21,12 +21,26 @@ const BAR_POLL_MS = 30_000;
 /** Header states in which the partner's ETA is worth showing as a badge. */
 const ETA_STATES: BuyerTrackHeader['state'][] = ['on_the_way', 'arriving', 'assigned'];
 
+/** The order model has no "status changed at", so an order placed over a day ago and still in flight is "stuck". */
+const STUCK_AFTER_MS = 24 * 3_600_000;
+
+/** Display heuristic only (no money or deadline decision): the pill ignores an order that has hung for over a day. */
+export function isStuck(order: SupplierOrder, nowMs: number): boolean {
+  const placed = Date.parse(order.createdAt);
+  return Number.isFinite(placed) && nowMs - placed > STUCK_AFTER_MS;
+}
+
+/** The orders the kitchen is still waiting on: in-flight statuses, minus any that look stuck (when `nowMs` is given). */
+export function inFlightOrders(orders: SupplierOrder[] | undefined, nowMs?: number): SupplierOrder[] {
+  return (orders ?? []).filter((o) => IN_FLIGHT.includes(o.status) && (nowMs == null || !isStuck(o, nowMs)));
+}
+
 /**
  * The restaurant's most recent order that is not yet delivered, or null, whoever delivers it. A supplier-delivered or
  * collect-yourself order is still something the kitchen is waiting on, and its header already says so.
  */
-export function latestInFlight(orders: SupplierOrder[] | undefined): SupplierOrder | null {
-  const candidates = (orders ?? []).filter((o) => IN_FLIGHT.includes(o.status));
+export function latestInFlight(orders: SupplierOrder[] | undefined, nowMs?: number): SupplierOrder | null {
+  const candidates = inFlightOrders(orders, nowMs);
   candidates.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return candidates[0] ?? null;
 }
@@ -62,7 +76,8 @@ export interface ActivePill {
 /**
  * Home and the Orders tab both float a pill for this. The hook shares their query keys, so the order list, the
  * requests list and the one extra delivery read are fetched once and every screen starts from the same cache.
- * An order in flight beats a pending request: it is further along.
+ * An answered request still inside its order window beats a passive in-flight order: it is the one with a clock on it.
+ * An order placed over 24 h ago and still in flight is ignored (the model has no status-changed time).
  */
 export function useLatestInFlight(outletId: number | null): ActivePill | null {
   const { accessToken } = useSession();
@@ -73,7 +88,7 @@ export function useLatestInFlight(outletId: number | null): ActivePill | null {
     queryFn: () => fetchOutletOrders(accessToken as string, outletId as number),
     enabled: outletId != null && accessToken != null,
   });
-  const order = useMemo(() => latestInFlight(orders.data), [orders.data]);
+  const order = useMemo(() => latestInFlight(orders.data, nowMs), [orders.data, nowMs]);
 
   const intents = useQuery({
     queryKey: intentsKey(outletId),
@@ -94,16 +109,6 @@ export function useLatestInFlight(outletId: number | null): ActivePill | null {
     refetchInterval: BAR_POLL_MS,
   });
 
-  if (order != null) {
-    const d = delivery.data ?? null;
-    const view = orderTrackingView({ audience: 'buyer', order, delivery: d, nowMs });
-    const header = buyerTrackingHeader({ view, order, delivery: d, drop: null, nowMs });
-    const etaMins = ETA_STATES.includes(header.state) && !view.delayed ? d?.etaMinutes ?? null : null;
-    return {
-      kind: 'order', supplierName: order.supplierName, statusText: header.title, etaMins,
-      href: `/restaurant/tracking/${order.id}`,
-    };
-  }
   if (request != null) {
     const by = clockTime(request.orderCreationDeadline);
     return {
@@ -113,6 +118,16 @@ export function useLatestInFlight(outletId: number | null): ActivePill | null {
       etaMins: null,
       href: `/restaurant/requests/${request.id}`,
       accessibilityLabel: `Request answered: ${request.supplierName ?? 'your supplier'} accepted your request. Place your order`,
+    };
+  }
+  if (order != null) {
+    const d = delivery.data ?? null;
+    const view = orderTrackingView({ audience: 'buyer', order, delivery: d, nowMs });
+    const header = buyerTrackingHeader({ view, order, delivery: d, drop: null, nowMs });
+    const etaMins = ETA_STATES.includes(header.state) && !view.delayed ? d?.etaMinutes ?? null : null;
+    return {
+      kind: 'order', supplierName: order.supplierName, statusText: header.title, etaMins,
+      href: `/restaurant/tracking/${order.id}`,
     };
   }
   return null;

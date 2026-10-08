@@ -35,6 +35,7 @@ jest.mock('@/services/quickscan', () => ({ fetchQuickScanConfig: jest.fn().mockR
 jest.mock('@/services/delivery', () => ({ fetchDelivery: jest.fn() }));
 
 const metrics = { frame: { x: 0, y: 0, width: 360, height: 805 }, insets: { top: 24, left: 0, right: 0, bottom: 0 } };
+const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
 const order = (id: number, status: string, createdAt: string, deliveryMode = 'COSTONOMY_DELIVERY') => ({
   id, orderNumber: `ORD-${id}`, status, deliveryMode, supplierName: 'Fresh Farms', storeName: 'FF', outletName: 'Cafe',
   outletLocality: null, createdAt, totalAmount: '100.00', paymentMethod: 'PREPAID', items: [],
@@ -67,7 +68,7 @@ beforeEach(() => {
 
 describe('home active-order pill', () => {
   it('hidden with nothing in flight', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(5, 'DELIVERED', '2026-01-01T08:00:00Z')]);
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(5, 'DELIVERED', ago(2))]);
     mount(<RestaurantHome />);
     await screen.findByText('No orders in flight');
     expect(pill()).toBeNull();
@@ -75,8 +76,8 @@ describe('home active-order pill', () => {
 
   it('shows for the latest Costonomy delivery in flight and tap opens tracking', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([
-      order(1, 'OUT_FOR_DELIVERY', '2026-01-01T09:00:00Z'),
-      order(3, 'OUT_FOR_DELIVERY', '2026-01-01T08:00:00Z', 'SUPPLIER_DELIVERY'),
+      order(1, 'OUT_FOR_DELIVERY', ago(1)),
+      order(3, 'OUT_FOR_DELIVERY', ago(2), 'SUPPLIER_DELIVERY'),
     ]);
     (fetchDelivery as jest.Mock).mockResolvedValue(transit);
     mount(<RestaurantHome />);
@@ -88,7 +89,7 @@ describe('home active-order pill', () => {
 
   it('own delivery order shows the pill', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([
-      order(3, 'OUT_FOR_DELIVERY', '2026-01-01T09:00:00Z', 'SUPPLIER_DELIVERY'),
+      order(3, 'OUT_FOR_DELIVERY', ago(1), 'SUPPLIER_DELIVERY'),
     ]);
     mount(<RestaurantHome />);
     expect(await screen.findByText('On the way')).toBeTruthy();
@@ -101,14 +102,14 @@ describe('home active-order pill', () => {
 
   it('own delivery order packed and ready shows the pill', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([
-      order(3, 'READY_FOR_PICKUP', '2026-01-01T09:00:00Z', 'SUPPLIER_DELIVERY'),
+      order(3, 'READY_FOR_PICKUP', ago(1), 'SUPPLIER_DELIVERY'),
     ]);
     mount(<RestaurantHome />);
     expect(await screen.findByText('Packed and ready')).toBeTruthy();
   });
 
   it('pickup order shows the pill', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(6, 'READY_FOR_PICKUP', '2026-01-01T08:00:00Z', 'PICKUP')]);
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(6, 'READY_FOR_PICKUP', ago(2), 'PICKUP')]);
     mount(<RestaurantHome />);
     expect(await screen.findByText('Ready to collect')).toBeTruthy();
     expect(fetchDelivery).not.toHaveBeenCalled();
@@ -117,7 +118,7 @@ describe('home active-order pill', () => {
   });
 
   it('answered request shows the pill and opens the request', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(5, 'DELIVERED', '2026-01-01T08:00:00Z')]);
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(5, 'DELIVERED', ago(2))]);
     (fetchIntents as jest.Mock).mockResolvedValue([
       intent(11, 'OPEN', '2026-01-01T07:00:00Z'),
       intent(12, 'RESPONSES_RECEIVED', '2026-01-01T08:00:00Z'),
@@ -138,24 +139,65 @@ describe('home active-order pill', () => {
     expect(screen.queryByText(/accepted your request/)).toBeNull();
   });
 
-  it('in-flight order beats a pending request', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(3, 'PREPARING', '2026-01-01T09:00:00Z', 'SUPPLIER_DELIVERY')]);
+  it('an answered, time-limited request beats a passive in-flight order', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(3, 'PREPARING', ago(1), 'SUPPLIER_DELIVERY')]);
     (fetchIntents as jest.Mock).mockResolvedValue([intent(12, 'RESPONSES_RECEIVED', '2026-01-01T10:00:00Z')]);
     mount(<RestaurantHome />);
-    await waitFor(() => expect(screen.queryByLabelText(/Order in progress/)).toBeTruthy());
-    await waitFor(() => expect(fetchIntents).toHaveBeenCalled());
+    expect(await screen.findByText('Fresh Farms accepted your request')).toBeTruthy();
+    expect(pill()).toBeNull();
+  });
+
+  it('an in-flight order shows when the answered request is past its window', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(3, 'PREPARING', ago(1), 'SUPPLIER_DELIVERY')]);
+    (fetchIntents as jest.Mock).mockResolvedValue([intent(12, 'RESPONSES_RECEIVED', '2026-01-01T10:00:00Z', false)]);
+    mount(<RestaurantHome />);
+    await waitFor(() => expect(pill()).toBeTruthy());
     expect(screen.queryByText(/accepted your request/)).toBeNull();
   });
 
+  it('an order that has sat for over 24 h is ignored by the pill, so the request shows', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(97, 'PREPARING', ago(30), 'SUPPLIER_DELIVERY')]);
+    (fetchIntents as jest.Mock).mockResolvedValue([intent(12, 'RESPONSES_RECEIVED', '2026-01-01T10:00:00Z')]);
+    mount(<RestaurantHome />);
+    expect(await screen.findByText('Fresh Farms accepted your request')).toBeTruthy();
+  });
+
+  it('a stuck order alone gives no pill', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(97, 'PREPARING', ago(30), 'SUPPLIER_DELIVERY')]);
+    mount(<RestaurantHome />);
+    await waitFor(() => expect(fetchOutletOrders).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(pill()).toBeNull();
+  });
+
+  it('active order cards say Arranging delivery for a partner-delivery order that is ready', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(4, 'READY_FOR_PICKUP', ago(2))]);
+    mount(<RestaurantHome />);
+    await screen.findByText('Active Orders');
+    expect((await screen.findAllByText('Arranging delivery')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Ready for pickup')).toBeNull();
+  });
+
+  it('the Active Orders count leaves out stuck orders so it agrees with the pill', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([
+      order(1, 'OUT_FOR_DELIVERY', ago(1), 'SUPPLIER_DELIVERY'),
+      order(97, 'PREPARING', ago(40), 'SUPPLIER_DELIVERY'),
+      order(98, 'CONFIRMED', ago(50), 'SUPPLIER_DELIVERY'),
+    ]);
+    mount(<RestaurantHome />);
+    await screen.findByText('1 on the way');
+    expect(screen.getByText(/Active Orders.*\(1\)/)).toBeTruthy();
+  });
+
   it('says finding a partner with no ETA badge when none is assigned', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(4, 'READY_FOR_PICKUP', '2026-01-01T08:00:00Z')]);
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(4, 'READY_FOR_PICKUP', ago(2))]);
     mount(<RestaurantHome />);
     expect(await screen.findByText('Assigning a delivery partner')).toBeTruthy();
     expect(screen.queryByText('arriving in')).toBeNull();
   });
 
   it('orders tab shows the same pill and opens tracking', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(1, 'OUT_FOR_DELIVERY', '2026-01-01T08:00:00Z')]);
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(1, 'OUT_FOR_DELIVERY', ago(2))]);
     (fetchDelivery as jest.Mock).mockResolvedValue(transit);
     mount(<OrdersScreen />);
     expect(await screen.findByText('14 mins')).toBeTruthy();
@@ -164,14 +206,14 @@ describe('home active-order pill', () => {
   });
 
   it('orders tab has no pill when nothing is in flight', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(5, 'DELIVERED', '2026-01-01T08:00:00Z')]);
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(5, 'DELIVERED', ago(2))]);
     mount(<OrdersScreen />);
     await screen.findByText('No active orders');
     expect(pill()).toBeNull();
   });
 
   it('home and orders share one query key', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(1, 'OUT_FOR_DELIVERY', '2026-01-01T08:00:00Z')]);
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(1, 'OUT_FOR_DELIVERY', ago(2))]);
     (fetchDelivery as jest.Mock).mockResolvedValue(transit);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 60_000 } } });
     const home = mount(<RestaurantHome />, client);

@@ -21,10 +21,7 @@ import {
   MandiSkeletonList,
   toneColors,
 } from '@/components/common';
-import {
-  resolveStatus,
-  SupplierOrderStatus,
-} from '@/models/status';
+import { buyerOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { RestaurantRequestCard } from '@/components/request/RestaurantRequestCard';
@@ -35,8 +32,10 @@ import { track } from '@/analytics';
 import { searchHints } from '@/lib/search/hints';
 import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
 import { ActiveOrderPill } from '@/components/delivery/ActiveOrderPill';
-import { useLatestInFlight } from '@/hooks/useLatestInFlight';
+import { inFlightOrders, useLatestInFlight } from '@/hooks/useLatestInFlight';
 import { useCreditAttention } from '@/hooks/useCreditAttention';
+import { useServerNow } from '@/hooks/useServerNow';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Spacing } from '@/theme';
 
@@ -60,11 +59,12 @@ export default function RestaurantHome() {
   const router = useRouter();
   const { outletId } = useOutlet();
   const inFlight = useLatestInFlight(outletId);
+  const insets = useSafeAreaInsets();
 
   return (
     <MandiScreen
       header={<RestaurantHeader screen={SCREEN} location />}
-      contentStyle={inFlight != null ? { paddingBottom: PILL_CLEARANCE } : undefined}
+      contentStyle={inFlight != null ? { paddingBottom: PILL_CLEARANCE + insets.bottom } : undefined}
       floating={inFlight != null ? (
         <ActiveOrderPill
           supplierName={inFlight.supplierName}
@@ -303,15 +303,11 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
     enabled: outletId != null && accessToken != null,
   });
 
-  // "Active" is everything the restaurant is still waiting on a supplier for. A
-  // terminal order belongs in the Orders tab's history, and a DRAFT one never
-  // reached a supplier at all — its payment did not complete — so presenting it
-  // as in flight would tell the restaurant something untrue about an order
-  // nobody is working on.
-  const active = (query.data ?? []).filter(
-    (order) => !['DRAFT', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED']
-      .includes(order.status),
-  );
+  // "Active" is what the restaurant is still waiting on a supplier for, the same list the floating pill draws from: a
+  // terminal order belongs in the Orders tab's history, a DRAFT one never reached a supplier, and one that has sat in
+  // flight for over a day is stuck, not "active". The heading count and the "on the way" line come from this list too.
+  const nowMs = useServerNow();
+  const active = inFlightOrders(query.data, nowMs);
 
   return (
     <View style={styles.section}>
@@ -338,7 +334,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
           <MandiCard
             key={order.id}
             onPress={() => router.push(`/restaurant/orders/${order.id}`)}
-            accentColor={toneColors(resolveStatus(SupplierOrderStatus, order.status).tone).fg}
+            accentColor={toneColors(buyerOrderStatus(order.status, order.deliveryMode).tone).fg}
           >
             <OrderCardBody
               primary={order.supplierName}
@@ -351,7 +347,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
               paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
               amount={order.totalAmount}
-              status={resolveStatus(SupplierOrderStatus, order.status)}
+              status={buyerOrderStatus(order.status, order.deliveryMode)}
             />
           </MandiCard>
         ))

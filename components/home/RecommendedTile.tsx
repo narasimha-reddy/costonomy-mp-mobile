@@ -10,6 +10,8 @@ export const RECOMMENDED_COLUMNS = 3;
 /** Share of the row each cell takes: a third, less room for the two gaps. */
 export const RECOMMENDED_CELL_WIDTH = '31%';
 
+const NAME_MIN_SCALE = 0.8;
+
 /**
  * One supplier in the Recommended grid: an initial disc, the store name on up
  * to two lines (ellipsis after that), and the distance when known.
@@ -40,6 +42,9 @@ export function RecommendedTile({
         variant="captionEmphasis"
         numberOfLines={2}
         ellipsizeMode="tail"
+        // At 360dp a cell is ~100dp: let a long name shrink a little before it is cut, rather than lose its tail.
+        adjustsFontSizeToFit
+        minimumFontScale={NAME_MIN_SCALE}
         style={styles.name}
       >
         {supplier.storeName}
@@ -60,7 +65,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: 2,
     borderRadius: Radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,

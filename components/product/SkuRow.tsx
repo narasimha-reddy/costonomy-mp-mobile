@@ -353,7 +353,7 @@ function PackStepper({ packs, name, unit, disabled, onChange }: {
       <Pressable
         onPress={() => onChange(packs - 1)}
         accessibilityRole="button"
-        accessibilityLabel={`Decrease quantity${suffix}`}
+        accessibilityLabel={`Decrease quantity of ${name}`}
         hitSlop={hitSlopFor(ControlHeight.sm)}
         style={styles.stepperHit}
       >
@@ -372,7 +372,7 @@ function PackStepper({ packs, name, unit, disabled, onChange }: {
         onPress={disabled ? undefined : () => onChange(packs + 1)}
         disabled={disabled}
         accessibilityRole="button"
-        accessibilityLabel={`Increase quantity${suffix}`}
+        accessibilityLabel={`Increase quantity of ${name}`}
         accessibilityState={{ disabled }}
         hitSlop={hitSlopFor(ControlHeight.sm)}
         style={styles.stepperHit}

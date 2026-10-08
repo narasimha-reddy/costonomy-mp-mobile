@@ -139,7 +139,7 @@ export function PaymentMethodPicker({
               disabled={option.disabled}
               onPress={() => onSelect(option.key)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: active, disabled: option.disabled }}
+              accessibilityState={{ selected: active, checked: active, disabled: option.disabled }}
               style={[
                 styles.option,
                 active && styles.optionActive,

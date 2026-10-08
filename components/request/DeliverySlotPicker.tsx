@@ -68,7 +68,7 @@ export function DeliverySlotPicker({
       <Pressable
         onPress={() => onSelect(null, null)}
         accessibilityRole="radio"
-        accessibilityState={{ selected: asap }}
+        accessibilityState={{ selected: asap, checked: asap }}
         style={[styles.option, asap && styles.optionActive, styles.asap]}
       >
         <MandiText variant="bodyEmphasis">As soon as possible</MandiText>

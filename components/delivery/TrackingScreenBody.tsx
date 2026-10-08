@@ -218,10 +218,6 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
         <MandiStickyBar>
           <MandiButton label="Check in delivery" size="lg" onPress={receive} />
         </MandiStickyBar>
-      ) : !buyer ? (
-        <MandiStickyBar>
-          <MandiButton label="Back to order" variant="neutral" size="md" onPress={back} />
-        </MandiStickyBar>
       ) : null}
 
       <MandiConfirm

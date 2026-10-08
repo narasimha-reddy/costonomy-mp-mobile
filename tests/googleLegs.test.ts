@@ -1,4 +1,4 @@
-import { legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint, glideMs } from '@/lib/maps/googleLegs';
+import { legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, insidePadded, QUIET_MAP_STYLE } from '@/lib/maps/googleLegs';
 import { Colors, TrackLayout } from '@/theme';
 
 const truck = { latitude: 12.97, longitude: 77.59 };
@@ -102,5 +102,37 @@ describe('glideMs', () => {
     expect(glideMs(at(10), at(5))).toBe(1000);
     expect(glideMs(null, at(5))).toBe(1000);
     expect(glideMs('nope', undefined)).toBe(1000);
+  });
+});
+
+describe('quiet map style', () => {
+  it('hides business POI and transit labels but leaves roads and areas', () => {
+    const hidden = QUIET_MAP_STYLE.filter((r) => r.stylers.some((x) => x.visibility === 'off')).map((r) => r.featureType);
+    expect(hidden).toEqual(expect.arrayContaining(['poi', 'transit']));
+    expect(hidden).not.toContain('road');
+    expect(hidden).not.toContain('administrative.locality');
+  });
+});
+
+describe('insidePadded', () => {
+  const view = { north: 13, south: 12, east: 78, west: 77 };
+  it('is true well inside and false near the edge or outside', () => {
+    expect(insidePadded(view, { latitude: 12.5, longitude: 77.5 })).toBe(true);
+    expect(insidePadded(view, { latitude: 12.99, longitude: 77.5 })).toBe(false);
+    expect(insidePadded(view, { latitude: 14, longitude: 77.5 })).toBe(false);
+  });
+});
+
+describe('shouldRefit', () => {
+  const base = { now: 100_000, lastFitAt: 0, outside: false, distNow: 1000, distAtFit: 1000 };
+  it('never within 8 s of the last fit', () => {
+    expect(shouldRefit({ ...base, lastFitAt: 95_000, outside: true })).toBe(false);
+  });
+  it('refits when the truck left the padded view', () => {
+    expect(shouldRefit({ ...base, outside: true })).toBe(true);
+  });
+  it('refits when the distance to the next stop halved', () => {
+    expect(shouldRefit({ ...base, distNow: 500 })).toBe(true);
+    expect(shouldRefit({ ...base, distNow: 600 })).toBe(false);
   });
 });

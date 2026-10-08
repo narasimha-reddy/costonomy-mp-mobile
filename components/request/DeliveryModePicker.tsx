@@ -112,7 +112,7 @@ export function DeliveryModePicker({
               onPress={() => onSelect(mode, fee as Money,
                 mode === 'COSTONOMY_DELIVERY' ? quote.data?.quoteReference : undefined)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: active, disabled: unavailable }}
+              accessibilityState={{ selected: active, checked: active, disabled: unavailable }}
               style={[styles.option, active && styles.optionActive]}
             >
               <View style={styles.flex}>

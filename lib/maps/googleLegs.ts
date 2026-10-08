@@ -107,7 +107,7 @@ export function glideMs(prevRecordedAt?: string | null, nextRecordedAt?: string 
 }
 
 /** Hide business and transit labels so they do not collide with our pins; roads and area names stay. */
-export const QUIET_MAP_STYLE: Array<{ featureType: string; elementType: string; stylers: Array<{ visibility: string }> }> = [
+export const QUIET_MAP_STYLE: { featureType: string; elementType: string; stylers: { visibility: string }[] }[] = [
   { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
 ];

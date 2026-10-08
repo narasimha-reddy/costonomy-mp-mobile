@@ -51,10 +51,11 @@ export function truckSvgDataUrl({ flip, muted }: { flip: boolean; muted: boolean
   const parcel = muted ? Colors.truckMuted : Colors.truckParcel;
   const light = muted ? Colors.truckMutedLight : Colors.truckParcelLight;
   const body =
-    `<rect x="1" y="3" width="24" height="15" rx="2.5" fill="${parcel}"/>` +
-    `<rect x="4" y="6" width="18" height="9" rx="1.5" fill="${light}"/>` +
-    `<path d="M26 7h7l5 5v6H26z" fill="${Colors.truckCab}"/>` +
-    `<path d="M28 9h4l3 3h-7z" fill="${Colors.truckGlass}"/>` +
+    `<rect x="1" y="3" width="24" height="14" rx="2.5" fill="${parcel}"/>` +
+    `<rect x="5" y="6" width="16" height="7" rx="1.5" fill="${light}"/>` +
+    `<path d="M24 7h8l6 6v4H24z" fill="${parcel}"/>` +
+    `<path d="M27 9h4l3 3.5h-7z" fill="${Colors.truckGlass}"/>` +
+    `<rect x="1" y="15" width="37" height="3" rx="1" fill="${Colors.truckCab}"/>` +
     `<circle cx="9" cy="19" r="3.2" fill="${Colors.truckCab}" stroke="${Colors.surface}" stroke-width="1"/>` +
     `<circle cx="31" cy="19" r="3.2" fill="${Colors.truckCab}" stroke="${Colors.surface}" stroke-width="1"/>`;
   const inner = flip ? `<g transform="translate(40 0) scale(-1 1)">${body}</g>` : body;

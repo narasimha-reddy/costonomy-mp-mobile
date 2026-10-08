@@ -100,15 +100,15 @@ export type BuyerHeaderOrder = TrackingOrder
   & { createdAt?: string; deliverySlotName?: string | null };
 
 type Pill = NonNullable<BuyerTrackHeader['pill']>;
-type Kind = 'pickup' | 'own' | 'partner';
+export type Kind = 'pickup' | 'own' | 'partner';
 
 /** How this order travels, read off the same step list the view uses (3 pickup, 5 own, 7 Costonomy). */
-function kindOf(order: BuyerHeaderOrder, delivery: TrackingDelivery | null): Kind {
+export function kindOf(order: BuyerHeaderOrder, delivery: TrackingDelivery | null): Kind {
   const n = stagesFor(order.deliveryMode, delivery?.mode).length;
   return n === 3 ? 'pickup' : n === 5 ? 'own' : 'partner';
 }
 
-function toPoint(loc: { latitude: string | number; longitude: string | number } | null | undefined): LatLng | null {
+export function toPoint(loc: { latitude: string | number; longitude: string | number } | null | undefined): LatLng | null {
   if (!loc) return null;
   const latitude = Number(loc.latitude);
   const longitude = Number(loc.longitude);
@@ -263,6 +263,6 @@ export function buyerTrackingHeader(i: {
 }
 
 const PARTNER_PHASE = new Set(['DRIVER_ASSIGNED', 'DRIVER_AT_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION']);
-function isPartnerPhase(status: string | null): boolean {
+export function isPartnerPhase(status: string | null): boolean {
   return status != null && PARTNER_PHASE.has(status);
 }

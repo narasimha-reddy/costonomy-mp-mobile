@@ -182,17 +182,88 @@ describe('TrackingScreenBody', () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
     setup('supplier');
     expect(await screen.findByText('Ready to send')).toBeTruthy();
+    expect(screen.getByText('Request a delivery partner to dispatch it')).toBeTruthy();
     expect(screen.getByText('Back to order')).toBeTruthy();
   });
 
-  it('supplier audience still renders develop\'s layout', async () => {
+  it('supplier IN_TRANSIT renders green header, ETA pill, map, partner card with plate', async () => {
     setup('supplier');
-    // Develop's supplier screen: the hero's "Step n of 5" line, and no green buyer header.
-    expect(await screen.findByText('Back to order')).toBeTruthy();
-    expect(screen.getByText('Step 4 of 5 · On the way')).toBeTruthy();
-    expect(screen.getByText('Order ORD-5')).toBeTruthy();
+    expect(await screen.findByText('Order collected, on the way to Cafe')).toBeTruthy();
+    expect(screen.getByTestId('tracking-header')).toBeTruthy();
+    expect(screen.getByTestId('eta-pill')).toBeTruthy();
+    expect(screen.getByTestId('tracking-map')).toBeTruthy();
+    // The supplier variant of the partner card keeps its heading and the plate, and the call button.
+    expect(screen.getByText('Your delivery partner')).toBeTruthy();
+    expect(screen.getByText('Bike')).toBeTruthy();
+    expect(screen.getByLabelText('Call Ravi Kumar')).toBeTruthy();
+    // The restaurant is the other party, and the order row leads to the supplier's own order screen.
+    expect(screen.getAllByText('Cafe').length).toBeGreaterThan(0);
+    fireEvent.press(screen.getByLabelText('Order ORD-5, 1 item · ₹1,180.00'));
+    expect(mockPush).toHaveBeenCalledWith('/supplier/orders/5');
+    expect(screen.getByText('Back to order')).toBeTruthy();
+    expect(screen.getAllByLabelText('Message this restaurant').length).toBeGreaterThan(0);
+  });
+
+  it('supplier PROVIDER_SELECTED renders the searching state and keeps the sandbox control card', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
+    (fetchDelivery as jest.Mock).mockResolvedValue({
+      ...delivery, status: 'PROVIDER_SELECTED', driverName: null, trackable: false, sandboxControls: true,
+      searchStartedAt: new Date(Date.now() - 12 * 60000).toISOString(),
+      retryUntil: new Date(Date.now() + 18 * 60000).toISOString(),
+    });
+    setup('supplier');
+    expect(await screen.findByText('Waiting for a delivery partner for Cafe')).toBeTruthy();
+    expect(screen.getByTestId('tracking-header')).toBeTruthy();
+    expect(screen.getByText('Searching for a partner')).toBeTruthy();
+    expect(screen.getByText('Test mode')).toBeTruthy();
+    expect(screen.getByText('Try again now')).toBeTruthy();
+  });
+
+  it('supplier sees reassign/retry when no partner', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
+    (fetchDelivery as jest.Mock).mockResolvedValue({
+      ...delivery, status: 'QUOTE_FAILED', driverName: null, trackable: false, canSwitchToOwn: true,
+    });
+    setup('supplier');
+    expect((await screen.findAllByText('No partner found yet')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('tracking-header')).toBeTruthy();
+    expect(screen.getByText('Try again')).toBeTruthy();
+    expect(screen.getByText('I will deliver it myself')).toBeTruthy();
+  });
+
+  it('supplier delivered renders the receipt', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'DELIVERED' });
+    (fetchDelivery as jest.Mock).mockResolvedValue({ ...delivery, status: 'DELIVERED', deliveredAt: '2026-01-01T10:10:00' });
+    setup('supplier');
+    expect(await screen.findByText('Order delivered at Cafe')).toBeTruthy();
+    expect(screen.getByText(/^Delivered at /)).toBeTruthy();
+    expect(screen.getByText('Delivered by Ravi Kumar')).toBeTruthy();
+    expect(screen.getByText('Bike')).toBeTruthy();
+    expect(screen.getByText('Waiting for the restaurant to check it in')).toBeTruthy();
     expect(screen.queryByTestId('tracking-header')).toBeNull();
-    expect(screen.queryByTestId('eta-pill')).toBeNull();
+    expect(screen.queryByLabelText('Call Ravi Kumar')).toBeNull();
+    expect(screen.queryByText('Report an issue')).toBeNull();
+    expect(screen.queryByText('Check in delivery')).toBeNull();
+    expect(screen.queryByText('Rate this order')).toBeNull();
+  });
+
+  it('supplier header never names a provider', async () => {
+    (fetchDelivery as jest.Mock).mockResolvedValue({ ...delivery, status: 'DELIVERY_FAILED', failureReason: 'Rider app timed out' });
+    setup('supplier');
+    expect(await screen.findByText('Delivery failed')).toBeTruthy();
+    expect(screen.queryByText(/pidge|porter|borzo|shadowfax|mock/i)).toBeNull();
+  });
+
+  it('buyer layout unchanged', async () => {
+    setup('buyer');
+    expect(await screen.findByText('Order is on the way')).toBeTruthy();
+    expect(screen.getByTestId('tracking-header')).toBeTruthy();
+    expect(screen.getByText('Delivery partner')).toBeTruthy();
+    expect(screen.queryByText('Your delivery partner')).toBeNull();
+    expect(screen.queryByText('Bike')).toBeNull();
+    expect(screen.queryByText('Back to order')).toBeNull();
+    fireEvent.press(screen.getByLabelText('Order ORD-5, 1 item · ₹1,180.00'));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/orders/5');
   });
 
   it('polling pauses when not focused', async () => {

@@ -21,6 +21,7 @@ import { clockTime } from '@/lib/delivery/deliveryPartner';
 import { haversineM, toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
 import { stagesFor, type OrderTrackingView } from '@/lib/delivery/orderTracking';
 import { buyerTrackingHeader, placeholderCopy } from '@/lib/delivery/trackingHeader';
+import { supplierTrackingHeader } from '@/lib/delivery/supplierTrackingHeader';
 import type { Delivery } from '@/models/delivery';
 import type { SupplierOrder } from '@/models/procurement';
 import { fetchRating } from '@/services/trust';
@@ -44,14 +45,17 @@ function distanceText(metres: number): string {
 }
 
 /**
- * The buyer's live tracking screen (restyle spec 4.A): the green header, the map, then the cards.
+ * The live tracking screen (restyle spec 4.A): the green header, the map, then the cards. The restaurant and the
+ * supplier see the same layout; `audience` picks the header logic (`buyerTrackingHeader` or `supplierTrackingHeader`),
+ * the copy, the chat side and where the order row leads. The supplier's own controls (sandbox card, partner search and
+ * retry panel) arrive as `extras` and sit under the partner area.
  *
- * <p>Every decision about what to show comes from `buyerTrackingHeader`; this component only lays it out and wires
+ * <p>Every decision about what to show comes from the header function; this component only lays it out and wires
  * the taps. Delivered and completed draw the receipt (restyle spec 4.B) instead of the map. Where the placeholder would read as a promise that cannot be kept (a pickup
  * or the supplier's own delivery has no partner to assign) the "we'll assign a partner soon" pill is left out.
  */
 export function BuyerTrackingLayout({
-  order, delivery, view, nowMs, outlet, onRefresh, refreshing, onBack, help,
+  order, delivery, view, nowMs, outlet, onRefresh, refreshing, onBack, help, audience = 'buyer', extras,
 }: {
   order: SupplierOrder;
   delivery: Delivery | null;
@@ -62,6 +66,9 @@ export function BuyerTrackingLayout({
   refreshing: boolean;
   onBack: () => void;
   help: React.ReactNode;
+  audience?: 'buyer' | 'supplier';
+  /** Supplier-only cards and controls, drawn under the partner area. */
+  extras?: React.ReactNode;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -69,14 +76,20 @@ export function BuyerTrackingLayout({
 
   // The drop: the server's own coordinates when it sends them (API B1), else the outlet the app already knows.
   const drop: LatLng | null = point(delivery?.dropLocation) ?? outlet;
-  const header = buyerTrackingHeader({ view, order, delivery, drop, nowMs });
+  const buyer = audience === 'buyer';
+  const header = buyer
+    ? buyerTrackingHeader({ view, order, delivery, drop, nowMs })
+    : supplierTrackingHeader({ view, order, delivery, drop, nowMs });
+  // The line under the back button: the supplier for the restaurant, the restaurant for the supplier.
   const supplier = header.supplierLine;
+  const chatSide = buyer ? 'RESTAURANT' as const : 'SUPPLIER' as const;
+  const orderRoute = buyer ? `/restaurant/orders/${order.id}` : `/supplier/orders/${order.id}`;
   // Only a COMPLETED order can be rated (the API refuses otherwise). A GET: the row shows on a 404, "not rated yet".
   const receipt = header.layout === 'receipt';
   const rating = useQuery({
     queryKey: ['supplier-order', order.id, 'rating'],
     queryFn: () => fetchRating(accessToken as string, order.id),
-    enabled: receipt && order.status === 'COMPLETED' && accessToken != null,
+    enabled: buyer && receipt && order.status === 'COMPLETED' && accessToken != null,
     retry: (count, error) => !isApiError(error) && count < 2,
   });
   const unrated = rating.isError && isApiError(rating.error) && rating.error.status === 404;
@@ -95,8 +108,9 @@ export function BuyerTrackingLayout({
         <ScrollView contentContainerStyle={styles.grow} {...scrollProps}>
           <OrderPlacedHero
             placedAt={order.createdAt ?? null}
-            supplier={supplier}
-            outletName={order.outletName ?? 'Your outlet'}
+            supplier={buyer ? supplier : order.supplierName ?? order.storeName ?? supplier}
+            caption={buyer ? undefined : 'Ready for you to start preparing'}
+            outletName={order.outletName ?? (buyer ? 'Your outlet' : 'The restaurant')}
             address={delivery?.dropAddress ?? ([order.outletName, order.outletLocality].filter(Boolean).join(', ') || null)}
             segments={view.segments}
             segmentIndex={view.segmentIndex}
@@ -107,12 +121,16 @@ export function BuyerTrackingLayout({
   }
 
   if (receipt) {
-    const outletLabel = order.outletName ?? 'your outlet';
+    const outletLabel = order.outletName ?? (buyer ? 'your outlet' : 'the restaurant');
     const address = delivery?.dropAddress ?? ([order.outletName, order.outletLocality].filter(Boolean).join(', ') || null);
     const at = clockTime(delivery?.deliveredAt);
     const orderSummary = `${order.items.length} ${order.items.length === 1 ? 'item' : 'items'} · ${formatMoney(order.totalAmount)}`;
     const canChatHere = order.outletId != null && order.supplierStoreId != null;
-    const rateRow: DetailRow[] = unrated ? [{
+    const rateRow: DetailRow[] = !buyer ? (order.status === 'DELIVERED' ? [{
+      key: 'checkin',
+      icon: 'time-outline',
+      title: 'Waiting for the restaurant to check it in',
+    }] : []) : unrated ? [{
       key: 'rate',
       icon: 'star-outline',
       title: 'Rate this order',
@@ -125,7 +143,9 @@ export function BuyerTrackingLayout({
       title: 'Check in the delivery to rate it',
     }] : [];
     const supplierRows = (chatRow: DetailRow | null): DetailRow[] => [
-      ...(chatRow ? [chatRow] : [{ key: 'supplier', icon: 'storefront-outline' as const, title: order.storeName ?? supplier }]),
+      ...(chatRow ? [chatRow] : [{
+        key: 'supplier', icon: 'storefront-outline' as const, title: buyer ? order.storeName ?? supplier : supplier,
+      }]),
       ...rateRow,
     ];
     return (
@@ -141,7 +161,7 @@ export function BuyerTrackingLayout({
               <MandiChatAction
                 outletId={order.outletId}
                 supplierStoreId={order.supplierStoreId}
-                side="RESTAURANT"
+                side={chatSide}
                 suggest={{ type: 'ORDER', id: order.id }}
               >
                 {({ onPress, label }) => (
@@ -149,7 +169,7 @@ export function BuyerTrackingLayout({
                     rows={supplierRows({
                       key: 'supplier',
                       icon: 'chatbubble-outline',
-                      title: order.storeName ?? supplier,
+                      title: buyer ? order.storeName ?? supplier : supplier,
                       subtitle: 'Message about this order',
                       onPress,
                       accessibilityLabel: label,
@@ -161,7 +181,12 @@ export function BuyerTrackingLayout({
               <DetailRowCard rows={supplierRows(null)} />
             )}
             {delivery?.driverName != null && (
-              <DeliveryPartnerCard name={delivery.driverName} showCall={false} delivered />
+              <DeliveryPartnerCard
+                name={delivery.driverName}
+                vehicle={buyer ? undefined : delivery.driverVehicle}
+                showCall={false}
+                delivered
+              />
             )}
             <DetailRowCard
               rows={[
@@ -172,12 +197,12 @@ export function BuyerTrackingLayout({
                   title: `Order ${order.orderNumber}`,
                   subtitle: orderSummary,
                   right: <MandiText variant="caption" color={Colors.textSecondary}>›</MandiText>,
-                  onPress: () => router.push(`/restaurant/orders/${order.id}`),
+                  onPress: () => router.push(orderRoute as never),
                   accessibilityLabel: `Order ${order.orderNumber}, ${orderSummary}`,
                 },
               ]}
             />
-            {view.complete && <ReportIssueCard onReport={() => router.push(`/restaurant/dispute/${order.id}`)} />}
+            {buyer && view.complete && <ReportIssueCard onReport={() => router.push(`/restaurant/dispute/${order.id}`)} />}
           </View>
         </ScrollView>
       </View>
@@ -193,7 +218,7 @@ export function BuyerTrackingLayout({
   const pickup = beforePickup ? point(delivery?.pickupLocation) : null;
   const driver = header.map === 'pending' ? null : delivery?.location ?? null;
   const away = driver != null && drop != null ? haversineM(toLatLng(driver), drop) : null;
-  const outletName = order.outletName ?? 'your outlet';
+  const outletName = order.outletName ?? (buyer ? 'your outlet' : 'the restaurant');
   const mapLabel = away != null
     ? `Map. Delivery partner ${distanceText(away)} away from ${outletName}`
     : 'Map of the route';
@@ -207,7 +232,12 @@ export function BuyerTrackingLayout({
   const timeline = delivery?.timeline ?? [];
 
   const deliveryRows = (chatRow: DetailRow | null): DetailRow[] => [
-    { key: 'drop', icon: 'location-outline', title: `Delivery at ${outletName}`, subtitle: deliveringTo || null },
+    {
+      key: 'drop',
+      icon: 'location-outline',
+      title: buyer ? `Delivery at ${outletName}` : `Deliver to ${outletName}`,
+      subtitle: deliveringTo || null,
+    },
     ...(chatRow ? [chatRow] : []),
   ];
   const canChat = order.outletId != null && order.supplierStoreId != null;
@@ -245,6 +275,7 @@ export function BuyerTrackingLayout({
             <DeliveryPartnerCard
               name={partnerName}
               phone={delivery?.driverPhone}
+              vehicle={buyer ? undefined : delivery?.driverVehicle}
               showCall={view.showCall}
             />
           )}
@@ -268,11 +299,12 @@ export function BuyerTrackingLayout({
             </View>
           )}
           {view.banner != null && <TrackingBanner banner={view.banner} />}
+          {extras}
           {canChat ? (
             <MandiChatAction
               outletId={order.outletId}
               supplierStoreId={order.supplierStoreId}
-              side="RESTAURANT"
+              side={chatSide}
               suggest={{ type: 'ORDER', id: order.id }}
             >
               {({ onPress, label }) => (
@@ -298,7 +330,7 @@ export function BuyerTrackingLayout({
               title: `Order ${order.orderNumber}`,
               subtitle: summary,
               right: <MandiText variant="caption" color={Colors.textSecondary}>›</MandiText>,
-              onPress: () => router.push(`/restaurant/orders/${order.id}`),
+              onPress: () => router.push(orderRoute as never),
               accessibilityLabel: `Order ${order.orderNumber}, ${summary}`,
             }]}
           />

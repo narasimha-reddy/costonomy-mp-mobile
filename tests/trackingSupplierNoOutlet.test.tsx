@@ -42,5 +42,7 @@ it('renders the supplier tracking screen with no OutletProvider above it', async
       </QueryClientProvider>
     </SafeAreaProvider>,
   );
-  expect(await screen.findByText('New order to prepare')).toBeTruthy();
+  // The newly confirmed order draws the placed hero (it used to be the old hero's "New order to prepare").
+  expect(await screen.findByText('Order placed')).toBeTruthy();
+  expect(screen.getByText('Ready for you to start preparing')).toBeTruthy();
 });

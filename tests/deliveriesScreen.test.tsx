@@ -141,3 +141,41 @@ describe('DeliveriesScreen cards', () => {
     expect(screen.getByText('Slot to be confirmed')).toBeTruthy();
   });
 });
+
+describe('DeliveriesScreen duplicates removed', () => {
+  it('has no second filter strip: the pills carry the counts', async () => {
+    withItems([item()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Arriving in 12 mins')).toBeTruthy());
+    for (const label of ['At Door', 'Approaching', 'Delayed', 'Check-in']) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+  });
+
+  it('a delivered, unchecked order shows one status chip, its delivered time, and no slot placeholder', async () => {
+    withItems([item({
+      status: 'DELIVERED', arrivalStage: 'DELIVERED_UNCHECKED', etaMinutes: null, deliveredAt: '2026-10-07T13:21:00Z',
+      recommendedAction: 'CHECK_IN', actionReason: 'Check the delivery in',
+    })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Order ORD-42')).toBeTruthy());
+    expect(screen.queryByText('Slot to be confirmed')).toBeNull();
+    expect(screen.queryByText('Delivered (Unchecked)')).toBeNull();
+    expect(screen.getAllByText('Delivered')).toHaveLength(1);
+    expect(screen.getByText(/^Delivered at /)).toBeTruthy();
+  });
+
+  it('the arrival rank is labelled, and hidden when it is the only delivery', async () => {
+    withItems([item({ arrivalRank: 3 }), item({ deliveryId: 2, supplierOrderId: 43, orderNumber: 'ORD-43', arrivalRank: 1 })]);
+    renderScreen();
+    expect(await screen.findByText('Arrival #3')).toBeTruthy();
+    expect(screen.queryByText('#3')).toBeNull();
+  });
+
+  it('a lone delivery has no arrival badge', async () => {
+    withItems([item({ arrivalRank: 1 })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Order ORD-42')).toBeTruthy());
+    expect(screen.queryByText(/Arrival #/)).toBeNull();
+  });
+});

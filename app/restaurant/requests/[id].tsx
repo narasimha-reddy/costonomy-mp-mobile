@@ -539,12 +539,6 @@ export default function RequestDetailScreen() {
             >
               <View style={styles.flex}>
                 <MandiText variant="bodyEmphasis">{request.storeName}</MandiText>
-                {request.supplierName != null
-                  && request.supplierName !== request.storeName && (
-                  <MandiText variant="caption" color={Colors.textSecondary}>
-                    {request.supplierName}
-                  </MandiText>
-                )}
               </View>
               <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
             </Pressable>
@@ -565,8 +559,8 @@ export default function RequestDetailScreen() {
                 {/* One idea: how long they have to reply, and how much of that is left. */}
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {request.responseWindowSeconds != null
-                    ? `${request.storeName} replies within ${Math.max(1, Math.round(request.responseWindowSeconds / 60))} min ·`
-                    : `${request.storeName} will reply soon ·`}
+                    ? `Replies within ${Math.max(1, Math.round(request.responseWindowSeconds / 60))} min ·`
+                    : 'Will reply soon ·'}
                 </MandiText>
                 <MandiCountdown
                   size="sm"

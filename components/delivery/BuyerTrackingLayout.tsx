@@ -50,6 +50,15 @@ function placedPaymentText(order: SupplierOrder): string | null {
   return line.summary === 'Total' ? null : line.summary;
 }
 
+/** The three short lines under the placed hero; the partner line only where a Costonomy partner delivers. */
+function nextSteps(order: SupplierOrder): string[] {
+  return [
+    'The supplier packs your order',
+    ...(order.deliveryMode === 'COSTONOMY_DELIVERY' ? ['A delivery partner is assigned'] : []),
+    'You get a notification at each step',
+  ];
+}
+
 const SEARCH_BAR_HEIGHT = 5;
 /** How much of the indeterminate bar is drawn; static, so reduced motion needs nothing special. */
 const SEARCH_BAR_FILL = '35%';
@@ -137,6 +146,14 @@ export function BuyerTrackingLayout({
             segments={view.segments}
             segmentIndex={view.segmentIndex}
           />
+          {buyer && order.status === 'CONFIRMED' && (
+            <View style={styles.next} accessible accessibilityLabel={nextSteps(order).join('. ')}>
+              <MandiText variant="captionEmphasis" color={Colors.textSecondary}>What happens next</MandiText>
+              {nextSteps(order).map((line) => (
+                <MandiText key={line} variant="caption" color={Colors.textSecondary}>{line}</MandiText>
+              ))}
+            </View>
+          )}
         </ScrollView>
       </View>
     );
@@ -374,6 +391,7 @@ export function BuyerTrackingLayout({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
   grow: { flexGrow: 1 },
+  next: { gap: 2, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
   scroll: { flexGrow: 1, paddingBottom: Spacing.xl },
   cards: { gap: Spacing.md, paddingHorizontal: Spacing.screenHorizontal, paddingTop: Spacing.md },
   progressTrack: {

@@ -68,6 +68,18 @@ beforeEach(() => {
 });
 
 describe('the cart', () => {
+  it('names the supplier once in the section header, not again in the subtitle', () => {
+    const was = { ...mockDraft };
+    Object.assign(mockDraft, { storeName: 'Sri Balaji Traders — Domlur', supplierName: 'Sri Balaji Traders' });
+    try {
+      setup();
+      expect(screen.getAllByText(/Sri Balaji Traders/)).toHaveLength(1);
+      expect(screen.getByText('1 item')).toBeTruthy();
+    } finally {
+      Object.assign(mockDraft, was);
+    }
+  });
+
   it('has one Send Request button (the bar) and no permanently disabled Create Order', () => {
     setup();
     expect(screen.getAllByText('Send Request')).toHaveLength(1);

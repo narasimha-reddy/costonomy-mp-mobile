@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder } from '@/services/procurement';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
-import { accountsFor, billedQuantityOf, quantityString, refundOutcome, weighedCaption, type RefundOutcome } from '@/lib/orders/receiving';
+import { accountsFor, billedQuantityOf, quantityString, rebalanceReceived, refundOutcome, unaccountedHint, weighedCaption, type RefundOutcome } from '@/lib/orders/receiving';
 import { receiveOrder, type ReceiveItemInput } from '@/services/trust';
 import {
   MandiBottomSheet,
@@ -128,6 +128,14 @@ export default function ReceivingScreen() {
     setLines((current) => ({ ...current, [itemId]: { ...stateOf(itemId), ...next } }));
   }
 
+  /** Damaged or Missing entered: Received follows so the three still add up (not on a weighed line). */
+  function setProblem(itemId: number, next: Partial<LineState>) {
+    const item = items.find((i) => i.id === itemId);
+    const merged = { ...stateOf(itemId), ...next };
+    const received = item ? rebalanceReceived(item, agreedOf(itemId), merged) : merged.received;
+    setLine(itemId, { ...next, received });
+  }
+
   const problems = useMemo(
     () =>
       items
@@ -142,6 +150,7 @@ export default function ReceivingScreen() {
             total,
             agreed,
             unit: item.unit,
+            hint: unaccountedHint(state, agreed, item.unit),
           };
         })
         .filter((p): p is NonNullable<typeof p> => p != null),
@@ -211,7 +220,7 @@ export default function ReceivingScreen() {
                 <Ionicons name="alert-circle-outline" size={16} color={Colors.danger} />
                 <MandiText variant="caption" color={Colors.danger} style={styles.flex}>
                   {problems[0]?.name}: {formatQuantity(String(problems[0]?.total))} of{' '}
-                  {formatQuantity(String(problems[0]?.agreed))} {problems[0]?.unit} accounted for.
+                  {formatQuantity(String(problems[0]?.agreed))} {problems[0]?.unit} accounted for. {problems[0]?.hint}
                 </MandiText>
               </View>
             )}
@@ -308,14 +317,14 @@ export default function ReceivingScreen() {
                   value={state.damaged}
                   max={agreed}
                   unit={item.unit}
-                  onChange={(damaged) => setLine(item.id, { damaged })}
+                  onChange={(damaged) => setProblem(item.id, { damaged })}
                 />
                 <Line
                   label="Missing"
                   value={state.missing}
                   max={agreed}
                   unit={item.unit}
-                  onChange={(missing) => setLine(item.id, { missing })}
+                  onChange={(missing) => setProblem(item.id, { missing })}
                 />
 
                 {hasRejection && (
@@ -405,12 +414,23 @@ export default function ReceivingScreen() {
               </View>
 
               <View style={{ gap: Spacing.sm, marginTop: Spacing.lg, width: '100%' }}>
+                {completionModal?.toWallet && (
+                  <MandiButton
+                    label="View Wallet Balance"
+                    size="md"
+                    onPress={() => {
+                      setCompletionModal(null);
+                      router.replace('/restaurant/wallet');
+                    }}
+                  />
+                )}
                 <MandiButton
-                  label="View Wallet Balance"
+                  label="Rate this order"
                   size="md"
+                  variant={completionModal?.toWallet ? 'secondary' : undefined}
                   onPress={() => {
                     setCompletionModal(null);
-                    router.replace('/restaurant/wallet');
+                    router.replace(`/restaurant/rating/${orderId}`);
                   }}
                 />
                 {checkedIn?.hasDiscrepancy && (
@@ -426,20 +446,11 @@ export default function ReceivingScreen() {
                 )}
                 <MandiButton
                   label="Done"
-                  variant="secondary"
+                  variant="tertiary"
                   size="md"
                   onPress={() => {
                     setCompletionModal(null);
                     router.replace(`/restaurant/orders/${orderId}`);
-                  }}
-                />
-                <MandiButton
-                  label="Rate Delivery & Supplier"
-                  variant="neutral"
-                  size="md"
-                  onPress={() => {
-                    setCompletionModal(null);
-                    router.replace(`/restaurant/rating/${orderId}`);
                   }}
                 />
               </View>

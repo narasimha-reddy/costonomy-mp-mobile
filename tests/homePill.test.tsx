@@ -33,7 +33,10 @@ jest.mock('@/services/catalog', () => ({ fetchCategories: jest.fn().mockResolved
 jest.mock('@/services/procurement', () => ({ fetchOutletOrders: jest.fn() }));
 jest.mock('@/services/intent', () => ({ fetchIntents: jest.fn().mockResolvedValue([]) }));
 jest.mock('@/services/quickscan', () => ({ fetchQuickScanConfig: jest.fn().mockResolvedValue(null) }));
-jest.mock('@/services/delivery', () => ({ fetchDelivery: jest.fn() }));
+jest.mock('@/services/delivery', () => ({
+  fetchDelivery: jest.fn(),
+  fetchOutletDeliveryRadar: jest.fn().mockResolvedValue({ outletId: 7, summary: { totalActive: 0 }, items: [] }),
+}));
 
 const metrics = { frame: { x: 0, y: 0, width: 360, height: 805 }, insets: { top: 24, left: 0, right: 0, bottom: 0 } };
 const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
@@ -279,7 +282,9 @@ describe('home active-order pill', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 60_000 } } });
     const home = mount(<RestaurantHome />, client);
     await screen.findByText('14 mins');
-    const keys = () => client.getQueryCache().getAll().map((q) => JSON.stringify(q.queryKey));
+    // The Orders tab's Deliveries button adds its own radar read; the pill's reads must still be shared.
+    const keys = () => client.getQueryCache().getAll().map((q) => JSON.stringify(q.queryKey))
+      .filter((k) => !k.includes('outlet-delivery-radar'));
     const afterHome = keys();
     expect(afterHome.filter((k) => k === JSON.stringify(['outlet', 7, 'orders']))).toHaveLength(1);
     expect(fetchOutletOrders).toHaveBeenCalledTimes(1);

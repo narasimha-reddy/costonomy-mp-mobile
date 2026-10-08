@@ -30,6 +30,7 @@ import type { Intent } from '@/models/intent';
 import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
 import { searchHints } from '@/lib/search/hints';
+import { paymentLine } from '@/lib/payments/paymentLine';
 import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
 import { ActiveOrderPill } from '@/components/delivery/ActiveOrderPill';
 import { inFlightOrders, useLatestInFlight } from '@/hooks/useLatestInFlight';
@@ -343,7 +344,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
               orderNumber={order.orderNumber}
               paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
-              amount={order.totalAmount}
+              amount={paymentLine(order).amount}
               status={buyerOrderStatus(order.status, order.deliveryMode)}
             />
           </MandiCard>

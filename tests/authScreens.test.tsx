@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import PhoneScreen from '@/app/auth/phone';
 import OtpScreen from '@/app/auth/otp';
 
@@ -18,6 +18,19 @@ jest.mock('expo-router', () => ({
   Redirect: () => null,
 }));
 const mockSignIn = jest.fn();
+// The Verify handler as the screen hands it over, even while the button is inert and drops it: a tap that was already
+// queued when the automatic send began still reaches that handler.
+let mockVerifyHandler: (() => void) | undefined;
+jest.mock('@/components/common/MandiButton', () => {
+  const actual = jest.requireActual('@/components/common/MandiButton');
+  return {
+    ...actual,
+    MandiButton: (props: { label: string; onPress: () => void }) => {
+      if (props.label === 'Verify') mockVerifyHandler = props.onPress;
+      return actual.MandiButton(props);
+    },
+  };
+});
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ signIn: mockSignIn }) }));
 jest.mock('@/services/auth', () => ({ requestOtp: jest.fn() }));
 
@@ -60,5 +73,22 @@ describe('code screen', () => {
     fireEvent.press(screen.getByText('Verify'));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
     expect(mockSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the code once even when a tap on Verify races the automatic send', async () => {
+    mockSignIn.mockReturnValue(new Promise(() => {}));   // never resolves: the first send is still in flight
+    render(<OtpScreen />);
+    await act(async () => { fireEvent.changeText(screen.getByLabelText(/Six-digit code/), '123456'); });
+    expect(mockSignIn).toHaveBeenCalledTimes(1);
+    // The button is already showing its spinner, but a tap queued before that render still reaches the handler.
+    await act(async () => { mockVerifyHandler?.(); });
+    expect(mockSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the keyboard for the SMS code', () => {
+    render(<OtpScreen />);
+    const field = screen.getByLabelText(/Six-digit code/);
+    expect(field.props.textContentType).toBe('oneTimeCode');
+    expect(field.props.autoComplete).toBe('sms-otp');
   });
 });

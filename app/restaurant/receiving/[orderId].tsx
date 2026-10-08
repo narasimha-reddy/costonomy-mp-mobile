@@ -40,14 +40,31 @@ const REJECTION_REASONS = [
 ];
 
 /**
- * "Delivery checked in. Received 9.5 of 10. 0.1 missing." Display of the server's own totals: nothing is added up here.
- * A damaged or missing figure is named only when the server reports one.
+ * What was recorded, line by line as the server sent it: "Chicken: 0.1 KG missing". A total across lines would add
+ * kilos to packets and weighed to ordered quantities, so none is shown and nothing is added up here.
  */
-function checkInSummary(r: Receiving): string {
-  const parts = [`Delivery checked in. Received ${formatQuantity(r.totalReceivedQuantity)} of ${formatQuantity(r.totalAcceptedQuantity)}.`];
-  if (Number(r.totalDamagedQuantity) > 0) parts.push(`${formatQuantity(r.totalDamagedQuantity)} damaged.`);
-  if (Number(r.totalMissingQuantity) > 0) parts.push(`${formatQuantity(r.totalMissingQuantity)} missing.`);
-  return parts.join(' ');
+function problemLines(r: Receiving): string[] {
+  const out: string[] = [];
+  for (const i of r.items) {
+    if (Number(i.damagedQuantity) > 0) out.push(`${i.productName}: ${formatQuantity(i.damagedQuantity, i.unit)} damaged`);
+    if (Number(i.missingQuantity) > 0) out.push(`${i.productName}: ${formatQuantity(i.missingQuantity, i.unit)} missing`);
+  }
+  return out;
+}
+
+function CheckInSummary({ receiving, centred }: { receiving: Receiving; centred?: boolean }) {
+  const lines = problemLines(receiving);
+  if (!receiving.hasDiscrepancy && lines.length === 0) {
+    return <MandiText variant="bodyEmphasis" style={centred ? styles.centred : undefined}>All items received as billed</MandiText>;
+  }
+  return (
+    <>
+      <MandiText variant="bodyEmphasis" style={centred ? styles.centred : undefined}>Delivery checked in.</MandiText>
+      {lines.map((line) => (
+        <MandiText key={line} variant="body" color={Colors.textSecondary} style={centred ? styles.centred : undefined}>{line}</MandiText>
+      ))}
+    </>
+  );
 }
 
 interface LineState {
@@ -211,20 +228,29 @@ export default function ReceivingScreen() {
           <View style={styles.successIconCircle}>
             <Ionicons name="checkmark-done" size={32} color={Colors.success} />
           </View>
-          <MandiText variant="bodyEmphasis" style={styles.centred} accessibilityRole="header">
-            {checkInSummary(checkedIn)}
-          </MandiText>
+          <CheckInSummary receiving={checkedIn} centred />
           {checkedIn.hasDiscrepancy && (
+            // Receiving and disputes are independent on the API: checking in opens nothing, so say what to do.
             <MandiText variant="caption" color={Colors.textSecondary} style={styles.centred}>
-              Something was damaged or missing, so a dispute is open for this order.
+              Something was short or damaged. Raise a dispute to get it resolved.
             </MandiText>
           )}
           <View style={styles.confirmActions}>
-            <MandiButton label="Rate this order" size="lg" onPress={() => router.replace(`/restaurant/rating/${orderId}`)} />
-            <MandiButton label="Done" size="lg" variant="secondary" onPress={() => router.replace(`/restaurant/orders/${orderId}`)} />
             {checkedIn.hasDiscrepancy && (
-              <MandiButton label="View dispute" variant="tertiary" onPress={() => router.replace(`/restaurant/dispute/${orderId}`)} />
+              <MandiButton label="Raise a dispute" size="lg" onPress={() => router.replace(`/restaurant/dispute/${orderId}`)} />
             )}
+            <MandiButton
+              label="Rate this order"
+              size="lg"
+              variant={checkedIn.hasDiscrepancy ? 'secondary' : undefined}
+              onPress={() => router.replace(`/restaurant/rating/${orderId}`)}
+            />
+            <MandiButton
+              label="Done"
+              size="lg"
+              variant={checkedIn.hasDiscrepancy ? 'tertiary' : 'secondary'}
+              onPress={() => router.replace(`/restaurant/orders/${orderId}`)}
+            />
           </View>
         </MandiCard>
       ) : (
@@ -349,11 +375,7 @@ export default function ReceivingScreen() {
                 </MandiText>
               )}
 
-              {checkedIn != null && (
-                <MandiText variant="caption" color={Colors.textSecondary} style={styles.centred}>
-                  {checkInSummary(checkedIn)}
-                </MandiText>
-              )}
+              {checkedIn != null && <CheckInSummary receiving={checkedIn} centred />}
 
               <View style={styles.creditNoteCard}>
                 {completionModal?.lines.map((line) => (
@@ -383,6 +405,17 @@ export default function ReceivingScreen() {
                     router.replace('/restaurant/wallet');
                   }}
                 />
+                {checkedIn?.hasDiscrepancy && (
+                  <MandiButton
+                    label="Raise a dispute"
+                    variant="secondary"
+                    size="md"
+                    onPress={() => {
+                      setCompletionModal(null);
+                      router.replace(`/restaurant/dispute/${orderId}`);
+                    }}
+                  />
+                )}
                 <MandiButton
                   label="Done"
                   variant="secondary"

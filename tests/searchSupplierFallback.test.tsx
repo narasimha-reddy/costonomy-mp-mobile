@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SearchScreen from '@/app/restaurant/search';
@@ -58,6 +58,20 @@ describe('search: a supplier name typed on the Products tab', () => {
     expect(screen.getByText('Store 1')).toBeTruthy();
   });
 
+  it('shows the skeleton, not "Nothing for", while the supplier check is still in flight', async () => {
+    let resolve: (v: unknown) => void = () => {};
+    (searchSuppliers as jest.Mock).mockReturnValue(new Promise((r) => { resolve = r; }));
+    setup();
+    fireEvent.changeText(screen.getByLabelText('Search for products'), 'Balaji');
+    await waitFor(() => expect(searchSuppliers).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByText('Nothing for "Balaji"')).toBeNull();
+    resolve({ suppliers: [supplier(1)], beyondRadius: 0, total: 1, nextOffset: null });
+    expect(await screen.findByText('1 supplier matches')).toBeTruthy();
+    expect(screen.getByText('No products for "Balaji". Some suppliers match.')).toBeTruthy();
+    expect(screen.queryByText('Nothing for "Balaji"')).toBeNull();
+  });
+
   it('keeps the plain empty state when no supplier matches either', async () => {
     (searchSuppliers as jest.Mock).mockResolvedValue({ suppliers: [], beyondRadius: 0, total: 0, nextOffset: null });
     setup();
@@ -73,7 +87,7 @@ describe('search field focus', () => {
     const input = screen.getByLabelText('Search for products');
     expect(StyleSheet.flatten(input.props.style)).toMatchObject({ outlineStyle: 'none' });
     fireEvent(input, 'focus');
-    const pill = screen.getByTestId('search-field-container');
+    const pill = screen.getByTestId('search-input-container');
     expect(StyleSheet.flatten(pill.props.style).borderColor).toBeDefined();
   });
 });

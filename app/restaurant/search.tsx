@@ -155,8 +155,10 @@ export default function SearchScreen() {
           emptyTitle={supplierMatches > 0
             ? `${supplierMatches} ${supplierMatches === 1 ? 'supplier matches' : 'suppliers match'}`
             : undefined}
-          emptyHint={supplierMatches > 0 ? `No products for "${query}", but a supplier has that name.` : undefined}
+          emptyHint={supplierMatches > 0 ? `No products for "${query}". Some suppliers match.` : undefined}
           emptyAction={supplierMatches > 0 ? { label: 'View suppliers', onPress: () => setTab('suppliers') } : undefined}
+          // No flash of "Nothing for" before the supplier check lands.
+          checking={suppliers.isFetching}
           render={(list) =>
             list.map((product) => (
               <ProductCard
@@ -214,6 +216,7 @@ function Results<T>({
   emptyTitle,
   emptyHint,
   emptyAction,
+  checking,
   render,
 }: {
   query: { isPending: boolean; error: unknown; data?: T[]; refetch: () => unknown };
@@ -223,6 +226,8 @@ function Results<T>({
   emptyTitle?: string;
   emptyHint?: string;
   emptyAction?: { label: string; onPress: () => void };
+  /** The empty list is not final yet: the supplier check that may replace it is still running. */
+  checking?: boolean;
   render: (list: T[]) => React.ReactNode;
 }) {
   if (query.isPending) return <MandiSkeletonList count={5} />;
@@ -230,6 +235,7 @@ function Results<T>({
     return <MandiErrorState message="Search didn't work." onRetry={() => query.refetch()} />;
   }
   const list = query.data ?? [];
+  if (list.length === 0 && checking) return <MandiSkeletonList count={5} />;
   if (list.length === 0) {
     return (
       <MandiEmptyState
@@ -439,6 +445,7 @@ function Header({
     <View style={styles.header}>
       <View style={styles.searchRow}>
         <MandiSearchBar
+          testID="search-input"
           value={term}
           onChangeText={onTerm}
           placeholder="Search for paneer, rice, oil and more"

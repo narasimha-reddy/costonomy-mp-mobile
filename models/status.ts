@@ -96,6 +96,9 @@ export function buyerOrderStatus(
   if (status === 'READY_FOR_PICKUP' && mode === 'COSTONOMY_DELIVERY') {
     return { label: 'Arranging delivery', tone: 'info' };
   }
+  if (status === 'READY_FOR_PICKUP' && mode === 'SUPPLIER_DELIVERY') {
+    return { label: 'Packed, supplier delivering', tone: 'info' };
+  }
   return resolveStatus(SupplierOrderStatus, status);
 }
 

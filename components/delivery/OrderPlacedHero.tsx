@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiButton, MandiText } from '@/components/common';
 import { clockTime } from '@/lib/delivery/deliveryPartner';
@@ -80,15 +80,7 @@ export function OrderPlacedHero({
           </View>
         )}
         {onViewOrder != null && (
-          <Pressable
-            onPress={onViewOrder}
-            accessibilityRole="link"
-            accessibilityLabel="View order"
-            style={styles.link}
-            hitSlop={8}
-          >
-            <MandiText variant="bodyEmphasis" color={Colors.primary}>View order</MandiText>
-          </Pressable>
+          <MandiButton label="View order" variant="secondary" onPress={onViewOrder} style={styles.home} />
         )}
         {onHome != null && (
           <MandiButton label="Back to Home" variant="secondary" onPress={onHome} style={styles.home} />
@@ -125,7 +117,6 @@ const styles = StyleSheet.create({
   outletRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   outlet: { flexShrink: 1 },
   amount: { alignItems: 'center', marginTop: Spacing.lg, gap: 2 },
-  link: { minHeight: 48, justifyContent: 'center', marginTop: Spacing.sm },
   home: { alignSelf: 'stretch', marginTop: Spacing.sm },
   address: { marginTop: Spacing.xs + 2, textAlign: 'center' },
 });

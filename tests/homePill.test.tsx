@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet, View } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -155,19 +156,74 @@ describe('home active-order pill', () => {
     expect(screen.queryByText(/accepted your request/)).toBeNull();
   });
 
-  it('an order that has sat for over 24 h is ignored by the pill, so the request shows', async () => {
+  it('an order 30 h old with no future schedule is skipped for the pill (the request shows) but is still listed', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([order(97, 'PREPARING', ago(30), 'SUPPLIER_DELIVERY')]);
     (fetchIntents as jest.Mock).mockResolvedValue([intent(12, 'RESPONSES_RECEIVED', '2026-01-01T10:00:00Z')]);
     mount(<RestaurantHome />);
     expect(await screen.findByText('Fresh Farms accepted your request')).toBeTruthy();
+    expect(screen.getByText(/Active Orders.*\(1\)/)).toBeTruthy();
   });
 
-  it('a stuck order alone gives no pill', async () => {
+  it('a stuck order alone gives no pill, but is still listed and counted', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([order(97, 'PREPARING', ago(30), 'SUPPLIER_DELIVERY')]);
     mount(<RestaurantHome />);
-    await waitFor(() => expect(fetchOutletOrders).toHaveBeenCalled());
+    await screen.findByText(/Active Orders.*\(1\)/);
     await new Promise((r) => setTimeout(r, 50));
     expect(pill()).toBeNull();
+    expect(screen.getAllByText('Fresh Farms').length).toBeGreaterThan(0);
+  });
+
+  it('a 30 h old order scheduled for a future day still appears in Active Orders, in the count, and can be the pill', async () => {
+    const inTwoDays = new Date(Date.now() + 48 * 3_600_000).toISOString().slice(0, 10);
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([
+      { ...order(41, 'CONFIRMED', ago(30), 'SUPPLIER_DELIVERY'), scheduledDeliveryDate: inTwoDays },
+    ]);
+    mount(<RestaurantHome />);
+    expect(await screen.findByText(/Active Orders.*\(1\)/)).toBeTruthy();
+    expect(screen.getAllByText('Fresh Farms').length).toBeGreaterThan(0);
+    await waitFor(() => expect(pill()).toBeTruthy());
+  });
+
+  it('the Active Orders count and list agree with the Orders tab: nothing in flight is hidden by age', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([
+      order(1, 'OUT_FOR_DELIVERY', ago(1), 'SUPPLIER_DELIVERY'),
+      order(97, 'PREPARING', ago(40), 'SUPPLIER_DELIVERY'),
+      order(98, 'CONFIRMED', ago(50), 'SUPPLIER_DELIVERY'),
+    ]);
+    mount(<RestaurantHome />);
+    await screen.findByText('1 on the way');
+    expect(screen.getByText(/Active Orders.*\(3\)/)).toBeTruthy();
+  });
+
+  it('only a collect-yourself order is "ready to collect"; a ready delivery order is not', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(4, 'READY_FOR_PICKUP', ago(2), 'SUPPLIER_DELIVERY')]);
+    mount(<RestaurantHome />);
+    await screen.findByText(/Active Orders.*\(1\)/);
+    expect(screen.queryByText('1 ready to collect')).toBeNull();
+    expect(screen.getByText('Being prepared')).toBeTruthy();
+  });
+
+  it('a ready pickup order is counted as ready to collect', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(4, 'READY_FOR_PICKUP', ago(2), 'PICKUP')]);
+    mount(<RestaurantHome />);
+    expect(await screen.findByText('1 ready to collect')).toBeTruthy();
+  });
+
+  it('an answered request does not beat an order that is arriving (ETA 4 min)', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(1, 'OUT_FOR_DELIVERY', ago(1))]);
+    (fetchDelivery as jest.Mock).mockResolvedValue({ ...transit, etaMinutes: 4 });
+    (fetchIntents as jest.Mock).mockResolvedValue([intent(12, 'RESPONSES_RECEIVED', '2026-01-01T10:00:00Z')]);
+    mount(<RestaurantHome />);
+    expect(await screen.findByText('4 mins')).toBeTruthy();
+    expect(screen.queryByText(/accepted your request/)).toBeNull();
+  });
+
+  it('an answered request still beats an order that is on the way but 14 minutes off', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(1, 'OUT_FOR_DELIVERY', ago(1))]);
+    (fetchDelivery as jest.Mock).mockResolvedValue(transit);
+    (fetchIntents as jest.Mock).mockResolvedValue([intent(12, 'RESPONSES_RECEIVED', '2026-01-01T10:00:00Z')]);
+    mount(<RestaurantHome />);
+    expect(await screen.findByText('Fresh Farms accepted your request')).toBeTruthy();
   });
 
   it('active order cards say Arranging delivery for a partner-delivery order that is ready', async () => {
@@ -178,22 +234,27 @@ describe('home active-order pill', () => {
     expect(screen.queryByText('Ready for pickup')).toBeNull();
   });
 
-  it('the Active Orders count leaves out stuck orders so it agrees with the pill', async () => {
-    (fetchOutletOrders as jest.Mock).mockResolvedValue([
-      order(1, 'OUT_FOR_DELIVERY', ago(1), 'SUPPLIER_DELIVERY'),
-      order(97, 'PREPARING', ago(40), 'SUPPLIER_DELIVERY'),
-      order(98, 'CONFIRMED', ago(50), 'SUPPLIER_DELIVERY'),
-    ]);
-    mount(<RestaurantHome />);
-    await screen.findByText('1 on the way');
-    expect(screen.getByText(/Active Orders.*\(1\)/)).toBeTruthy();
-  });
-
   it('says finding a partner with no ETA badge when none is assigned', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([order(4, 'READY_FOR_PICKUP', ago(2))]);
     mount(<RestaurantHome />);
     expect(await screen.findByText('Assigning a delivery partner')).toBeTruthy();
     expect(screen.queryByText('arriving in')).toBeNull();
+  });
+
+  it('clears the floating pill by a fixed amount: the safe-area inset is not counted twice', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([order(3, 'OUT_FOR_DELIVERY', ago(1), 'SUPPLIER_DELIVERY')]);
+    render(
+      <SafeAreaProvider initialMetrics={{ ...metrics, insets: { ...metrics.insets, bottom: 34 } }}>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+          <RestaurantHome />
+        </QueryClientProvider>
+      </SafeAreaProvider>,
+    );
+    await waitFor(() => expect(pill()).toBeTruthy());
+    // MandiScreen adds the inset itself, as a spacer under the scroller.
+    const paddings = screen.UNSAFE_getAllByType(View).map((v) => StyleSheet.flatten(v.props.style)?.paddingBottom);
+    expect(paddings).toContain(96);
+    expect(paddings).not.toContain(96 + 34);
   });
 
   it('orders tab shows the same pill and opens tracking', async () => {

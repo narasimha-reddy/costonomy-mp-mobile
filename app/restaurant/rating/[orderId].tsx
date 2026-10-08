@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder, newIdempotencyKey } from '@/services/procurement';
 import { createRating, fetchRating } from '@/services/trust';
@@ -64,6 +64,7 @@ export default function RatingScreen() {
     retry: (count, error) => !isApiError(error) && count < 2,
   });
 
+  const queryClient = useQueryClient();
   const submit = useMutation({
     mutationFn: () =>
       createRating(accessToken as string, orderId, {
@@ -74,7 +75,9 @@ export default function RatingScreen() {
         delivery: delivery ?? undefined,
         comment: comment || undefined,
       }, idempotencyKey),
-    onSuccess: () => {
+    onSuccess: (created) => {
+      // The order page and the receipt read this key: say it is rated now, so Rate never shows again while they refetch.
+      queryClient.setQueryData(['supplier-order', orderId, 'rating'], created);
       track('rating_submitted', { screen: SCREEN, entityId: orderId }, { overall });
       toast.show('Thanks — that helps other kitchens', 'success');
       // Back to the order that was rated, which now shows its rating, not to a list it may not be on.

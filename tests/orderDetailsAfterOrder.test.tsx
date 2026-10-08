@@ -96,6 +96,26 @@ describe('restaurant order details after the order', () => {
     expect(screen.queryByText(/📄/)).toBeNull();
   });
 
+  it('a plain on-credit order has no Payment method row at all', async () => {
+    notRated();
+    setup(RestaurantOrderScreen);
+    await screen.findByText('Bill Summary');
+    expect(screen.queryByText('Payment method')).toBeNull();
+  });
+
+  it.each([
+    ['FULLY_REFUNDED', 'Refunded'],
+    ['CANCEL_PENDING', 'Cancelled · being settled'],
+    ['RETURN_DELAYED', 'Refund delayed'],
+  ])('a credit order that is %s keeps its Payment method row and the status label', async (paymentStatus, label) => {
+    notRated();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...completed, status: 'CANCELLED', paymentStatus });
+    setup(RestaurantOrderScreen);
+    await screen.findByText('Bill Summary');
+    expect(screen.getByText('Payment method')).toBeTruthy();
+    expect(screen.getAllByText(new RegExp(label)).length).toBeGreaterThan(0);
+  });
+
   it('GST Documents carries a document icon', async () => {
     notRated();
     setup(RestaurantOrderScreen);
@@ -111,6 +131,28 @@ describe('rating screen', () => {
     fireEvent.press((await screen.findAllByLabelText('5 stars'))[0]);
     fireEvent.press(screen.getByText('Submit Rating'));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/restaurant/orders/5'));
+  });
+
+  it('after rating, the order page underneath never offers Rate This Order again, even before a refetch lands', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 60_000 } } });
+    const wrap = (el: React.ReactElement) => (
+      <SafeAreaProvider initialMetrics={metrics}>
+        <QueryClientProvider client={client}><MandiToastProvider>{el}</MandiToastProvider></QueryClientProvider>
+      </SafeAreaProvider>
+    );
+    // The server's read still says "not rated" (a lagging replica): only what the rating screen wrote can say otherwise.
+    notRated();
+    (createRating as jest.Mock).mockResolvedValue({ id: 1, overall: 5 });
+    // The order page stays mounted under the rating screen, as it is in a navigation stack.
+    const orderPage = render(wrap(<RestaurantOrderScreen />));
+    await orderPage.findByText('Rate This Order');
+    render(wrap(<RatingScreen />));
+    fireEvent.press((await screen.findAllByLabelText('5 stars'))[0]);
+    fireEvent.press(screen.getByText('Submit Rating'));
+    await waitFor(() => expect(createRating).toHaveBeenCalled());
+    await waitFor(() => expect(orderPage.queryByText('Rate This Order')).toBeNull());
+    await new Promise((r) => setTimeout(r, 50));   // and it does not come back when the lagging read lands
+    expect(orderPage.queryByText('Rate This Order')).toBeNull();
   });
 
   it('stars say how many and expose the selection', async () => {

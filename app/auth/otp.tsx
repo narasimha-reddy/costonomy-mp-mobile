@@ -125,6 +125,8 @@ export default function OtpScreen() {
             required
             error={error}
             autoFocus
+            textContentType="oneTimeCode"
+            autoComplete="sms-otp"
           />
 
           <MandiButton

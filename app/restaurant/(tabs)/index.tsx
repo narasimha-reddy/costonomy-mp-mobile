@@ -34,8 +34,6 @@ import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
 import { ActiveOrderPill } from '@/components/delivery/ActiveOrderPill';
 import { inFlightOrders, useLatestInFlight } from '@/hooks/useLatestInFlight';
 import { useCreditAttention } from '@/hooks/useCreditAttention';
-import { useServerNow } from '@/hooks/useServerNow';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Spacing } from '@/theme';
 
@@ -59,12 +57,11 @@ export default function RestaurantHome() {
   const router = useRouter();
   const { outletId } = useOutlet();
   const inFlight = useLatestInFlight(outletId);
-  const insets = useSafeAreaInsets();
 
   return (
     <MandiScreen
       header={<RestaurantHeader screen={SCREEN} location />}
-      contentStyle={inFlight != null ? { paddingBottom: PILL_CLEARANCE + insets.bottom } : undefined}
+      contentStyle={inFlight != null ? { paddingBottom: PILL_CLEARANCE } : undefined}
       floating={inFlight != null ? (
         <ActiveOrderPill
           supplierName={inFlight.supplierName}
@@ -226,7 +223,8 @@ function ordersSubtitle(active: SupplierOrder[]): string | undefined {
   if (active.length === 0) return undefined;
 
   const onTheWay = active.filter((order) => order.status === 'OUT_FOR_DELIVERY').length;
-  const ready = active.filter((order) => order.status === 'READY_FOR_PICKUP').length;
+  // Only a collect-yourself order is "ready to collect"; a delivery order that is ready is waiting for a rider.
+  const ready = active.filter((order) => order.status === 'READY_FOR_PICKUP' && order.deliveryMode === 'PICKUP').length;
 
   if (onTheWay > 0) return `${onTheWay} on the way`;
   if (ready > 0) return `${ready} ready to collect`;
@@ -303,11 +301,10 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
     enabled: outletId != null && accessToken != null,
   });
 
-  // "Active" is what the restaurant is still waiting on a supplier for, the same list the floating pill draws from: a
-  // terminal order belongs in the Orders tab's history, a DRAFT one never reached a supplier, and one that has sat in
-  // flight for over a day is stuck, not "active". The heading count and the "on the way" line come from this list too.
-  const nowMs = useServerNow();
-  const active = inFlightOrders(query.data, nowMs);
+  // "Active" is what the restaurant is still waiting on a supplier for, the same statuses as the Orders tab's Active
+  // filter: a terminal order belongs in history and a DRAFT one never reached a supplier. No age rule here: an order
+  // scheduled for the day after tomorrow is on schedule, not stuck. The count and the "on the way" line use this list.
+  const active = inFlightOrders(query.data);
 
   return (
     <View style={styles.section}>

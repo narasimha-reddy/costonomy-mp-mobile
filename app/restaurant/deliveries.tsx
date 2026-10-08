@@ -144,7 +144,7 @@ export default function DeliveriesScreen() {
           const needsCheckIn = item.recommendedAction === 'CHECK_IN' && !item.isCheckedIn;
           const delivered = item.status === 'DELIVERED' || item.arrivalStage === 'DELIVERED_UNCHECKED';
           // The rank orders arrivals among several; on its own, or once delivered, it says nothing.
-          const showRank = item.arrivalRank > 0 && !isHistory && !delivered && rawItems.length > 1;
+          const showRank = item.arrivalRank > 0 && !isHistory && !delivered && visibleItems.length > 1;
 
           return (
             <MandiCard

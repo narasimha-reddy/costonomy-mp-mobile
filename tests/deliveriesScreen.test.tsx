@@ -178,4 +178,14 @@ describe('DeliveriesScreen duplicates removed', () => {
     await waitFor(() => expect(screen.getByText('Order ORD-42')).toBeTruthy());
     expect(screen.queryByText(/Arrival #/)).toBeNull();
   });
+
+  it('the arrival rank follows the list as shown: a search that leaves one delivery hides it', async () => {
+    withItems([item({ arrivalRank: 3 }), item({ deliveryId: 2, supplierOrderId: 43, orderNumber: 'ORD-43', arrivalRank: 1 })]);
+    renderScreen();
+    expect(await screen.findByText('Arrival #3')).toBeTruthy();
+    fireEvent.changeText(screen.getByLabelText('Search order, supplier, or driver'), 'ORD-42');
+    await waitFor(() => expect(screen.queryByText('Order ORD-43')).toBeNull());
+    expect(screen.getByText('Order ORD-42')).toBeTruthy();
+    expect(screen.queryByText(/Arrival #/)).toBeNull();
+  });
 });

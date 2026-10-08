@@ -143,18 +143,18 @@ export default function OrderDetailScreen() {
   /** Payment method, the delivery window, the address, and a way to report a problem once it has arrived. */
   function detailRows(o: NonNullable<typeof order>): DetailRow[] {
     const rows: DetailRow[] = [];
-    const onCredit = o.paymentMethod === 'CREDIT';
-    if (o.paymentMethod != null || payment != null) {
+    // A plain on-credit order already says "On credit" on the bar and in the bill: no row for it. Any other status on a
+    // credit order (Refunded, Cancelled · being settled, Refund delayed) is news, and keeps its row, label and pill.
+    const plainCredit = o.paymentStatus === 'ON_CREDIT';
+    if (!plainCredit && (o.paymentMethod != null || payment != null)) {
       rows.push({
         key: 'payment',
         icon: 'card-outline',
         title: 'Payment method',
         // Said by the server's status and instrument, never guessed: a UPI order that was cancelled has been
         // debited and is being refunded, which is not "no money was taken".
-        // A credit order already says "On credit" on the bar and in the bill, so the row does not say it a third and
-        // fourth time: it keeps only the extra detail and drops the pill.
-        subtitle: payment == null ? null : [onCredit ? null : payment.label, payment.detail].filter(Boolean).join('. '),
-        right: o.paymentMethod != null && !onCredit ? <PaymentMethodPill method={o.paymentMethod} /> : undefined,
+        subtitle: payment == null ? null : [payment.label, payment.detail].filter(Boolean).join('. '),
+        right: o.paymentMethod != null ? <PaymentMethodPill method={o.paymentMethod} /> : undefined,
       });
     }
     const when = o.deliverySlotName ?? o.scheduledDeliveryDate;

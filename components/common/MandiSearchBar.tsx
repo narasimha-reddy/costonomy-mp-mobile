@@ -85,7 +85,11 @@ export function MandiSearchBar({
     <RotatingHint hints={rotatingHints} testID={testID ? `${testID}-hint` : undefined} />
   ) : null;
   const body = (
-    <View testID="search-field-container" style={[styles.container, pill && styles.pill, focused && styles.focused, style]}>
+    <View
+      testID={testID ? `${testID}-container` : undefined}
+      // Focus last: a caller's style may size and place the bar but not remove its focus indicator.
+      style={[styles.container, pill && styles.pill, style, focused && styles.focused]}
+    >
       {leading}
       <Ionicons name="search" size={IconSize.md} color={Colors.textTertiary} />
 
@@ -163,6 +167,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     backgroundColor: Colors.surfaceSunken,
     borderRadius: Radius.md,
+    // Always 2 px, so focusing changes only the colour and nothing shifts by 2 px.
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   // The browser's own blue ring around the bare input looks like a second box inside the pill: the container shows
   // focus instead, with a border that is visible to keyboard users too.

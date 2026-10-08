@@ -17,22 +17,36 @@ const WITH_DELIVERY: Status[] = ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'];
 /** The Orders tab's "Active" statuses. */
 const IN_FLIGHT: Status[] = ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'];
 const BAR_POLL_MS = 30_000;
+/** An out-for-delivery order this close (by the server's own ETA) is more urgent than an answered request. */
+const ARRIVING_PILL_MINS = 5;
 
 /** Header states in which the partner's ETA is worth showing as a badge. */
 const ETA_STATES: BuyerTrackHeader['state'][] = ['on_the_way', 'arriving', 'assigned'];
 
-/** The order model has no "status changed at", so an order placed over a day ago and still in flight is "stuck". */
-const STUCK_AFTER_MS = 24 * 3_600_000;
+/** Statuses in which an order can still be "stuck" waiting on the supplier to start or hand over. */
+const STALLABLE: Status[] = ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP'];
+/** How long past its due moment an order may sit unchanged before the pill stops pointing at it. */
+const STUCK_AFTER_MS = 12 * 3_600_000;
 
-/** Display heuristic only (no money or deadline decision): the pill ignores an order that has hung for over a day. */
+/**
+ * Display heuristic only (no money or deadline decision), and only for choosing the pill: the order model has no
+ * "status changed at", so an order that is still CONFIRMED / PREPARING / READY_FOR_PICKUP more than 12 h after the
+ * later of its creation and the end of its scheduled delivery day (IST, as the server schedules) is not what the
+ * kitchen is waiting on. An order scheduled for the future is never stuck. It stays in the Active Orders list and count.
+ */
 export function isStuck(order: SupplierOrder, nowMs: number): boolean {
+  if (!STALLABLE.includes(order.status)) return false;
   const placed = Date.parse(order.createdAt);
-  return Number.isFinite(placed) && nowMs - placed > STUCK_AFTER_MS;
+  if (!Number.isFinite(placed)) return false;
+  const day = order.scheduledDeliveryDate?.slice(0, 10);
+  const dueEnd = day ? Date.parse(`${day}T23:59:59+05:30`) : NaN;
+  const since = Number.isFinite(dueEnd) ? Math.max(placed, dueEnd) : placed;
+  return nowMs - since > STUCK_AFTER_MS;
 }
 
-/** The orders the kitchen is still waiting on: in-flight statuses, minus any that look stuck (when `nowMs` is given). */
-export function inFlightOrders(orders: SupplierOrder[] | undefined, nowMs?: number): SupplierOrder[] {
-  return (orders ?? []).filter((o) => IN_FLIGHT.includes(o.status) && (nowMs == null || !isStuck(o, nowMs)));
+/** The orders the kitchen is still waiting on: every in-flight status, newest first as the API sends them. */
+export function inFlightOrders(orders: SupplierOrder[] | undefined): SupplierOrder[] {
+  return (orders ?? []).filter((o) => IN_FLIGHT.includes(o.status));
 }
 
 /**
@@ -40,7 +54,7 @@ export function inFlightOrders(orders: SupplierOrder[] | undefined, nowMs?: numb
  * collect-yourself order is still something the kitchen is waiting on, and its header already says so.
  */
 export function latestInFlight(orders: SupplierOrder[] | undefined, nowMs?: number): SupplierOrder | null {
-  const candidates = inFlightOrders(orders, nowMs);
+  const candidates = inFlightOrders(orders).filter((o) => nowMs == null || !isStuck(o, nowMs));
   candidates.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return candidates[0] ?? null;
 }
@@ -73,11 +87,14 @@ export interface ActivePill {
   accessibilityLabel?: string;
 }
 
+type OrderPill = ActivePill & { imminent: boolean };
+
 /**
  * Home and the Orders tab both float a pill for this. The hook shares their query keys, so the order list, the
  * requests list and the one extra delivery read are fetched once and every screen starts from the same cache.
  * An answered request still inside its order window beats a passive in-flight order: it is the one with a clock on it.
- * An order placed over 24 h ago and still in flight is ignored (the model has no status-changed time).
+ * An order stuck unchanged for 12 h past its due moment is ignored by the pill (see isStuck), not by the order lists.
+ * An order about to arrive beats an answered request, which can wait a minute.
  */
 export function useLatestInFlight(outletId: number | null): ActivePill | null {
   const { accessToken } = useSession();
@@ -109,7 +126,21 @@ export function useLatestInFlight(outletId: number | null): ActivePill | null {
     refetchInterval: BAR_POLL_MS,
   });
 
-  if (request != null) {
+  const orderPill: OrderPill | null = (() => {
+    if (order == null) return null;
+    const d = delivery.data ?? null;
+    const view = orderTrackingView({ audience: 'buyer', order, delivery: d, nowMs });
+    const header = buyerTrackingHeader({ view, order, delivery: d, drop: null, nowMs });
+    const etaMins = ETA_STATES.includes(header.state) && !view.delayed ? d?.etaMinutes ?? null : null;
+    const imminent = order.status === 'OUT_FOR_DELIVERY' && (header.state === 'arriving' || header.state === 'reached'
+      || (header.state === 'on_the_way' && etaMins != null && etaMins <= ARRIVING_PILL_MINS));
+    return {
+      kind: 'order', supplierName: order.supplierName, statusText: header.title, etaMins,
+      href: `/restaurant/tracking/${order.id}`, imminent,
+    };
+  })();
+
+  if (request != null && !orderPill?.imminent) {
     const by = clockTime(request.orderCreationDeadline);
     return {
       kind: 'request',
@@ -120,15 +151,7 @@ export function useLatestInFlight(outletId: number | null): ActivePill | null {
       accessibilityLabel: `Request answered: ${request.supplierName ?? 'your supplier'} accepted your request. Place your order`,
     };
   }
-  if (order != null) {
-    const d = delivery.data ?? null;
-    const view = orderTrackingView({ audience: 'buyer', order, delivery: d, nowMs });
-    const header = buyerTrackingHeader({ view, order, delivery: d, drop: null, nowMs });
-    const etaMins = ETA_STATES.includes(header.state) && !view.delayed ? d?.etaMinutes ?? null : null;
-    return {
-      kind: 'order', supplierName: order.supplierName, statusText: header.title, etaMins,
-      href: `/restaurant/tracking/${order.id}`,
-    };
-  }
-  return null;
+  if (orderPill == null) return null;
+  const { imminent: _imminent, ...pill } = orderPill;
+  return pill;
 }

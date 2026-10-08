@@ -106,7 +106,7 @@ export function BuyerTrackingLayout({
     enabled: buyer && receipt && order.status === 'COMPLETED' && accessToken != null,
     retry: (count, error) => !isApiError(error) && count < 2,
   });
-  const unrated = rating.isError && isApiError(rating.error) && rating.error.status === 404;
+  const unrated = rating.data == null && rating.isError && isApiError(rating.error) && rating.error.status === 404;
   const scrollProps = {
     refreshControl: <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />,
   };
@@ -127,7 +127,7 @@ export function BuyerTrackingLayout({
             total={buyer ? formatMoney(order.totalAmount) : undefined}
             paymentText={buyer ? placedPaymentText(order) : undefined}
             onViewOrder={buyer ? () => router.push(orderRoute) : undefined}
-            onHome={buyer ? () => router.push('/restaurant') : undefined}
+            onHome={buyer ? () => router.navigate('/restaurant/(tabs)') : undefined}
             outletName={order.outletName ?? (buyer ? 'Your outlet' : 'The restaurant')}
             address={delivery?.dropAddress ?? ([order.outletName, order.outletLocality].filter(Boolean).join(', ') || null)}
             segments={view.segments}

@@ -11,7 +11,7 @@ import { formatDay, relative } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 import { serverNow } from '@/lib/server-clock';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 /** The claimed amount as the plain figure the field starts with: "5000", "1200.5". */
 function prefill(amount: string | number): string {
@@ -163,7 +163,7 @@ export function ClaimReviewSheet({
                     disabled={pending}
                     accessibilityRole="radio"
                     accessibilityLabel={option}
-                    accessibilityState={radioState(selected, pending)}
+                    {...radioProps(selected, pending)}
                     style={[styles.option, selected && styles.optionSelected]}
                   >
                     <Ionicons

@@ -44,7 +44,8 @@ export function OrderProgressHero({ view, onTrack }: { view: OrderTrackingView; 
           )}
           {tag != null && (
             <View style={[styles.tag, { backgroundColor: TAG[tag.kind].bg }]} testID={`tag-${tag.kind}`}>
-              <MandiText variant="label" color={TAG[tag.kind].fg} style={styles.tagText}>{tag.label}</MandiText>
+              {/* As written ("Delivered", "On time"): sentence case, never upper-cased (flow review 4). */}
+              <MandiText variant="label" color={TAG[tag.kind].fg}>{tag.label}</MandiText>
             </View>
           )}
         </View>
@@ -84,7 +85,6 @@ const styles = StyleSheet.create({
   status: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: Spacing.sm, rowGap: Spacing.xs, marginTop: Spacing.xs },
   sub: { flexShrink: 1 },
   tag: { paddingHorizontal: Spacing.sm + 1, paddingVertical: 3, borderRadius: Radius.full },
-  tagText: { textTransform: 'uppercase' },
   progress: { marginTop: Spacing.md },
   track: { marginTop: Spacing.md },
 });

@@ -15,7 +15,7 @@ import type { ReviewSku } from '@/models/wallet';
 import { formatUnitPrice } from '@/lib/wallet/pickerFormat';
 import { ReviewColors, ReviewLayout, Spacing, TextStyles } from '@/theme';
 import { Chip, FieldLabel, HelperText, NumberInput, ReviewInput } from './fields';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 /** The lookup is asked 300 ms after the typing stops. */
 export const LOOKUP_DEBOUNCE_MS = 300;
@@ -496,7 +496,7 @@ export function SkuPicker({
                   key={u}
                   onPress={() => setUnit(u)}
                   accessibilityRole="radio"
-                  accessibilityState={radioState(on)}
+                  {...radioProps(on)}
                   accessibilityLabel={u}
                   style={[styles.unit, on && styles.unitOn]}
                   testID={`new-sku-unit-${u}`}

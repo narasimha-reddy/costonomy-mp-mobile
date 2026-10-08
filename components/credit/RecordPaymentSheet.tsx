@@ -19,7 +19,7 @@ import type { SupplierPaymentMethod } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 /** Wide enough for a thumb, and grows (minHeight) with the text size. */
 const TARGET = 48;
@@ -200,7 +200,7 @@ export function RecordPaymentSheet({
                     disabled={rec.pending}
                     accessibilityRole="radio"
                     accessibilityLabel={option.label}
-                    accessibilityState={radioState(active, rec.pending)}
+                    {...radioProps(active, rec.pending)}
                     style={[styles.chip, active && styles.chipActive]}
                   >
                     <MethodIcon icon={option.icon} color={active ? Colors.primary : Colors.textSecondary} />
@@ -340,7 +340,7 @@ function Chip({ label, active, onPress, testID }: { label: string; active: boole
       onPress={onPress}
       accessibilityRole="radio"
       accessibilityLabel={label}
-      accessibilityState={radioState(active)}
+      {...radioProps(active)}
       style={[styles.chip, active && styles.chipActive]}
     >
       <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>{label}</MandiText>

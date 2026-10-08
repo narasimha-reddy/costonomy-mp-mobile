@@ -21,7 +21,7 @@ import {
 import type { SubscriptionFrequency } from '@/models/subscription';
 import { ApiError } from '@/lib/api/errors';
 import { Colors, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 interface SubscribeModalProps {
   visible: boolean;
@@ -134,7 +134,7 @@ export function SubscribeModal({
                     key={f.value}
                     onPress={() => setFrequency(f.value)}
                     accessibilityRole="radio"
-                    accessibilityState={radioState(active)}
+                    {...radioProps(active)}
                     accessibilityLabel={f.label}
                     style={[styles.freqPill, active && styles.freqPillActive]}
                   >
@@ -160,7 +160,7 @@ export function SubscribeModal({
                     key={m.value}
                     onPress={() => setDeliveryMode(m.value)}
                     accessibilityRole="radio"
-                    accessibilityState={radioState(active)}
+                    {...radioProps(active)}
                     accessibilityLabel={m.label}
                     style={[styles.freqPill, active && styles.freqPillActive]}
                   >
@@ -188,7 +188,7 @@ export function SubscribeModal({
                     key={m.value}
                     onPress={disabled ? undefined : () => setPaymentMethod(m.value)}
                     accessibilityRole="radio"
-                    accessibilityState={radioState(active, disabled)}
+                    {...radioProps(active, disabled)}
                     accessibilityLabel={disabled ? `${m.label}, not available with this supplier` : m.label}
                     style={[styles.freqPill, active && styles.freqPillActive, disabled && { opacity: 0.5 }]}
                   >
@@ -221,7 +221,7 @@ export function SubscribeModal({
                         key={s.id}
                         onPress={() => setPreferredSlotId(s.id)}
                         accessibilityRole="radio"
-                        accessibilityState={radioState(active)}
+                        {...radioProps(active)}
                         accessibilityLabel={`${s.slotName}, ${s.startTime.substring(0, 5)} to ${s.endTime.substring(0, 5)}`}
                         style={[styles.slotOption, active && styles.slotOptionActive]}
                       >

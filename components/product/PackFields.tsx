@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiFormField, MandiText } from '@/components/common';
 import { Colors, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 /**
  * How much is in one pack, and what it is called.
@@ -116,7 +116,7 @@ function UnitChips({
               key={option}
               onPress={() => onChange(option)}
               accessibilityRole="radio"
-              accessibilityState={radioState(active)}
+              {...radioProps(active)}
               style={[styles.chip, active && styles.chipActive]}
             >
               <MandiText

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from '@/components/common';
 import { Colors, Spacing, TouchTarget } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 const LABELS = ['', 'Poor', 'Below par', 'Fine', 'Good', 'Excellent'];
 
@@ -46,7 +46,7 @@ export function StarRating({
               key={star}
               onPress={() => onChange(star)}
               accessibilityRole="radio"
-              accessibilityState={radioState(value === star)}
+              {...radioProps(value === star)}
               accessibilityLabel={star === 1 ? '1 star' : `${star} stars`}
               accessibilityHint={LABELS[star]}
               style={styles.star}

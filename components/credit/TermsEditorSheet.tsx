@@ -6,7 +6,7 @@ import {
 } from '@/lib/credit/supplierLine';
 import type { CreditAgreement } from '@/models/credit';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 /** What the change does, in words, by where the line is. */
 function effectNote(mode: 'modify' | 'approve', status: string): string {
@@ -101,7 +101,7 @@ export function TermsEditorSheet({
                   disabled={pending}
                   accessibilityRole="radio"
                   accessibilityLabel={`${option} days`}
-                  accessibilityState={radioState(active, pending)}
+                  {...radioProps(active, pending)}
                   style={[styles.chip, active && styles.chipActive]}
                 >
                   <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>

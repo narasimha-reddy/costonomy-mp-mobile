@@ -44,7 +44,7 @@ import { formatMoney } from '@/utils/money';
 import { formatDistance } from '@/utils/orders';
 import { track } from '@/analytics';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'SUP-CREDIT-01';
 const PAGE_SIZE = 20;
@@ -397,7 +397,7 @@ function Chip({ label, selected, onPress, testID }: {
       testID={testID}
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityState={radioState(selected)}
+      {...radioProps(selected)}
       accessibilityLabel={label}
       style={[styles.chip, selected && styles.chipSelected]}
     >

@@ -170,21 +170,21 @@ describe('the rejection-reason chips', () => {
     await enterShortDelivery();
 
     // Only something missing was entered, so the chosen reason is the missing one, not a damaged crate.
-    const chip = await screen.findByLabelText('Short Delivery for Chicken');
+    const chip = await screen.findByLabelText('Short delivery for Chicken');
     expect(chip.props.accessibilityRole).toBe('radio');
     expect(chip.props.accessibilityState.checked).toBe(true);
-    expect(screen.getByLabelText('Damaged Crate for Chicken').props.accessibilityState.checked).toBe(false);
+    expect(screen.getByLabelText('Damaged crate for Chicken').props.accessibilityState.checked).toBe(false);
   });
 
-  it('default to Damaged Crate when something is damaged, and send what was chosen', async () => {
+  it('default to Damaged crate when something is damaged, and send what was chosen', async () => {
     paidBy('PREPAID');
     (receiveOrder as jest.Mock).mockResolvedValue(RECEIVING_APPLIED_NO_NOTE_YET);
     setup();
     const received = (await screen.findAllByDisplayValue('9.6'))[0] as ReturnType<typeof screen.getByDisplayValue>;
     fireEvent.changeText(received, '9.5');
     fireEvent.changeText(screen.getAllByDisplayValue('0')[0] as typeof received, '0.1');
-    expect((await screen.findByLabelText('Damaged Crate for Chicken')).props.accessibilityState.checked).toBe(true);
-    fireEvent.press(screen.getByLabelText('Wrong Grade for Chicken'));
+    expect((await screen.findByLabelText('Damaged crate for Chicken')).props.accessibilityState.checked).toBe(true);
+    fireEvent.press(screen.getByLabelText('Wrong grade for Chicken'));
     fireEvent.press(screen.getByText('Complete check-in'));
     await waitFor(() => expect(receiveOrder).toHaveBeenCalled());
     expect((receiveOrder as jest.Mock).mock.calls[0][2][0].rejectionReason).toBe('WRONG_GRADE');
@@ -297,7 +297,7 @@ describe('the refund sheet buttons follow where the refund went', () => {
     fireEvent.press(screen.getByText('Complete check-in'));
     await screen.findByText('Refund of ₹10.50');
 
-    expect(screen.queryByText('View Wallet Balance')).toBeNull();
+    expect(screen.queryByText('View wallet balance')).toBeNull();
     expect(screen.queryByText('Rate Delivery & Supplier')).toBeNull();
     fireEvent.press(screen.getByText('Rate this order'));
     expect(mockReplace).toHaveBeenCalledWith('/restaurant/rating/501');
@@ -311,7 +311,7 @@ describe('the refund sheet buttons follow where the refund went', () => {
     fireEvent.press(screen.getByText('Complete check-in'));
     await screen.findByText('Refund of ₹10.50');
 
-    fireEvent.press(screen.getByText('View Wallet Balance'));
+    fireEvent.press(screen.getByText('View wallet balance'));
     expect(mockReplace).toHaveBeenCalledWith('/restaurant/wallet');
   });
 });
@@ -351,5 +351,36 @@ describe('entering a problem lowers Received by itself', () => {
     fireEvent.changeText(zeros[1] as typeof received, '0.1');
 
     expect(screen.getAllByDisplayValue('9.6').length).toBeGreaterThan(0);
+  });
+});
+
+describe('check-in labels (flow review 4)', () => {
+  it('names each quantity box by its field and line, not just "Quantity"', async () => {
+    paidBy('PREPAID');
+    setup();
+    expect(await screen.findByLabelText('Received quantity for Chicken')).toBeTruthy();
+    expect(screen.getByLabelText('Damaged quantity for Chicken')).toBeTruthy();
+    expect(screen.getByLabelText('Missing quantity for Chicken')).toBeTruthy();
+    expect(screen.getByLabelText('Increase received quantity for Chicken')).toBeTruthy();
+    expect(screen.getByLabelText('Decrease missing quantity for Chicken')).toBeTruthy();
+    expect(screen.queryAllByLabelText('Quantity', { exact: true })).toHaveLength(0);
+  });
+
+  it('shows the rejection reasons in sentence case, and the chips are radios with aria-checked', async () => {
+    paidBy('PREPAID');
+    setup();
+    await enterShortDelivery();
+    for (const label of ['Damaged crate', 'Spoiled goods', 'Wrong grade', 'Short delivery', 'Warm/melted', 'Other']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    expect(screen.queryByText('Damaged Crate')).toBeNull();
+    // Native folds aria-checked into accessibilityState at the host; the Pressable above it carries the web prop.
+    const aria = (label: string) => {
+      let node: ReturnType<typeof screen.getByLabelText> | null = screen.getByLabelText(label);
+      while (node != null && !('aria-checked' in node.props)) node = node.parent as typeof node | null;
+      return node?.props['aria-checked'];
+    };
+    expect(aria('Short delivery for Chicken')).toBe(true);
+    expect(aria('Damaged crate for Chicken')).toBe(false);
   });
 });

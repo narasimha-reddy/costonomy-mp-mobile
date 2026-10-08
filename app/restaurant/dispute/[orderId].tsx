@@ -26,7 +26,7 @@ import { ApiError } from '@/lib/api/errors';
 import { formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
 import { Colors, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'REST-DISPUTE-01';
 
@@ -151,7 +151,7 @@ export default function DisputeScreen() {
                       key={option.key}
                       onPress={() => setCategory(option.key)}
                       accessibilityRole="radio"
-                      accessibilityState={radioState(active)}
+                      {...radioProps(active)}
                       style={[styles.chip, active && styles.chipActive]}
                     >
                       {active && (

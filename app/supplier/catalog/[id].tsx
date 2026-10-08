@@ -26,7 +26,7 @@ import { formatMoney, formatPack } from '@/utils/money';
 import { track } from '@/analytics';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'SUP-CATALOG-02';
 const GST_RATES = ['0', '5', '12', '18'];
@@ -225,7 +225,7 @@ export default function SkuEditorScreen() {
                     key={g}
                     onPress={() => setGrade(active ? '' : g)}
                     accessibilityRole="radio"
-                    accessibilityState={radioState(active)}
+                    {...radioProps(active)}
                     style={[styles.chip, active && styles.chipActive]}
                   >
                     <MandiText
@@ -295,7 +295,7 @@ export default function SkuEditorScreen() {
                     key={rate}
                     onPress={() => setGstRate(rate)}
                     accessibilityRole="radio"
-                    accessibilityState={radioState(active)}
+                    {...radioProps(active)}
                     style={[styles.chip, active && styles.chipActive]}
                   >
                     <MandiText

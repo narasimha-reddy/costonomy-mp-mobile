@@ -6,6 +6,7 @@ import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchOutletOrders } from '@/services/procurement';
 import { fetchOutletDeliveryRadar } from '@/services/delivery';
+import { deliveriesLabel } from '@/lib/delivery/deliveriesLabel';
 import { paymentLine } from '@/lib/payments/paymentLine';
 import { Ionicons } from '@expo/vector-icons';
 import type { SupplierOrder, SupplierOrderStatus as Status } from '@/models/procurement';
@@ -70,7 +71,8 @@ export default function OrdersScreen() {
     queryFn: () => fetchOutletDeliveryRadar(accessToken as string, outletId as number),
     enabled: outletId != null && accessToken != null,
   });
-  const activeDeliveries = radar.data?.summary.totalActive ?? null;
+  // On the way and waiting for check-in, said apart: a delivered order is not "active" (flow review 4).
+  const deliveries = deliveriesLabel(radar.data?.summary);
 
   const orders = useMemo(() => {
     const statuses = TABS.find((t) => t.key === tab)?.statuses ?? [];
@@ -79,7 +81,7 @@ export default function OrdersScreen() {
 
   return (
     <MandiScreen
-      header={<Header tab={tab} onTab={setTab} activeDeliveries={activeDeliveries} onDeliveries={() => router.push('/restaurant/deliveries')} />}
+      header={<Header tab={tab} onTab={setTab} deliveries={deliveries} onDeliveries={() => router.push('/restaurant/deliveries')} />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
       contentStyle={inFlight != null ? { paddingBottom: BAR_CLEARANCE } : undefined}
@@ -143,10 +145,10 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
   );
 }
 
-function Header({ tab, onTab, activeDeliveries, onDeliveries }: {
+function Header({ tab, onTab, deliveries, onDeliveries }: {
   tab: Tab;
   onTab: (tab: Tab) => void;
-  activeDeliveries: number | null;
+  deliveries: { text: string; accessibilityLabel: string };
   onDeliveries: () => void;
 }) {
   return (
@@ -155,12 +157,12 @@ function Header({ tab, onTab, activeDeliveries, onDeliveries }: {
       <Pressable
         onPress={onDeliveries}
         accessibilityRole="button"
-        accessibilityLabel={activeDeliveries != null && activeDeliveries > 0 ? `Deliveries, ${activeDeliveries} active` : 'Deliveries'}
+        accessibilityLabel={deliveries.accessibilityLabel}
         style={styles.deliveries}
       >
         <Ionicons name="bicycle-outline" size={18} color={Colors.primaryDark} />
         <MandiText variant="captionEmphasis" color={Colors.primaryDark}>
-          {activeDeliveries != null && activeDeliveries > 0 ? `Deliveries · ${activeDeliveries} active` : 'Deliveries'}
+          {deliveries.text}
         </MandiText>
         <Ionicons name="chevron-forward" size={16} color={Colors.primaryDark} />
       </Pressable>

@@ -34,6 +34,7 @@ import { itemTaxLine } from '@/components/order/BillSummary';
 import { formatDay, formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
 import { paymentLine } from '@/lib/payments/paymentLine';
 import { skuSecondaryLine } from '@/utils/skuLabel';
+import { splitStoreName } from '@/components/restaurant/SupplierStoreHeader';
 import { Colors, IconSize, Spacing, TouchTarget } from '@/theme';
 
 const ACTIVE_POLL_MS = 15_000;
@@ -112,6 +113,10 @@ export default function OrderDetailScreen() {
   const header = order == null || view == null
     ? null
     : buyerTrackingHeader({ view, order, delivery: deliveryStatus, drop: null, nowMs });
+  // Who it is from, the name once (SupplierStoreHeader's rule). No store name: the supplier alone.
+  const party = order?.storeName != null && order.storeName.trim() !== ''
+    ? splitStoreName(order.storeName, order.supplierName)
+    : { title: order?.supplierName ?? '', subtitle: null };
   // Track while the order is moving, or whenever the server says the partner can be followed. A DRAFT is not yet sent.
   const showTrack = view != null && order != null && order.status !== 'DRAFT'
     && (view.showTrack || !view.terminal);
@@ -273,7 +278,8 @@ export default function OrderDetailScreen() {
             <DetailRowCard
               rows={[{
                 key: 'status',
-                icon: 'navigate-outline',
+                // A finished order gets a check: the navigate arrow says "on its way", which it no longer is.
+                icon: header.state === 'completed' ? 'checkmark-circle-outline' : 'navigate-outline',
                 title: header.title,
                 subtitle: header.pill?.text ?? null,
                 accessibilityLabel: `Order status, ${header.title}`,
@@ -300,13 +306,17 @@ export default function OrderDetailScreen() {
                 accessibilityLabel={`See everything ${order.storeName ?? order.supplierName} sells`}
                 style={({ pressed }) => [styles.partyLink, pressed && styles.pressed]}
               >
+                {/* The name once: "Sri Balaji Traders — Domlur" under "Sri Balaji Traders" reads as the supplier
+                    with the locality as the caption (the storefront header's own rule). */}
                 <View style={styles.flex}>
                   <MandiText variant="bodyEmphasis" style={styles.party}>
-                    {order.supplierName}
+                    {party.title}
                   </MandiText>
-                  <MandiText variant="caption" color={Colors.textSecondary}>
-                    {order.storeName}
-                  </MandiText>
+                  {party.subtitle != null && party.subtitle !== '' && (
+                    <MandiText variant="caption" color={Colors.textSecondary}>
+                      {party.subtitle}
+                    </MandiText>
+                  )}
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
               </Pressable>

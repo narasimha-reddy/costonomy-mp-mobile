@@ -42,7 +42,7 @@ import type { ClaimMethod } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
 import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 function overpaymentText(outstanding: number): string {
   return `You can tell your supplier about up to ${formatMoney(outstanding)} more on this invoice (other payments are waiting for them to confirm).`;
@@ -376,7 +376,7 @@ export default function CreditClaimScreen() {
                 disabled={claim.pending}
                 accessibilityRole="radio"
                 accessibilityLabel={claimMethodLabel(option)}
-                accessibilityState={radioState(active, claim.pending)}
+                {...radioProps(active, claim.pending)}
                 style={[styles.chip, active && styles.chipActive]}
               >
                 {active && <Ionicons name="checkmark" size={IconSize.sm} color={Colors.primary} />}

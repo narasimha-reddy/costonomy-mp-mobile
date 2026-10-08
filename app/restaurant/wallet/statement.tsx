@@ -19,7 +19,7 @@ import { financialYears, validateStatement } from '@/lib/wallet/statement';
 import { saveBlobOnWeb } from '@/lib/wallet/saveFile';
 import type { StatementFormat, StatementRange, StatementRequest } from '@/models/wallet';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 type Mode = 'range' | 'financialYear';
 
@@ -207,7 +207,7 @@ function Radio({
       testID={testID}
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityState={radioState(selected)}
+      {...radioProps(selected)}
       style={styles.radio}
     >
       <Ionicons

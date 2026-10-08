@@ -26,7 +26,7 @@ import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
 import type { QuickScanMethodOption } from '@/models/quickscan';
 import { Colors, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'REST-QUICKSCAN-02';
 
@@ -180,7 +180,7 @@ export default function QuickScanPayScreen() {
                     disabled={!option.available}
                     onPress={() => setMethod(option.method)}
                     accessibilityRole="radio"
-                    accessibilityState={radioState(active, !option.available)}
+                    {...radioProps(active, !option.available)}
                     style={[
                       styles.option,
                       active && styles.optionActive,

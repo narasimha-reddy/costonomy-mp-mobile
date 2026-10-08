@@ -1,6 +1,6 @@
 import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { billingFailureMessage } from '@/lib/billing/messages';
 import { fetchTaxInvoice, fetchCreditNotes, generateTaxInvoice, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -55,17 +55,20 @@ import { formatMomentWithRecency } from '@/utils/dateRange';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { TrackingCards } from '@/components/delivery/TrackingCards';
-import { SandboxControlCard } from '@/components/delivery/SandboxControlCard';
-import { useSandboxAdvance } from '@/hooks/useSandboxAdvance';
-import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
+import { usePressGuard } from '@/hooks/usePressGuard';
+import { useTimeoutFlag } from '@/hooks/useTimeoutFlag';
+import { FIND_TIMEOUT_MS, deliveryPollMs, partnerAwaitPhase } from '@/lib/delivery/partnerSearch';
+import { partyTitle } from '@/lib/supplier/partyTitle';
 import { useServerNow } from '@/hooks/useServerNow';
 import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
-import { Colors, FontSize, Radius, Spacing, TrackingLayout } from '@/theme';
+import { Colors, FontSize, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'SUP-ORD-01';
+/** A fee the server sent as nothing (`0`, `0.00`): not worth a line. A text check, not arithmetic. */
+const ZERO_MONEY = /^0*\.?0*$/;
 
 /**
  * Why a supplier is backing out. D-091 turned these from rejection reasons into
@@ -207,21 +210,26 @@ export default function SupplierOrderScreen() {
     onError: (caught) => onRefusal(caught, "Couldn't cancel this order."),
   });
 
+  // A Costonomy-delivery order that is Ready gets its delivery from auto-dispatch a few seconds later: until the row
+  // exists the read 404s, so the screen keeps asking (fast) rather than offering a button for something in progress.
+  const awaitingDelivery = order?.status === 'READY_FOR_PICKUP' && wantsDeliveryPartner(order.deliveryMode);
+  const [hasDelivery, setHasDelivery] = useState(false);
+  const findTimedOut = useTimeoutFlag(awaitingDelivery && !hasDelivery, FIND_TIMEOUT_MS);
   const delivery = useQuery({
     queryKey: ['supplier-order', orderId, 'delivery'],
     queryFn: () => fetchDelivery(accessToken as string, orderId),
     enabled: Number.isFinite(orderId) && accessToken != null && (order?.status === 'READY_FOR_PICKUP' || order?.status === 'OUT_FOR_DELIVERY' || order?.status === 'DELIVERED'),
     retry: false,
     // While a partner is being found the screen follows it, so the bar moves and a booking shows up without a tap.
-    refetchInterval: (query) => {
-      const found = query.state.data;
-      return found != null && found.mode !== 'SUPPLIER_OWN'
-        && (canRetryPartner(found.mode, found.status) || found.status === 'DELIVERY_REQUESTED'
-          || found.status === 'PROVIDER_SELECTED') ? 15000 : false;
-    },
+    refetchInterval: (query) => deliveryPollMs(query.state.data, awaitingDelivery, findTimedOut),
   });
-
-  const sandbox = useSandboxAdvance(orderId);
+  const deliveryExists = delivery.data != null;
+  React.useEffect(() => { setHasDelivery(deliveryExists); }, [deliveryExists]);
+  const partnerPhase = partnerAwaitPhase({
+    orderStatus: order?.status, deliveryMode: order?.deliveryMode, hasDelivery: deliveryExists, timedOut: findTimedOut,
+  });
+  // One press at a time on the stage bar: the next stage's button lands where this one was.
+  const stageGuard = usePressGuard(order?.status);
 
   const requestPartner = useMutation({
     mutationFn: () =>
@@ -393,17 +401,6 @@ export default function SupplierOrderScreen() {
         <>
           {view != null && (
             <View style={styles.tracker}>
-              <View style={styles.topClip}>
-                <TrackingTopArea
-                  view={view}
-                  delivery={deliveryData}
-                  destination={null}
-                  height={TrackingLayout.previewHeight}
-                  overlap={0}
-                  compact
-                  onPress={view.showTrack && view.showMap ? () => router.push(`/supplier/tracking/${order.id}`) : undefined}
-                />
-              </View>
               <TrackingCards
                 audience="supplier"
                 view={view}
@@ -415,7 +412,6 @@ export default function SupplierOrderScreen() {
                 retrying={retryPartner.isPending}
                 switching={switchToOwn.isPending}
               />
-              <SandboxControlCard delivery={deliveryData} onAdvance={sandbox.advance} pending={sandbox.pending} />
             </View>
           )}
 
@@ -433,11 +429,10 @@ export default function SupplierOrderScreen() {
                     reference took its place there. A supplier reads this before
                     anything else on the card. */}
                 <MandiText variant="bodyEmphasis" numberOfLines={2}>
-                  {order.outletName}
+                  {partyTitle(order.restaurantName, order.outletName)}
                 </MandiText>
                 <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-                  {[order.restaurantName, order.outletLocality, order.outletCity]
-                    .filter(Boolean).join(' · ')}
+                  {[order.outletLocality, order.outletCity].filter(Boolean).join(' · ')}
                 </MandiText>
                 {formatDistance(order.distanceKm) ? (
                   <MandiText variant="caption" color={Colors.textSecondary}>
@@ -454,6 +449,12 @@ export default function SupplierOrderScreen() {
               </MandiText>
               <PaymentMethodPill method={order.paymentMethod} />
             </View>
+            {/* The server's field, shown as sent: the total above already contains it. */}
+            {mode !== 'PICKUP' && order.deliveryFee != null && !ZERO_MONEY.test(order.deliveryFee) && (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Includes {formatMoney(order.deliveryFee)} delivery fee
+              </MandiText>
+            )}
 
             {/* How it travels, which is what the buttons below depend on. Shown
                 rather than inferred from which actions appear, because a
@@ -526,6 +527,27 @@ export default function SupplierOrderScreen() {
               </MandiText>
             ) : null}
           </MandiCard>
+
+          {order.rating != null && (
+            <MandiCard>
+              <View style={styles.valueRow}>
+                <MandiText variant="bodyEmphasis">Restaurant rating</MandiText>
+                <View style={styles.stars} accessible accessibilityLabel={`Rated ${order.rating} out of 5`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Ionicons
+                      key={n}
+                      name={n <= (order.rating ?? 0) ? 'star' : 'star-outline'}
+                      size={18}
+                      color={Colors.warning}
+                    />
+                  ))}
+                </View>
+              </View>
+              {order.ratingComment != null && order.ratingComment.trim() !== '' && (
+                <MandiText variant="caption" color={Colors.textSecondary}>{order.ratingComment}</MandiText>
+              )}
+            </MandiCard>
+          )}
 
           {/* ── Statutory Billing Documents ────────────────────────── */}
           {billingEligible && (
@@ -777,7 +799,18 @@ export default function SupplierOrderScreen() {
       );
     }
 
-    if (order.status === 'READY_FOR_PICKUP' && delivery.data == null && wantsDeliveryPartner(order.deliveryMode)) {
+    if (partnerPhase === 'finding') {
+      return (
+        <MandiStickyBar>
+          <View style={styles.finding} accessibilityRole="progressbar" accessibilityLiveRegion="polite">
+            <ActivityIndicator color={Colors.primary} />
+            <MandiText variant="bodyEmphasis">Finding a delivery partner…</MandiText>
+          </View>
+        </MandiStickyBar>
+      );
+    }
+
+    if (partnerPhase === 'manual') {
       return (
         <MandiStickyBar>
           <MandiButton
@@ -815,7 +848,7 @@ export default function SupplierOrderScreen() {
           size="md"
           loading={busy}
           disabled={blocked != null}
-          onPress={() => advance.mutate({ to: next.to })}
+          onPress={() => stageGuard.press(() => advance.mutate({ to: next.to }))}
         />
         {/* Only while the goods are still in the store. Doc 01 §13: once they
             have left, the path is return or dispute. */}
@@ -918,7 +951,6 @@ function CancelPanel({
 
 const styles = StyleSheet.create({
   tracker: { gap: Spacing.listGap },
-  topClip: { borderRadius: Radius.lg, overflow: 'hidden' },
   deliveryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -943,6 +975,8 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   where: { flex: 1, gap: 2 },
+  finding: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, minHeight: 48 },
+  stars: { flexDirection: 'row', gap: 2 },
   valueRow: {
     flexDirection: 'row',
     alignItems: 'center',

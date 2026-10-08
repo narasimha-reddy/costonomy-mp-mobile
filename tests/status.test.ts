@@ -1,6 +1,7 @@
 import {
   DeliveryMode,
   DeliveryStatus,
+  SettlementStatus,
   SupplierOrderStatus,
   orderStatusFor,
   resolveStatus,
@@ -90,5 +91,18 @@ describe('status spellings match the server', () => {
     // Mobile releases lag the API, which is why the registry stays widened to
     // Record<string, …> after the satisfies check.
     expect(unknownStatus('SOMETHING_NEW').label).toBeTruthy();
+  });
+});
+
+describe('supplier-side labels (flow review 23)', () => {
+  it('calls a Costonomy-delivered order "Delivery partner", not "We deliver"', () => {
+    expect(resolveStatus(DeliveryMode, 'COSTONOMY_DELIVERY').label).toBe('Delivery partner');
+  });
+
+  it('maps every settlement status to a human label, including calculated', () => {
+    expect(resolveStatus(SettlementStatus, 'CALCULATED').label).toBe('Calculated');
+    expect(resolveStatus(SettlementStatus, 'PAID').label).toBe('Paid');
+    expect(resolveStatus(SettlementStatus, 'PENDING').label).toBe('Pending');
+    expect(resolveStatus(SettlementStatus, 'FAILED').tone).toBe('danger');
   });
 });

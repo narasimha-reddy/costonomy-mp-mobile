@@ -5,6 +5,7 @@ import type {
   SupplierOrderStatus as SupplierOrderStatusCode,
   DeliveryMode as DeliveryModeCode,
 } from './procurement';
+import type { SettlementStatus as SettlementStatusCode } from './settlement';
 import type {
   IntentFulfilment as IntentFulfilmentCode,
   IntentStatus as IntentStatusCode,
@@ -103,8 +104,18 @@ export function buyerOrderStatus(
 export const DeliveryMode = widen({
   PICKUP: { label: 'You collect', tone: 'neutral' },
   SUPPLIER_DELIVERY: { label: 'Supplier delivers', tone: 'info' },
-  COSTONOMY_DELIVERY: { label: 'We deliver', tone: 'info' },
+  COSTONOMY_DELIVERY: { label: 'Delivery partner', tone: 'info' },
 } satisfies Record<DeliveryModeCode, StatusDisplay>);
+
+/** A settlement's raw status, named for the supplier reading the payouts list. */
+export const SettlementStatus = widen({
+  PENDING: { label: 'Pending', tone: 'pending' },
+  CALCULATED: { label: 'Calculated', tone: 'info' },
+  APPROVED: { label: 'Approved', tone: 'info' },
+  PROCESSING: { label: 'Processing', tone: 'pending' },
+  PAID: { label: 'Paid', tone: 'success' },
+  FAILED: { label: 'Failed', tone: 'danger' },
+} satisfies Record<SettlementStatusCode, StatusDisplay>);
 
 /** Procurement — doc 03 §4. */
 export const ProcurementStatus = widen({

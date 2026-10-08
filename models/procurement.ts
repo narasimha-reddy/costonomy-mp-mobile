@@ -312,6 +312,9 @@ export interface SupplierOrder {
   isSubscriptionOrder?: boolean | null;
   subscriptionId?: number | null;
   hasColdChainItems?: boolean | null;
+  /** The restaurant's rating of this order, 1 to 5, once given. Null or absent until then (API flow-review 28). */
+  rating?: number | null;
+  ratingComment?: string | null;
   /** Set only on a cancelled order, and the reason it is not three statuses. */
   cancelledBy: CancelledBy | null;
   cancellationReason: string | null;

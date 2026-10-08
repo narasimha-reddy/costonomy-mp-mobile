@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MandiToastProvider } from '@/components/common';
@@ -207,12 +207,16 @@ describe('supplier order screen', () => {
     expect(screen.queryByText(/Pidge/)).toBeNull();
   });
 
-  it('offers Request Delivery Partner when ready with no delivery', async () => {
+  it('offers Request Delivery Partner when ready with no delivery, once the automatic search has had its minute', async () => {
+    jest.useFakeTimers({ now: new Date('2026-01-01T10:00:00Z') });
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
     noDelivery();
     setup(SupplierOrderScreen);
+    expect(await screen.findByText('Finding a delivery partner…')).toBeTruthy();
+    await act(async () => { jest.advanceTimersByTime(61000); });
     expect(await screen.findByText('Request Delivery Partner')).toBeTruthy();
     expect(screen.queryByText(/Pidge/)).toBeNull();
+    jest.useRealTimers();
   });
 
   it('shows the partner card and Track only once a trackable partner is assigned', async () => {

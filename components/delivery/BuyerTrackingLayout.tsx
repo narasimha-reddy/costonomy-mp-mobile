@@ -25,6 +25,7 @@ import { supplierTrackingHeader } from '@/lib/delivery/supplierTrackingHeader';
 import type { Delivery } from '@/models/delivery';
 import type { SupplierOrder } from '@/models/procurement';
 import { fetchRating } from '@/services/trust';
+import { paymentLine } from '@/lib/payments/paymentLine';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing, TrackLayout } from '@/theme';
 
@@ -33,6 +34,19 @@ function point(loc: { latitude: string | number; longitude: string | number } | 
   const latitude = Number(loc.latitude);
   const longitude = Number(loc.longitude);
   return Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : null;
+}
+
+/** The line under "Order placed", by what the supplier has actually done: it is no longer waiting once confirmed. */
+function placedCaption(status: string, supplierName: string): string | undefined {
+  if (status === 'CONFIRMED') return `${supplierName} will start packing soon`;
+  if (status === 'PREPARING') return 'Packing your order';
+  return undefined;
+}
+
+/** "On credit, due 7 Nov" or "Paid" from the server's payment fields; null when the line would only say "Total". */
+function placedPaymentText(order: SupplierOrder): string | null {
+  const line = paymentLine(order);
+  return line.label === 'Total' ? null : line.label;
 }
 
 const SEARCH_BAR_HEIGHT = 5;
@@ -109,7 +123,11 @@ export function BuyerTrackingLayout({
           <OrderPlacedHero
             placedAt={order.createdAt ?? null}
             supplier={buyer ? supplier : order.supplierName ?? order.storeName ?? supplier}
-            caption={buyer ? undefined : 'Ready for you to start preparing'}
+            caption={buyer ? placedCaption(order.status, order.supplierName ?? supplier) : 'Ready for you to start preparing'}
+            total={buyer ? formatMoney(order.totalAmount) : undefined}
+            paymentText={buyer ? placedPaymentText(order) : undefined}
+            onViewOrder={buyer ? () => router.push(orderRoute) : undefined}
+            onHome={buyer ? () => router.push('/restaurant') : undefined}
             outletName={order.outletName ?? (buyer ? 'Your outlet' : 'The restaurant')}
             address={delivery?.dropAddress ?? ([order.outletName, order.outletLocality].filter(Boolean).join(', ') || null)}
             segments={view.segments}

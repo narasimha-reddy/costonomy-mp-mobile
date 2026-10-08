@@ -109,6 +109,23 @@ describe('BuyerTrackingLayout', () => {
     expect(screen.queryByTestId('eta-pill')).toBeNull();
   });
 
+  it('CONFIRMED placed hero says what happens next, the total, the credit line and has View order / Back to Home', () => {
+    setup({ status: 'CONFIRMED', paymentMethod: 'CREDIT', creditDueDate: '2026-11-07', totalAmount: '1180.00' }, null);
+    expect(screen.getByText('Fresh Farms will start packing soon')).toBeTruthy();
+    expect(screen.queryByText('Waiting for supplier confirmation')).toBeNull();
+    expect(screen.getByText('₹1,180.00')).toBeTruthy();
+    expect(screen.getByText(/^On credit, due /)).toBeTruthy();
+    fireEvent.press(screen.getByRole('link', { name: 'View order' }));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/orders/5');
+    fireEvent.press(screen.getByRole('button', { name: 'Back to Home' }));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant');
+  });
+
+  it('a prepaid CONFIRMED order says Paid on the placed hero', () => {
+    setup({ status: 'CONFIRMED', paymentMethod: 'PREPAID', paymentStatus: 'CAPTURED' }, null);
+    expect(screen.getByText('Paid')).toBeTruthy();
+  });
+
   it('own READY has no map and no partner', () => {
     setup({ status: 'READY_FOR_PICKUP', deliveryMode: 'SUPPLIER_DELIVERY' }, null);
     expect(screen.getByText('Packed and ready')).toBeTruthy();

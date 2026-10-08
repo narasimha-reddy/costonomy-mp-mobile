@@ -144,7 +144,7 @@ describe('home restyle', () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([{
       id: 1, orderNumber: 'ORD-1', status: 'OUT_FOR_DELIVERY', deliveryMode: 'COSTONOMY_DELIVERY',
       supplierName: 'Fresh Farms', storeName: 'FF', outletName: 'Cafe', outletLocality: null,
-      createdAt: '2026-01-01T08:00:00Z', totalAmount: '100.00', paymentMethod: 'PREPAID', items: [],
+      createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), totalAmount: '100.00', paymentMethod: 'PREPAID', items: [],
     }]);
     (fetchDelivery as jest.Mock).mockResolvedValue({
       id: 9, status: 'IN_TRANSIT', mode: 'COSTONOMY', driverName: 'Ravi', trackable: true,

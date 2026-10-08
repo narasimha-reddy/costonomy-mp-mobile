@@ -1,7 +1,7 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { MandiText } from '@/components/common';
+import { MandiButton, MandiText } from '@/components/common';
 import { clockTime } from '@/lib/delivery/deliveryPartner';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
 
@@ -16,6 +16,7 @@ const TICK_CIRCLE = 84;
  */
 export function OrderPlacedHero({
   placedAt, supplier, outletName, address, segments, segmentIndex, caption = 'Waiting for supplier confirmation',
+  total, paymentText, onViewOrder, onHome,
 }: {
   placedAt: string | null;
   supplier: string;
@@ -25,6 +26,12 @@ export function OrderPlacedHero({
   segmentIndex: number;
   /** The line under the title; the supplier's version says what to do next. */
   caption?: string;
+  /** The order total as already formatted, with the payment line under it ("On credit, due 7 Nov", "Paid"). */
+  total?: string | null;
+  paymentText?: string | null;
+  /** The buyer's follow-ups; each shows only when given. */
+  onViewOrder?: () => void;
+  onHome?: () => void;
 }) {
   const time = clockTime(placedAt);
   const title = time != null ? `Order placed at ${time}` : 'Order placed';
@@ -64,6 +71,28 @@ export function OrderPlacedHero({
         {address != null && address !== '' && (
           <MandiText variant="caption" color={Colors.textSecondary} style={styles.address}>{address}</MandiText>
         )}
+        {total != null && (
+          <View style={styles.amount} accessible accessibilityLabel={`Order total ${total}${paymentText ? `, ${paymentText}` : ''}`}>
+            <MandiText variant="subtitle">{total}</MandiText>
+            {paymentText != null && paymentText !== '' && (
+              <MandiText variant="caption" color={Colors.textSecondary}>{paymentText}</MandiText>
+            )}
+          </View>
+        )}
+        {onViewOrder != null && (
+          <Pressable
+            onPress={onViewOrder}
+            accessibilityRole="link"
+            accessibilityLabel="View order"
+            style={styles.link}
+            hitSlop={8}
+          >
+            <MandiText variant="bodyEmphasis" color={Colors.primary}>View order</MandiText>
+          </Pressable>
+        )}
+        {onHome != null && (
+          <MandiButton label="Back to Home" variant="secondary" onPress={onHome} style={styles.home} />
+        )}
       </View>
     </View>
   );
@@ -95,5 +124,8 @@ const styles = StyleSheet.create({
   },
   outletRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   outlet: { flexShrink: 1 },
+  amount: { alignItems: 'center', marginTop: Spacing.lg, gap: 2 },
+  link: { minHeight: 48, justifyContent: 'center', marginTop: Spacing.sm },
+  home: { alignSelf: 'stretch', marginTop: Spacing.sm },
   address: { marginTop: Spacing.xs + 2, textAlign: 'center' },
 });

@@ -15,7 +15,7 @@ const TICK_CIRCLE = 84;
  * motion. The time is the device clock, as everywhere else on the tracking screen.
  */
 export function OrderPlacedHero({
-  placedAt, supplier, outletName, address, segments, segmentIndex,
+  placedAt, supplier, outletName, address, segments, segmentIndex, caption = 'Waiting for supplier confirmation',
 }: {
   placedAt: string | null;
   supplier: string;
@@ -23,6 +23,8 @@ export function OrderPlacedHero({
   address: string | null;
   segments: string[];
   segmentIndex: number;
+  /** The line under the title; the supplier's version says what to do next. */
+  caption?: string;
 }) {
   const time = clockTime(placedAt);
   const title = time != null ? `Order placed at ${time}` : 'Order placed';
@@ -33,7 +35,7 @@ export function OrderPlacedHero({
           <Ionicons name="time-outline" size={IconSize.xl} color={Colors.onGradient} />
           <View style={styles.cardText}>
             <MandiText variant="subtitle" color={Colors.onGradient} accessibilityRole="header">{title}</MandiText>
-            <MandiText variant="caption" color={Colors.onGradientMuted}>Waiting for supplier confirmation</MandiText>
+            <MandiText variant="caption" color={Colors.onGradientMuted}>{caption}</MandiText>
             <MandiText variant="caption" color={Colors.onGradientMuted}>{supplier}</MandiText>
           </View>
         </View>

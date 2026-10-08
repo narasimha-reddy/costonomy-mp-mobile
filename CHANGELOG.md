@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [feat/restyle-p17-supplier-tracking] - The supplier's tracking screen matches the restaurant's
+#### Changed
+- `/supplier/tracking/:id` now uses the green header, ETA pill, map, partner card (with plate), placed hero and delivered receipt via `BuyerTrackingLayout audience="supplier"` and a new `supplierTrackingHeader`; the sandbox card, partner search, retry and switch-to-own controls are kept. Supplier tracking polling now also pauses when the screen is not focused.
 ### [chore/restyle-e2e-tools] - Delivery e2e tooling runs against the merged stack
 #### Changed
 - `tools/delivery-e2e`: env overrides (`API`, `WEB`, `MYSQL_CMD`, `PIDGE_WEBHOOK_SECRET` from the environment first), provider detection (PIDGE vs MOCK, BLOCKED instead of FAIL), screenshots at 360/390/412, `android_shots.sh` (adb `-s` per emulator) and `driver.py --self-test` that refuses ports 7070/7071/3306.

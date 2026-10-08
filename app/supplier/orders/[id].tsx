@@ -51,7 +51,8 @@ import {
   weightAdjustmentCopy,
 } from '@/lib/orders/catchWeight';
 import { formatDistance, orderValue } from '@/utils/orders';
-import { formatMomentWithRecency } from '@/utils/dateRange';
+import { formatDay, formatMomentWithRecency } from '@/utils/dateRange';
+import { rejectionReasonLabel } from '@/lib/supplier/rejectionReason';
 import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { TrackingCards } from '@/components/delivery/TrackingCards';
@@ -480,7 +481,7 @@ export default function SupplierOrderScreen() {
               <View style={styles.valueRow}>
                 <Ionicons name="time-outline" size={16} color={Colors.primary} />
                 <MandiText variant="captionEmphasis" color={Colors.primary}>
-                  Slot: {order.scheduledDeliveryDate ?? 'Today'} {order.deliverySlotName ? `(${order.deliverySlotName})` : ''}
+                  Slot: {formatDay(order.scheduledDeliveryDate) ?? 'Today'} {order.deliverySlotName ? `(${order.deliverySlotName})` : ''}
                 </MandiText>
                 {order.isSubscriptionOrder && (
                   <MandiStatusChip tone="info" label="Subscription" size="sm" />
@@ -507,8 +508,8 @@ export default function SupplierOrderScreen() {
             {order.doorstepRefundAmount != null && parseFloat(order.doorstepRefundAmount) > 0 && (
               <View style={styles.valueRow}>
                 <Ionicons name="receipt-outline" size={16} color={Colors.danger} />
-                <MandiText variant="captionEmphasis" color={Colors.danger}>
-                  Doorstep Rejection Refund: -{formatMoney(order.doorstepRefundAmount)}
+                <MandiText variant="captionEmphasis" color={Colors.danger} style={styles.shrink}>
+                  Doorstep rejection refund: -{formatMoney(order.doorstepRefundAmount)}
                 </MandiText>
               </View>
             )}
@@ -557,7 +558,10 @@ export default function SupplierOrderScreen() {
           {/* ── Statutory Billing Documents ────────────────────────── */}
           {billingEligible && (
             <MandiCard>
-              <MandiText variant="bodyEmphasis">📄 GST Documents</MandiText>
+              <View style={styles.valueRow}>
+                <Ionicons name="document-text-outline" size={18} color={Colors.textPrimary} />
+                <MandiText variant="bodyEmphasis">GST documents</MandiText>
+              </View>
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                 <MandiButton
                   label={billingLoading ? 'Loading…' : (invoice ? 'View Invoice' : 'Generate Invoice')}
@@ -701,14 +705,10 @@ export default function SupplierOrderScreen() {
                   {item.doorstepRejectedQty != null && parseFloat(item.doorstepRejectedQty) > 0 && (
                     <View style={styles.itemDoorstepRow}>
                       <Ionicons name="close-circle-outline" size={14} color={Colors.danger} />
-                      <MandiText variant="caption" color={Colors.danger}>
-                        Doorstep rejected: {item.doorstepRejectedQty} {item.unit} ({item.doorstepRejectionReason ?? 'Damaged'})
+                      <MandiText variant="caption" color={Colors.danger} style={styles.shrink}>
+                        Doorstep rejected: {item.doorstepRejectedQty} {item.unit} ({rejectionReasonLabel(item.doorstepRejectionReason)})
+                        {item.doorstepRefundAmount != null ? ` · Refund: -${formatMoney(item.doorstepRefundAmount)}` : ''}
                       </MandiText>
-                      {item.doorstepRefundAmount != null && (
-                        <MandiText variant="caption" color={Colors.danger}>
-                          · Refund: -{formatMoney(item.doorstepRefundAmount)}
-                        </MandiText>
-                      )}
                     </View>
                   )}
                 </View>
@@ -859,7 +859,7 @@ export default function SupplierOrderScreen() {
             have left, the path is return or dispute. */}
         {(order.status === 'CONFIRMED' || order.status === 'PREPARING') && (
           <MandiButton
-            label="Cannot Fulfil"
+            label="Cannot fulfil"
             variant="neutral"
             size="md"
             onPress={() => setCancelling(true)}
@@ -982,6 +982,7 @@ const styles = StyleSheet.create({
   where: { flex: 1, gap: 2 },
   finding: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, minHeight: 48 },
   stars: { flexDirection: 'row', gap: 2 },
+  shrink: { flexShrink: 1 },
   valueRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1021,7 +1022,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: Colors.warningLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
     borderRadius: Radius.sm,
@@ -1031,7 +1032,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: Colors.dangerLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
     borderRadius: Radius.sm,

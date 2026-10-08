@@ -1,6 +1,6 @@
 import React from 'react';
 import { Linking, Text } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { DeliveryPartnerCard } from '@/components/delivery/DeliveryPartnerCard';
 import { PartnerSearchPanel } from '@/components/delivery/PartnerSearchPanel';
 import { CollapsibleSection } from '@/components/order/CollapsibleSection';
@@ -86,6 +86,30 @@ describe('PartnerSearchPanel', () => {
     expect(screen.getByText('Auto-retrying')).toBeTruthy();
     fireEvent.press(screen.getByText('Try again now'));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PartnerSearchPanel "Try again now" waits for a search that is really stuck', () => {
+  afterEach(() => { jest.useRealTimers(); });
+  const searching = (startedAgoMs: number) => ({
+    ...stopped, status: 'PROVIDER_SELECTED' as const,
+    searchStartedAt: new Date(NOW - startedAgoMs).toISOString(), retryUntil: new Date(NOW + 600000).toISOString(),
+  });
+
+  it('is hidden at the start of the search and appears after 60 s', () => {
+    jest.useFakeTimers();
+    render(<PartnerSearchPanel audience="supplier" nowMs={NOW} onRetry={jest.fn()} delivery={searching(5000)} />);
+    expect(screen.getByText('Searching for a partner')).toBeTruthy();
+    expect(screen.queryByText('Try again now')).toBeNull();
+    act(() => { jest.advanceTimersByTime(54000); });
+    expect(screen.queryByText('Try again now')).toBeNull();
+    act(() => { jest.advanceTimersByTime(2000); });
+    expect(screen.getByText('Try again now')).toBeTruthy();
+  });
+
+  it('is shown at once when the server says the search began over a minute ago', () => {
+    render(<PartnerSearchPanel audience="supplier" nowMs={NOW} onRetry={jest.fn()} delivery={searching(90000)} />);
+    expect(screen.getByText('Try again now')).toBeTruthy();
   });
 });
 

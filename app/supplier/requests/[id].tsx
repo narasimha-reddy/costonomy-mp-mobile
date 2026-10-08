@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
@@ -62,6 +62,7 @@ export default function SupplierRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const intentId = Number(id);
   const toast = useToast();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { storeId } = useStore();
@@ -349,6 +350,14 @@ export default function SupplierRequestScreen() {
                 </MandiText>
               )}
             </MandiCard>
+          )}
+          {request.supplierOrderId != null && (
+            <MandiButton
+              label="View order"
+              variant="secondary"
+              size="md"
+              onPress={() => router.push(`/supplier/orders/${request.supplierOrderId}` as never)}
+            />
           )}
         </>
       )}

@@ -554,7 +554,7 @@ function HowItWorksSheet({ visible, onClose }: { visible: boolean; onClose: () =
         <Step
           number={3}
           title="You create the order"
-          body="Once a supplier has accepted, you have a window to order against their answer. This is where you choose how the goods travel — collect them yourself, have the supplier deliver, or have us arrange a courier. A delivery fee is quoted before you commit to it."
+          body="Once a supplier has accepted, you have a window to order against their answer. This is where you choose how the goods travel — collect them yourself, have the supplier deliver, or have us arrange a delivery partner. A delivery fee is quoted before you commit to it."
         />
         <Step
           number={4}

@@ -1,3 +1,4 @@
+import { partnerWording } from '@/lib/delivery/partnerWording';
 import { partyTitle } from '@/lib/supplier/partyTitle';
 import { haversineM } from '@/lib/delivery/mapGeometry';
 import type { LatLng } from '@/lib/delivery/mapGeometry';
@@ -108,7 +109,7 @@ export function supplierTrackingHeader(i: {
     return out('delivered', view.headline, { ...neutral, layout: 'receipt' });
   }
   if (dStatus === 'DELIVERY_FAILED') {
-    return out('failed', COPY.failed, { ...neutral, pill: pill(delivery?.failureReason, 'warning') });
+    return out('failed', COPY.failed, { ...neutral, pill: pill(delivery?.failureReason ? partnerWording(delivery.failureReason) : delivery?.failureReason, 'warning') });
   }
   if (kind === 'pickup' && oStatus === 'READY_FOR_PICKUP') {
     return out('pickup_ready', COPY.pickupReady, { pill: pill(COPY.pickupPill) });
@@ -125,7 +126,7 @@ export function supplierTrackingHeader(i: {
 
   // The partner search and its failures: the view already decided which one this is.
   if (view.showFailure || (kind === 'partner' && oStatus === 'READY_FOR_PICKUP' && dStatus === 'CANCELLED')) {
-    const text = dStatus === 'CANCELLED' ? view.subline : delivery?.failureReason ?? COPY.noPartnerPill;
+    const text = dStatus === 'CANCELLED' ? view.subline : (delivery?.failureReason ? partnerWording(delivery.failureReason) : null) ?? COPY.noPartnerPill;
     return out('no_partner', dStatus === 'CANCELLED' ? view.headline : COPY.noPartner, {
       pill: pill(text, 'warning'), map: pending,
     });

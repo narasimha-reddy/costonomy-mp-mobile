@@ -1,6 +1,7 @@
 import type { Delivery, DeliveryStatus } from '@/models/delivery';
 import type { DeliveryMode as OrderDeliveryMode, SupplierOrder, SupplierOrderStatus } from '@/models/procurement';
 import { canRetryPartner, clockTime, searchProgress } from '@/lib/delivery/deliveryPartner';
+import { partnerWording } from '@/lib/delivery/partnerWording';
 
 /**
  * What the order tracker shows, as one pure function of what the server said.
@@ -313,7 +314,7 @@ export function orderTrackingView(input: {
   } else if (failed) {
     copy = buyer
       ? { headline: 'Delivery didn\'t go through', subline: 'Your supplier and our team have been told.', tone: 'danger' }
-      : { headline: 'Delivery failed', subline: delivery?.failureReason ?? null, tone: 'danger' };
+      : { headline: 'Delivery failed', subline: delivery?.failureReason ? partnerWording(delivery.failureReason) : null, tone: 'danger' };
   } else if (partnerChanged) {
     search = 'indeterminate';
     copy = { headline: 'Finding a new delivery partner', subline: 'Usually takes 2 to 5 mins', tone: 'warning' };
@@ -330,7 +331,7 @@ export function orderTrackingView(input: {
       }
       : {
         headline: 'No partner found yet',
-        subline: delivery?.failureReason ?? 'We could not find a delivery partner.',
+        subline: (delivery?.failureReason ? partnerWording(delivery.failureReason) : null) ?? 'We could not find a delivery partner.',
         tone: 'warning',
       };
   } else if (dStatus != null && partnerPhase) {

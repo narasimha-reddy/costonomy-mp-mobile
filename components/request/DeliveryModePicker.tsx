@@ -206,7 +206,7 @@ const LABELS: Record<DeliveryMode, string> = {
 const DESCRIPTIONS: Record<DeliveryMode, string> = {
   PICKUP: 'Collect from the store when it is ready',
   SUPPLIER_DELIVERY: 'The supplier brings it in their own vehicle',
-  COSTONOMY_DELIVERY: 'We arrange a courier and you can track it',
+  COSTONOMY_DELIVERY: 'We arrange a delivery partner and you can track it',
 };
 
 const styles = StyleSheet.create({

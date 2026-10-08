@@ -451,3 +451,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [Restyle] Checkout header card, add-more chip and delivery rows on the request screen (T14).
 - [Costonomy] Restyle e2e fixes: dark status bar on white tracking headers, dashed sketch route as real segments, own-delivery 'Delivery fee' wording, no stray unit in item tax line, 'Arranging delivery' list label.
 - [Restyle] Home/Orders pill now shows an in-flight order of any delivery mode and an answered request awaiting the order; INTENT and DELIVERY realtime events refresh the outlet lists; sketch map shows labelled Supplier/You pins and the correct solid/dashed legs per stage (T16).
+- [Restyle] Web delivery map: the real Google map (Maps JavaScript API, EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY) with supplier and restaurant pins, truck marker and route legs; falls back to the schematic without a key, on gm_authFailure or after 6 s without tiles (T18).

@@ -79,8 +79,11 @@ describe('MandiMapSketch honesty', () => {
     expect(JSON.stringify(toJSON())).not.toContain('"opacity":0.22');
   });
 
-  it('is what the web build exports', () => {
-    expect(MandiMapWeb).toBe(MandiMapSketch);
+  it('the web build draws the schematic when no web key is configured', () => {
+    delete process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY;
+    delete process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const { UNSAFE_queryByType } = render(<MandiMapWeb driver={fix} destination={outlet} stale={false} />);
+    expect(UNSAFE_queryByType(MandiMapSketch)).toBeTruthy();
   });
 });
 

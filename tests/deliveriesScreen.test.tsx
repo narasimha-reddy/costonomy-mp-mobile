@@ -3,7 +3,7 @@ import { ScrollView } from 'react-native';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DeliveriesScreen from '@/app/restaurant/deliveries';
-import { fetchOutletDeliveryRadar } from '@/services/delivery';
+import { fetchOutletDeliveries, fetchOutletDeliveryRadar } from '@/services/delivery';
 
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
@@ -183,9 +183,62 @@ describe('DeliveriesScreen duplicates removed', () => {
     withItems([item({ arrivalRank: 3 }), item({ deliveryId: 2, supplierOrderId: 43, orderNumber: 'ORD-43', arrivalRank: 1 })]);
     renderScreen();
     expect(await screen.findByText('Arrival #3')).toBeTruthy();
-    fireEvent.changeText(screen.getByLabelText('Search order, supplier, or driver'), 'ORD-42');
+    fireEvent.changeText(screen.getByLabelText('Search order, supplier, or delivery partner'), 'ORD-42');
     await waitFor(() => expect(screen.queryByText('Order ORD-43')).toBeNull());
     expect(screen.getByText('Order ORD-42')).toBeTruthy();
     expect(screen.queryByText(/Arrival #/)).toBeNull();
+  });
+});
+
+describe('finished deliveries carry no live hints (All)', () => {
+  const finished = (over: Record<string, unknown> = {}) => item({
+    status: 'DELIVERED', arrivalStage: 'DELIVERED_UNCHECKED', etaMinutes: null, deliveredAt: '2026-10-07T13:21:00Z',
+    isCheckedIn: true, scheduleStatus: 'RUNNING_LATE', recommendedAction: 'MONITOR',
+    actionReason: 'Order progressing normally on schedule.', ...over,
+  });
+  async function openAll(items: unknown[]) {
+    (fetchOutletDeliveries as jest.Mock).mockResolvedValue({ items });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('All')).toBeTruthy());
+    fireEvent.press(screen.getByText('All'));
+  }
+
+  it('a delivered, checked-in order shows its delivered time and no recommended-action text', async () => {
+    await openAll([finished({ actionReason: 'Driver running late or GPS stale. Call driver', recommendedAction: 'CALL_DRIVER' })]);
+    expect(await screen.findByText(/^Delivered at /)).toBeTruthy();
+    expect(screen.queryByText(/progressing normally/)).toBeNull();
+    expect(screen.queryByText(/running late/i)).toBeNull();
+  });
+
+  it('a delivered order still waiting for its check-in keeps the Check-in prompt', async () => {
+    await openAll([finished({ isCheckedIn: false, recommendedAction: 'CHECK_IN', actionReason: 'Check the delivery in' })]);
+    expect(await screen.findByText('Check the delivery in')).toBeTruthy();
+    expect(screen.getByText('Check-in')).toBeTruthy();
+  });
+
+  it('an active delivery keeps its hint', async () => {
+    withItems([item({ recommendedAction: 'MONITOR', actionReason: 'Order progressing normally on schedule.' })]);
+    renderScreen();
+    expect(await screen.findByText('Order progressing normally on schedule.')).toBeTruthy();
+  });
+});
+
+describe('delivery wording says delivery partner, not driver', () => {
+  it('stages and server hints are reworded', async () => {
+    withItems([item({
+      arrivalStage: 'AWAITING_DRIVER', status: 'DELIVERY_REQUESTED', recommendedAction: 'CALL_DRIVER',
+      actionReason: 'Driver running late or GPS stale. Call driver', driver: { name: 'Ravi', phone: null, vehicle: null },
+    })]);
+    renderScreen();
+    expect(await screen.findByText('Awaiting Delivery Partner')).toBeTruthy();
+    expect(screen.getByText('Delivery partner running late or GPS stale. Call delivery partner')).toBeTruthy();
+    expect(screen.queryByText(/driver/i)).toBeNull();
+  });
+
+  it('the search finds a delivery by its hint in the new words', async () => {
+    withItems([item({ actionReason: 'Driver running late' })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Order ORD-42')).toBeTruthy());
+    expect(screen.getByLabelText('Search order, supplier, or delivery partner')).toBeTruthy();
   });
 });

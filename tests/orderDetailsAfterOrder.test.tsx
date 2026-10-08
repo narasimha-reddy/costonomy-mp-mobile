@@ -92,7 +92,7 @@ describe('restaurant order details after the order', () => {
     setup(RestaurantOrderScreen);
     await screen.findByText('Bill Summary');
     expect(screen.getAllByText('On credit')).toHaveLength(1);
-    expect(screen.getByText(/^On credit, due /)).toBeTruthy();
+    expect(screen.getByText(/^Due 7th Nov 2026/)).toBeTruthy();
     expect(screen.queryByText(/📄/)).toBeNull();
   });
 
@@ -114,6 +114,49 @@ describe('restaurant order details after the order', () => {
     await screen.findByText('Bill Summary');
     expect(screen.getByText('Payment method')).toBeTruthy();
     expect(screen.getAllByText(new RegExp(label)).length).toBeGreaterThan(0);
+  });
+
+  it('after a check-in refund, the bill and the bar show the server final payable and the refund as its own line', async () => {
+    notRated();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({
+      ...completed, paymentMethod: 'WALLET', paymentStatus: 'PAID', creditDueDate: null, totalAmount: '901.00',
+      acceptedAmount: '901.00', doorstepRefundAmount: '430.50', finalPayableAmount: '470.50',
+    });
+    setup(RestaurantOrderScreen);
+    await screen.findByText('Bill Summary');
+    expect(screen.getByText('Refunded to wallet')).toBeTruthy();
+    expect(screen.getAllByText('₹430.50')).toHaveLength(1);
+    // "You paid" and the last bill line both say 470.50, never the 901.00 that was first debited.
+    expect(screen.getAllByText('₹470.50')).toHaveLength(2);
+    expect(screen.getByText('You paid')).toBeTruthy();
+  });
+
+  it('a wallet order says it was paid from the wallet once, not in the bill, a payment row and a pill', async () => {
+    notRated();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...completed, paymentMethod: 'WALLET', paymentStatus: 'PAID' });
+    setup(RestaurantOrderScreen);
+    await screen.findByText('Bill Summary');
+    expect(screen.getAllByText(/from wallet/i)).toHaveLength(1);
+    expect(screen.queryByText('Payment method')).toBeNull();
+  });
+
+  it('the delivery window shows a readable day, never the raw ISO date', async () => {
+    notRated();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({
+      ...completed, scheduledDeliveryDate: '2026-10-08', deliverySlotName: null,
+    });
+    setup(RestaurantOrderScreen);
+    expect(await screen.findByText('8th Oct 2026')).toBeTruthy();
+    expect(screen.queryByText(/2026-10-08/)).toBeNull();
+  });
+
+  it('the delivery window with a slot reads "8th Oct 2026, Morning"', async () => {
+    notRated();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({
+      ...completed, scheduledDeliveryDate: '2026-10-08', deliverySlotName: 'Morning',
+    });
+    setup(RestaurantOrderScreen);
+    expect(await screen.findByText('8th Oct 2026, Morning')).toBeTruthy();
   });
 
   it('GST Documents carries a document icon', async () => {

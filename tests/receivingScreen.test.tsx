@@ -80,7 +80,7 @@ describe('the check-in counts (API D-128)', () => {
     expect(orderId).toBe(501);
     expect(items).toEqual([{
       supplierOrderItemId: 301, receivedQuantity: '9.5', damagedQuantity: '0', missingQuantity: '0.1',
-      rejectionReason: 'DAMAGED_CRATE',
+      rejectionReason: 'SHORT_DELIVERY',
     }]);
   });
 
@@ -169,10 +169,38 @@ describe('the rejection-reason chips', () => {
     setup();
     await enterShortDelivery();
 
-    const chip = await screen.findByLabelText('Damaged Crate for Chicken');
+    // Only something missing was entered, so the chosen reason is the missing one, not a damaged crate.
+    const chip = await screen.findByLabelText('Short Delivery for Chicken');
     expect(chip.props.accessibilityRole).toBe('radio');
     expect(chip.props.accessibilityState.checked).toBe(true);
-    expect(screen.getByLabelText('Short Delivery for Chicken').props.accessibilityState.checked).toBe(false);
+    expect(screen.getByLabelText('Damaged Crate for Chicken').props.accessibilityState.checked).toBe(false);
+  });
+
+  it('default to Damaged Crate when something is damaged, and send what was chosen', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue(RECEIVING_APPLIED_NO_NOTE_YET);
+    setup();
+    const received = (await screen.findAllByDisplayValue('9.6'))[0] as ReturnType<typeof screen.getByDisplayValue>;
+    fireEvent.changeText(received, '9.5');
+    fireEvent.changeText(screen.getAllByDisplayValue('0')[0] as typeof received, '0.1');
+    expect((await screen.findByLabelText('Damaged Crate for Chicken')).props.accessibilityState.checked).toBe(true);
+    fireEvent.press(screen.getByLabelText('Wrong Grade for Chicken'));
+    fireEvent.press(screen.getByText('Complete check-in'));
+    await waitFor(() => expect(receiveOrder).toHaveBeenCalled());
+    expect((receiveOrder as jest.Mock).mock.calls[0][2][0].rejectionReason).toBe('WRONG_GRADE');
+  });
+});
+
+describe('the refund sheet', () => {
+  it('says Delivery checked in once: the sheet title carries it, the summary does not repeat it', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue(RECEIVING_APPLIED_NO_NOTE_YET);
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+    await screen.findByText('Refund of ₹10.50');
+    expect(screen.getAllByText(/^Delivery checked in/)).toHaveLength(1);
+    expect(screen.getByText('Chicken: 0.1 KG missing')).toBeTruthy();
   });
 });
 

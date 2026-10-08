@@ -52,7 +52,7 @@ describe('BillSummary', () => {
 
   it('final line from paymentLine', () => {
     show({ ...base, paymentMethod: 'CREDIT', paymentStatus: 'ON_CREDIT', creditDueDate: '2026-10-12' } as SupplierOrder);
-    expect(screen.getByText('On credit, due 12th Oct 2026')).toBeTruthy();
+    expect(screen.getByText('Due 12th Oct 2026')).toBeTruthy();
     expect(screen.queryByText('Paid')).toBeNull();
   });
 
@@ -70,5 +70,36 @@ describe('BillSummary', () => {
     show({ ...base, deliveryFee: '0.00' } as SupplierOrder);
     expect(screen.getByText('Delivery partner fee')).toBeTruthy();
     expect(screen.getByText('Free')).toBeTruthy();
+  });
+
+  describe('check-in refund (server fields only)', () => {
+    const refunded = {
+      ...base, status: 'COMPLETED', paymentMethod: 'WALLET', paymentStatus: 'PAID', acceptedAmount: '901.00',
+      totalAmount: '901.00', doorstepRefundAmount: '430.50', finalPayableAmount: '470.50',
+    } as unknown as SupplierOrder;
+
+    it('shows Refunded to wallet as its own line and the final payable as the last line', () => {
+      show(refunded);
+      expect(screen.getByText('Refunded to wallet')).toBeTruthy();
+      expect(screen.getByText('₹430.50')).toBeTruthy();
+      expect(screen.getByText('Paid from wallet')).toBeTruthy();
+      expect(screen.getByText('₹470.50')).toBeTruthy();
+      // the grand total is still the accepted amount, never worked out
+      expect(screen.getByText('₹901.00')).toBeTruthy();
+    });
+
+    it('no refund line when the server sent none, or sent zero', () => {
+      show({ ...refunded, doorstepRefundAmount: null, finalPayableAmount: null } as unknown as SupplierOrder);
+      expect(screen.queryByText(/^Refunded/)).toBeNull();
+      screen.unmount();
+      show({ ...refunded, doorstepRefundAmount: '0.00', finalPayableAmount: '901.00' } as unknown as SupplierOrder);
+      expect(screen.queryByText(/^Refunded/)).toBeNull();
+    });
+
+    it('a credit order says the refund came off credit', () => {
+      show({ ...refunded, paymentMethod: 'CREDIT', paymentStatus: 'ON_CREDIT' } as unknown as SupplierOrder);
+      expect(screen.getByText('Taken off credit')).toBeTruthy();
+      expect(screen.queryByText('Refunded to wallet')).toBeNull();
+    });
   });
 });

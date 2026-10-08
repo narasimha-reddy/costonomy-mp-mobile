@@ -21,6 +21,8 @@ export interface BillLine {
 export interface BillSummaryProps {
   lines: BillLine[];
   grandTotal: Money;
+  /** What was refunded at check-in, as its own line between the grand total and the final line. */
+  refundLine?: { label: string; amount: Money } | null;
   finalLine: { label: string; amount: Money };
   /** Drawn only when above zero. The backend sends none in v1. */
   savings?: Money | null;
@@ -29,7 +31,7 @@ export interface BillSummaryProps {
 type BillOrder = Pick<
   SupplierOrder,
   'status' | 'paymentMethod' | 'paymentStatus' | 'totalAmount' | 'acceptedAmount' | 'subtotal' | 'gstAmount'
-  | 'acceptedSubtotal' | 'acceptedGst' | 'deliveryFee' | 'deliveryMode'
+  | 'acceptedSubtotal' | 'acceptedGst' | 'deliveryFee' | 'deliveryMode' | 'finalPayableAmount' | 'doorstepRefundAmount'
 > & CreditDates & { paymentInstrument?: string | null };
 
 /**
@@ -51,9 +53,14 @@ export function billSummaryFor(order: BillOrder, settled: boolean, credit?: Cred
       : { label, amount: order.deliveryFee, valueText: 'Free', tone: 'saving' });
   }
   const final = paymentLine(order, credit);
+  // The check-in refund, said by the server: shown only when it sent an amount above zero.
+  const refunded = order.doorstepRefundAmount != null && Number(order.doorstepRefundAmount) > 0;
+  const refundLabel = order.paymentMethod === 'WALLET' ? 'Refunded to wallet'
+    : order.paymentMethod === 'CREDIT' ? 'Taken off credit' : 'Refunded';
   return {
     lines,
     grandTotal: settled ? (order.acceptedAmount as Money) : order.totalAmount,
+    refundLine: refunded ? { label: refundLabel, amount: order.doorstepRefundAmount as Money } : null,
     finalLine: { label: final.label, amount: final.amount },
   };
 }
@@ -74,7 +81,7 @@ export function itemTaxLine(item: {
 }
 
 /** "Bill Summary": one card, a row per server figure, the grand total, then what is left to pay or was paid. */
-export function BillSummary({ lines, grandTotal, finalLine, savings }: BillSummaryProps) {
+export function BillSummary({ lines, grandTotal, refundLine, finalLine, savings }: BillSummaryProps) {
   const saved = savings != null && Number(savings) > 0;
   return (
     <View style={styles.card} testID="bill-summary">
@@ -102,6 +109,12 @@ export function BillSummary({ lines, grandTotal, finalLine, savings }: BillSumma
         <MandiText variant="bodyEmphasis" style={styles.label}>Grand total</MandiText>
         <MandiText variant="bodyEmphasis">{formatMoney(grandTotal)}</MandiText>
       </View>
+      {refundLine != null && (
+        <View style={styles.row}>
+          <MandiText variant="body" color={Colors.successText} style={styles.label}>{refundLine.label}</MandiText>
+          <MandiText variant="body" color={Colors.successText}>{formatMoney(refundLine.amount)}</MandiText>
+        </View>
+      )}
       <View style={styles.row}>
         <MandiText variant="bodyEmphasis" style={styles.label}>{finalLine.label}</MandiText>
         <MandiText variant="bodyEmphasis">{formatMoney(finalLine.amount)}</MandiText>

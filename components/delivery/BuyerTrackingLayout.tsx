@@ -47,7 +47,7 @@ function placedCaption(status: string, supplierName: string): string | undefined
 /** "On credit, due 7 Nov" or "Paid" from the server's payment fields; null when the line would only say "Total". */
 function placedPaymentText(order: SupplierOrder): string | null {
   const line = paymentLine(order);
-  return line.label === 'Total' ? null : line.label;
+  return line.summary === 'Total' ? null : line.summary;
 }
 
 const SEARCH_BAR_HEIGHT = 5;
@@ -125,7 +125,8 @@ export function BuyerTrackingLayout({
         <ScrollView contentContainerStyle={styles.grow} {...scrollProps}>
           <OrderPlacedHero
             placedAt={order.createdAt ?? null}
-            supplier={buyer ? supplier : order.supplierName ?? order.storeName ?? supplier}
+            // The restaurant's header already names the supplier, and the caption does too: no third line.
+            supplier={buyer ? undefined : order.supplierName ?? order.storeName ?? supplier}
             caption={buyer ? placedCaption(order.status, order.supplierName ?? supplier) : 'Ready for you to start preparing'}
             total={buyer ? formatMoney(order.totalAmount) : undefined}
             paymentText={buyer ? placedPaymentText(order) : undefined}

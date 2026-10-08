@@ -19,7 +19,8 @@ export function OrderPlacedHero({
   total, paymentText, onViewOrder, onHome,
 }: {
   placedAt: string | null;
-  supplier: string;
+  /** A line under the caption; left out when the screen's header already names them. */
+  supplier?: string;
   outletName: string;
   address: string | null;
   segments: string[];
@@ -43,7 +44,9 @@ export function OrderPlacedHero({
           <View style={styles.cardText}>
             <MandiText variant="subtitle" color={Colors.onGradient} accessibilityRole="header">{title}</MandiText>
             <MandiText variant="caption" color={Colors.onGradientMuted}>{caption}</MandiText>
-            <MandiText variant="caption" color={Colors.onGradientMuted}>{supplier}</MandiText>
+            {supplier != null && supplier !== '' && (
+              <MandiText variant="caption" color={Colors.onGradientMuted}>{supplier}</MandiText>
+            )}
           </View>
         </View>
         {segments.length > 0 && segmentIndex >= 0 && (

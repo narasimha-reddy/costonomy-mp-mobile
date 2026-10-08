@@ -18,6 +18,7 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
+import { partnerWording } from '@/lib/delivery/partnerWording';
 import { resolveStatus, DeliveryStatus as DeliveryStatusRegistry } from '@/models/status';
 import {
   fetchOutletDeliveries,
@@ -83,7 +84,7 @@ export default function DeliveriesScreen() {
       item.supplier?.supplierOrgName,
       item.driver?.name,
       item.driver?.vehicle,
-      item.actionReason,
+      item.actionReason ? partnerWording(item.actionReason) : null,
     ].filter(Boolean).join(' ').toLowerCase();
     return haystack.includes(search.trim().toLowerCase());
   });
@@ -105,7 +106,7 @@ export default function DeliveriesScreen() {
       <MandiSearchBar
         value={search}
         onChangeText={setSearch}
-        placeholder="Search order, supplier, or driver"
+        placeholder="Search order, supplier, or delivery partner"
       />
 
       <FilterPills
@@ -231,8 +232,9 @@ export default function DeliveriesScreen() {
                 </Pressable>
               </View>
 
-              {/* Recommended Kitchen Action */}
-              {item.recommendedAction && item.actionReason && (
+              {/* Recommended Kitchen Action: only for a delivery still moving, or one waiting for its check-in. A finished
+                  one has no "progressing normally" or "running late" to tell. */}
+              {item.recommendedAction && item.actionReason && (!delivered || needsCheckIn) && (
                 <View style={[styles.actionBanner, actionBannerStyle(item.recommendedAction)]}>
                   <View style={styles.actionTextWrap}>
                     <Ionicons
@@ -241,7 +243,7 @@ export default function DeliveriesScreen() {
                       color={actionColor(item.recommendedAction)}
                     />
                     <MandiText variant="captionEmphasis" color={actionColor(item.recommendedAction)}>
-                      {item.actionReason}
+                      {partnerWording(item.actionReason)}
                     </MandiText>
                   </View>
                   {needsCheckIn && (
@@ -283,8 +285,8 @@ function formatStage(stage: string): string {
     case 'APPROACHING': return 'Approaching';
     case 'EN_ROUTE': return 'En Route';
     case 'AT_SUPPLIER_PICKUP': return 'At Pickup';
-    case 'DRIVER_DISPATCHED': return 'Driver Dispatched';
-    case 'AWAITING_DRIVER': return 'Awaiting Driver';
+    case 'DRIVER_DISPATCHED': return 'Delivery Partner Dispatched';
+    case 'AWAITING_DRIVER': return 'Awaiting Delivery Partner';
     case 'DELIVERED_UNCHECKED': return 'Delivered (Unchecked)';
     default: return stage.replace(/_/g, ' ');
   }

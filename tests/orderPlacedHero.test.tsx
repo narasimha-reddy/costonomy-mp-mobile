@@ -26,6 +26,12 @@ describe('OrderPlacedHero', () => {
     expect(screen.getByText('408, Medha Prestige, Indiranagar, Bengaluru')).toBeTruthy();
   });
 
+  it('without a supplier line it draws none (the header already names them)', () => {
+    render(<OrderPlacedHero {...props} supplier={undefined} />);
+    expect(screen.queryByText('Sri Balaji Traders')).toBeNull();
+    expect(screen.getByText('Kitchen')).toBeTruthy();
+  });
+
   it('draws a green tick circle and a progress bar', () => {
     render(<OrderPlacedHero {...props} />);
     const circle = screen.getByTestId('placed-tick', { includeHiddenElements: true });

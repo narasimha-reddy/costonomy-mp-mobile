@@ -153,6 +153,21 @@ describe('a refused quote is replaced, not reused (blocker 1)', () => {
   });
 });
 
+describe('after the order is placed', () => {
+  it('does not ask the server to preview it again (it would answer 400: nothing left to order)', async () => {
+    setup();
+    await waitFor(() => expect(placeDisabled()).toBe(false));
+    const previews = (previewOrder as jest.Mock).mock.calls.length;
+    const intentReads = (fetchIntent as jest.Mock).mock.calls.length;
+    fireEvent.press(screen.getByLabelText('Place order'));
+    await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalledTimes(1));
+    // The intent is refetched after placing; the preview must not ride along with it.
+    await waitFor(() => expect((fetchIntent as jest.Mock).mock.calls.length).toBeGreaterThan(intentReads));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect((previewOrder as jest.Mock).mock.calls.length).toBe(previews);
+  });
+});
+
 describe('a saved payment method that cannot be used (blocker 2)', () => {
   it('saved credit that no longer covers the order is not sent', async () => {
     save({ mode: 'COSTONOMY_DELIVERY', slotId: null, scheduledDate: null, method: 'CREDIT' });

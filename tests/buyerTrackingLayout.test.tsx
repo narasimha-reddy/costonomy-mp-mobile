@@ -124,6 +124,11 @@ describe('BuyerTrackingLayout', () => {
     expect(mockPush).not.toHaveBeenCalledWith('/restaurant');
   });
 
+  it('the placed screen names the supplier twice at most: the header and the "will start packing" line', () => {
+    setup({ status: 'CONFIRMED' }, null);
+    expect(screen.getAllByText(/Fresh Farms/)).toHaveLength(2);
+  });
+
   it('a prepaid CONFIRMED order says Paid on the placed hero', () => {
     setup({ status: 'CONFIRMED', paymentMethod: 'PREPAID', paymentStatus: 'CAPTURED' }, null);
     expect(screen.getByText('Paid')).toBeTruthy();

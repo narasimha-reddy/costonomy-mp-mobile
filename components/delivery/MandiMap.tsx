@@ -64,7 +64,7 @@ export function MandiMap(props: MandiMapProps) {
         {mode == null && driver && (
           <Marker
             coordinate={toLatLng(driver)}
-            title={stale ? 'Last known position' : 'Driver'}
+            title={stale ? 'Last known position' : 'Delivery partner'}
             pinColor={stale ? Colors.textTertiary : Colors.primary}
             opacity={stale ? 0.6 : 1}
           />

@@ -41,7 +41,7 @@ describe('paymentLine', () => {
   });
   it('CREDIT with a due date and not settled: On credit, due {date}', () => {
     expect(line({ paymentMethod: 'CREDIT', creditDueDate: '2026-10-20' })).toMatchObject({
-      label: 'On credit, due 20th Oct 2026', barLabel: 'On credit',
+      label: 'Due 20th Oct 2026', summary: 'On credit, due 20th Oct 2026', barLabel: 'On credit',
     });
   });
   it('CREDIT settled: Paid on {date} / Paid on credit', () => {
@@ -57,7 +57,7 @@ describe('paymentLine', () => {
     expect(line({ paymentMethod: 'CREDIT', creditSettledAt: 'garbage' }).label).toBe('Paid on credit');
   });
   it('the credit argument overrides the order fields', () => {
-    expect(line({ paymentMethod: 'CREDIT' }, { creditDueDate: '2026-11-01' }).label).toBe('On credit, due 1st Nov 2026');
+    expect(line({ paymentMethod: 'CREDIT' }, { creditDueDate: '2026-11-01' }).label).toBe('Due 1st Nov 2026');
   });
   it('no method: Total', () => {
     expect(line({ paymentMethod: null })).toMatchObject({ label: 'Total', barLabel: 'Total' });
@@ -65,5 +65,22 @@ describe('paymentLine', () => {
   it('amount is a server field: accepted once completed, else the total', () => {
     expect(line({ status: 'COMPLETED', acceptedAmount: '1100.00' }).amount).toBe('1100.00');
     expect(line({ status: 'PREPARING', acceptedAmount: '1100.00' }).amount).toBe('1180.00');
+  });
+
+  describe('after a check-in refund (finalPayableAmount, doorstepRefundAmount)', () => {
+    const wallet = { paymentMethod: 'WALLET', paymentStatus: 'PAID', status: 'COMPLETED', totalAmount: '901.00', acceptedAmount: '901.00' };
+    it('a wallet order refunded at check-in: the line and the bar carry the server final payable', () => {
+      const r = line({ ...wallet, doorstepRefundAmount: '430.50', finalPayableAmount: '470.50' });
+      expect(r).toMatchObject({ label: 'Paid from wallet', amount: '470.50', barLabel: 'You paid' });
+    });
+    it('no refund: the final payable is the accepted amount, and a missing one falls back to it', () => {
+      expect(line({ ...wallet, doorstepRefundAmount: null, finalPayableAmount: null }).amount).toBe('901.00');
+      expect(line({ ...wallet, doorstepRefundAmount: '0.00', finalPayableAmount: '901.00' }).amount).toBe('901.00');
+    });
+    it('a credit order: the final payable is what stays on credit', () => {
+      const r = line({ paymentMethod: 'CREDIT', paymentStatus: 'ON_CREDIT', status: 'COMPLETED', totalAmount: '901.00',
+        acceptedAmount: '901.00', finalPayableAmount: '470.50', doorstepRefundAmount: '430.50' });
+      expect(r).toMatchObject({ amount: '470.50', barLabel: 'On credit' });
+    });
   });
 });

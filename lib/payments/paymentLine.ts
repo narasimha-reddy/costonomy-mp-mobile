@@ -15,15 +15,18 @@ export interface CreditDates {
 export interface PaymentLine {
   /** The bill's final line. */
   label: string;
-  /** The figure that line is for, as the server sent it: the accepted amount once settled. */
+  /** The figure that line is for, as the server sent it: the final payable once the server has one, else the accepted amount once settled. */
   amount: Money;
   /** The sticky bar's caption. */
   barLabel: string;
+  /** The label with the method spelled out ("On credit, due 7th Nov 2026"), for places with no sticky bar beside it. */
+  summary: string;
 }
 
 type Input = Pick<
   SupplierOrder,
   'status' | 'paymentMethod' | 'paymentStatus' | 'totalAmount' | 'acceptedAmount'
+  | 'finalPayableAmount'
 > & CreditDates & { paymentInstrument?: string | null };
 
 /**
@@ -32,22 +35,24 @@ type Input = Pick<
  * settled, never because the order is complete.
  */
 export function paymentLine(order: Input, credit?: CreditDates | null): PaymentLine {
-  const amount = (order.status === 'COMPLETED' ? order.acceptedAmount : null) ?? order.totalAmount;
+  // The server's final payable wins: after a check-in refund it is what the buyer actually paid.
+  const amount = order.finalPayableAmount
+    ?? (order.status === 'COMPLETED' ? order.acceptedAmount : null) ?? order.totalAmount;
   const method: PaymentMethod | null = order.paymentMethod;
   const status = order.paymentStatus;
-  const both = (text: string): PaymentLine => ({ label: text, amount, barLabel: text });
+  const both = (text: string): PaymentLine => ({ label: text, amount, barLabel: text, summary: text });
 
   switch (method) {
     case 'PREPAID': {
       if (status === 'CAPTURED' || status === 'AUTHORIZED') {
-        return { label: 'Paid', amount, barLabel: 'You paid' };
+        return { label: 'Paid', amount, barLabel: 'You paid', summary: 'Paid' };
       }
       if (order.status === 'DRAFT') return both('To pay');
       return both(paymentStatusCopy({ status, instrument: order.paymentInstrument }).label);
     }
     case 'WALLET': {
       if (status === 'PAID' || status === 'CAPTURED') {
-        return { label: 'Paid from wallet', amount, barLabel: 'You paid' };
+        return { label: 'Paid from wallet', amount, barLabel: 'You paid', summary: 'Paid from wallet' };
       }
       return both(paymentStatusCopy({ status, instrument: order.paymentInstrument }).label);
     }
@@ -55,17 +60,16 @@ export function paymentLine(order: Input, credit?: CreditDates | null): PaymentL
       const settledAt = credit?.creditSettledAt ?? order.creditSettledAt;
       if (settledAt != null) {
         const settledOn = formatDay(settledAt);
-        return {
-          label: settledOn == null ? 'Paid on credit' : `Paid on ${settledOn}`,
-          amount,
-          barLabel: 'Paid on credit',
-        };
+        const text = settledOn == null ? 'Paid on credit' : `Paid on ${settledOn}`;
+        return { label: text, amount, barLabel: 'Paid on credit', summary: text };
       }
       const dueOn = formatDay(credit?.creditDueDate ?? order.creditDueDate);
+      // The bill's line is "Due 7th Nov 2026": "On credit" is already said by the sticky bar beside it.
       return {
-        label: dueOn == null ? 'On credit' : `On credit, due ${dueOn}`,
+        label: dueOn == null ? 'On credit' : `Due ${dueOn}`,
         amount,
         barLabel: 'On credit',
+        summary: dueOn == null ? 'On credit' : `On credit, due ${dueOn}`,
       };
     }
     default:

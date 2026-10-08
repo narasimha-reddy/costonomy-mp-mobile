@@ -47,11 +47,9 @@ export function SupplierStoreTitle({
   const router = useRouter();
   const [switching, setSwitching] = useState(false);
   const branches = header?.otherStores.length ?? 0;
-  const title = header?.storeName ?? fallbackTitle;
+  const storeName = header?.storeName ?? fallbackTitle;
   const supplierLine = header?.supplierName ?? fallbackSubtitle ?? null;
-  const subtitle = supplierLine != null && supplierLine.trim().toLowerCase() !== title.trim().toLowerCase()
-    ? supplierLine
-    : null;
+  const { title, subtitle } = splitStoreName(storeName, supplierLine);
 
   return (
     <View style={styles.bar}>
@@ -137,7 +135,7 @@ export function SupplierStoreTitle({
 
         <View style={styles.branchList}>
           <BranchRow
-            name={title}
+            name={storeName}
             city={header?.city ?? null}
             distanceKm={header?.distanceKm ?? null}
             openNow={header?.openNow ?? true}
@@ -160,6 +158,24 @@ export function SupplierStoreTitle({
       </MandiBottomSheet>
     </View>
   );
+}
+
+/**
+ * The title and caption for a store: the name once. "Sri Balaji Traders — Domlur" under the supplier "Sri Balaji
+ * Traders" is the supplier as the title and the locality as the caption; a store with a name of its own keeps it
+ * as the title with the supplier beneath; a store named exactly like its supplier has no caption.
+ */
+export function splitStoreName(storeName: string, supplier: string | null): { title: string; subtitle: string | null } {
+  const name = storeName.trim();
+  const owner = supplier?.trim() ?? '';
+  if (owner === '') return { title: storeName, subtitle: null };
+  if (name.toLowerCase() === owner.toLowerCase()) return { title: storeName, subtitle: null };
+  if (name.toLowerCase().startsWith(owner.toLowerCase())) {
+    const rest = name.slice(owner.length);
+    const place = /^\s*[—–-]\s*(\S.*)$/.exec(rest);
+    if (place != null) return { title: owner, subtitle: place[1] ?? null };
+  }
+  return { title: storeName, subtitle: supplier };
 }
 
 /**

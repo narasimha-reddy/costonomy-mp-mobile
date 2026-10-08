@@ -53,14 +53,15 @@ function problemLines(r: Receiving): string[] {
   return out;
 }
 
-function CheckInSummary({ receiving, centred }: { receiving: Receiving; centred?: boolean }) {
+function CheckInSummary({ receiving, centred, heading = true }: { receiving: Receiving; centred?: boolean; heading?: boolean }) {
   const lines = problemLines(receiving);
   if (!receiving.hasDiscrepancy && lines.length === 0) {
     return <MandiText variant="bodyEmphasis" style={centred ? styles.centred : undefined}>All items received as billed</MandiText>;
   }
   return (
     <>
-      <MandiText variant="bodyEmphasis" style={centred ? styles.centred : undefined}>Delivery checked in.</MandiText>
+      {/* The refund sheet's own title already says it. */}
+      {heading && <MandiText variant="bodyEmphasis" style={centred ? styles.centred : undefined}>Delivery checked in.</MandiText>}
       {lines.map((line) => (
         <MandiText key={line} variant="body" color={Colors.textSecondary} style={centred ? styles.centred : undefined}>{line}</MandiText>
       ))}
@@ -109,12 +110,18 @@ export default function ReceivingScreen() {
     return item ? billedQuantityOf(item) : 0;
   };
 
+  /**
+   * The reason follows the problem entered: damaged goods default to a damaged crate, goods that never came to a short
+   * delivery. What the buyer picked wins.
+   */
+  const reasonOf = (state: LineState): string =>
+    state.reason ?? (state.damaged > 0 ? 'DAMAGED_CRATE' : 'SHORT_DELIVERY');
+
   const stateOf = (itemId: number): LineState =>
     lines[itemId] ?? {
       received: agreedOf(itemId),
       damaged: 0,
       missing: 0,
-      reason: 'DAMAGED_CRATE',
     };
 
   function setLine(itemId: number, next: Partial<LineState>) {
@@ -158,7 +165,7 @@ export default function ReceivingScreen() {
           missingQuantity: quantityString(state.missing),
           rejectionReason:
             state.damaged > 0 || state.missing > 0
-              ? state.reason ?? 'DAMAGED_CRATE'
+              ? reasonOf(state)
               : undefined,
         };
       });
@@ -318,7 +325,7 @@ export default function ReceivingScreen() {
                     </MandiText>
                     <View style={styles.reasonsList}>
                       {REJECTION_REASONS.map((r) => {
-                        const active = (state.reason ?? 'DAMAGED_CRATE') === r.key;
+                        const active = reasonOf(state) === r.key;
                         return (
                           <Pressable
                             key={r.key}
@@ -376,7 +383,7 @@ export default function ReceivingScreen() {
                 </MandiText>
               )}
 
-              {checkedIn != null && <CheckInSummary receiving={checkedIn} centred />}
+              {checkedIn != null && <CheckInSummary receiving={checkedIn} centred heading={false} />}
 
               <View style={styles.creditNoteCard}>
                 {completionModal?.lines.map((line) => (

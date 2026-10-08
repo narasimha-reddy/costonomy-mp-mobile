@@ -50,7 +50,8 @@ export const TrackLayout = {
   /** Metres from the drop at which the map shows the arriving ring, and the reached ring. */
   geofenceArriveM: 300,
   geofenceReachM: 50,
-  truckWidth: 36,
+  /** The truck marker's square box (the truck turns inside it), in dp. */
+  truckSize: 44,
 } as const;
 
 /** The tracking screen: what sits above the sheet, and how far the sheet rides up over it. */

@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react-native';
 import { MandiMap } from '@/components/delivery/MandiMap.web';
 import { resetTileWatchdog, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
 import { Colors } from '@/theme';
+import { LOGO_DEEP_D } from '@/lib/maps/truckSvg';
 
 const mockLoad = jest.fn();
 jest.mock('@/lib/maps/googleWebLoader', () => ({
@@ -198,18 +199,65 @@ describe('MandiMap (web)', () => {
     expect(circles[0]!.opts.radius).toBe(300);
   });
 
-  it('truck marker flips with bearing and mutes when stale', async () => {
+  it('truck marker is the top-view truck with the logo, rotated to the bearing, and mutes when stale', async () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
     const view = render(<MandiMap driver={{ ...fix, bearing: '270' }} destination={outlet} stale={false} mode="live" />);
     await flush();
     const truck = truckOf();
-    expect(decodeURIComponent(truck.opts.icon.url)).toContain('scale(-1');
+    const first = decodeURIComponent(truck.opts.icon.url);
+    expect(first).toContain('rotate(270 ');
+    expect(first).toContain(LOGO_DEEP_D);
+    // Square and centred, so any rotation stays on the fix.
+    expect(truck.opts.icon.scaledSize.w).toBe(truck.opts.icon.scaledSize.h);
+    expect(truck.opts.icon.anchor).toEqual({ x: truck.opts.icon.scaledSize.w / 2, y: truck.opts.icon.scaledSize.h / 2 });
     view.rerender(<MandiMap driver={{ ...fix, bearing: '90' }} destination={outlet} stale mode="live" />);
     await flush();
+    act(() => { jest.advanceTimersByTime(1500); });
     const url = decodeURIComponent((truck.setIcon.mock.calls.at(-1) as any[])[0].url);
-    expect(url).not.toContain('scale(-1');
+    expect(url).toContain('rotate(90 ');
     expect(url).toContain(Colors.truckMuted);
     expect(truck.setOpacity).toHaveBeenLastCalledWith(0.6);
+  });
+
+  it('turns over the glide the short way round, in 5 degree steps', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    const view = render(<MandiMap driver={{ ...fix, bearing: '340' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    const truck = truckOf();
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.971', bearing: '20' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    act(() => { jest.advanceTimersByTime(500); });
+    const angles = () => truck.setIcon.mock.calls.map((c: any[]) => Number(/rotate\((\d+) /.exec(decodeURIComponent(c[0].url))![1]));
+    const mid = angles().at(-1)!;
+    expect(Math.min(mid, 360 - mid)).toBeLessThanOrEqual(10);
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(angles().at(-1)).toBe(20);
+    // Every step is a 5 degree bucket and none swung through the south.
+    for (const a of angles()) {
+      expect(a % 5).toBe(0);
+      expect(a >= 340 || a <= 20).toBe(true);
+    }
+    // One icon per bucket crossed, not one per animation frame.
+    expect(truck.setIcon.mock.calls.length).toBeLessThanOrEqual(9);
+  });
+
+  it('with no bearing the truck faces the way the fixes moved, and keeps it while standing', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    const truck = truckOf();
+    expect(decodeURIComponent(truck.opts.icon.url)).toContain('rotate(0 ');
+    view.rerender(<MandiMap driver={{ ...fix, longitude: '77.6', recordedAt: '2026-01-01T10:00:02Z' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    act(() => { jest.advanceTimersByTime(2500); });
+    const last = () => decodeURIComponent((truck.setIcon.mock.calls.at(-1) as any[])[0].url);
+    expect(last()).toContain('rotate(90 ');
+    const calls = truck.setIcon.mock.calls.length;
+    // Standing at the pickup (a 1 m wobble): still facing east.
+    view.rerender(<MandiMap driver={{ ...fix, longitude: String(77.6 + 0.00001), recordedAt: '2026-01-01T10:00:04Z' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    act(() => { jest.advanceTimersByTime(2500); });
+    expect(truck.setIcon.mock.calls.length).toBe(calls);
   });
 
   it('moves the truck smoothly between fixes instead of jumping', async () => {

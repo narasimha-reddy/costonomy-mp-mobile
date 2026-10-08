@@ -4,8 +4,9 @@ import MapView, { Circle, Marker, Polyline, PROVIDER_DEFAULT } from 'react-nativ
 import { MAPS_CONFIGURED } from '@/lib/maps/config';
 import { useTileWatchdog } from '@/lib/maps/tileWatchdog';
 import { fitTargetFor } from '@/lib/maps/googleLegs';
-import { mirrored, regionFor, toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
-import { TruckIcon } from './TruckIcon';
+import { regionFor, toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
+import { useSmoothHeading, useTruckHeading } from '@/hooks/useTruckHeading';
+import { TruckTopIcon } from './TruckTopIcon';
 import { MandiMapSketch, type MandiMapProps, type MapMode } from './MandiMapSketch';
 import { Colors, Radius, TrackLayout } from '@/theme';
 
@@ -40,6 +41,8 @@ export function MandiMap(props: MandiMapProps) {
   const { driver, destination, stale, height = 220, bare = false, pickup = null, mode, audience = 'buyer' } = props;
   const watched = MAPS_CONFIGURED && Platform.OS === 'android' && !forcedSketch();
   const watchdog = useTileWatchdog(undefined, watched);
+  // Followed on every fix, even while the sketch is shown, so the truck faces the right way if the map comes back.
+  const heading = useTruckHeading(driver);
 
   const focus = driver ? toLatLng(driver) : destination;
 
@@ -73,7 +76,7 @@ export function MandiMap(props: MandiMapProps) {
           />
         )}
         {mode != null && truck && mode !== 'placed' && mode !== 'pending' && (
-          <TruckMarker at={truck} stale={stale} flip={mirrored(driver?.bearing)} />
+          <TruckMarker at={truck} stale={stale} heading={heading} />
         )}
         {mode != null && pickup && <Marker coordinate={pickup} title="Supplier" pinColor={Colors.textPrimary} />}
         {destination && (
@@ -128,19 +131,21 @@ function Route({ mode, truck, pickup, drop }: { mode: MapMode; truck: LatLng | n
 }
 
 /**
- * The truck. A custom marker view is redrawn only while `tracksViewChanges` is on, so it is on for the first
- * moments after it appears or changes (muted, mirrored) and then off; left on it burns the battery.
+ * The truck, flat on the map and turned to its heading by the marker's own `rotation` (eased the short way round), so
+ * the image is not redrawn for a turn. A custom marker view is redrawn only while `tracksViewChanges` is on, so it is
+ * on for the first moments after it appears or its colours change (stale) and then off; left on it burns the battery.
  */
-function TruckMarker({ at, stale, flip }: { at: LatLng; stale: boolean; flip: boolean }) {
+function TruckMarker({ at, stale, heading }: { at: LatLng; stale: boolean; heading: number }) {
   const [track, setTrack] = useState(true);
+  const rotation = useSmoothHeading(heading);
   useEffect(() => {
     setTrack(true);
     const t = setTimeout(() => setTrack(false), TRACK_MS);
     return () => clearTimeout(t);
-  }, [stale, flip]);
+  }, [stale]);
   return (
-    <Marker coordinate={at} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={track}>
-      <TruckIcon width={TrackLayout.truckWidth} muted={stale} flip={flip} />
+    <Marker coordinate={at} anchor={{ x: 0.5, y: 0.5 }} flat rotation={rotation} tracksViewChanges={track}>
+      <TruckTopIcon size={TrackLayout.truckSize} muted={stale} />
     </Marker>
   );
 }

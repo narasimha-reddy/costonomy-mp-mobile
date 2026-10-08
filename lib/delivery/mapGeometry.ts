@@ -66,13 +66,59 @@ export function regionFor(points: LatLng[]): MapRegion {
   };
 }
 
-/** True when the truck (drawn facing right) should be mirrored: a bearing from 180 up to, not including, 360. */
-export function mirrored(bearing: number | string | null | undefined): boolean {
-  if (bearing == null) return false;
-  const n = Number(bearing);
-  if (!Number.isFinite(n)) return false;
-  const d = ((n % 360) + 360) % 360;
-  return d >= 180;
+/** A move shorter than this between fixes is GPS jitter or a truck standing still: it does not turn the truck. */
+export const MIN_HEADING_MOVE_M = 5;
+
+/** Degrees into 0 (inclusive) .. 360 (exclusive). */
+export function normDeg(deg: number): number {
+  return ((deg % 360) + 360) % 360;
+}
+
+/** The initial compass bearing from a to b: 0 north, 90 east, 180 south, 270 west. */
+export function bearingBetween(a: LatLng, b: LatLng): number {
+  const f1 = toRad(a.latitude);
+  const f2 = toRad(b.latitude);
+  const dl = toRad(b.longitude - a.longitude);
+  const y = Math.sin(dl) * Math.cos(f2);
+  const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+  return normDeg((Math.atan2(y, x) * 180) / Math.PI);
+}
+
+/** The heading for a move from prev to next; a move under MIN_HEADING_MOVE_M (or no prev) keeps the last heading. */
+export function headingFrom(prev: LatLng | null, next: LatLng, lastHeading: number): number {
+  if (prev == null || haversineM(prev, next) < MIN_HEADING_MOVE_M) return lastHeading;
+  return bearingBetween(prev, next);
+}
+
+/** The signed turn (-180 .. 180] that takes `from` to `to` the short way round. */
+export function shortestTurn(from: number, to: number): number {
+  const d = normDeg(to - from);
+  return d > 180 ? d - 360 : d;
+}
+
+/** The heading `t` (0..1) of the way from `from` to `to`, turning the short way: 350 to 10 passes north, not south. */
+export function turnLerp(from: number, to: number, t: number): number {
+  return normDeg(from + shortestTurn(from, to) * t);
+}
+
+/** Where the truck is facing, and the fix that heading was last measured from. */
+export interface HeadingState {
+  anchor: LatLng | null;
+  heading: number;
+}
+
+/**
+ * The heading after a new fix: the provider's bearing when it sends a readable one, else the direction of the move
+ * since the last fix that counted (a move under 5 m, standing at the pickup, keeps the heading and the anchor, so a
+ * slow crawl still turns the truck once it adds up to 5 m).
+ */
+export function advanceHeading(state: HeadingState, fix: DeliveryLocation): HeadingState {
+  const at = toLatLng(fix);
+  const sent = fix.bearing == null || fix.bearing === '' ? NaN : Number(fix.bearing);
+  if (Number.isFinite(sent)) return { anchor: at, heading: normDeg(sent) };
+  if (state.anchor == null) return { anchor: at, heading: state.heading };
+  if (haversineM(state.anchor, at) < MIN_HEADING_MOVE_M) return state;
+  return { anchor: at, heading: headingFrom(state.anchor, at, state.heading) };
 }
 
 /** The server sends coordinates as decimal strings. */

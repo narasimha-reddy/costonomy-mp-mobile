@@ -140,13 +140,23 @@ export const Colors = {
   geofenceFill: 'rgba(22,163,74,0.15)',
   geofenceStroke: 'rgba(22,163,74,0.45)',
   pickupPin: '#1F2937',
-  /** The truck marker: the parcel is the brand orange; stale uses the muted pair. */
-  truckParcel: '#FF6000',
-  truckParcelLight: '#FFB380',
+  /**
+   * The truck marker, seen from above: a brand-orange cab, a white cargo roof with a grey edge (so it reads on a
+   * light map) carrying the Costonomy C in its two tones, dark mirrors and windscreen, a soft shadow under it.
+   * Stale uses the muted set: grey cab and logo on a pale roof.
+   */
+  truckBody: '#FF6000',
+  truckRoof: '#FFFFFF',
+  truckRoofEdge: '#C9CFD8',
   truckCab: '#1F2937',
-  truckGlass: '#9CC9F5',
+  truckGlass: '#33475B',
+  truckShadow: 'rgba(17,24,39,0.16)',
+  /** The Costonomy C: the upper quarter is sand, the rest the deeper orange. */
+  truckLogoSand: '#E9A868',
+  truckLogoOrange: '#E8893C',
   truckMuted: '#9CA3AF',
   truckMutedLight: '#D1D5DB',
+  truckMutedRoof: '#F1F3F5',
 
   // ── Marketplace: data freshness (PRD §23A.46, guardrail 16/17) ──────
   // Stale is deliberately *grey*, not amber: a stale price or an old GPS fix is

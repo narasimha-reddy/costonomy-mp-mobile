@@ -2,7 +2,7 @@
  * What the Google web map draws, decided in plain data so it can be tested without a map.
  * The native map (MandiMap.tsx) draws the same legs; display only, nothing decides anything on it.
  */
-import { haversineM, mirrored, regionFor, type LatLng } from '@/lib/delivery/mapGeometry';
+import { haversineM, regionFor, type LatLng } from '@/lib/delivery/mapGeometry';
 import { Colors, TrackLayout } from '@/theme';
 
 export type LegMode = 'placed' | 'pending' | 'live' | 'arriving' | 'reached' | undefined;
@@ -42,25 +42,9 @@ export function legsFor(input: { mode: LegMode; truck: LatLng | null; pickup: La
   return { lines, circles, showTruck };
 }
 
-export function truckLook(input: { bearing: number | string | null | undefined; stale: boolean }) {
-  return { flip: mirrored(input.bearing), muted: input.stale, opacity: input.stale ? 0.6 : 1 };
-}
-
-/** The TruckIcon artwork (components/delivery/TruckIcon.tsx) as an SVG data URL, mirrored with the flip. */
-export function truckSvgDataUrl({ flip, muted }: { flip: boolean; muted: boolean }): string {
-  const parcel = muted ? Colors.truckMuted : Colors.truckParcel;
-  const light = muted ? Colors.truckMutedLight : Colors.truckParcelLight;
-  const body =
-    `<rect x="1" y="3" width="24" height="14" rx="2.5" fill="${parcel}"/>` +
-    `<rect x="5" y="6" width="16" height="7" rx="1.5" fill="${light}"/>` +
-    `<path d="M24 7h8l6 6v4H24z" fill="${parcel}"/>` +
-    `<path d="M27 9h4l3 3.5h-7z" fill="${Colors.truckGlass}"/>` +
-    `<rect x="1" y="15" width="37" height="3" rx="1" fill="${Colors.truckCab}"/>` +
-    `<circle cx="9" cy="19" r="3.2" fill="${Colors.truckCab}" stroke="${Colors.surface}" stroke-width="1"/>` +
-    `<circle cx="31" cy="19" r="3.2" fill="${Colors.truckCab}" stroke="${Colors.surface}" stroke-width="1"/>`;
-  const inner = flip ? `<g transform="translate(40 0) scale(-1 1)">${body}</g>` : body;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="24" viewBox="0 0 40 24">${inner}</svg>`;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+/** The truck's palette and opacity: a stale fix is grey and faded. Its heading is drawn by lib/maps/truckSvg.ts. */
+export function truckLook(input: { stale: boolean }) {
+  return { muted: input.stale, opacity: input.stale ? 0.6 : 1 };
 }
 
 /** Google's shapes take a colour and a separate opacity; split an rgba() token. */

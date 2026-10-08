@@ -1,5 +1,5 @@
 import {
-  legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, shouldRefitMoving, fitTargetFor, insidePadded,
+  legsFor, truckLook, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, shouldRefitMoving, fitTargetFor, insidePadded,
   QUIET_MAP_STYLE, cameraFor, MIN_ZOOM, MAX_ZOOM, SINGLE_POINT_ZOOM, NEAR_DROP_M, chipIcon, chipSide, metersPerPixel,
 } from '@/lib/maps/googleLegs';
 import { Colors, TrackLayout } from '@/theme';
@@ -49,20 +49,9 @@ describe('legsFor', () => {
 });
 
 describe('truck look', () => {
-  it('flips with bearing and mutes when stale', () => {
-    expect(truckLook({ bearing: 90, stale: false })).toEqual({ flip: false, muted: false, opacity: 1 });
-    expect(truckLook({ bearing: 270, stale: false }).flip).toBe(true);
-    expect(truckLook({ bearing: null, stale: true })).toEqual({ flip: false, muted: true, opacity: 0.6 });
-  });
-
-  it('the svg data url carries the muted palette and the mirror', () => {
-    const live = decodeURIComponent(truckSvgDataUrl({ flip: false, muted: false }));
-    const stale = decodeURIComponent(truckSvgDataUrl({ flip: true, muted: true }));
-    expect(live).toContain(Colors.truckParcel);
-    expect(live).not.toContain('scale(-1');
-    expect(stale).toContain(Colors.truckMuted);
-    expect(stale).not.toContain(Colors.truckParcel);
-    expect(stale).toContain('scale(-1');
+  it('mutes when stale; the heading is not its business', () => {
+    expect(truckLook({ stale: false })).toEqual({ muted: false, opacity: 1 });
+    expect(truckLook({ stale: true })).toEqual({ muted: true, opacity: 0.6 });
   });
 
   it('only shows the truck once a partner is on the way', () => {

@@ -3,11 +3,13 @@ import { StyleSheet, View } from 'react-native';
 import { loadWebMaps } from '@/lib/maps/googleWebLoader';
 import { markTilesFailed, markTilesLoaded, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
 import { hostHasTiles, hostShown, watchHost } from '@/lib/maps/hostVisibility';
-import { toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
+import { toLatLng, turnLerp, type LatLng } from '@/lib/delivery/mapGeometry';
 import {
   cameraFor, chipAnchor, chipIcon, chipSide, cssColor, distanceM, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint,
-  MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook, truckSvgDataUrl,
+  MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook,
 } from '@/lib/maps/googleLegs';
+import { headingBucket, truckIconUrl } from '@/lib/maps/truckSvg';
+import { useTruckHeading } from '@/hooks/useTruckHeading';
 import { MandiMapSketch, type MandiMapProps } from './MandiMapSketch';
 import { Colors, Radius, TrackLayout } from '@/theme';
 
@@ -52,12 +54,13 @@ const pt = (p: LatLng) => ({ lat: p.latitude, lng: p.longitude });
  * `idle` or tiles found painted in the box. A timeout falls back for this map only; only a refused key
  * (`gm_authFailure`) sends every map of the session to the schematic.
  *
- * <p>The truck is a marker with the TruckIcon artwork, mirrored by bearing and greyed when the fix is stale. A stale
- * fix is drawn differently, never as current.
+ * <p>The truck is a marker with the top-view truck (lib/maps/truckSvg.ts), turned to its heading (see `useTruckHeading`)
+ * and greyed when the fix is stale. A stale fix is drawn differently, never as current.
  */
 export function GoogleTrackMap(props: MandiMapProps) {
   const { driver, destination, stale, height = 220, bare = false, pickup = null, mode, accessibilityLabel, audience = 'buyer' } = props;
   const [failed, setFailed] = useState(tilesFailed());
+  const heading = useTruckHeading(driver);
   const [ready, setReady] = useState(false);
   const host = useRef<unknown>(null);
   // The host element exists only once the first render had something to draw; the map is created when it does.
@@ -68,7 +71,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
     setHostEl((cur: unknown) => (cur === el ? cur : el));
   };
   const map = useRef<G>(null);
-  const truck = useRef<{ marker: G; look: string; at: LatLng } | null>(null);
+  const truck = useRef<{ marker: G; look: string; at: LatLng; heading: number } | null>(null);
   const overlays = useRef<G[]>([]);
   const lastFixAt = useRef<string | null>(null);
   const glide = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -361,43 +364,48 @@ export function GoogleTrackMap(props: MandiMapProps) {
       truck.current = null;
       return;
     }
-    const look = truckLook({ bearing: driver?.bearing, stale });
-    const lookKey = `${look.flip}|${look.muted}`;
-    const icon = () => ({
-      url: truckSvgDataUrl(look),
-      scaledSize: new g.Size(TrackLayout.truckWidth, (TrackLayout.truckWidth * 24) / 40),
-      anchor: new g.Point(TrackLayout.truckWidth / 2, (TrackLayout.truckWidth * 24) / 80),
+    const look = truckLook({ stale });
+    // Google's marker icon cannot rotate: the turn is baked into the image, one cached image per 5 degree bucket.
+    const lookKey = (h: number) => `${look.muted}|${headingBucket(h)}`;
+    const icon = (h: number) => ({
+      url: truckIconUrl({ muted: look.muted, heading: h }),
+      scaledSize: new g.Size(TrackLayout.truckSize, TrackLayout.truckSize),
+      anchor: new g.Point(TrackLayout.truckSize / 2, TrackLayout.truckSize / 2),
     });
     const cur = truck.current;
     if (!cur) {
       const marker = new g.Marker({
         map: map.current,
         position: pt(at),
-        icon: icon(),
+        icon: icon(heading),
         opacity: look.opacity,
         title: stale ? 'Last known position' : 'Delivery partner',
         zIndex: TRUCK_Z,
       });
-      truck.current = { marker, look: lookKey, at };
+      truck.current = { marker, look: lookKey(heading), at, heading };
       lastFixAt.current = driver?.recordedAt ?? null;
       return;
     }
-    if (cur.look !== lookKey) {
-      cur.marker.setIcon(icon());
-      cur.look = lookKey;
-    }
     cur.marker.setOpacity(look.opacity);
-    // Glide from where the marker is now to the new fix, taking as long as the fixes are apart (1 to 5 s).
+    // Glide from where the marker is now to the new fix, taking as long as the fixes are apart (1 to 5 s), turning to
+    // the new heading the short way round over the same time (a new image only when the 5 degree bucket changes).
     const glideFor = glideMs(lastFixAt.current, driver?.recordedAt);
     lastFixAt.current = driver?.recordedAt ?? null;
     if (glide.current) clearTimeout(glide.current);
     const from = cur.at;
+    const fromHeading = cur.heading;
     const started = Date.now();
     const step = () => {
       const t = Math.min(1, (Date.now() - started) / glideFor);
       const here = lerpPoint(from, at, t);
       cur.at = here;
       cur.marker.setPosition(pt(here));
+      cur.heading = t < 1 ? turnLerp(fromHeading, heading, t) : heading;
+      const key = lookKey(cur.heading);
+      if (cur.look !== key) {
+        cur.marker.setIcon(icon(cur.heading));
+        cur.look = key;
+      }
       glide.current = t < 1 ? setTimeout(step, GLIDE_STEP_MS) : null;
     };
     step();

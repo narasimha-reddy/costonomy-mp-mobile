@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 import { MandiMap } from '@/components/delivery/MandiMap';
 import { MandiMap as MandiMapWeb } from '@/components/delivery/MandiMap.web';
 import { MandiMapSketch } from '@/components/delivery/MandiMapSketch';
-import { TruckIcon } from '@/components/delivery/TruckIcon';
+import { TruckTopIcon } from '@/components/delivery/TruckTopIcon';
 import { Colors } from '@/theme';
 
 let mockConfigured = false;
@@ -158,7 +158,7 @@ describe('MandiMap modes (native)', () => {
 
   it('stale mutes the truck', () => {
     const { UNSAFE_getByType } = render(<MandiMap driver={fix} destination={outlet} stale mode="live" />);
-    expect(UNSAFE_getByType(TruckIcon).props.muted).toBe(true);
+    expect(UNSAFE_getByType(TruckTopIcon).props.muted).toBe(true);
   });
 });
 
@@ -204,7 +204,7 @@ describe('MandiMapSketch modes', () => {
 
   it('stale mutes the truck', () => {
     const { UNSAFE_getByType } = render(<MandiMapSketch driver={fix} destination={outlet} stale mode="live" />);
-    expect(UNSAFE_getByType(TruckIcon).props.muted).toBe(true);
+    expect(UNSAFE_getByType(TruckTopIcon).props.muted).toBe(true);
   });
 
   it('renders exactly one truck', () => {
@@ -214,6 +214,21 @@ describe('MandiMapSketch modes', () => {
       expect(screen.getAllByTestId('map-driver')).toHaveLength(1);
       unmount();
     }
+  });
+
+  it('the truck faces along the sketched road it is on: onward to the drop, back to the supplier before pickup', () => {
+    const rotation = () => StyleSheet.flatten(screen.getByTestId('truck-icon').props.style)?.transform;
+    // ~1.5 km out: on the last, eastbound leg of the sketch.
+    const { unmount } = render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="live" />);
+    expect(rotation()).toEqual([{ rotate: '90deg' }]);
+    unmount();
+    // Before pickup the truck is driving to the supplier, the other way along the drawn road.
+    const before = render(<MandiMapSketch driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+    expect(rotation()).toEqual([{ rotate: '270deg' }]);
+    before.unmount();
+    // Far out: on the first, northbound leg.
+    render(<MandiMapSketch driver={{ ...fix, latitude: '12.9', longitude: '77.5' }} destination={outlet} stale={false} mode="live" />);
+    expect(rotation()).toBeUndefined();
   });
 
   it('pickup and drop pins carry labels', () => {
@@ -284,8 +299,42 @@ describe('MandiMap native legs', () => {
     expect(UNSAFE_queryAllByType('Circle' as never)).toHaveLength(1);
   });
 
+  it('the truck marker is flat, centred and rotated to the heading, turning the short way', () => {
+    jest.useFakeTimers();
+    try {
+      const truckMarker = (r: { UNSAFE_getAllByType: (t: never) => unknown[] }) =>
+        (r.UNSAFE_getAllByType('Marker' as never) as unknown as P[]).find((m) => m.props.flat === true)!;
+      const view = render(<MandiMap driver={{ ...fix, bearing: '350' }} destination={outlet} stale={false} mode="live" />);
+      const m = truckMarker(view);
+      expect(m.props.anchor).toEqual({ x: 0.5, y: 0.5 });
+      expect(m.props.rotation).toBe(350);
+      view.rerender(<MandiMap driver={{ ...fix, bearing: '10' }} destination={outlet} stale={false} mode="live" />);
+      act(() => { jest.advanceTimersByTime(300); });
+      const mid = truckMarker(view).props.rotation as number;
+      // Halfway through a 20 degree turn across north: near 0, never swinging round through 180.
+      expect(Math.min(mid, 360 - mid)).toBeLessThan(10);
+      act(() => { jest.advanceTimersByTime(1000); });
+      expect(truckMarker(view).props.rotation).toBeCloseTo(10, 6);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('with no bearing from the provider the marker faces the way the fixes moved', () => {
+    jest.useFakeTimers();
+    try {
+      const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      view.rerender(<MandiMap driver={{ ...fix, longitude: '77.6' }} destination={outlet} stale={false} mode="live" />);
+      act(() => { jest.advanceTimersByTime(1500); });
+      const m = (view.UNSAFE_getAllByType('Marker' as never) as unknown as P[]).find((x) => x.props.flat === true)!;
+      expect(m.props.rotation as number).toBeCloseTo(90, 0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('renders exactly one truck', () => {
     const { UNSAFE_getAllByType } = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
-    expect(UNSAFE_getAllByType(TruckIcon)).toHaveLength(1);
+    expect(UNSAFE_getAllByType(TruckTopIcon)).toHaveLength(1);
   });
 });

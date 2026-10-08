@@ -2,9 +2,9 @@ import React from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { DeliveryLocation } from '@/models/delivery';
-import { haversineM, mirrored } from '@/lib/delivery/mapGeometry';
+import { haversineM, normDeg } from '@/lib/delivery/mapGeometry';
 import { MandiText } from '@/components/common/MandiText';
-import { TruckIcon } from '@/components/delivery/TruckIcon';
+import { TruckTopIcon } from '@/components/delivery/TruckTopIcon';
 import { Colors, Radius, TrackLayout } from '@/theme';
 
 /** What the tracking screen is showing: before a partner (pending), on the way, close, at the door. */
@@ -139,7 +139,7 @@ export function MandiMapSketch({
 
       {driver && mode != null && mode !== 'placed' && mode !== 'pending' ? (
         <View testID="map-driver" style={[styles.dotSlot, at(dot.x, dot.y)]}>
-          <TruckIcon width={TrackLayout.truckWidth} muted={stale} flip={mirrored(driver.bearing)} />
+          <TruckTopIcon size={TrackLayout.truckSize} muted={stale} heading={headingAlong(progress, pickup != null)} />
         </View>
       ) : (
         driver &&
@@ -183,6 +183,35 @@ function pointAlong(progress: number): { x: number; y: number } {
     remaining -= length;
   }
   return ROUTE[0];
+}
+
+/**
+ * Which way the truck faces on the sketch: along the drawn road it sits on (0 up, 90 right), towards the drop, or
+ * back towards the supplier before pickup (`toPickup`). The sketch is not to scale and its roads are not the real
+ * ones, so the provider's compass bearing would point the truck off the drawn road; the real maps use the bearing.
+ */
+function headingAlong(progress: number, toPickup: boolean): number {
+  const total = ROUTE.slice(1).reduce((sum, to, i) => {
+    const from = ROUTE[i] as { x: number; y: number };
+    return sum + Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
+  }, 0);
+  let remaining = progress * total;
+  let leg = ROUTE.length - 2;
+  for (let i = 0; i < ROUTE.length - 1; i += 1) {
+    const from = ROUTE[i] as { x: number; y: number };
+    const to = ROUTE[i + 1] as { x: number; y: number };
+    const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
+    if (remaining <= length) {
+      leg = i;
+      break;
+    }
+    remaining -= length;
+  }
+  const from = ROUTE[leg] as { x: number; y: number };
+  const to = ROUTE[leg + 1] as { x: number; y: number };
+  // Screen y grows downwards: up the panel is north (0).
+  const onward = normDeg((Math.atan2(to.x - from.x, from.y - to.y) * 180) / Math.PI);
+  return toPickup ? normDeg(onward + 180) : onward;
 }
 
 /** The part of the route between two progress values (0 to 1, by drawn length), as axis-aligned legs. */

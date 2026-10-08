@@ -3,6 +3,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import MapView, { Circle, Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MAPS_CONFIGURED } from '@/lib/maps/config';
 import { useTileWatchdog } from '@/lib/maps/tileWatchdog';
+import { fitTargetFor } from '@/lib/maps/googleLegs';
 import { mirrored, regionFor, toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
 import { TruckIcon } from './TruckIcon';
 import { MandiMapSketch, type MandiMapProps, type MapMode } from './MandiMapSketch';
@@ -46,10 +47,12 @@ export function MandiMap(props: MandiMapProps) {
   if (!MAPS_CONFIGURED || forcedSketch() || watchdog.failed) return <MandiMapSketch {...props} />;
 
   const truck = driver ? toLatLng(driver) : null;
+  // The same framing as the web map (`fitTargetFor`): the truck and the next stop, a bad far-off fix left out.
+  const framed = mode == null ? [] : fitTargetFor(mode, truck, pickup, destination);
   const region =
-    mode == null
+    mode == null || framed.length === 0
       ? { ...focus, latitudeDelta: 0.03, longitudeDelta: 0.03 }
-      : regionFor([truck, pickup, destination].filter((p): p is LatLng => p != null));
+      : regionFor(framed);
 
   return (
     <View style={[styles.container, bare && styles.bare, { height }]}>

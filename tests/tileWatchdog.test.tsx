@@ -2,7 +2,7 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { act, render, screen } from '@testing-library/react-native';
 import { MandiMap } from '@/components/delivery/MandiMap';
-import { resetTileWatchdog } from '@/lib/maps/tileWatchdog';
+import { markTilesFailed, markTilesLoaded, resetTileWatchdog, tilesFailed } from '@/lib/maps/tileWatchdog';
 
 jest.mock('@/lib/maps/config', () => ({ MAPS_CONFIGURED: true }));
 jest.mock('@expo/vector-icons', () => {
@@ -79,5 +79,41 @@ describe('tile watchdog (Android, with a key)', () => {
       jest.advanceTimersByTime(20000);
     });
     expect(UNSAFE_queryByType('MapView' as never)).not.toBeNull();
+  });
+});
+
+describe('the session flag', () => {
+  it('a timeout never marks the session failed once any map has drawn tiles', () => {
+    markTilesLoaded();
+    markTilesFailed('timeout');
+    expect(tilesFailed()).toBe(false);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('a timeout before any map loaded still marks it (Android has no other signal)', () => {
+    markTilesFailed('timeout');
+    expect(tilesFailed()).toBe(true);
+  });
+
+  it('a refused key (auth) marks the session even after tiles loaded: it is definitive', () => {
+    markTilesLoaded();
+    markTilesFailed('auth');
+    expect(tilesFailed()).toBe(true);
+  });
+
+  it('Android: a second map timing out after the first loaded falls back alone, later maps stay real', () => {
+    const first = render(<MandiMap driver={fix} destination={outlet} stale={false} />);
+    act(() => {
+      (first.UNSAFE_getByType('MapView' as never).props as { onMapLoaded: () => void }).onMapLoaded();
+    });
+    const second = render(<MandiMap driver={fix} destination={outlet} stale={false} />);
+    act(() => {
+      jest.advanceTimersByTime(6100);
+    });
+    expect(second.UNSAFE_queryByType('MapView' as never)).toBeNull();
+    expect(first.UNSAFE_queryByType('MapView' as never)).not.toBeNull();
+    expect(tilesFailed()).toBe(false);
+    const third = render(<MandiMap driver={fix} destination={outlet} stale={false} />);
+    expect(third.UNSAFE_queryByType('MapView' as never)).not.toBeNull();
   });
 });

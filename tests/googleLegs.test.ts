@@ -1,4 +1,7 @@
-import { legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, shouldRefitMoving, fitTargetFor, insidePadded, QUIET_MAP_STYLE } from '@/lib/maps/googleLegs';
+import {
+  legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, shouldRefitMoving, fitTargetFor, insidePadded,
+  QUIET_MAP_STYLE, cameraFor, MIN_ZOOM, MAX_ZOOM, SINGLE_POINT_ZOOM, NEAR_DROP_M, chipIcon, chipSide, metersPerPixel,
+} from '@/lib/maps/googleLegs';
 import { Colors, TrackLayout } from '@/theme';
 
 const truck = { latitude: 12.97, longitude: 77.59 };
@@ -144,6 +147,28 @@ describe('fitTargetFor', () => {
     const near = { latitude: 12.972, longitude: 77.592 };
     expect(fitTargetFor('live', truck, pickup, near)).toEqual([truck, pickup, near]);
   });
+  // The demo route (flow review 4, order 116): the truck starts ~1 km south of the supplier in Domlur and the
+  // restaurant in Indiranagar is ~2 km north of it. The restaurant must stay out of the approach frame.
+  const demoSupplier = { latitude: 12.96109, longitude: 77.63869 };
+  const demoRestaurant = { latitude: 12.9784, longitude: 77.64081 };
+  it('before pickup the restaurant 2 km away is not framed; it joins only within 800 m of the truck', () => {
+    expect(NEAR_DROP_M).toBe(800);
+    const approaching = { latitude: 12.95319, longitude: 77.63513 };
+    expect(fitTargetFor('live', approaching, demoSupplier, demoRestaurant)).toEqual([approaching, demoSupplier]);
+    const atSupplier = { latitude: 12.96109, longitude: 77.63869 };
+    expect(fitTargetFor('live', atSupplier, demoSupplier, demoRestaurant)).toEqual([atSupplier, demoSupplier]);
+    const near = { latitude: 12.9734, longitude: 77.6408 }; // ~560 m from the restaurant
+    expect(fitTargetFor('live', near, demoSupplier, demoRestaurant)).toEqual([near, demoSupplier, demoRestaurant]);
+  });
+  it('ignores a truck fix more than 50 km from both stops, at 0,0 or not a number', () => {
+    const gurugram = { latitude: 28.4595, longitude: 77.0266 };
+    expect(fitTargetFor('live', gurugram, demoSupplier, demoRestaurant)).toEqual([demoSupplier, demoRestaurant]);
+    expect(fitTargetFor('live', gurugram, null, demoRestaurant)).toEqual([demoRestaurant]);
+    expect(fitTargetFor('live', { latitude: 0, longitude: 0 }, null, demoRestaurant)).toEqual([demoRestaurant]);
+    expect(fitTargetFor('live', { latitude: NaN, longitude: 77.6 }, null, demoRestaurant)).toEqual([demoRestaurant]);
+    // With no stop to compare against a plausible fix is still framed.
+    expect(fitTargetFor('live', truck, null, null)).toEqual([truck]);
+  });
   it('after pickup (and arriving, reached): the truck and the restaurant, never the supplier', () => {
     for (const m of ['live', 'arriving', 'reached'] as const) {
       expect(fitTargetFor(m, truck, null, drop)).toEqual([truck, drop]);
@@ -168,5 +193,58 @@ describe('shouldRefitMoving', () => {
   it('every 20 s while live, even if barely moved', () => {
     expect(shouldRefitMoving({ ...base, lastFitAt: 79_000 })).toBe(true);
     expect(shouldRefitMoving({ ...base, lastFitAt: 85_000 })).toBe(false);
+  });
+});
+
+describe('cameraFor', () => {
+  it('a single point is centred at street zoom, never fitted', () => {
+    expect(cameraFor([truck])).toEqual({ kind: 'center', center: truck, zoom: SINGLE_POINT_ZOOM });
+    expect(SINGLE_POINT_ZOOM).toBe(16);
+    // Two fixes a few metres apart are one point for the camera (a fit would zoom to the maximum).
+    expect(cameraFor([truck, { latitude: 12.97001, longitude: 77.59001 }])?.kind).toBe('center');
+    expect(cameraFor([])).toBeNull();
+  });
+  it('several points: the exact bounds of the points with pixel padding (no extra 25% box), zoom clamped 12..17', () => {
+    const cam = cameraFor([truck, pickup]);
+    expect(cam).toEqual({
+      kind: 'bounds',
+      bounds: { north: 12.97, south: 12.95, east: 77.59, west: 77.57 },
+      padding: expect.objectContaining({ top: expect.any(Number), bottom: expect.any(Number) }),
+    });
+    expect(MIN_ZOOM).toBe(12);
+    expect(MAX_ZOOM).toBe(17);
+  });
+});
+
+describe('pin label chips', () => {
+  it('a white rounded chip with a thin border carrying the text', () => {
+    const c = chipIcon('Supplier');
+    const svg = decodeURIComponent(c.url);
+    expect(svg).toContain('data-chip="Supplier"');
+    expect(svg).toContain('>Supplier<');
+    expect(svg).toContain(`fill="${Colors.surface}"`);
+    expect(svg).toContain(`stroke="${Colors.border}"`);
+    expect(svg).toMatch(/rx="\d/);
+    expect(c.width).toBeGreaterThan(chipIcon('You').width);
+  });
+  it('escapes markup in the text', () => {
+    expect(decodeURIComponent(chipIcon('A & <B>').url)).toContain('A &amp; &lt;B&gt;');
+  });
+  it('sits above the pin unless the truck is within ~30 px north of it', () => {
+    const pin = { latitude: 12.96109, longitude: 77.63869 };
+    const mpp = metersPerPixel(pin.latitude, 15);
+    expect(mpp).toBeGreaterThan(4);
+    expect(mpp).toBeLessThan(5);
+    expect(chipSide(pin, null, 15)).toBe('above');
+    expect(chipSide(pin, { latitude: 13.2, longitude: 77.6 }, 15)).toBe('above');
+    // ~20 px north of the pin at zoom 15: the chip moves below so the truck does not cover it.
+    const north = { latitude: pin.latitude + (20 * mpp) / 111_320, longitude: pin.longitude };
+    expect(chipSide(pin, north, 15)).toBe('below');
+    // ~20 px south: the chip above is clear of the truck.
+    const south = { latitude: pin.latitude - (20 * mpp) / 111_320, longitude: pin.longitude };
+    expect(chipSide(pin, south, 15)).toBe('above');
+    // Zoomed further in, the same metres are many pixels apart; with no zoom known the chip stays above.
+    expect(chipSide(pin, north, 19)).toBe('above');
+    expect(chipSide(pin, north, undefined)).toBe('above');
   });
 });

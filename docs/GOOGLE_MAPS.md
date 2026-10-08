@@ -79,20 +79,44 @@ and the whole native path. Those need a real key and, for native, a device build
 picker uses `PlaceAutocompleteElement`, which is the supported replacement and is
 a web component that brings its own input.
 
-The loader deliberately does **not** pass `loading=async`. That bootstrap resolves
-with a stub where `google.maps.Map` does not exist until `importLibrary` has been
-awaited, so `new google.maps.Map(...)` throws *"is not a constructor"* — a failure
+The delivery map's loader (`lib/maps/googleWebLoader.ts`) passes `loading=async` and then awaits
+`importLibrary('maps' | 'marker' | 'core')` before resolving. Without that await the bootstrap resolves with a stub
+where `google.maps.Map` does not exist yet, so `new google.maps.Map(...)` throws *"is not a constructor"*, a failure
 that reads exactly like a bad key and is not one.
 
-`google.maps.Marker` is deprecated in favour of `AdvancedMarkerElement`, which
-requires a Map ID configured in Cloud. The classic marker still works and is not
-scheduled for removal, so it stays until a Map ID is worth the extra setup.
+### Marker vs AdvancedMarkerElement (decision: keep Marker)
+
+`google.maps.Marker` logs a deprecation warning in favour of `AdvancedMarkerElement`. An advanced marker only works on a
+map created with a `mapId`. `mapId: 'DEMO_MAP_ID'` needs no Cloud setup, but **a map with a `mapId` ignores the
+`styles` option**: styling then comes from the Cloud map style attached to that Map ID, and DEMO_MAP_ID has Google's
+default style, so business POI and transit labels come back (our `QUIET_MAP_STYLE` hides them so they do not collide
+with the pins). Switching to DEMO_MAP_ID would trade a console warning for a busier map, so the code stays on the
+classic `Marker`, which Google has said it will not remove without 12 months' notice.
+
+To switch properly later: Google Cloud console -> Map Management -> create a Map ID (JavaScript, vector) -> Map Styles
+-> create a style that hides POI and transit labels and sets **Language: English only** (this also removes the
+Kannada labels, see below) -> attach it to the Map ID -> pass `mapId` when the map is created, remove `styles`, and
+move the pins, chips and truck to `AdvancedMarkerElement` (HTML content: the label chip can then be real HTML).
 
 ## The web delivery map (rider tracking)
 
 The restaurant and supplier web apps draw the tracking map with the Maps JavaScript API
 (`components/delivery/GoogleTrackMap.web.tsx`): supplier pin, restaurant pin, the truck and the route legs.
 Without a key, or if Google refuses it (`gm_authFailure`) or draws no tiles within 6 s, they show the schematic.
+
+The 6 s tile clock (`GoogleTrackMap.web.tsx`, `lib/maps/hostVisibility.ts`) only runs while the map's box is on screen
+with a size: a screen further down the navigation stack stays mounted but hidden and never draws tiles, and its clock
+once condemned every map of the session (flow review 4, order 115). It stops at `tilesloaded`, at `idle`, or when
+Google tile images or a drawn canvas are found in the box; a hidden box stops it and showing the box restarts it in
+full. A timeout swaps only that map for the schematic. Only `gm_authFailure` (the key refused) sends every map of the
+session to the schematic; on Android, where there is no such callback, a timeout does so only while no map of the
+session has ever drawn tiles (`lib/maps/tileWatchdog.ts`).
+
+Camera (`fitTargetFor`, `cameraFor` in `lib/maps/googleLegs.ts`): before pickup the truck and the supplier, plus the
+restaurant once the truck is within 800 m of it; after pickup the truck and the restaurant. One point is centred at
+zoom 16; several are fitted to their exact box with pixel padding; the map's zoom is limited to 12..17. A truck fix
+more than 50 km from both stops, at 0,0 or not a number is not framed. Pin labels are white chips above the pin, drawn
+over the truck; a chip moves below its pin when the truck is within about 32 px north of the pin.
 
 1. Google Cloud Console -> enable **Maps JavaScript API** on the project (billing on).
 2. Credentials -> create an API key, restrict it to the Maps JavaScript API and to HTTP referrers

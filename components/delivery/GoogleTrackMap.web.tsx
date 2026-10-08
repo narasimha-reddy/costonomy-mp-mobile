@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { loadWebMaps } from '@/lib/maps/googleWebLoader';
-import { markTilesFailed, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
+import { markTilesFailed, markTilesLoaded, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
+import { hostHasTiles, hostShown, watchHost } from '@/lib/maps/hostVisibility';
 import { toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
 import {
-  cssColor, distanceM, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint, QUIET_MAP_STYLE, shouldRefit,
-  shouldRefitMoving, truckLook, truckSvgDataUrl, viewportFor,
+  cameraFor, chipAnchor, chipIcon, chipSide, cssColor, distanceM, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint,
+  MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook, truckSvgDataUrl,
 } from '@/lib/maps/googleLegs';
 import { MandiMapSketch, type MandiMapProps } from './MandiMapSketch';
 import { Colors, Radius, TrackLayout } from '@/theme';
@@ -16,6 +17,10 @@ const CREATE_RETRY_MS = 500;
 const CREATE_TRIES = 3;
 /** After the user moves the map themselves, the camera is theirs for this long (a mode change still refits). */
 const USER_MOVED_HOLD_MS = 30_000;
+/** Stacking: pins, then the truck, then the label chips (a chip moves aside rather than hide under the truck). */
+const PIN_Z = 10;
+const TRUCK_Z = 20;
+const CHIP_Z = 30;
 
 type G = any; // the google.maps namespace is loaded at runtime; there is no typings package for it here
 
@@ -31,7 +36,7 @@ function installAuthHook(): void {
   w.gm_authFailure = authHook;
 }
 function authHook(): void {
-  markTilesFailed();
+  markTilesFailed('auth');
   authListeners.forEach((l) => l());
 }
 
@@ -41,6 +46,11 @@ const pt = (p: LatLng) => ({ lat: p.latitude, lng: p.longitude });
  * The delivery map on the web: the real Google map (Maps JavaScript API) drawing the same facts as the native
  * one, the supplier pin, the restaurant pin, the truck and the route legs (see `legsFor`). Any failure (no
  * script, a refused key, no tiles in 6 s) swaps it for the schematic, which is always honest about the same data.
+ *
+ * <p>The 6 s tile clock runs only while the map's box is on screen with a size (a screen further down the navigation
+ * stack stays mounted but hidden and never draws tiles), restarts when it is shown again, and stops at `tilesloaded`,
+ * `idle` or tiles found painted in the box. A timeout falls back for this map only; only a refused key
+ * (`gm_authFailure`) sends every map of the session to the schematic.
  *
  * <p>The truck is a marker with the TruckIcon artwork, mirrored by bearing and greyed when the fix is stale. A stale
  * fix is drawn differently, never as current.
@@ -68,6 +78,9 @@ export function GoogleTrackMap(props: MandiMapProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tries = useRef(0);
+  const chips = useRef<{ marker: G; pin: LatLng; url: string; width: number; height: number; side: 'above' | 'below' }[]>([]);
+  /** Puts each label chip above its pin, or below when the truck is right there (see `chipSide`). */
+  const placeChips = useRef<() => void>(() => undefined);
 
   const clearTimer = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -78,18 +91,43 @@ export function GoogleTrackMap(props: MandiMapProps) {
   useEffect(() => {
     if (failed || hostEl == null) return undefined;
     let alive = true;
+    let loaded = false;
+    const handles: G[] = [];
     setReady(false);
     const fail = () => {
       if (!alive) return;
       clearTimer();
       setFailed(true);
     };
+    const succeed = (painted: boolean) => {
+      if (!alive) return;
+      loaded = true;
+      clearTimer();
+      if (painted) markTilesLoaded();
+    };
+    // The tile clock: only while the box is on screen with a size; hidden stops it, shown again restarts it in full.
+    const arm = () => {
+      if (!alive || loaded || timer.current) return;
+      if (!hostShown(host.current)) return;
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        if (!alive || loaded) return;
+        if (hostHasTiles(host.current)) {
+          succeed(true);
+          return;
+        }
+        if (!hostShown(host.current)) return; // hidden meanwhile: the watcher re-arms it when shown
+        console.warn('[maps] this map drew no tiles in 6 s; showing the schematic for it');
+        fail();
+      }, TILE_TIMEOUT_MS);
+    };
+    const unwatch = watchHost(host.current, () => {
+      if (hostShown(host.current)) arm();
+      else clearTimer();
+    });
     authListeners.add(fail);
     installAuthHook();
-    timer.current = setTimeout(() => {
-      markTilesFailed();
-      fail();
-    }, TILE_TIMEOUT_MS);
+    arm();
     loadWebMaps()
       .then(() => {
         if (!alive) return;
@@ -98,6 +136,8 @@ export function GoogleTrackMap(props: MandiMapProps) {
           map.current = new g.Map(host.current, {
             center: { lat: 12.9716, lng: 77.5946 },
             zoom: 14,
+            minZoom: MIN_ZOOM,
+            maxZoom: MAX_ZOOM,
             disableDefaultUI: true,
             // Cooperative: the page still scrolls on a touch drag; ctrl/two fingers move the map.
             gestureHandling: 'cooperative',
@@ -113,22 +153,33 @@ export function GoogleTrackMap(props: MandiMapProps) {
           return;
         }
         tries.current = 0;
-        g.event.addListenerOnce(map.current, 'tilesloaded', clearTimer);
-        g.event.addListener(map.current, 'dragstart', () => {
-          userMovedAt.current = Date.now();
-        });
+        const m = map.current;
+        handles.push(
+          g.event.addListener(m, 'tilesloaded', () => succeed(true)),
+          // idle: the map settled after drawing; also when the chips need placing for a new zoom.
+          g.event.addListener(m, 'idle', () => {
+            succeed(false);
+            placeChips.current();
+          }),
+          g.event.addListener(m, 'dragstart', () => {
+            userMovedAt.current = Date.now();
+          }),
+        );
         setReady(true);
       })
       .catch(fail);
     return () => {
       alive = false;
       authListeners.delete(fail);
+      unwatch();
       clearTimer();
+      handles.forEach((h) => h?.remove?.());
       if (retry.current) clearTimeout(retry.current);
       if (glide.current) clearTimeout(glide.current);
       overlays.current.forEach((o) => o.setMap(null));
       truck.current?.marker.setMap(null);
       overlays.current = [];
+      chips.current = [];
       truck.current = null;
       map.current = null;
     };
@@ -211,13 +262,14 @@ export function GoogleTrackMap(props: MandiMapProps) {
         }),
       ),
     );
-    const pin = (p: LatLng, text: string, fill: string) =>
+    chips.current = [];
+    const pin = (p: LatLng, text: string, fill: string) => {
       own(
         new g.Marker({
           map: map.current,
           position: pt(p),
           title: text,
-          zIndex: 1,
+          zIndex: PIN_Z,
           icon: {
             path: g.SymbolPath.CIRCLE,
             scale: 8,
@@ -225,25 +277,59 @@ export function GoogleTrackMap(props: MandiMapProps) {
             fillOpacity: 1,
             strokeColor: Colors.surface,
             strokeWeight: 2,
-            labelOrigin: new g.Point(0, 3.2), // below the pin, clear of the truck drawn above
           },
-          label: { text, color: Colors.textPrimary, fontSize: '12px', fontWeight: '600' },
         }),
       );
+      // The label is a white chip of its own above the pin, so road names and the truck cannot swallow it.
+      const chip = chipIcon(text);
+      const anchor = chipAnchor('above', chip.width, chip.height);
+      const marker = own(
+        new g.Marker({
+          map: map.current,
+          position: pt(p),
+          clickable: false,
+          zIndex: CHIP_Z,
+          icon: { url: chip.url, scaledSize: new g.Size(chip.width, chip.height), anchor: new g.Point(anchor.x, anchor.y) },
+        }),
+      );
+      chips.current.push({ marker, pin: p, url: chip.url, width: chip.width, height: chip.height, side: 'above' });
+    };
     if (pickup && (mode != null || !driver)) pin(pickup, 'Supplier', Colors.textPrimary);
     if (destination) pin(destination, audience === 'supplier' ? 'Restaurant' : 'You', Colors.success);
 
     moveTruck(g, scene.showTruck ? at : null);
+    const truckAt = scene.showTruck ? at : null;
+    placeChips.current = () => {
+      if (!map.current) return;
+      const zoom = map.current.getZoom?.();
+      chips.current.forEach((c) => {
+        const side = chipSide(c.pin, truckAt, zoom);
+        if (side === c.side) return;
+        c.side = side;
+        const a = chipAnchor(side, c.width, c.height);
+        c.marker.setIcon({ url: c.url, scaledSize: new g.Size(c.width, c.height), anchor: new g.Point(a.x, a.y) });
+      });
+    };
+    placeChips.current();
 
-    // Fit the truck and the NEXT stop (see `fitTargetFor`) on the first draw and when the mode changes. While live a new
-    // fix alone must not yank the camera: refit when the truck left the padded view, got twice as close to the next stop,
-    // moved over 10% of the view, or 20 s passed (never more than once per 8 s, never within 30 s of the user's drag).
-    const modeKey = String(mode ?? 'none');
+    // Frame the truck and the NEXT stop (see `fitTargetFor`) on the first draw and whenever the mode or the set of framed
+    // stops changes (the order collected, the restaurant coming close). While live a new fix alone must not yank the
+    // camera: refit when the truck left the padded view, got twice as close to the next stop, moved over 10% of the view,
+    // or 20 s passed (never more than once per 8 s, never within 30 s of the user's drag).
     const pts = fitTargetFor(mode, at, pickup, destination);
+    const has = (p: LatLng | null) => p != null && pts.includes(p);
+    const modeKey = `${String(mode ?? 'none')}|${has(at) ? 't' : ''}${has(pickup) ? 'p' : ''}${has(destination) ? 'd' : ''}`;
     const next = mode === 'live' && pickup ? pickup : destination;
     const distNow = at && next ? distanceM(at, next) : 0;
     const fit = () => {
-      map.current.fitBounds(viewportFor(pts), 0);
+      const cam = cameraFor(pts);
+      if (!cam) return;
+      if (cam.kind === 'center') {
+        map.current.setCenter(pt(cam.center));
+        map.current.setZoom(cam.zoom);
+      } else {
+        map.current.fitBounds(cam.bounds, cam.padding);
+      }
       lastFit.current = { at: Date.now(), dist: distNow, truck: at };
       userMovedAt.current = 0; // an explicit refit gives the camera back to the app
     };
@@ -252,7 +338,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
         fit();
         fittedMode.current = modeKey;
       }
-    } else if (at && scene.showTruck && pts.length > 1) {
+    } else if (at && scene.showTruck && has(at)) {
       const raw = map.current.getBounds?.()?.toJSON?.();
       const outside = raw != null && !insidePadded(raw, at);
       const now = Date.now();
@@ -290,7 +376,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
         icon: icon(),
         opacity: look.opacity,
         title: stale ? 'Last known position' : 'Delivery partner',
-        zIndex: 1000,
+        zIndex: TRUCK_Z,
       });
       truck.current = { marker, look: lookKey, at };
       lastFixAt.current = driver?.recordedAt ?? null;

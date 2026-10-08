@@ -105,6 +105,18 @@ describe('MandiMap modes (native)', () => {
     expect(UNSAFE_queryAllByType('Marker' as never)).toHaveLength(2);
   });
 
+  it('frames the same points as the web map: truck and supplier before pickup, a far-off fix ignored', () => {
+    const far = { latitude: 13.3, longitude: 78.0 };
+    const before = render(<MandiMap driver={fix} destination={far} pickup={pickup} stale={false} mode="live" />);
+    const r1 = (before.UNSAFE_getByType('MapView' as never) as unknown as P).props.region as { latitude: number; latitudeDelta: number };
+    expect(r1.latitude + r1.latitudeDelta / 2).toBeLessThan(13.0); // the restaurant 40 km away is not framed
+    before.unmount();
+    const gurugram = { ...fix, latitude: '28.4595', longitude: '77.0266' };
+    const bad = render(<MandiMap driver={gurugram} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+    const r2 = (bad.UNSAFE_getByType('MapView' as never) as unknown as P).props.region as { latitude: number; latitudeDelta: number };
+    expect(r2.latitude + r2.latitudeDelta / 2).toBeLessThan(13.1);
+  });
+
   it('pending draws a dashed line pickup to drop', () => {
     const { UNSAFE_getAllByType } = render(
       <MandiMap driver={null} destination={outlet} pickup={pickup} stale={false} mode="pending" />,

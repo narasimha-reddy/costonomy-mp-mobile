@@ -1,13 +1,30 @@
 import React from 'react';
 import { act, render, screen } from '@testing-library/react-native';
 import { MandiMap } from '@/components/delivery/MandiMap.web';
-import { resetTileWatchdog, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
+import { resetTileWatchdog, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
 import { Colors } from '@/theme';
 
 const mockLoad = jest.fn();
 jest.mock('@/lib/maps/googleWebLoader', () => ({
   webMapsKey: () => (process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '').trim(),
   loadWebMaps: (...a: unknown[]) => mockLoad(...a),
+}));
+// Which map hosts are on screen. Each new host takes `mockNextHidden` the first time it is asked about; a test reveals
+// a hidden host by flipping its entry and calling its watcher (what ResizeObserver does in the browser).
+const mockShown = new Map<unknown, boolean>();
+const mockWatchers = new Map<unknown, () => void>();
+let mockNextHidden = false;
+let mockHasTiles = false;
+jest.mock('@/lib/maps/hostVisibility', () => ({
+  hostShown: (n: unknown) => {
+    if (!mockShown.has(n)) mockShown.set(n, !mockNextHidden);
+    return mockShown.get(n);
+  },
+  watchHost: (n: unknown, cb: () => void) => {
+    mockWatchers.set(n, cb);
+    return () => mockWatchers.delete(n);
+  },
+  hostHasTiles: () => mockHasTiles,
 }));
 jest.mock('@expo/vector-icons', () => {
   const { Text: T } = jest.requireActual('react-native');
@@ -23,6 +40,23 @@ let mapInstances: Obj[];
 let viewBounds: Obj;
 let tilesLoadedCb: (() => void) | null;
 let dragStartCb: (() => void) | null;
+let handles: Obj[];
+
+/** Google's addListener: kept per map so a test can fire one map's events; the handle's remove drops it. */
+const listen = jest.fn((m: Obj, e: string, cb: () => void) => {
+  if (e === 'dragstart') dragStartCb = cb;
+  if (e === 'tilesloaded') tilesLoadedCb = cb;
+  const list = ((m.listeners ??= {})[e] ??= []) as (() => void)[];
+  list.push(cb);
+  const h = { remove: jest.fn(() => { const i = list.indexOf(cb); if (i >= 0) list.splice(i, 1); }) };
+  handles.push(h);
+  return h;
+});
+const fire = (m: Obj, e: string) => act(() => { [...(m.listeners?.[e] ?? [])].forEach((cb: () => void) => cb()); });
+/** The texts of the label chips (SVG markers carrying data-chip). */
+const chipText = (m: Obj) => /data-chip="([^"]*)"/.exec(decodeURIComponent(String(m.opts.icon?.url ?? '')))?.[1];
+const chips = () => markers.filter((m) => chipText(m) != null);
+const truckOf = () => markers.find((m) => String(m.opts.icon?.url ?? '').startsWith('data:image/svg+xml') && chipText(m) == null)!;
 
 function installGoogle() {
   markers = [];
@@ -38,23 +72,26 @@ function installGoogle() {
       list.push(o);
       return o;
     });
+  handles = [];
   maps = {
     Map: jest.fn().mockImplementation((h: unknown, opts: Obj) => {
       if (h == null) throw new Error('Map: Expected mapDiv of type HTMLElement but was passed null');
-      const m: Obj = { opts, fitBounds: jest.fn(), getBounds: () => ({ toJSON: () => viewBounds }) };
+      const m: Obj = {
+        opts, host: h, listeners: {} as Record<string, (() => void)[]>, zoom: 14,
+        fitBounds: jest.fn(), setCenter: jest.fn(), setZoom: jest.fn(),
+        getZoom() { return this.zoom; },
+        getBounds: () => ({ toJSON: () => viewBounds }),
+      };
       mapInstances.push(m);
       return m;
     }),
     Marker: mk(markers),
     Polyline: mk(polylines),
     Circle: mk(circles),
-    Size: jest.fn(),
-    Point: jest.fn(),
+    Size: jest.fn().mockImplementation((w: number, h: number) => ({ w, h })),
+    Point: jest.fn().mockImplementation((x: number, y: number) => ({ x, y })),
     SymbolPath: { CIRCLE: 0 },
-    event: {
-      trigger: jest.fn(),
-      addListener: jest.fn((_m: unknown, e: string, cb: () => void) => { if (e === 'dragstart') dragStartCb = cb; return { remove: jest.fn() }; }),
-       addListenerOnce: jest.fn((_m: unknown, _e: string, cb: () => void) => { tilesLoadedCb = cb; }) },
+    event: { trigger: jest.fn(), addListener: listen, addListenerOnce: listen, clearInstanceListeners: jest.fn() },
   };
   (global as Obj).google = { maps };
 }
@@ -67,6 +104,10 @@ const flush = () => act(async () => { await Promise.resolve(); await Promise.res
 beforeEach(() => {
   jest.useFakeTimers();
   resetTileWatchdog();
+  mockShown.clear();
+  mockWatchers.clear();
+  mockNextHidden = false;
+  mockHasTiles = false;
   mockLoad.mockReset().mockResolvedValue(undefined);
   delete process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY;
   delete process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -140,9 +181,9 @@ describe('MandiMap (web)', () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
     render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
     await flush();
-    const labels = markers.map((m) => m.opts.label?.text).filter(Boolean);
+    const labels = chips().map(chipText);
     expect(labels).toEqual(expect.arrayContaining(['Supplier', 'You']));
-    expect(markers.some((m) => String(m.opts.icon?.url ?? '').startsWith('data:image/svg+xml'))).toBe(true);
+    expect(truckOf()).toBeTruthy();
     expect(polylines).toHaveLength(2);
     expect(polylines[0]!.opts.strokeColor).toBe(Colors.deliveryRoute);
     expect(polylines[1]!.opts.strokeColor).toBe(Colors.routePending);
@@ -161,7 +202,7 @@ describe('MandiMap (web)', () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
     const view = render(<MandiMap driver={{ ...fix, bearing: '270' }} destination={outlet} stale={false} mode="live" />);
     await flush();
-    const truck = markers.find((m) => String(m.opts.icon?.url ?? '').startsWith('data:image/svg+xml'))!;
+    const truck = truckOf();
     expect(decodeURIComponent(truck.opts.icon.url)).toContain('scale(-1');
     view.rerender(<MandiMap driver={{ ...fix, bearing: '90' }} destination={outlet} stale mode="live" />);
     await flush();
@@ -175,7 +216,7 @@ describe('MandiMap (web)', () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
     const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
     await flush();
-    const truck = markers.find((m) => String(m.opts.icon?.url ?? '').startsWith('data:image/svg+xml'))!;
+    const truck = truckOf();
     view.rerender(<MandiMap driver={{ ...fix, latitude: '12.98' }} destination={outlet} stale={false} mode="live" />);
     await flush();
     act(() => { jest.advanceTimersByTime(500); });
@@ -190,7 +231,7 @@ describe('MandiMap (web)', () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
     const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
     await flush();
-    const truck = markers.find((m) => String(m.opts.icon?.url ?? '').startsWith('data:image/svg+xml'))!;
+    const truck = truckOf();
     // The next fix is 4 s later by the provider's clock: still moving at 2 s, arrived after 4 s.
     view.rerender(<MandiMap driver={{ ...fix, latitude: '12.98', recordedAt: '2026-01-01T10:00:04Z' }} destination={outlet} stale={false} mode="live" />);
     await flush();
@@ -213,17 +254,33 @@ describe('MandiMap (web)', () => {
     expect(JSON.stringify(o.styles)).toContain('"off"');
   });
 
-  it('puts the pin labels below the pin and the truck above them', async () => {
+  it('pin labels are white chips above the pin, drawn over the truck; the pins carry no Google label', async () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
     render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
     await flush();
-    const pins = markers.filter((m) => m.opts.label);
-    const truck = markers.find((m) => String(m.opts.icon?.url ?? '').startsWith('data:image/svg+xml'))!;
+    const truck = truckOf();
+    const pins = markers.filter((m) => m.opts.icon?.path === 0);
     expect(pins).toHaveLength(2);
-    pins.forEach((p) => {
-      expect(maps.Point).toHaveBeenCalledWith(0, expect.any(Number));
-      expect(p.opts.zIndex).toBeLessThan(truck.opts.zIndex);
+    pins.forEach((p) => expect(p.opts.label).toBeUndefined());
+    expect(chips().map(chipText).sort()).toEqual(['Supplier', 'You']);
+    chips().forEach((c) => {
+      expect(c.opts.zIndex).toBeGreaterThan(truck.opts.zIndex);
+      expect(c.opts.icon.anchor.y).toBeGreaterThan(c.opts.icon.scaledSize.h); // the chip's bottom edge is above the pin
+      expect(c.opts.clickable).toBe(false);
     });
+    pins.forEach((p) => expect(p.opts.zIndex).toBeLessThan(truck.opts.zIndex));
+  });
+
+  it('a truck right on top of the supplier pushes the Supplier chip below the pin', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    // ~10 m north of the supplier: a few pixels at zoom 14.
+    render(<MandiMap driver={{ ...fix, latitude: '12.9501', longitude: '77.57' }} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+    await flush();
+    const supplier = chips().find((c) => chipText(c) === 'Supplier')!;
+    const you = chips().find((c) => chipText(c) === 'You')!;
+    const lastIcon = (c: Obj) => (c.setIcon.mock.calls.at(-1)?.[0] ?? c.opts.icon) as Obj;
+    expect(lastIcon(supplier).anchor.y).toBeLessThan(0);
+    expect(lastIcon(you).anchor.y).toBeGreaterThan(0);
   });
 
   it('triggers a resize after mount and when the container changes size', async () => {
@@ -371,8 +428,161 @@ describe('MandiMap (web)', () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
     render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" audience="supplier" />);
     await flush();
-    const labels = markers.map((m) => m.opts.label?.text).filter(Boolean);
+    const labels = chips().map(chipText);
     expect(labels).toContain('Restaurant');
     expect(labels).not.toContain('You');
+  });
+
+  describe('tile watchdog: only for a map on screen, scoped to that map', () => {
+    beforeEach(() => {
+      process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    it('a hidden map further down the stack cannot switch the visible map, or any later map, to the sketch', async () => {
+      // Order 115: the Placed screen stayed mounted (display:none) under Order details -> Track and drew its own map.
+      mockNextHidden = true;
+      const hidden = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      mockNextHidden = false;
+      const visible = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      fire(mapInstances[1]!, 'tilesloaded');
+      act(() => { jest.advanceTimersByTime(TILE_TIMEOUT_MS * 3); });
+      expect(visible.queryByTestId('map-driver')).toBeNull();
+      expect(hidden.queryByTestId('map-driver')).toBeNull(); // never armed: still the Google map, waiting to be shown
+      expect(tilesFailed()).toBe(false);
+      expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining('[maps] tiles did not load'));
+      // The next screen's map (Track again, a new status) is the real map, not the sketch.
+      const later = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="arriving" />);
+      await flush();
+      expect(later.queryByTestId('map-driver')).toBeNull();
+      expect(maps.Map).toHaveBeenCalledTimes(3);
+    });
+
+    it('a hidden map starts its 6 s only when shown; its own timeout falls back for it alone', async () => {
+      mockNextHidden = true;
+      const hidden = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      act(() => { jest.advanceTimersByTime(TILE_TIMEOUT_MS * 2); });
+      expect(hidden.queryByTestId('map-driver')).toBeNull();
+      const node = [...mockShown.keys()][0];
+      act(() => { mockShown.set(node, true); mockWatchers.get(node)?.(); });
+      act(() => { jest.advanceTimersByTime(TILE_TIMEOUT_MS - 100); });
+      expect(hidden.queryByTestId('map-driver')).toBeNull();
+      act(() => { jest.advanceTimersByTime(200); });
+      expect(hidden.getByTestId('map-driver')).toBeTruthy();
+      expect(tilesFailed()).toBe(false);
+      mockNextHidden = false;
+      const next = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      expect(next.queryByTestId('map-driver')).toBeNull();
+    });
+
+    it('hidden again before the 6 s are up: the clock stops and restarts in full when shown', async () => {
+      const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      const node = [...mockShown.keys()][0];
+      act(() => { jest.advanceTimersByTime(4000); });
+      act(() => { mockShown.set(node, false); mockWatchers.get(node)?.(); });
+      act(() => { jest.advanceTimersByTime(10_000); });
+      act(() => { mockShown.set(node, true); mockWatchers.get(node)?.(); });
+      act(() => { jest.advanceTimersByTime(4000); });
+      expect(view.queryByTestId('map-driver')).toBeNull();
+    });
+
+    it('idle as well as tilesloaded counts as loaded', async () => {
+      const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      fire(mapInstances[0]!, 'idle');
+      act(() => { jest.advanceTimersByTime(TILE_TIMEOUT_MS * 2); });
+      expect(view.queryByTestId('map-driver')).toBeNull();
+    });
+
+    it('tiles already painted in the host count as loaded even if the event was missed', async () => {
+      mockHasTiles = true;
+      const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      act(() => { jest.advanceTimersByTime(TILE_TIMEOUT_MS * 2); });
+      expect(view.queryByTestId('map-driver')).toBeNull();
+    });
+
+    it('a visible map with no tiles in 6 s falls back alone and does not poison the session', async () => {
+      const first = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      act(() => { jest.advanceTimersByTime(TILE_TIMEOUT_MS + 1); });
+      expect(first.getByTestId('map-driver')).toBeTruthy();
+      expect(tilesFailed()).toBe(false);
+      const second = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      expect(second.queryByTestId('map-driver')).toBeNull();
+    });
+
+    it('a refused key still sends every map, including later ones, to the sketch', async () => {
+      render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      act(() => (window as Obj).gm_authFailure());
+      expect(tilesFailed()).toBe(true);
+      const later = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      expect(later.getByTestId('map-driver')).toBeTruthy();
+    });
+
+    it('unmounting removes the map listeners and stops the clock', async () => {
+      const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      expect(handles.length).toBeGreaterThan(0);
+      view.unmount();
+      handles.forEach((h) => expect(h.remove).toHaveBeenCalled());
+      expect(mockWatchers.size).toBe(0);
+      act(() => { jest.advanceTimersByTime(TILE_TIMEOUT_MS * 2); });
+      expect(console.warn).not.toHaveBeenCalled();
+      expect(jest.getTimerCount()).toBe(0);
+    });
+  });
+
+  describe('camera', () => {
+    beforeEach(() => { process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k'; });
+
+    it('zoom is clamped 12..17 and a fit gets pixel padding', async () => {
+      render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+      await flush();
+      const m = mapInstances[0]!;
+      expect(m.opts.minZoom).toBe(12);
+      expect(m.opts.maxZoom).toBe(17);
+      const [, padding] = m.fitBounds.mock.calls[0] as any[];
+      expect(padding).toEqual(expect.objectContaining({ top: expect.any(Number) }));
+      expect(padding.top).toBeGreaterThan(0);
+    });
+
+    it('a single point is centred at zoom 16, not fitted', async () => {
+      render(<MandiMap driver={fix} destination={null} stale={false} mode="live" />);
+      await flush();
+      const m = mapInstances[0]!;
+      expect(m.fitBounds).not.toHaveBeenCalled();
+      expect(m.setCenter).toHaveBeenCalledWith({ lat: 12.97, lng: 77.59 });
+      expect(m.setZoom).toHaveBeenCalledWith(16);
+    });
+
+    it('a fix far from both stops (a default point) is left out of the frame', async () => {
+      render(<MandiMap driver={{ ...fix, latitude: '28.4595', longitude: '77.0266' }} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+      await flush();
+      const [b] = mapInstances[0]!.fitBounds.mock.calls[0] as any[];
+      expect(b.north).toBeLessThan(13.1);
+      expect(b.west).toBeGreaterThan(77.5);
+    });
+
+    it('the moment the order is collected the camera reframes on the truck and the restaurant', async () => {
+      const view = render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+      await flush();
+      const fit = mapInstances[0]!.fitBounds;
+      expect(fit).toHaveBeenCalledTimes(1);
+      view.rerender(<MandiMap driver={fix} destination={outlet} pickup={null} stale={false} mode="live" />);
+      await flush();
+      expect(fit).toHaveBeenCalledTimes(2);
+      const [b] = fit.mock.calls[1] as any[];
+      expect(b.south).toBeCloseTo(12.97, 6); // the supplier (12.95) left the frame
+    });
   });
 });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -77,6 +77,7 @@ export function MandiSearchBar({
   style,
   testID,
 }: MandiSearchBarProps) {
+  const [focused, setFocused] = useState(false);
   const showHint = !!rotatingHints && rotatingHints.length > 0 && value === '';
   // One stable name; the rotating text must never leak into it.
   const label = rotatingHints && rotatingHints.length > 0 ? SEARCH_LABEL : placeholder;
@@ -84,7 +85,7 @@ export function MandiSearchBar({
     <RotatingHint hints={rotatingHints} testID={testID ? `${testID}-hint` : undefined} />
   ) : null;
   const body = (
-    <View style={[styles.container, pill && styles.pill, style]}>
+    <View testID="search-field-container" style={[styles.container, pill && styles.pill, focused && styles.focused, style]}>
       {leading}
       <Ionicons name="search" size={IconSize.md} color={Colors.textTertiary} />
 
@@ -109,11 +110,13 @@ export function MandiSearchBar({
             placeholderTextColor={Colors.textTertiary}
             onSubmitEditing={onSubmit}
             autoFocus={autoFocus}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             returnKeyType="search"
             autoCorrect={false}
             autoCapitalize="none"
             accessibilityLabel={label}
-            style={styles.input}
+            style={[styles.input, styles.noRing]}
           />
           {hint && <View pointerEvents="none" style={styles.overlay}>{hint}</View>}
         </View>
@@ -161,6 +164,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceSunken,
     borderRadius: Radius.md,
   },
+  // The browser's own blue ring around the bare input looks like a second box inside the pill: the container shows
+  // focus instead, with a border that is visible to keyboard users too.
+  focused: { borderWidth: 2, borderColor: Colors.primary },
+  noRing: { outlineStyle: 'none' } as object,
   pill: {
     height: ControlHeight.lg,
     borderRadius: Radius.full,

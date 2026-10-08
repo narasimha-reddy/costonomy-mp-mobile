@@ -110,8 +110,11 @@ export default function SearchScreen() {
         sort: supplierFilters.sort,
       }),
     getNextPageParam: (last) => last.nextOffset ?? undefined,
-    enabled: tab === 'suppliers' && searching && accessToken != null,
+    // Also asked when the Products tab came back empty, to tell the kitchen a supplier of that name exists.
+    enabled: (tab === 'suppliers' || (tab === 'products' && products.isSuccess && products.data.length === 0))
+      && searching && accessToken != null,
   });
+  const supplierMatches = suppliers.data?.pages[0]?.total ?? suppliers.data?.pages[0]?.suppliers.length ?? 0;
 
   function openProduct(productId: number) {
     if (searching) remember(query);
@@ -149,6 +152,11 @@ export default function SearchScreen() {
           query={products}
           empty={`Nothing for "${query}"`}
           hint="Try a shorter word, or the name your supplier uses."
+          emptyTitle={supplierMatches > 0
+            ? `${supplierMatches} ${supplierMatches === 1 ? 'supplier matches' : 'suppliers match'}`
+            : undefined}
+          emptyHint={supplierMatches > 0 ? `No products for "${query}", but a supplier has that name.` : undefined}
+          emptyAction={supplierMatches > 0 ? { label: 'View suppliers', onPress: () => setTab('suppliers') } : undefined}
           render={(list) =>
             list.map((product) => (
               <ProductCard
@@ -203,11 +211,18 @@ function Results<T>({
   query,
   empty,
   hint,
+  emptyTitle,
+  emptyHint,
+  emptyAction,
   render,
 }: {
   query: { isPending: boolean; error: unknown; data?: T[]; refetch: () => unknown };
   empty: string;
   hint: string;
+  /** What to say instead when the list is empty but something else matches (the Products tab, a supplier of that name). */
+  emptyTitle?: string;
+  emptyHint?: string;
+  emptyAction?: { label: string; onPress: () => void };
   render: (list: T[]) => React.ReactNode;
 }) {
   if (query.isPending) return <MandiSkeletonList count={5} />;
@@ -216,7 +231,15 @@ function Results<T>({
   }
   const list = query.data ?? [];
   if (list.length === 0) {
-    return <MandiEmptyState icon="search-outline" title={empty} description={hint} />;
+    return (
+      <MandiEmptyState
+        icon="search-outline"
+        title={emptyTitle ?? empty}
+        description={emptyHint ?? hint}
+        actionLabel={emptyAction?.label}
+        onAction={emptyAction?.onPress}
+      />
+    );
   }
   // Wrapped, so `MandiScreen`'s section gap applies to the list rather than
   // between every row of it — the rows carry their own padding and separator.

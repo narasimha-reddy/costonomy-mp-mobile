@@ -36,6 +36,7 @@ export function DeliveryDayChoice({
   const [showDates, setShowDates] = useState(false);
   const farther = days.filter((day) => day.offset >= 2);
   const fartherChosen = value.offset != null && value.offset >= 2;
+  const chosenFarther = fartherChosen ? days.find((day) => day.offset === value.offset)?.label ?? null : null;
   const datesOpen = showDates || fartherChosen;
   const hours = value.offset == null ? [] : deliverByHoursFor(value.offset);
 
@@ -64,9 +65,12 @@ export function DeliveryDayChoice({
             onPress={() => pick(day.offset)}
           />
         ))}
+        {/* Selected only when a farther day is chosen; open or closed is the toggle's own state. */}
         <Chip
-          label="Pick a date"
-          active={datesOpen}
+          label={chosenFarther ?? 'Pick a date'}
+          spokenAs={chosenFarther == null ? undefined : `Pick a date, ${chosenFarther} chosen`}
+          active={fartherChosen}
+          expanded={datesOpen}
           onPress={() => setShowDates((open) => !open)}
         />
       </ScrollView>
@@ -103,13 +107,15 @@ export function DeliveryDayChoice({
   );
 }
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function Chip({ label, spokenAs, active, expanded, onPress }: {
+  label: string; spokenAs?: string; active: boolean; expanded?: boolean; onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={`Delivery: ${label}`}
+      accessibilityState={expanded == null ? { selected: active } : { selected: active, expanded }}
+      accessibilityLabel={`Delivery: ${spokenAs ?? label}`}
       style={[styles.chip, active && styles.chipActive]}
     >
       <MandiText variant="caption" color={active ? Colors.surface : Colors.textSecondary}>

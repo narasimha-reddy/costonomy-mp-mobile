@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RequestDetailScreen from '@/app/restaurant/requests/[id]';
 import { MandiToastProvider } from '@/components/common';
+import { istDay } from '@/lib/delivery/deliveryDay';
 import { createOrderFromIntent, fetchIntent, previewOrder, quoteDelivery } from '@/services/intent';
 
 jest.mock('@expo/vector-icons', () => {
@@ -40,21 +41,33 @@ jest.mock('@/components/request/DeliverySlotPicker', () => {
   const { Pressable, Text } = jest.requireActual('react-native');
   const { istDay: day } = jest.requireActual('@/lib/delivery/deliveryDay');
   return {
-    DeliverySlotPicker: ({ onSelect }: { onSelect: (s: number, d: string) => void }) => (
-      <Pressable accessibilityLabel="pick slot" onPress={() => onSelect(3, day(1))}><Text>pick slot</Text></Pressable>
-    ),
+    DeliverySlotPicker: ({ onSelect, selectedDate, selectedSlotId }: {
+      onSelect: (s: number, d: string) => void; selectedDate: string | null; selectedSlotId: number | null;
+    }) => {
+      // Like the real picker: a chosen day with no slot starts on the first free one (slot 3).
+      jest.requireActual('react').useEffect(() => {
+        if (selectedDate != null && selectedSlotId == null) onSelect(3, selectedDate);
+      }, [selectedDate, selectedSlotId]);
+      return <Pressable accessibilityLabel="pick slot" onPress={() => onSelect(3, day(1))}><Text>pick slot</Text></Pressable>;
+    },
   };
 });
 jest.mock('@/components/request/PaymentMethodPicker', () => {
   const { Pressable, Text } = jest.requireActual('react-native');
   return {
-    PaymentMethodPicker: ({ onSelect }: { onSelect: (m: string) => void }) => (
+    PaymentMethodPicker: ({ onSelect, selected, initialMethod }: {
+      onSelect: (m: string) => void; selected: string | null; initialMethod?: string | null;
+    }) => {
+      // Like the real picker: a method chosen earlier is taken up once the picker is ready to offer it.
+      jest.requireActual('react').useEffect(() => { if (selected == null && initialMethod != null) onSelect(initialMethod); }, [selected, initialMethod]);
+      return (
       <>
         {['PREPAID', 'WALLET', 'CREDIT'].map((m) => (
           <Pressable key={m} accessibilityLabel={`method ${m}`} onPress={() => onSelect(m)}><Text>{`method ${m}`}</Text></Pressable>
         ))}
       </>
-    ),
+      );
+    },
   };
 });
 
@@ -142,7 +155,7 @@ describe('checkout choices', () => {
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
     expect((createOrderFromIntent as jest.Mock).mock.calls[0][2]).toMatchObject({
-      deliveryMode: 'COSTONOMY_DELIVERY', deliverySlotId: 3,
+      deliveryMode: 'COSTONOMY_DELIVERY', deliverySlotId: 3, scheduledDeliveryDate: istDay(1),
     });
   });
 

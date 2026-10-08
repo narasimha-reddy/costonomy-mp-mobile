@@ -34,6 +34,16 @@ describe('the request card total', () => {
     expect(screen.getByText('Accepted · 1 item')).toBeTruthy();
   });
 
+  it('says Declined, with no amount, when everything was declined', () => {
+    render(<RestaurantRequestCard request={request({
+      status: 'RESPONSES_RECEIVED', fulfilment: 'NOT_FULFILLED', withinOrderWindow: false,
+      acceptance: { offeredTotal: '0.00' },
+    })} />);
+    expect(screen.getByText('Declined · 1 item')).toBeTruthy();
+    expect(screen.queryByText(/₹0\.00/)).toBeNull();
+    expect(screen.queryByText(/Accepted/)).toBeNull();
+  });
+
   it('calls the action Place order', () => {
     render(<RestaurantRequestCard request={request({
       status: 'RESPONSES_RECEIVED', fulfilment: 'FULFILLED', withinOrderWindow: true, acceptance: { offeredTotal: '132.00' },

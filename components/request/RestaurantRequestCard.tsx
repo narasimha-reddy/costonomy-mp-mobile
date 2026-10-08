@@ -47,6 +47,8 @@ export function RestaurantRequestCard({
 
   const awaitingReply = request.status === 'OPEN';
   const answered = request.acceptance != null;
+  // Everything declined: there is no accepted amount to show, and showing ₹0.00 as accepted would say otherwise.
+  const declined = answered && request.fulfilment === 'NOT_FULFILLED';
   const readyToOrder = request.status === 'RESPONSES_RECEIVED' && request.withinOrderWindow;
 
   const open = onPress ?? (() => router.push(`/restaurant/requests/${request.id}`));
@@ -70,8 +72,8 @@ export function RestaurantRequestCard({
         occurredAt={request.sentAt ?? request.createdAt}
         // Once the supplier has answered, what they accepted is what the order would cost; the requested
         // total is what was asked before then, and the label says which one this is.
-        amount={answered ? request.acceptance?.offeredTotal : request.agreedTotal}
-        amountLabel={`${answered ? 'Accepted' : 'Requested'} · ${request.items.length} item${request.items.length === 1 ? '' : 's'}`}
+        amount={declined ? null : answered ? request.acceptance?.offeredTotal : request.agreedTotal}
+        amountLabel={`${declined ? 'Declined' : answered ? 'Accepted' : 'Requested'} · ${request.items.length} item${request.items.length === 1 ? '' : 's'}`}
         items={request.items}
     />
   );

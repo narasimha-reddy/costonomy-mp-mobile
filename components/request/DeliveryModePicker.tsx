@@ -62,6 +62,8 @@ export function DeliveryModePicker({
     // Quotes expire. Refetching on focus keeps the screen showing a figure that
     // can still be spent, rather than one that fails at the moment of paying.
     staleTime: 10 * 60_000,
+    // A quote kept from an earlier visit may have expired, and a restored choice would spend it: ask again on open.
+    refetchOnMount: 'always',
     retry: false,
   });
 
@@ -70,6 +72,9 @@ export function DeliveryModePicker({
   function feeFor(mode: DeliveryMode): Money | null {
     if (mode === 'PICKUP') return '0';
     if (mode === 'SUPPLIER_DELIVERY') return supplierFee;
+    // No figure while a new quote is on its way or the last ask failed: the old one may be the very quote the server
+    // just refused, and choosing from it would send that reference again.
+    if (quote.isFetching || quote.isError) return null;
     return quote.data?.fee ?? null;
   }
 
@@ -98,7 +103,7 @@ export function DeliveryModePicker({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, available.length, quote.data?.quoteReference]);
+  }, [selected, available.length, quote.data?.quoteReference, quote.isFetching, quote.isError]);
 
   return (
     <MandiCard>

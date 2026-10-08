@@ -111,6 +111,12 @@ export default function RequestDetailScreen() {
 
   const request = query.data;
 
+  // Whether there is something to order right now; only then do the checkout choices matter or get kept.
+  const orderableNow = request != null
+    && request.status === 'RESPONSES_RECEIVED'
+    && request.withinOrderWindow
+    && request.fulfilment !== 'NOT_FULFILLED';
+
   /**
    * The chosen mode, its fee, and the quote that fee came from. D-091.
    *
@@ -156,40 +162,51 @@ export default function RequestDetailScreen() {
    * rather than trusting a saved one (a quote expires). Cleared once the order is placed.
    */
   const [restored, setRestored] = React.useState(false);
+  const [replyExpired, setReplyExpired] = React.useState(false);
   const [restoredMode, setRestoredMode] = React.useState<DeliveryMode | null>(null);
+  // Handed to the payment picker, which only takes it up once the balances say it can still be used.
+  const [restoredMethod, setRestoredMethod] = React.useState<PaymentMethod | null>(null);
   const orderPlaced = React.useRef(false);
   React.useEffect(() => {
     if (!Number.isFinite(intentId)) return;
     let live = true;
     void getJsonPreference<Partial<SavedCheckout> | null>(checkoutKey(intentId), null).then((saved) => {
       if (!live) return;
-      if (saved != null) {
+      if (saved != null && typeof saved === 'object') {
         if (saved.mode != null) setRestoredMode(saved.mode);
         // What was chosen wins over the day the request was sent for; a day that has gone by is as soon as possible.
-        const dayHolds = saved.scheduledDate != null && saved.scheduledDate >= istDay(0);
+        // Only the day comes back: the slot is the picker's to choose from what the supplier has free today, since a
+        // saved slot may since have filled up or gone.
+        const dayHolds = typeof saved.scheduledDate === 'string' && saved.scheduledDate >= istDay(0);
         prefilled.current = true;
-        setSlot({
-          slotId: dayHolds ? saved.slotId ?? null : null,
-          scheduledDate: dayHolds ? saved.scheduledDate ?? null : null,
-        });
-        if (saved.method != null) setMethod(saved.method);
+        setSlot({ slotId: null, scheduledDate: dayHolds ? saved.scheduledDate ?? null : null });
+        if (saved.method != null) setRestoredMethod(saved.method);
       }
-      setRestored(true);
+    }).catch(() => {
+      // Storage that fails is as good as nothing saved: the pickers still start from their defaults.
+    }).finally(() => {
+      if (live) setRestored(true);
     });
     return () => { live = false; };
   }, [intentId]);
 
   // Save what is chosen, once the saved choices have been read (or the first render would overwrite them).
+  // Kept only while there is an order to place: a request that is open, closed or long gone has nothing to remember.
+  const requestLoaded = request != null;
   React.useEffect(() => {
-    if (!restored || orderPlaced.current) return;
+    if (!restored || orderPlaced.current || !requestLoaded) return;
+    if (!orderableNow) {
+      void removePreference(checkoutKey(intentId));
+      return;
+    }
     const choices: SavedCheckout = {
       mode: delivery?.mode ?? restoredMode,
       slotId: slot.slotId,
       scheduledDate: slot.scheduledDate,
-      method,
+      method: method ?? restoredMethod,
     };
     void setJsonPreference(checkoutKey(intentId), choices);
-  }, [restored, delivery?.mode, slot.slotId, slot.scheduledDate, method, restoredMode, intentId]);
+  }, [restored, requestLoaded, orderableNow, delivery?.mode, slot.slotId, slot.scheduledDate, method, restoredMode, restoredMethod, intentId]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: intentKey(intentId) });
 
   // Where the payment picker sits, so the bar's method column can scroll to it. Presentation only.
@@ -252,8 +269,9 @@ export default function RequestDetailScreen() {
     mutationFn: (key: string) => createOrderFromIntent(accessToken as string, intentId, {
       deliveryMode: (delivery?.mode ?? 'PICKUP') as DeliveryMode,
       deliveryQuoteReference: delivery?.quoteReference,
-      deliverySlotId: slot.slotId ?? undefined,
-      scheduledDeliveryDate: slot.scheduledDate ?? undefined,
+      // Collecting has no slot and no day, whatever was picked before switching to it.
+      deliverySlotId: delivery?.mode === 'PICKUP' ? undefined : slot.slotId ?? undefined,
+      scheduledDeliveryDate: delivery?.mode === 'PICKUP' ? undefined : slot.scheduledDate ?? undefined,
       paymentMethod: method ?? 'PREPAID',
     }, key),
     onSettled: () => {
@@ -264,7 +282,6 @@ export default function RequestDetailScreen() {
       // Placed: these choices belong to an order that now exists, not to the next visit.
       orderPlaced.current = true;
       void removePreference(checkoutKey(intentId));
-      
       void refresh();
       // Navigate to the authoritative state rather than claiming success here.
       // If payment is still outstanding the payment screen is where it belongs;
@@ -300,6 +317,7 @@ export default function RequestDetailScreen() {
       // The fee shown is no longer the right one (the goods have become chilled since it was quoted): ask for it
       // again and make the restaurant choose again, rather than leave a choice standing that the server will refuse.
       if (feeNeedsRefreshing(caught)) {
+        // The re-quote starts first; the picker will not choose delivery again until the new figure is in.
         void queryClient.invalidateQueries({ queryKey: ['delivery-quote', intentId] });
         setDelivery(null);
       }
@@ -397,11 +415,6 @@ export default function RequestDetailScreen() {
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not copy that.', 'error'),
   });
-
-  const orderableNow = request != null
-    && request.status === 'RESPONSES_RECEIVED'
-    && request.withinOrderWindow
-    && request.fulfilment !== 'NOT_FULFILLED';
 
   return (
     <MandiScreen
@@ -534,20 +547,25 @@ export default function RequestDetailScreen() {
                 refreshing a screen that says only "waiting". */}
             {request.status === 'OPEN' && request.responseDeadline != null && (
               <View style={styles.replyRow}>
-                {/* One idea: how long they usually take, and how much of that is left. */}
+                {/* One idea: how long they have to reply, and how much of that is left. */}
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {request.responseWindowSeconds != null
-                    ? `${request.storeName} usually replies in ${Math.max(1, Math.round(request.responseWindowSeconds / 60))} min ·`
+                    ? `${request.storeName} replies within ${Math.max(1, Math.round(request.responseWindowSeconds / 60))} min ·`
                     : `${request.storeName} will reply soon ·`}
                 </MandiText>
                 <MandiCountdown
                   size="sm"
                   deadlineAt={request.responseDeadline}
                   slaSeconds={request.responseWindowSeconds ?? undefined}
-                  action="left"
-                  onExpire={() => void refresh()}
+                  action="to reply"
+                  onExpire={() => { setReplyExpired(true); void refresh(); }}
                 />
-                <MandiText variant="caption" color={Colors.textSecondary}>left</MandiText>
+                {/* The clock's own label already says "left"; this word is for the eye only. */}
+                {!replyExpired && (
+                  <MandiText variant="caption" color={Colors.textSecondary} accessibilityElementsHidden importantForAccessibility="no">
+                    left
+                  </MandiText>
+                )}
               </View>
             )}
 
@@ -636,6 +654,7 @@ export default function RequestDetailScreen() {
                   supplierStoreId={request.supplierStoreId}
                   amount={preview.data?.grandTotal ?? request.acceptance?.offeredTotal}
                   selected={method}
+                  initialMethod={restoredMethod}
                   onSelect={setMethod}
                 />
               </View>
@@ -897,7 +916,7 @@ export default function RequestDetailScreen() {
 function requestedHow(preference: 'DELIVERY' | 'PICKUP', day: string | null): string {
   const how = preference === 'DELIVERY' ? 'Deliver to me' : 'Pickup';
   const when = day == null ? 'As soon as possible'
-    : day === istDay(0) ? 'Today'
+    : day === istDay(0) ? 'Later today'
       : day === istDay(1) ? 'Tomorrow' : describeDeliveryDay(day);
   return `${how} · ${when}`;
 }

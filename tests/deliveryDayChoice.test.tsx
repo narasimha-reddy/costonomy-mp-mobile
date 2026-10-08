@@ -40,6 +40,26 @@ describe('the cart delivery day', () => {
 
   it('a date picked from further out keeps its own chip, selected', () => {
     render(<DeliveryDayChoice value={{ offset: 9, byHour: null }} onChange={jest.fn()} />);
-    expect(screen.getByLabelText(`Delivery: ${dayLabel(9)}`).props.accessibilityState.selected).toBe(true);
+    expect(screen.getByLabelText(`Delivery: Pick a date, ${dayLabel(9)} chosen`).props.accessibilityState.selected).toBe(true);
+    expect(screen.getAllByLabelText(`Delivery: ${dayLabel(9)}`)[0].props.accessibilityState.selected).toBe(true);
+  });
+});
+
+describe('the Pick a date chip', () => {
+  it('is not selected while nothing farther is chosen, and says whether it is open', () => {
+    render(<DeliveryDayChoice value={{ offset: null, byHour: null }} onChange={jest.fn()} />);
+    const chip = screen.getByLabelText('Delivery: Pick a date');
+    expect(chip.props.accessibilityState).toMatchObject({ selected: false, expanded: false });
+    fireEvent.press(chip);
+    expect(screen.getByLabelText('Delivery: Pick a date').props.accessibilityState)
+      .toMatchObject({ selected: false, expanded: true });
+  });
+
+  it('shows the chosen farther date and is selected', () => {
+    render(<DeliveryDayChoice value={{ offset: 5, byHour: null }} onChange={jest.fn()} />);
+    expect(screen.queryByLabelText('Delivery: Pick a date')).toBeNull();
+    const toggle = screen.getByLabelText(`Delivery: Pick a date, ${dayLabel(5)} chosen`);
+    expect(toggle.props.accessibilityState).toMatchObject({ selected: true, expanded: true });
+    expect(screen.getAllByText(dayLabel(5)).length).toBe(2);
   });
 });

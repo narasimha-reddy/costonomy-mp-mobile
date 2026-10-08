@@ -41,6 +41,7 @@ export function PaymentMethodPicker({
   onSelect,
   offered,
   autoSelect = true,
+  initialMethod = null,
   title = 'How would you like to pay?',
 }: {
   outletId: number | null;
@@ -53,6 +54,12 @@ export function PaymentMethodPicker({
   offered?: PaymentMethod[];
   /** Pick the first usable method on open. Off where choosing is a deliberate act. */
   autoSelect?: boolean;
+  /**
+   * A method chosen on an earlier visit. Taken up only once its balance has loaded and it can still cover this order;
+   * until then nothing is selected, so an order cannot go out on a method nobody has checked. If it cannot, the
+   * first usable method is chosen as if there had been no earlier choice.
+   */
+  initialMethod?: PaymentMethod | null;
   title?: string;
 }) {
   const { accessToken } = useSession();
@@ -88,6 +95,7 @@ export function PaymentMethodPicker({
     hint: string;
     trailing: string | null;
     disabled: boolean;
+    pending?: boolean;
   }[] = [
     {
       key: 'PREPAID',
@@ -105,6 +113,7 @@ export function PaymentMethodPicker({
       // "available", so a balance is not read as the price of paying this way.
       trailing: walletBalance == null ? null : `${formatMoney(walletBalance)} available`,
       disabled: wallet.isPending || walletBalance == null || walletShort,
+      pending: wallet.isPending,
     },
     {
       key: 'CREDIT',
@@ -115,6 +124,7 @@ export function PaymentMethodPicker({
           : creditShort ? 'Not enough credit left' : 'Owed, not paid now',
       trailing: creditAvailable == null ? null : `${formatMoney(creditAvailable)} available`,
       disabled: agreements.isPending || line == null || creditShort,
+      pending: agreements.isPending,
     },
   ];
 
@@ -124,7 +134,10 @@ export function PaymentMethodPicker({
   // chosen is rendered as chosen.
   useEffect(() => {
     if (selected != null || !autoSelect) return;
-    const usable = options.find((option) => !option.disabled);
+    const earlier = initialMethod == null ? undefined : options.find((option) => option.key === initialMethod);
+    // The earlier choice waits for the figure it depends on, then stands or gives way to the first usable method.
+    if (earlier?.pending) return;
+    const usable = earlier != null && !earlier.disabled ? earlier : options.find((option) => !option.disabled);
     if (usable != null) onSelect(usable.key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, wallet.isPending, agreements.isPending, walletShort, creditShort, line == null]);

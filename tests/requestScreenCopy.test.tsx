@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RequestDetailScreen from '@/app/restaurant/requests/[id]';
@@ -113,8 +113,10 @@ describe('a request waiting for the supplier', () => {
   it('says one thing about the reply time, with the clock', async () => {
     (fetchIntent as jest.Mock).mockResolvedValue(open());
     setup();
-    expect(await screen.findByText(/Sri Balaji usually replies in 5 min/)).toBeTruthy();
-    expect(screen.getByLabelText(/minutes \d+ seconds left left/)).toBeTruthy();
+    expect(await screen.findByText(/Sri Balaji replies within 5 min/)).toBeTruthy();
+    expect(screen.queryByText(/usually replies/)).toBeNull();
+    expect(screen.getByLabelText(/minutes \d+ seconds left to reply/)).toBeTruthy();
+    expect(screen.queryByLabelText(/left left/)).toBeNull();
     expect(screen.queryByText('Usually accepts within')).toBeNull();
     expect(screen.queryByText('to accept')).toBeNull();
   });
@@ -123,6 +125,19 @@ describe('a request waiting for the supplier', () => {
     (fetchIntent as jest.Mock).mockResolvedValue(open());
     setup();
     expect(await screen.findByText('Deliver to me · As soon as possible')).toBeTruthy();
+  });
+
+  it('says Later today for a request sent for today', async () => {
+    (fetchIntent as jest.Mock).mockResolvedValue(open({ preferredDeliveryDate: istDay(0) }));
+    setup();
+    expect(await screen.findByText('Deliver to me · Later today')).toBeTruthy();
+  });
+
+  it('drops the spoken-twice "left" once the reply window has run out', async () => {
+    (fetchIntent as jest.Mock).mockResolvedValue(open({ responseDeadline: new Date(Date.now() - 5_000).toISOString() }));
+    setup();
+    expect(await screen.findByLabelText('Window expired')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('left')).toBeNull());
   });
 
   it('names tomorrow and pickup in words', async () => {

@@ -5,6 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchOutletOrders } from '@/services/procurement';
+import { fetchOutletDeliveryRadar } from '@/services/delivery';
+import { paymentLine } from '@/lib/payments/paymentLine';
+import { Ionicons } from '@expo/vector-icons';
 import type { SupplierOrder, SupplierOrderStatus as Status } from '@/models/procurement';
 import {
   MandiCard,
@@ -61,6 +64,14 @@ export default function OrdersScreen() {
 
   const inFlight = useLatestInFlight(outletId);
 
+  // The Deliveries screen's own default query (same key), so opening it starts from this; the count is the server's.
+  const radar = useQuery({
+    queryKey: ['outlet-delivery-radar', outletId, 'radar'],
+    queryFn: () => fetchOutletDeliveryRadar(accessToken as string, outletId as number),
+    enabled: outletId != null && accessToken != null,
+  });
+  const activeDeliveries = radar.data?.summary.totalActive ?? null;
+
   const orders = useMemo(() => {
     const statuses = TABS.find((t) => t.key === tab)?.statuses ?? [];
     return (query.data ?? []).filter((order) => statuses.includes(order.status));
@@ -68,7 +79,7 @@ export default function OrdersScreen() {
 
   return (
     <MandiScreen
-      header={<Header tab={tab} onTab={setTab} />}
+      header={<Header tab={tab} onTab={setTab} activeDeliveries={activeDeliveries} onDeliveries={() => router.push('/restaurant/deliveries')} />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
       contentStyle={inFlight != null ? { paddingBottom: BAR_CLEARANCE } : undefined}
@@ -124,18 +135,35 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
         items={order.items}
         orderNumber={order.orderNumber}
         paymentMethod={order.paymentMethod}
-              createdAt={order.createdAt}
-        amount={order.totalAmount}
+        createdAt={order.createdAt}
+        amount={paymentLine(order).amount}
         status={buyerOrderStatus(order.status, order.deliveryMode)}
       />
     </MandiCard>
   );
 }
 
-function Header({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
+function Header({ tab, onTab, activeDeliveries, onDeliveries }: {
+  tab: Tab;
+  onTab: (tab: Tab) => void;
+  activeDeliveries: number | null;
+  onDeliveries: () => void;
+}) {
   return (
     <View style={styles.header}>
       <RestaurantHeader screen="REST-ORDERS-01" subtitle="Orders" />
+      <Pressable
+        onPress={onDeliveries}
+        accessibilityRole="button"
+        accessibilityLabel={activeDeliveries != null && activeDeliveries > 0 ? `Deliveries, ${activeDeliveries} active` : 'Deliveries'}
+        style={styles.deliveries}
+      >
+        <Ionicons name="bicycle-outline" size={18} color={Colors.primaryDark} />
+        <MandiText variant="captionEmphasis" color={Colors.primaryDark}>
+          {activeDeliveries != null && activeDeliveries > 0 ? `Deliveries · ${activeDeliveries} active` : 'Deliveries'}
+        </MandiText>
+        <Ionicons name="chevron-forward" size={16} color={Colors.primaryDark} />
+      </Pressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {TABS.map((option) => {
           const active = option.key === tab;
@@ -163,6 +191,17 @@ function Header({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
 
 const styles = StyleSheet.create({
   header: { gap: Spacing.sm, paddingBottom: Spacing.sm },
+  deliveries: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: Spacing.xs,
+    marginHorizontal: Spacing.screenHorizontal,
+    paddingHorizontal: Spacing.md,
+    minHeight: TouchTarget.min - 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryLight,
+  },
   tabs: { paddingHorizontal: Spacing.screenHorizontal, gap: Spacing.sm },
   tab: {
     paddingHorizontal: Spacing.lg,

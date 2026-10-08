@@ -210,6 +210,31 @@ describe('finished deliveries carry no live hints (All)', () => {
     expect(screen.queryByText(/running late/i)).toBeNull();
   });
 
+  it('shows the delivered time in 12-hour form, like the rest of the app', async () => {
+    await openAll([finished()]);
+    expect(await screen.findByText(/^Delivered at \d{1,2}:\d{2} (AM|PM)$/)).toBeTruthy();
+  });
+
+  const ravi = { name: 'Ravi', phone: '999', vehicle: null };
+
+  it('offers Call on a delivery that is still moving', async () => {
+    withItems([item({ driver: ravi })]);
+    renderScreen();
+    expect(await screen.findByText('Call')).toBeTruthy();
+  });
+
+  it('hides Call on a delivered one', async () => {
+    await openAll([finished({ driver: ravi })]);
+    await screen.findByText(/^Delivered at /);
+    expect(screen.queryByText('Call')).toBeNull();
+  });
+
+  it('hides Call on a cancelled one', async () => {
+    await openAll([finished({ status: 'CANCELLED', arrivalStage: 'EN_ROUTE', deliveredAt: null, driver: ravi })]);
+    await screen.findByText('Order ORD-42');
+    expect(screen.queryByText('Call')).toBeNull();
+  });
+
   it('a delivered order still waiting for its check-in keeps the Check-in prompt', async () => {
     await openAll([finished({ isCheckedIn: false, recommendedAction: 'CHECK_IN', actionReason: 'Check the delivery in' })]);
     expect(await screen.findByText('Check the delivery in')).toBeTruthy();

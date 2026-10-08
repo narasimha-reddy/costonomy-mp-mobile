@@ -287,3 +287,69 @@ describe('the check-in confirmation step (before rating)', () => {
     expect(mockReplace).toHaveBeenCalledWith('/restaurant/dispute/501');
   });
 });
+
+describe('the refund sheet buttons follow where the refund went', () => {
+  it('a credit order has Rate this order as the main button and no wallet button', async () => {
+    paidBy('CREDIT');
+    (receiveOrder as jest.Mock).mockResolvedValue(RECEIVING_APPLIED_NO_NOTE_YET);
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+    await screen.findByText('Refund of ₹10.50');
+
+    expect(screen.queryByText('View Wallet Balance')).toBeNull();
+    expect(screen.queryByText('Rate Delivery & Supplier')).toBeNull();
+    fireEvent.press(screen.getByText('Rate this order'));
+    expect(mockReplace).toHaveBeenCalledWith('/restaurant/rating/501');
+  });
+
+  it('a wallet-paid order still offers the wallet', async () => {
+    paidBy('WALLET');
+    (receiveOrder as jest.Mock).mockResolvedValue(RECEIVING_APPLIED_NO_NOTE_YET);
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+    await screen.findByText('Refund of ₹10.50');
+
+    fireEvent.press(screen.getByText('View Wallet Balance'));
+    expect(mockReplace).toHaveBeenCalledWith('/restaurant/wallet');
+  });
+});
+
+describe('entering a problem lowers Received by itself', () => {
+  const plainOrder = {
+    ...ORDER_READY_SETTLED_9_6,
+    items: [{ ...ORDER_READY_SETTLED_9_6.items[0], isCatchWeight: false, billableQuantity: undefined, requestedQuantity: 3, acceptedQuantity: 3, productName: 'Potato' }],
+  };
+  it('adding 1 missing of 3 makes Received 2 and lets the check-in complete', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...plainOrder, paymentMethod: 'WALLET' });
+    setup();
+    const received = (await screen.findAllByDisplayValue('3'))[0] as ReturnType<typeof screen.getByDisplayValue>;
+    const zeros = screen.getAllByDisplayValue('0');
+    fireEvent.changeText(zeros[1] as typeof received, '1');
+
+    expect(screen.getByDisplayValue('2')).toBeTruthy();
+    expect(screen.queryByText(/accounted for/)).toBeNull();
+  });
+
+  it('says what to do when Received is raised too high by hand', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...plainOrder, paymentMethod: 'WALLET' });
+    setup();
+    const received = (await screen.findAllByDisplayValue('3'))[0] as ReturnType<typeof screen.getByDisplayValue>;
+    const zeros = screen.getAllByDisplayValue('0');
+    fireEvent.changeText(zeros[1] as typeof received, '1');
+    fireEvent.changeText(screen.getByDisplayValue('2'), '3');
+
+    expect(screen.getByText(/Lower Received to 2 KG/)).toBeTruthy();
+  });
+
+  it('does not touch Received on a weighed catch-weight line', async () => {
+    paidBy('WALLET');
+    setup();
+    const received = (await screen.findAllByDisplayValue('9.6'))[0] as ReturnType<typeof screen.getByDisplayValue>;
+    const zeros = screen.getAllByDisplayValue('0');
+    fireEvent.changeText(zeros[1] as typeof received, '0.1');
+
+    expect(screen.getAllByDisplayValue('9.6').length).toBeGreaterThan(0);
+  });
+});

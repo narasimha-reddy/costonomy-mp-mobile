@@ -93,9 +93,7 @@ export function SupplierSectionHeader({
           {draft.storeName ?? 'Supplier'}
         </MandiText>
         <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {draft.supplierName != null && draft.supplierName !== draft.storeName
-            ? `${draft.supplierName} · ${items}`
-            : items}
+          {items}
         </MandiText>
         {warning != null && (
           <View style={styles.warningRow}>

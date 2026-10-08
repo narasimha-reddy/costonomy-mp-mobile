@@ -19,6 +19,7 @@ import {
   MandiText,
 } from '@/components/common';
 import { partnerWording } from '@/lib/delivery/partnerWording';
+import { clockTime } from '@/lib/delivery/deliveryPartner';
 import { resolveStatus, DeliveryStatus as DeliveryStatusRegistry } from '@/models/status';
 import {
   fetchOutletDeliveries,
@@ -144,6 +145,8 @@ export default function DeliveriesScreen() {
           const late = item.scheduleStatus !== 'ON_SCHEDULE';
           const needsCheckIn = item.recommendedAction === 'CHECK_IN' && !item.isCheckedIn;
           const delivered = item.status === 'DELIVERED' || item.arrivalStage === 'DELIVERED_UNCHECKED';
+          // Nobody to ring once it is over, one way or the other.
+          const over = delivered || item.status === 'CANCELLED' || item.status === 'DELIVERY_FAILED';
           // The rank orders arrivals among several; on its own, or once delivered, it says nothing.
           const showRank = item.arrivalRank > 0 && !isHistory && !delivered && visibleItems.length > 1;
 
@@ -189,7 +192,7 @@ export default function DeliveriesScreen() {
                       {item.driver.vehicle ? ` · ${item.driver.vehicle}` : ''}
                     </MandiText>
                   </View>
-                  {item.driver.phone && (
+                  {item.driver.phone && !over && (
                     <MandiButton
                       label="Call"
                       icon="call-outline"
@@ -274,9 +277,7 @@ function filterCount(key: DeliveryFilter, summary: RadarSummary | undefined): nu
 }
 
 function formatClock(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return clockTime(value) ?? '\u2014';
 }
 
 function formatStage(stage: string): string {

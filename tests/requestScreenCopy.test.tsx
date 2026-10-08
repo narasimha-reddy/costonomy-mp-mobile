@@ -113,12 +113,19 @@ describe('a request waiting for the supplier', () => {
   it('says one thing about the reply time, with the clock', async () => {
     (fetchIntent as jest.Mock).mockResolvedValue(open());
     setup();
-    expect(await screen.findByText(/Sri Balaji replies within 5 min/)).toBeTruthy();
+    expect(await screen.findByText(/^Replies within 5 min/)).toBeTruthy();
     expect(screen.queryByText(/usually replies/)).toBeNull();
     expect(screen.getByLabelText(/minutes \d+ seconds left to reply/)).toBeTruthy();
     expect(screen.queryByLabelText(/left left/)).toBeNull();
     expect(screen.queryByText('Usually accepts within')).toBeNull();
     expect(screen.queryByText('to accept')).toBeNull();
+  });
+
+  it('names the supplier once, in the header card', async () => {
+    (fetchIntent as jest.Mock).mockResolvedValue(open({ storeName: 'Sri Balaji Traders — Domlur', supplierName: 'Sri Balaji Traders' }));
+    setup();
+    await screen.findByText(/^Replies within 5 min/);
+    expect(screen.getAllByText(/Sri Balaji Traders/)).toHaveLength(1);
   });
 
   it('shows the chosen way and day on the request sent screen', async () => {

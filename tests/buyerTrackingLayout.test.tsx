@@ -129,6 +129,20 @@ describe('BuyerTrackingLayout', () => {
     expect(screen.getAllByText(/Fresh Farms/)).toHaveLength(2);
   });
 
+  it('the buyer placed screen lists what happens next, three short lines', () => {
+    setup({ status: 'CONFIRMED', deliveryMode: 'COSTONOMY_DELIVERY' }, null);
+    expect(screen.getByText('What happens next')).toBeTruthy();
+    expect(screen.getByText('The supplier packs your order')).toBeTruthy();
+    expect(screen.getByText('A delivery partner is assigned')).toBeTruthy();
+    expect(screen.getByText('You get a notification at each step')).toBeTruthy();
+  });
+
+  it('a self-collect order is not told a delivery partner is coming', () => {
+    setup({ status: 'CONFIRMED', deliveryMode: 'PICKUP' }, null);
+    expect(screen.getByText('What happens next')).toBeTruthy();
+    expect(screen.queryByText('A delivery partner is assigned')).toBeNull();
+  });
+
   it('a prepaid CONFIRMED order says Paid on the placed hero', () => {
     setup({ status: 'CONFIRMED', paymentMethod: 'PREPAID', paymentStatus: 'CAPTURED' }, null);
     expect(screen.getByText('Paid')).toBeTruthy();

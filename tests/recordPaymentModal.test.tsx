@@ -92,7 +92,7 @@ describe('the payment-mode chips', () => {
     setup();
     const upi = screen.getByLabelText('UPI');
     expect(upi.props.accessibilityRole).toBe('radio');
-    expect(upi.props.accessibilityState.selected).toBe(false);
-    expect(screen.getByLabelText('Bank Transfer / NEFT').props.accessibilityState.selected).toBe(true);
+    expect(upi.props.accessibilityState.checked).toBe(false);
+    expect(screen.getByLabelText('Bank Transfer / NEFT').props.accessibilityState.checked).toBe(true);
   });
 });

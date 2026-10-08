@@ -251,7 +251,7 @@ describe('Receivables home: pending actions come from the server', () => {
     await waitFor(() => expect(lastRestaurantsParams().sort).toBe('owed'));
     fireEvent.press(screen.getByTestId('pending-OVERDUE_RESTAURANTS'));
     await waitFor(() => expect(lastRestaurantsParams().sort).toBe('overdue'));
-    expect(screen.getByTestId('sort-overdue').props.accessibilityState).toMatchObject({ selected: true });
+    expect(screen.getByTestId('sort-overdue').props.accessibilityState).toMatchObject({ checked: true });
   });
 
   it('at-limit chip brings the biggest lines forward', async () => {

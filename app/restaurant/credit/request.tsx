@@ -27,6 +27,7 @@ import { scaledToAmount, toScaled } from '@/lib/wallet/amount';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
 import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 const SCREEN = 'REST-CREDIT-02';
 
@@ -358,7 +359,7 @@ export default function CreditRequestScreen() {
                 onPress={() => { setDays(option); setProblem(null); }}
                 accessibilityRole="radio"
                 accessibilityLabel={`${option} days`}
-                accessibilityState={{ selected: active }}
+                accessibilityState={radioState(active)}
                 style={[styles.chip, active && styles.chipActive]}
               >
                 <MandiText

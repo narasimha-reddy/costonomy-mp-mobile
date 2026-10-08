@@ -117,7 +117,7 @@ describe('a refused quote is replaced, not reused (blocker 1)', () => {
     (createOrderFromIntent as jest.Mock).mockRejectedValueOnce(
       new ApiError({ code: 'PRICE_CHANGED', message: 'The delivery fee changed.', status: 409 }));
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     await waitFor(() => expect(placeDisabled()).toBe(false));
 
     fireEvent.press(screen.getByLabelText('Place order'));
@@ -125,11 +125,11 @@ describe('a refused quote is replaced, not reused (blocker 1)', () => {
     expect(sent(0).deliveryQuoteReference).toBe('q1');
     // The re-quote is still in flight: nothing may be chosen from the old figure.
     await waitFor(() => expect(quoteDelivery).toHaveBeenCalledTimes(2));
-    expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(false);
+    expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(false);
     expect(placeDisabled()).toBe(true);
 
     await act(async () => { release({ fee: '66.00', quoteReference: 'q2', etaMinutes: 40 }); });
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     expect(screen.getByText('₹66.00')).toBeTruthy();
     await waitFor(() => expect(placeDisabled()).toBe(false));
     fireEvent.press(screen.getByLabelText('Place order'));
@@ -145,7 +145,7 @@ describe('a refused quote is replaced, not reused (blocker 1)', () => {
     // A quote left in the cache by an earlier visit, still inside its ten-minute staleTime.
     setup((client) => client.setQueryData(['delivery-quote', 7], { fee: '10.00', quoteReference: 'old', etaMinutes: 40 }));
     await waitFor(() => expect(quoteDelivery).toHaveBeenCalledWith('token', 7));
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     await waitFor(() => expect(placeDisabled()).toBe(false));
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
@@ -158,8 +158,8 @@ describe('a saved payment method that cannot be used (blocker 2)', () => {
     save({ mode: 'COSTONOMY_DELIVERY', slotId: null, scheduledDate: null, method: 'CREDIT' });
     (fetchOutletAgreements as jest.Mock).mockResolvedValue([{ supplierStoreId: 4, status: 'ACTIVE', available: '10.00' }]);
     setup();
-    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.selected).toBe(true));
-    expect(radio(/Mandi Credit/).props.accessibilityState.selected).toBe(false);
+    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.checked).toBe(true));
+    expect(radio(/Mandi Credit/).props.accessibilityState.checked).toBe(false);
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
     expect(sent().paymentMethod).toBe('PREPAID');
@@ -169,7 +169,7 @@ describe('a saved payment method that cannot be used (blocker 2)', () => {
     save({ mode: 'COSTONOMY_DELIVERY', slotId: null, scheduledDate: null, method: 'WALLET' });
     (fetchWallet as jest.Mock).mockResolvedValue({ balance: '1.00' });
     setup();
-    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.checked).toBe(true));
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
     expect(sent().paymentMethod).toBe('PREPAID');
@@ -180,10 +180,10 @@ describe('a saved payment method that cannot be used (blocker 2)', () => {
     let release: (w: object) => void = () => undefined;
     (fetchWallet as jest.Mock).mockReturnValue(new Promise((resolve) => { release = resolve; }));
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     expect(placeDisabled()).toBe(true);
     await act(async () => { release({ balance: '5000.00' }); });
-    await waitFor(() => expect(radio(/Wallet/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Wallet/).props.accessibilityState.checked).toBe(true));
     expect(placeDisabled()).toBe(false);
   });
 });
@@ -200,10 +200,10 @@ describe('a chosen payment method that stops covering the real total (re-review 
     (previewOrder as jest.Mock).mockReturnValue(new Promise((resolve) => { release = resolve; }));
     setup();
     // The wallet is taken up against the acceptance total while the real one is still on its way.
-    await waitFor(() => expect(radio(/Wallet/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Wallet/).props.accessibilityState.checked).toBe(true));
     await act(async () => { release({ grandTotal: '1105.00', deliveryFee: '55.00', lines: [] }); });
-    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.selected).toBe(true));
-    expect(radio(/Wallet/).props.accessibilityState.selected).toBe(false);
+    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.checked).toBe(true));
+    expect(radio(/Wallet/).props.accessibilityState.checked).toBe(false);
     await waitFor(() => expect(placeDisabled()).toBe(false));
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
@@ -216,18 +216,18 @@ describe('a chosen payment method that stops covering the real total (re-review 
     setup();
     await waitFor(() => expect(radio(/Wallet/).props.accessibilityState.disabled).toBe(false));
     fireEvent.press(radio(/Wallet/));
-    expect(radio(/Wallet/).props.accessibilityState.selected).toBe(true);
+    expect(radio(/Wallet/).props.accessibilityState.checked).toBe(true);
     await act(async () => { release({ grandTotal: '1105.00', deliveryFee: '55.00', lines: [] }); });
-    await waitFor(() => expect(radio(/Wallet/).props.accessibilityState.selected).toBe(false));
-    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Wallet/).props.accessibilityState.checked).toBe(false));
+    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.checked).toBe(true));
   });
 
   it('Place order stays disabled until the real total has arrived, and the total shown is the one charged', async () => {
     let release: (p: object) => void = () => undefined;
     (previewOrder as jest.Mock).mockReturnValue(new Promise((resolve) => { release = resolve; }));
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
-    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
+    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.checked).toBe(true));
     await waitFor(() => expect(previewOrder).toHaveBeenCalled());
     expect(placeDisabled()).toBe(true);
     await act(async () => { release({ grandTotal: '1105.00', deliveryFee: '55.00', lines: [] }); });
@@ -252,7 +252,7 @@ describe('a chosen payment method that stops covering the real total (re-review 
 describe('the delivery quote moves under a chosen Costonomy delivery (re-review 3, 4)', () => {
   it('a background refetch with a new reference re-emits the new fee and reference, and Place order waits', async () => {
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     await waitFor(() => expect(placeDisabled()).toBe(false));
     let release: (q: object) => void = () => undefined;
     (quoteDelivery as jest.Mock).mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
@@ -271,17 +271,17 @@ describe('the delivery quote moves under a chosen Costonomy delivery (re-review 
     (createOrderFromIntent as jest.Mock).mockRejectedValueOnce(
       new ApiError({ code: 'PRICE_CHANGED', message: 'The delivery fee changed.', status: 409 }));
     setup();
-    await waitFor(() => expect(radio(/I will collect/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/I will collect/).props.accessibilityState.checked).toBe(true));
     fireEvent.press(radio(/Deliver it for me/));
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     await waitFor(() => expect(placeDisabled()).toBe(false));
     (quoteDelivery as jest.Mock).mockResolvedValue({ fee: '66.00', quoteReference: 'q2', etaMinutes: 40 });
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(quoteDelivery).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByText('₹66.00')).toBeTruthy());
-    expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true);
-    expect(radio(/I will collect/).props.accessibilityState.selected).toBe(false);
+    expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true);
+    expect(radio(/I will collect/).props.accessibilityState.checked).toBe(false);
   });
 
   it('a failed quote with only Costonomy offered offers Try again, which asks once more', async () => {
@@ -293,7 +293,7 @@ describe('the delivery quote moves under a chosen Costonomy delivery (re-review 
     setup();
     fireEvent.press(await screen.findByLabelText('Try again'));
     await waitFor(() => expect(quoteDelivery).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
   });
 });
 
@@ -301,8 +301,8 @@ describe('saved fields are checked (re-review 9)', () => {
   it('an unknown mode and method are ignored: the defaults apply and nothing odd is sent', async () => {
     save({ mode: 'HOVERCRAFT', slotId: null, scheduledDate: null, method: 'BARTER' });
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
-    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
+    await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.checked).toBe(true));
     await waitFor(() => expect(placeDisabled()).toBe(false));
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
@@ -338,7 +338,7 @@ describe('a saved day and slot (blocker 3)', () => {
   it('sends no slot and no day when the order is pickup', async () => {
     save({ mode: 'PICKUP', slotId: 999, scheduledDate: istDay(1), method: 'PREPAID' });
     setup();
-    await waitFor(() => expect(radio(/I will collect/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/I will collect/).props.accessibilityState.checked).toBe(true));
     await waitFor(() => expect(placeDisabled()).toBe(false));
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
@@ -372,19 +372,19 @@ describe('storage that fails', () => {
     (getJsonPreference as jest.Mock).mockRejectedValueOnce(new Error('disk'));
     setup();
     expect(await screen.findByText('How should this reach you?')).toBeTruthy();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
   });
 
   it('still shows the pickers when the saved choices are not an object', async () => {
     (getJsonPreference as jest.Mock).mockResolvedValueOnce('not an object');
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
   });
 
   it('still shows the pickers when the saved fields have the wrong types', async () => {
     (getJsonPreference as jest.Mock).mockResolvedValueOnce({ mode: 'HOVERCRAFT', method: 'BARTER', scheduledDate: 42 });
     setup();
     expect(await screen.findByText('How should this reach you?')).toBeTruthy();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
   });
 });

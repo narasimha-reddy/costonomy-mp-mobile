@@ -8,6 +8,7 @@ import { MandiCard, MandiText } from '@/components/common';
 import { formatMoney, type Money } from '@/utils/money';
 import { PAYMENT_METHOD_LABEL } from '@/components/request/paymentLabels';
 import { Colors, Radius, Spacing } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 export type PaymentMethod = 'PREPAID' | 'WALLET' | 'CREDIT';
 
@@ -170,7 +171,7 @@ export function PaymentMethodPicker({
               disabled={option.disabled}
               onPress={() => onSelect(option.key)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: active, checked: active, disabled: option.disabled }}
+              accessibilityState={radioState(active, option.disabled)}
               style={[
                 styles.option,
                 active && styles.optionActive,

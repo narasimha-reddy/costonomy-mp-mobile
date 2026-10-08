@@ -171,8 +171,8 @@ describe('the rejection-reason chips', () => {
 
     const chip = await screen.findByLabelText('Damaged Crate for Chicken');
     expect(chip.props.accessibilityRole).toBe('radio');
-    expect(chip.props.accessibilityState.selected).toBe(true);
-    expect(screen.getByLabelText('Short Delivery for Chicken').props.accessibilityState.selected).toBe(false);
+    expect(chip.props.accessibilityState.checked).toBe(true);
+    expect(screen.getByLabelText('Short Delivery for Chicken').props.accessibilityState.checked).toBe(false);
   });
 });
 

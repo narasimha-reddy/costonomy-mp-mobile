@@ -15,6 +15,7 @@ import {
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 const PAYMENT_METHODS = [
   { label: 'Bank Transfer / NEFT', value: 'BANK_TRANSFER' },
@@ -149,7 +150,7 @@ export function RecordPaymentModal({
                     setMethod(m.value);
                   }}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
+                  accessibilityState={radioState(active)}
                   accessibilityLabel={m.label}
                   style={[styles.methodChip, active && styles.methodChipActive]}
                 >

@@ -43,7 +43,7 @@ describe('the delivery time picker', () => {
     const onSelect = setup(null);
 
     expect(screen.getByText('As soon as possible')).toBeTruthy();
-    expect(screen.getByRole('radio', { selected: true })).toBeTruthy();
+    expect(screen.getByRole('radio', { checked: true })).toBeTruthy();
     expect(await screen.findByText('Morning')).toBeTruthy();
     // Slots are listed, but none is chosen on the buyer's behalf while as soon as possible is.
     expect(onSelect).not.toHaveBeenCalled();

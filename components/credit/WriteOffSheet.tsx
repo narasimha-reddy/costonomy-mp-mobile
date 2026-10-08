@@ -10,6 +10,7 @@ import { reasonCheck } from '@/lib/credit/supplierLine';
 import type { WriteOffQuickReason } from '@/models/credit';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 const REASON_MAX = 500;
 
@@ -136,7 +137,7 @@ export function WriteOffSheet({
                   onPress={() => { setQuick(r.value); setReason(r.label); reset(); }}
                   accessibilityRole="radio"
                   accessibilityLabel={r.label}
-                  accessibilityState={{ selected: active }}
+                  accessibilityState={radioState(active)}
                   style={[styles.chip, active && styles.chipActive]}
                 >
                   <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>{r.label}</MandiText>

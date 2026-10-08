@@ -32,6 +32,7 @@ import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
 import { Colors, Elevation, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 const SCREEN = 'SUP-CATALOG-02';
 const STEPS = ['Choose the product', 'Pack and price'];
@@ -689,7 +690,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
     <Pressable
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityState={{ selected: active }}
+      accessibilityState={radioState(active)}
       style={[styles.chip, active && styles.chipActive]}
     >
       <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>

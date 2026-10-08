@@ -4,6 +4,7 @@ import { MandiCard, MandiFormField, MandiText } from '@/components/common';
 import type { DeliveryPolicy } from '@/services/supplier';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 export type DeliveryOffer = 'SELF_FREE' | 'SELF' | 'COSTONOMY' | 'NONE';
 
@@ -95,7 +96,7 @@ export function DeliveryOfferChoice({
               <Pressable
                 onPress={() => onChange(offer)}
                 accessibilityRole="radio"
-                accessibilityState={{ selected: active, checked: active }}
+                accessibilityState={radioState(active)}
                 style={[styles.option, active && styles.optionActive]}
               >
                 <MandiText variant="body">{labels[offer].title}</MandiText>

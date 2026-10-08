@@ -7,6 +7,7 @@ import { checkAmount, cleanAmountInput, plainAmount } from '@/lib/credit/recordP
 import type { CreditNoteReason } from '@/models/credit';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 const NOTE_MAX = 500;
 
@@ -92,7 +93,7 @@ export function CreditNoteSheet({
                 disabled={pending}
                 accessibilityRole="radio"
                 accessibilityLabel={r.label}
-                accessibilityState={{ selected: active, disabled: pending }}
+                accessibilityState={radioState(active, pending)}
                 style={[styles.chip, active && styles.chipActive]}
               >
                 <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>{r.label}</MandiText>

@@ -7,6 +7,7 @@ import { MAX_REASON, reasonCheck } from '@/lib/credit/supplierLine';
 import type { ReversalResult, StorePayment } from '@/models/credit';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 /**
  * Undo a payment the supplier recorded. Says in plain words what happens, asks for a reason
@@ -93,7 +94,7 @@ export function UndoPaymentSheet({
                 disabled={pending}
                 accessibilityRole="radio"
                 accessibilityLabel={label}
-                accessibilityState={{ selected: active, disabled: pending }}
+                accessibilityState={radioState(active, pending)}
                 style={[styles.chip, active && styles.chipActive]}
               >
                 <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>

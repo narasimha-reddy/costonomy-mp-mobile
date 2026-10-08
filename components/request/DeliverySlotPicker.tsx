@@ -6,6 +6,7 @@ import { fetchAvailableSlots } from '@/services/delivery';
 import { MandiCard, MandiText, MandiSkeletonList } from '@/components/common';
 import { istDay } from '@/lib/delivery/deliveryDay';
 import { Colors, Radius, Spacing } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 interface DeliverySlotPickerProps {
   supplierStoreId: number;
@@ -68,7 +69,7 @@ export function DeliverySlotPicker({
       <Pressable
         onPress={() => onSelect(null, null)}
         accessibilityRole="radio"
-        accessibilityState={{ selected: asap, checked: asap }}
+        accessibilityState={radioState(asap)}
         style={[styles.option, asap && styles.optionActive, styles.asap]}
       >
         <MandiText variant="bodyEmphasis">As soon as possible</MandiText>

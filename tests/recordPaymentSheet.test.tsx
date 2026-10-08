@@ -442,8 +442,8 @@ describe('accessibility and layout', () => {
     renderSheet();
     const upi = screen.getByLabelText('UPI');
     expect(upi.props.accessibilityRole).toBe('radio');
-    expect(screen.getByLabelText('Cash').props.accessibilityState).toMatchObject({ selected: true });
-    expect(upi.props.accessibilityState).toMatchObject({ selected: false });
+    expect(screen.getByLabelText('Cash').props.accessibilityState).toMatchObject({ checked: true });
+    expect(upi.props.accessibilityState).toMatchObject({ checked: false });
     expect(screen.getByLabelText('Full ₹12,000.00').props.accessibilityRole).toBe('radio');
     expect(screen.getByLabelText('Previous day').props.accessibilityRole).toBe('button');
     expect(screen.getByLabelText('Next day').props.accessibilityState).toMatchObject({ disabled: true });

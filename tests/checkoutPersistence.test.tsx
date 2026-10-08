@@ -115,15 +115,15 @@ beforeEach(() => {
 describe('checkout choices', () => {
   it('opens on delivery when the restaurant asked for delivery, and the header says so', async () => {
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
-    expect(radio(/I will collect/).props.accessibilityState.selected).toBe(false);
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
+    expect(radio(/I will collect/).props.accessibilityState.checked).toBe(false);
     expect(screen.queryByText(/Pickup at/)).toBeNull();
     expect(screen.getByText('to Cafe One · Indiranagar')).toBeTruthy();
   });
 
   it('header names the supplier, not the outlet, when pickup is chosen', async () => {
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     fireEvent.press(radio(/I will collect/));
     expect(await screen.findByText('Pickup at Metro')).toBeTruthy();
     expect(screen.queryByText('to Cafe One · Indiranagar')).toBeNull();
@@ -131,7 +131,7 @@ describe('checkout choices', () => {
 
   it('choices survive a remount', async () => {
     const first = setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     fireEvent.press(radio(/I will collect/));
     fireEvent.press(screen.getByLabelText('method CREDIT'));
     await waitFor(() => expect(screen.getByText('Mandi Credit')).toBeTruthy());
@@ -140,19 +140,19 @@ describe('checkout choices', () => {
 
     setup();
     // The preference alone would put delivery back; the saved choice is pickup.
-    await waitFor(() => expect(radio(/I will collect/).props.accessibilityState.selected).toBe(true));
-    expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(false);
+    await waitFor(() => expect(radio(/I will collect/).props.accessibilityState.checked).toBe(true));
+    expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(false);
     expect(await screen.findByText('Mandi Credit')).toBeTruthy();
   });
 
   it('a saved day and slot come back and are what is ordered', async () => {
     const first = setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     fireEvent.press(screen.getByLabelText('pick slot'));
     first.unmount();
 
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     fireEvent.press(screen.getByLabelText('method WALLET'));
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
@@ -163,7 +163,7 @@ describe('checkout choices', () => {
 
   it('choices cleared after placing', async () => {
     setup();
-    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.selected).toBe(true));
+    await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     fireEvent.press(screen.getByLabelText('method CREDIT'));
     await waitFor(() => expect(mockStore.size).toBe(1));
     fireEvent.press(screen.getByLabelText('Place order'));

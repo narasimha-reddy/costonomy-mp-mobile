@@ -9,6 +9,7 @@ import {
 } from '@/lib/wallet/numberInput';
 import { ReviewColors, ReviewLayout, Spacing, TextStyles } from '@/theme';
 import { KEYBOARD_BAR_ID, useReviewForm } from './formContext';
+import { radioState } from '@/lib/a11y';
 
 /** An input's label, with a red asterisk (and "required" for screen readers) when it must be filled. */
 export function FieldLabel({ label, required = false }: { label: string; required?: boolean }) {
@@ -223,7 +224,7 @@ export function Segmented<T extends string>({
             key={o.value}
             onPress={() => onChange(o.value)}
             accessibilityRole="radio"
-            accessibilityState={{ checked: on, selected: on }}
+            accessibilityState={radioState(on)}
             accessibilityLabel={o.label}
             style={[styles.segment, on && styles.segmentOn]}
             testID={testID ? `${testID}-${o.value}` : undefined}

@@ -9,6 +9,7 @@ import type { Intent } from '@/models/intent';
 import type { DeliveryMode } from '@/models/procurement';
 import { formatMoney, type Money } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 /**
  * How the restaurant wants the goods to travel, chosen before they pay. D-091.
@@ -155,7 +156,7 @@ export function DeliveryModePicker({
               onPress={() => emit(mode, fee as Money,
                 mode === 'COSTONOMY_DELIVERY' ? quote.data?.quoteReference : undefined)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: active, checked: active, disabled: unavailable }}
+              accessibilityState={radioState(active, unavailable)}
               style={[styles.option, active && styles.optionActive]}
             >
               <View style={styles.flex}>

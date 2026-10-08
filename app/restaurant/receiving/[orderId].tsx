@@ -27,6 +27,7 @@ import { formatMoney, formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
 import type { Receiving } from '@/models/trust';
 import { Colors, Elevation, FontSize, IconSize, Radius, Spacing } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 const SCREEN = 'REST-RECEIVE-01';
 
@@ -324,7 +325,7 @@ export default function ReceivingScreen() {
                             style={[styles.reasonChip, active && styles.reasonChipActive]}
                             onPress={() => setLine(item.id, { reason: r.key })}
                             accessibilityRole="radio"
-                            accessibilityState={{ selected: active }}
+                            accessibilityState={radioState(active)}
                             accessibilityLabel={`${r.label} for ${item.productName}`}
                           >
                             <MandiText

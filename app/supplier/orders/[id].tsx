@@ -65,6 +65,7 @@ import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
+import { radioState } from '@/lib/a11y';
 
 const SCREEN = 'SUP-ORD-01';
 /** A fee the server sent as nothing (`0`, `0.00`): not worth a line. A text check, not arithmetic. */
@@ -925,7 +926,7 @@ function CancelPanel({
               key={option.key}
               onPress={() => onReason(option.key)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: active }}
+              accessibilityState={radioState(active)}
               style={[styles.reason, active && styles.reasonActive]}
             >
               <MandiText

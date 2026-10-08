@@ -183,7 +183,8 @@ describe('TrackingScreenBody', () => {
     setup('supplier');
     expect(await screen.findByText('Ready to send')).toBeTruthy();
     expect(screen.getByText('Request a delivery partner to dispatch it')).toBeTruthy();
-    expect(screen.getByText('Back to order')).toBeTruthy();
+    // The header arrow goes back; a second "Back to order" bar carried no action of its own.
+    expect(screen.queryByText('Back to order')).toBeNull();
   });
 
   it('supplier IN_TRANSIT renders green header, ETA pill, map, partner card with plate', async () => {
@@ -200,7 +201,8 @@ describe('TrackingScreenBody', () => {
     expect(screen.getAllByText('Cafe').length).toBeGreaterThan(0);
     fireEvent.press(screen.getByLabelText('Order ORD-5, 1 item · ₹1,180.00'));
     expect(mockPush).toHaveBeenCalledWith('/supplier/orders/5');
-    expect(screen.getByText('Back to order')).toBeTruthy();
+    // The header arrow goes back; a second "Back to order" bar carried no action of its own.
+    expect(screen.queryByText('Back to order')).toBeNull();
     expect(screen.getAllByLabelText('Message this restaurant').length).toBeGreaterThan(0);
   });
 

@@ -396,3 +396,19 @@ describe('a supplier delivering it themselves (found by the delivery e2e run)', 
     expect(own('supplier', 'OUT_FOR_DELIVERY', 'PICKED_UP').subline).toBe('Mark it delivered once it arrives.');
   });
 });
+
+describe('party line', () => {
+  it('the supplier sees the restaurant name, not the outlet locality; the buyer sees the supplier', () => {
+    const o = { ...order('COSTONOMY_DELIVERY'), outletName: 'Indiranagar', restaurantName: 'Spice Garden' };
+    const sup = orderTrackingView({ audience: 'supplier', order: o, delivery: delivery('IN_TRANSIT'), nowMs: NOW });
+    expect(sup.party).toBe('Spice Garden');
+    expect(sup.subline ?? '').not.toContain('Indiranagar');
+    const buyer = orderTrackingView({ audience: 'buyer', order: o, delivery: delivery('IN_TRANSIT'), nowMs: NOW });
+    expect(buyer.party).toBe('Fresh Farms');
+  });
+
+  it('falls back to the outlet name when the order has no restaurant name', () => {
+    const o = { ...order('COSTONOMY_DELIVERY'), restaurantName: null };
+    expect(orderTrackingView({ audience: 'supplier', order: o, delivery: delivery('IN_TRANSIT'), nowMs: NOW }).party).toBe('Cafe Mocha');
+  });
+});

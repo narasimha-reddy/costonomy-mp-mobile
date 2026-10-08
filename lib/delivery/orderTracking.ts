@@ -128,7 +128,7 @@ export function initials(name: string | null | undefined): string {
 
 /** The slice of an order the tracker reads. A full `SupplierOrder` satisfies it. */
 export type TrackingOrder = Pick<SupplierOrder, 'status' | 'deliveryMode'>
-  & Partial<Pick<SupplierOrder, 'orderNumber' | 'supplierName' | 'storeName' | 'outletName' | 'cancellationReason'>>;
+  & Partial<Pick<SupplierOrder, 'orderNumber' | 'supplierName' | 'storeName' | 'outletName' | 'restaurantName' | 'cancellationReason'>>;
 
 export type TrackingDelivery = Pick<Delivery, 'status' | 'mode'> & Partial<Omit<Delivery, 'status' | 'mode'>>;
 
@@ -228,12 +228,13 @@ export function orderTrackingView(input: {
   const kind = travelKind(order.deliveryMode, delivery?.mode);
 
   const supplier = order.supplierName ?? order.storeName ?? 'Your supplier';
-  const outlet = order.outletName ?? (buyer ? 'your outlet' : 'the restaurant');
+  // The supplier knows the restaurant by its name; the outlet locality ("Indiranagar") is only a fallback.
+  const outlet = (buyer ? order.outletName : order.restaurantName ?? order.outletName) ?? (buyer ? 'your outlet' : 'the restaurant');
   const partnerName = delivery?.driverName ?? (buyer ? 'Your partner' : 'The partner');
   const orderNumber = order.orderNumber ?? 'the order';
 
   const base: OrderTrackingView = {
-    party: buyer ? supplier : order.outletName ?? null,
+    party: buyer ? supplier : order.restaurantName ?? order.outletName ?? null,
     segments: [], segmentIndex: -1, segmentFill: 0, stepLine: null, nextLine: null, etaSmall: null, tag: null,
     delayed: false, lateMinutes: null, partnerChanged: false, banner: null, stage: 'bag', top: 'illustration',
     searching: false,

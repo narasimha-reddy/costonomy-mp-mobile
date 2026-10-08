@@ -80,6 +80,12 @@ export function MandiQuantityStepper({
   const [text, setText] = useState(String(value));
   useEffect(() => setText(String(value)), [value]);
 
+  const clamp = (next: number) => {
+    if (next < min) return min;
+    if (max != null && next > max) return max;
+    return next;
+  };
+
   const commitText = () => {
     const parsed = Number(text.replace(/[^0-9.]/g, ''));
     if (!Number.isFinite(parsed) || parsed <= 0 || text.trim() === '') {
@@ -89,12 +95,6 @@ export function MandiQuantityStepper({
     const next = clamp(parsed);
     setText(String(next));
     if (next !== value) onChange(next);
-  };
-
-  const clamp = (next: number) => {
-    if (next < min) return min;
-    if (max != null && next > max) return max;
-    return next;
   };
 
   return (

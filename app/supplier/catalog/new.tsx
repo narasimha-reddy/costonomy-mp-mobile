@@ -196,6 +196,9 @@ export default function NewSkuScreen() {
     setStep(1);
   }
 
+  // Declared before the mutation below, whose callbacks read it (no-tdz).
+  const needsMeasure = (units.data?.requiresMeasure ?? []).includes(packUnit);
+
   const create = useMutation({
     mutationFn: () =>
       createSku(accessToken as string, storeId as number, {
@@ -241,7 +244,6 @@ export default function NewSkuScreen() {
 
   const priceValid = Number(sellingPrice) > 0;
   const packValid = Number(packSize) > 0;
-  const needsMeasure = (units.data?.requiresMeasure ?? []).includes(packUnit);
   // A container with no contents is a listing nobody can compare, so it cannot
   // be saved — the server refuses it, and the button should not offer it.
   const measureValid = !needsMeasure || (Number(measureValue) > 0 && measureUnit !== '');

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/p26-guard-and-verify-findings follow-up] - Lint guard against use-before-define crashes
+#### Added
+- `costonomy/no-tdz` ESLint error (a `no-use-before-define` that ignores module-level styles read inside functions) over app, components, hooks, lib, contexts, after the web-only crash where the supplier order screen read a later-declared `const` in a react-query callback. See docs/NO_USE_BEFORE_DEFINE.md.
+#### Fixed
+- Latent: `MandiQuantityStepper` (clamp) and supplier new product (needsMeasure) read a later-declared const inside a callback; declarations moved up. Jest cannot catch this class (babel turns const into var), so the lint rule is the guard.
 ### [fix/p21-supplier follow-up] - Review fixes on the supplier screens
 #### Fixed
 - Home inbox splits a Ready order by delivery mode ("Ready to send out" when the supplier delivers, "Waiting for rider", "Waiting for pickup", plain "Ready" when the list does not say) and adds an "Other" catch-all so no order is unreachable; the request screen keeps Accept off until the delivery options load (retry message if they fail) and puts the outlet on the subtitle; supplier tracking names restaurant and outlet; payout status CALCULATED reads "Scheduled"; the duplicated "restaurant pays" note is gone; the press guard restarts in a layout effect.

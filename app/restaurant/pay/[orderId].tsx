@@ -112,6 +112,7 @@ export default function PayForOrderScreen() {
       otherKey.current = null;
       if (caught instanceof ApiError && caught.status === 409) {
         // The card payment got there first. Ask the server rather than guess.
+        // eslint-disable-next-line costonomy/no-tdz -- onError runs after a failed press, long after render has declared askServer
         void askServer(true);
         setOtherError('Your card payment already went through, so this order is paid.');
         return;

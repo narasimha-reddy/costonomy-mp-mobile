@@ -87,3 +87,16 @@ that reads exactly like a bad key and is not one.
 `google.maps.Marker` is deprecated in favour of `AdvancedMarkerElement`, which
 requires a Map ID configured in Cloud. The classic marker still works and is not
 scheduled for removal, so it stays until a Map ID is worth the extra setup.
+
+## The web delivery map (rider tracking)
+
+The restaurant and supplier web apps draw the tracking map with the Maps JavaScript API
+(`components/delivery/GoogleTrackMap.web.tsx`): supplier pin, restaurant pin, the truck and the route legs.
+Without a key, or if Google refuses it (`gm_authFailure`) or draws no tiles within 6 s, they show the schematic.
+
+1. Google Cloud Console -> enable **Maps JavaScript API** on the project (billing on).
+2. Credentials -> create an API key, restrict it to the Maps JavaScript API and to HTTP referrers
+   `http://localhost:7074/*` plus the LAN URL you open the app on (for example `http://192.168.1.20:7074/*`).
+3. Put `EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY=...` in `~/.costonomy-maps.env` (never commit it or paste it in a chat).
+   If that name is empty the build falls back to `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`, only when that is set.
+4. Re-export the web build (the variable is inlined at build time).

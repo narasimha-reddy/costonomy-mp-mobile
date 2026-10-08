@@ -3,7 +3,10 @@ import { StyleSheet, View } from 'react-native';
 import { loadWebMaps } from '@/lib/maps/googleWebLoader';
 import { markTilesFailed, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
 import { toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
-import { cssColor, glideMs, legsFor, lerpPoint, truckLook, truckSvgDataUrl, viewportFor } from '@/lib/maps/googleLegs';
+import {
+  cssColor, distanceM, glideMs, insidePadded, legsFor, lerpPoint, QUIET_MAP_STYLE, shouldRefit, truckLook,
+  truckSvgDataUrl, viewportFor,
+} from '@/lib/maps/googleLegs';
 import { MandiMapSketch, type MandiMapProps } from './MandiMapSketch';
 import { Colors, Radius, TrackLayout } from '@/theme';
 
@@ -48,6 +51,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
   const lastFixAt = useRef<string | null>(null);
   const glide = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fittedMode = useRef<string | null>(null);
+  const lastFit = useRef<{ at: number; dist: number }>({ at: 0, dist: 0 });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTimer = () => {
@@ -78,8 +82,10 @@ export function GoogleTrackMap(props: MandiMapProps) {
           center: { lat: 12.9716, lng: 77.5946 },
           zoom: 14,
           disableDefaultUI: true,
-          gestureHandling: 'none',
+          // Cooperative: the page still scrolls on a touch drag; ctrl/two fingers move the map.
+          gestureHandling: 'cooperative',
           clickableIcons: false,
+          styles: QUIET_MAP_STYLE,
         });
         g.event.addListenerOnce(map.current, 'tilesloaded', clearTimer);
         setReady(true);
@@ -97,6 +103,31 @@ export function GoogleTrackMap(props: MandiMapProps) {
       map.current = null;
     };
   }, [failed]);
+
+  // The container can paint before it has its final width (tiles over two thirds only): tell the map when it changes.
+  useEffect(() => {
+    if (!ready || !map.current) return undefined;
+    const g: G = (window as any).google.maps;
+    const resize = () => {
+      if (map.current) g.event.trigger(map.current, 'resize');
+    };
+    const first = setTimeout(resize, 0);
+    const node = host.current as Element | null;
+    const Observer = (globalThis as any).ResizeObserver;
+    let ro: { observe: (n: Element) => void; disconnect: () => void } | null = null;
+    try {
+      if (Observer && node) {
+        ro = new Observer(resize);
+        ro?.observe(node);
+      }
+    } catch {
+      ro = null; // not a DOM node (tests, native): the mount-time resize still ran
+    }
+    return () => {
+      clearTimeout(first);
+      ro?.disconnect();
+    };
+  }, [ready]);
 
   const driverKey = driver ? `${driver.latitude},${driver.longitude},${driver.bearing ?? ''}` : '';
   const pickupKey = pickup ? `${pickup.latitude},${pickup.longitude}` : '';
@@ -156,6 +187,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
           map: map.current,
           position: pt(p),
           title: text,
+          zIndex: 1,
           icon: {
             path: g.SymbolPath.CIRCLE,
             scale: 8,
@@ -163,7 +195,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
             fillOpacity: 1,
             strokeColor: Colors.surface,
             strokeWeight: 2,
-            labelOrigin: new g.Point(0, 2.6),
+            labelOrigin: new g.Point(0, 3.2), // below the pin, clear of the truck drawn above
           },
           label: { text, color: Colors.textPrimary, fontSize: '12px', fontWeight: '600' },
         }),
@@ -173,14 +205,25 @@ export function GoogleTrackMap(props: MandiMapProps) {
 
     moveTruck(g, scene.showTruck ? at : null);
 
-    // Fit on the first draw and when the mode changes; a new fix alone must not yank the camera.
+    // Fit on the first draw and when the mode changes. A new fix alone must not yank the camera, except when the truck
+    // left the padded view or got twice as close to the next stop, and then at most once per 8 s.
     const modeKey = String(mode ?? 'none');
+    const pts = [at, pickup, destination].filter((p): p is LatLng => p != null);
+    const next = mode === 'live' && pickup ? pickup : destination;
+    const distNow = at && next ? distanceM(at, next) : 0;
+    const fit = () => {
+      map.current.fitBounds(viewportFor(pts), 0);
+      lastFit.current = { at: Date.now(), dist: distNow };
+    };
     if (fittedMode.current !== modeKey) {
-      const pts = [at, pickup, destination].filter((p): p is LatLng => p != null);
       if (pts.length > 0) {
-        map.current.fitBounds(viewportFor(pts), 0);
+        fit();
         fittedMode.current = modeKey;
       }
+    } else if (at && scene.showTruck && pts.length > 1) {
+      const raw = map.current.getBounds?.()?.toJSON?.();
+      const outside = raw != null && !insidePadded(raw, at);
+      if (shouldRefit({ now: Date.now(), lastFitAt: lastFit.current.at, outside, distNow, distAtFit: lastFit.current.dist })) fit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, driverKey, pickupKey, destKey, mode, stale]);
@@ -206,7 +249,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
         icon: icon(),
         opacity: look.opacity,
         title: stale ? 'Last known position' : 'Delivery partner',
-        zIndex: 10,
+        zIndex: 1000,
       });
       truck.current = { marker, look: lookKey, at };
       lastFixAt.current = driver?.recordedAt ?? null;

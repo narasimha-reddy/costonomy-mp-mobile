@@ -22,17 +22,31 @@ export function loadWebMaps(): Promise<void> {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return Promise.reject(new Error('Google Maps is web only'));
   }
-  if ((window as { google?: { maps?: unknown } }).google?.maps) return Promise.resolve();
+  if ((window as { google?: { maps?: { Map?: unknown } } }).google?.maps?.Map) return Promise.resolve();
   if (pending) return pending;
   const key = webMapsKey();
   if (!key) return Promise.reject(new Error('No Google Maps web key'));
 
   pending = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
-    // Synchronous bootstrap (no loading=async): classes exist when onload fires.
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly`;
+    // loading=async is Google's recommended bootstrap: the classes are not on the namespace at onload, so the libraries
+    // the map uses are imported before resolving. English labels and the India region stop mixed-script place names.
+    script.src =
+      `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&loading=async&language=en&region=IN`;
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = () => {
+      const maps = (window as { google?: { maps?: { importLibrary?: (n: string) => Promise<unknown> } } }).google?.maps;
+      if (!maps?.importLibrary) {
+        resolve();
+        return;
+      }
+      Promise.all(['maps', 'marker', 'core'].map((name) => maps.importLibrary!(name)))
+        .then(() => resolve())
+        .catch((e) => {
+          pending = null;
+          reject(e instanceof Error ? e : new Error('Could not load Google Maps libraries'));
+        });
+    };
     script.onerror = () => {
       pending = null;
       reject(new Error('Could not load Google Maps'));

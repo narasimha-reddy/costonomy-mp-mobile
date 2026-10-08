@@ -2,7 +2,7 @@
  * What the Google web map draws, decided in plain data so it can be tested without a map.
  * The native map (MandiMap.tsx) draws the same legs; display only, nothing decides anything on it.
  */
-import { mirrored, regionFor, type LatLng } from '@/lib/delivery/mapGeometry';
+import { haversineM, mirrored, regionFor, type LatLng } from '@/lib/delivery/mapGeometry';
 import { Colors, TrackLayout } from '@/theme';
 
 export type LegMode = 'placed' | 'pending' | 'live' | 'arriving' | 'reached' | undefined;
@@ -105,3 +105,34 @@ export function glideMs(prevRecordedAt?: string | null, nextRecordedAt?: string 
   if (!Number.isFinite(gap)) return 1000;
   return Math.min(5000, Math.max(1000, gap));
 }
+
+/** Hide business and transit labels so they do not collide with our pins; roads and area names stay. */
+export const QUIET_MAP_STYLE: Array<{ featureType: string; elementType: string; stylers: Array<{ visibility: string }> }> = [
+  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+];
+
+export const REFIT_MIN_GAP_MS = 8000;
+
+/** True when the point sits inside the view with a margin (default 15% of each side) to spare. */
+export function insidePadded(view: Viewport, p: LatLng, pad: number = 0.15): boolean {
+  const dLat = (view.north - view.south) * pad;
+  const dLng = (view.east - view.west) * pad;
+  return (
+    p.latitude <= view.north - dLat && p.latitude >= view.south + dLat &&
+    p.longitude <= view.east - dLng && p.longitude >= view.west + dLng
+  );
+}
+
+/**
+ * Whether the camera should be refitted for a moving truck: never more than once per 8 s, and only when the truck left
+ * the padded view or the distance to the next stop is half of (or less than) what it was at the last fit.
+ */
+export function shouldRefit(input: {
+  now: number; lastFitAt: number; outside: boolean; distNow: number; distAtFit: number;
+}): boolean {
+  if (input.now - input.lastFitAt < REFIT_MIN_GAP_MS) return false;
+  return input.outside || (input.distAtFit > 0 && input.distNow <= input.distAtFit / 2);
+}
+
+export const distanceM = haversineM;

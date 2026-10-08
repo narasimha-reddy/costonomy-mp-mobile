@@ -95,3 +95,13 @@ export function lerpPoint(a: LatLng, b: LatLng, t: number): LatLng {
     longitude: a.longitude + (b.longitude - a.longitude) * t,
   };
 }
+
+/**
+ * How long the truck glides to a new fix: the gap between the provider's timestamps of the last two fixes, so the
+ * movement looks continuous at whatever pace they arrive, clamped to 1 s..5 s. Unreadable timestamps give 1 s.
+ */
+export function glideMs(prevRecordedAt?: string | null, nextRecordedAt?: string | null): number {
+  const gap = Date.parse(nextRecordedAt ?? '') - Date.parse(prevRecordedAt ?? '');
+  if (!Number.isFinite(gap)) return 1000;
+  return Math.min(5000, Math.max(1000, gap));
+}

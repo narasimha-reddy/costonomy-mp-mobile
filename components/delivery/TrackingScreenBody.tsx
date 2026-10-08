@@ -27,12 +27,10 @@ import { useServerNow } from '@/hooks/useServerNow';
 import { ApiError, isApiError } from '@/lib/api/errors';
 import { canRetryPartner } from '@/lib/delivery/deliveryPartner';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
+import { ACTIVE_POLL_MS, BACKSTOP_POLL_MS, trackingPollMs } from '@/lib/delivery/trackingPoll';
 import { Colors, Radius, Spacing } from '@/theme';
 import { newIdempotencyKey } from '@/lib/api/client';
 
-const ACTIVE_POLL_MS = 15_000;
-/** With the socket up, this is a safety net rather than the transport. */
-const BACKSTOP_POLL_MS = 60_000;
 const ENDED_ORDER = ['COMPLETED', 'CANCELLED'];
 const ENDED_DELIVERY = ['DELIVERED', 'CANCELLED', 'DELIVERY_FAILED'];
 
@@ -82,7 +80,8 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
       if (status != null && ENDED_DELIVERY.includes(status)) return false;
       const orderStatus = order.data?.status;
       if (status == null && orderStatus != null && ENDED_ORDER.includes(orderStatus)) return false;
-      return livePollMs;
+      // A moving partner is refetched at the rider-fix pace so the truck does not jump once per 15 s.
+      return trackingPollMs({ status, mode: query.state.data?.mode, focused, socket: transport === 'socket' });
     },
   });
 

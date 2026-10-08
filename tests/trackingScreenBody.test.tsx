@@ -284,6 +284,18 @@ describe('TrackingScreenBody', () => {
     expect(intervals()).toEqual([15_000, 15_000]);
   });
 
+  it('refetches the delivery every 5 s while a Costonomy partner is on the road', async () => {
+    setup('buyer');
+    await screen.findByText('Order is on the way');
+    const deliveryInterval = (data: object) => {
+      const call = mockUseQuery.mock.calls.filter(([o]: any[]) => Array.isArray(o.queryKey) && o.queryKey.includes('delivery')).at(-1)!;
+      return (call[0] as any).refetchInterval({ state: { data } });
+    };
+    expect(deliveryInterval({ status: 'IN_TRANSIT', mode: 'COSTONOMY' })).toBe(5_000);
+    expect(deliveryInterval({ status: 'DELIVERY_REQUESTED', mode: 'COSTONOMY' })).toBe(15_000);
+    expect(deliveryInterval({ status: 'DELIVERED', mode: 'COSTONOMY' })).toBe(false);
+  });
+
   it('Help opens chat', async () => {
     (openThread as jest.Mock).mockResolvedValue({ id: 77 });
     setup('buyer');

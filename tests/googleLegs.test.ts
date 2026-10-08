@@ -1,4 +1,4 @@
-import { legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint } from '@/lib/maps/googleLegs';
+import { legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint, glideMs } from '@/lib/maps/googleLegs';
 import { Colors, TrackLayout } from '@/theme';
 
 const truck = { latitude: 12.97, longitude: 77.59 };
@@ -90,5 +90,17 @@ describe('helpers', () => {
     expect(lerpPoint(pickup, drop, 0)).toEqual(pickup);
     expect(lerpPoint(pickup, drop, 1)).toEqual(drop);
     expect(lerpPoint(pickup, drop, 0.5).latitude).toBeCloseTo(12.97, 6);
+  });
+});
+
+describe('glideMs', () => {
+  const at = (s: number) => new Date(Date.UTC(2026, 0, 1, 10, 0, s)).toISOString();
+  it('glide duration follows the gap between fixes, clamped', () => {
+    expect(glideMs(at(0), at(3))).toBe(3000);
+    expect(glideMs(at(0), at(0))).toBe(1000);
+    expect(glideMs(at(0), at(30))).toBe(5000);
+    expect(glideMs(at(10), at(5))).toBe(1000);
+    expect(glideMs(null, at(5))).toBe(1000);
+    expect(glideMs('nope', undefined)).toBe(1000);
   });
 });

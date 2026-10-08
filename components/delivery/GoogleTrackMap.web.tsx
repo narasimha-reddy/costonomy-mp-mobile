@@ -3,12 +3,10 @@ import { StyleSheet, View } from 'react-native';
 import { loadWebMaps } from '@/lib/maps/googleWebLoader';
 import { markTilesFailed, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
 import { toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
-import { cssColor, legsFor, lerpPoint, truckLook, truckSvgDataUrl, viewportFor } from '@/lib/maps/googleLegs';
+import { cssColor, glideMs, legsFor, lerpPoint, truckLook, truckSvgDataUrl, viewportFor } from '@/lib/maps/googleLegs';
 import { MandiMapSketch, type MandiMapProps } from './MandiMapSketch';
 import { Colors, Radius, TrackLayout } from '@/theme';
 
-/** The truck glides to a new fix over this long instead of jumping. */
-const GLIDE_MS = 1000;
 const GLIDE_STEP_MS = 40;
 
 type G = any; // the google.maps namespace is loaded at runtime; there is no typings package for it here
@@ -47,6 +45,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
   const map = useRef<G>(null);
   const truck = useRef<{ marker: G; look: string; at: LatLng } | null>(null);
   const overlays = useRef<G[]>([]);
+  const lastFixAt = useRef<string | null>(null);
   const glide = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fittedMode = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -210,6 +209,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
         zIndex: 10,
       });
       truck.current = { marker, look: lookKey, at };
+      lastFixAt.current = driver?.recordedAt ?? null;
       return;
     }
     if (cur.look !== lookKey) {
@@ -217,12 +217,14 @@ export function GoogleTrackMap(props: MandiMapProps) {
       cur.look = lookKey;
     }
     cur.marker.setOpacity(look.opacity);
-    // Glide from where the marker is now to the new fix.
+    // Glide from where the marker is now to the new fix, taking as long as the fixes are apart (1 to 5 s).
+    const glideFor = glideMs(lastFixAt.current, driver?.recordedAt);
+    lastFixAt.current = driver?.recordedAt ?? null;
     if (glide.current) clearTimeout(glide.current);
     const from = cur.at;
     const started = Date.now();
     const step = () => {
-      const t = Math.min(1, (Date.now() - started) / GLIDE_MS);
+      const t = Math.min(1, (Date.now() - started) / glideFor);
       const here = lerpPoint(from, at, t);
       cur.at = here;
       cur.marker.setPosition(pt(here));

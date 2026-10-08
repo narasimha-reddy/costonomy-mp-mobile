@@ -171,4 +171,20 @@ describe('MandiMap (web)', () => {
     act(() => { jest.advanceTimersByTime(1000); });
     expect((truck.setPosition.mock.calls.at(-1) as any[])[0].lat).toBeCloseTo(12.98, 6);
   });
+
+  it('glide duration follows the gap between fixes, clamped', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    const truck = markers.find((m) => String(m.opts.icon?.url ?? '').startsWith('data:image/svg+xml'))!;
+    // The next fix is 4 s later by the provider's clock: still moving at 2 s, arrived after 4 s.
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.98', recordedAt: '2026-01-01T10:00:04Z' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    act(() => { jest.advanceTimersByTime(2000); });
+    const mid = (truck.setPosition.mock.calls.at(-1) as any[])[0];
+    expect(mid.lat).toBeGreaterThan(12.974);
+    expect(mid.lat).toBeLessThan(12.977);
+    act(() => { jest.advanceTimersByTime(2100); });
+    expect((truck.setPosition.mock.calls.at(-1) as any[])[0].lat).toBeCloseTo(12.98, 6);
+  });
 });

@@ -74,6 +74,7 @@ export function MandiQuantityStepper({
   const height = size === 'sm' ? ControlHeight.sm : ControlHeight.md;
   const glyph = size === 'sm' ? IconSize.sm : IconSize.md;
   const suffix = itemLabel ? ` ${itemLabel}` : '';
+  const ofItem = itemLabel ? ` of ${itemLabel}` : '';
 
   // What is in the box while it is being typed in (commitOnBlur only).
   const [text, setText] = useState(String(value));
@@ -103,7 +104,7 @@ export function MandiQuantityStepper({
         onPress={canDecrease ? () => onChange(clamp(value - step)) : undefined}
         disabled={!canDecrease}
         accessibilityRole="button"
-        accessibilityLabel={`Decrease quantity${suffix}`}
+        accessibilityLabel={`Decrease quantity${ofItem}`}
         accessibilityState={{ disabled: !canDecrease }}
         hitSlop={hitSlopFor(glyph)}
         style={styles.control}
@@ -157,7 +158,7 @@ export function MandiQuantityStepper({
         onPress={canIncrease ? () => onChange(clamp(value + step)) : undefined}
         disabled={!canIncrease}
         accessibilityRole="button"
-        accessibilityLabel={`Increase quantity${suffix}`}
+        accessibilityLabel={`Increase quantity${ofItem}`}
         accessibilityState={{ disabled: !canIncrease }}
         hitSlop={hitSlopFor(glyph)}
         style={styles.control}

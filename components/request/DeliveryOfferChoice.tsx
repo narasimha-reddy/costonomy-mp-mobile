@@ -95,7 +95,7 @@ export function DeliveryOfferChoice({
               key={offer}
               onPress={() => onChange(offer)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: active }}
+              accessibilityState={{ selected: active, checked: active }}
               style={[styles.option, active && styles.optionActive]}
             >
               <MandiText variant="body">{labels[offer].title}</MandiText>

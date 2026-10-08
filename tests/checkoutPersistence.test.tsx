@@ -52,6 +52,8 @@ jest.mock('@/components/request/DeliverySlotPicker', () => {
     },
   };
 });
+// A stand-in that ignores balances and totals (it offers all three methods always); the money rules of the real
+// picker are tested in checkoutFollowUp, which renders the real one.
 jest.mock('@/components/request/PaymentMethodPicker', () => {
   const { Pressable, Text } = jest.requireActual('react-native');
   return {

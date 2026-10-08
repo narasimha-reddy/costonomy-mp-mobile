@@ -49,7 +49,8 @@ export function PaymentMethodPicker({
   /** What this order comes to, carriage included. */
   amount: Money | null | undefined;
   selected: PaymentMethod | null;
-  onSelect: (method: PaymentMethod) => void;
+  /** `null` when the method chosen no longer covers the order and nothing else is usable. */
+  onSelect: (method: PaymentMethod | null) => void;
   /** Only these methods are listed. All three by default; the pay screen offers wallet and credit (API D-152). */
   offered?: PaymentMethod[];
   /** Pick the first usable method on open. Off where choosing is a deliberate act. */
@@ -84,6 +85,10 @@ export function PaymentMethodPicker({
       && agreement.status === 'ACTIVE',
   );
 
+  // A query that is switched off (no outlet yet) is pending for ever: that is not "checking".
+  const walletPending = wallet.isPending && wallet.fetchStatus !== 'idle';
+  const creditPending = agreements.isPending && agreements.fetchStatus !== 'idle';
+
   const walletBalance = wallet.data?.balance ?? null;
   const walletShort = due != null && walletBalance != null && Number(walletBalance) < due;
   const creditAvailable = line?.available ?? null;
@@ -107,24 +112,24 @@ export function PaymentMethodPicker({
     {
       key: 'WALLET',
       label: PAYMENT_METHOD_LABEL.WALLET,
-      hint: wallet.isPending
+      hint: walletPending
         ? 'Checking your balance…'
         : walletShort ? 'Not enough for this order' : 'Settles straight away',
       // "available", so a balance is not read as the price of paying this way.
       trailing: walletBalance == null ? null : `${formatMoney(walletBalance)} available`,
-      disabled: wallet.isPending || walletBalance == null || walletShort,
-      pending: wallet.isPending,
+      disabled: walletPending || walletBalance == null || walletShort,
+      pending: walletPending,
     },
     {
       key: 'CREDIT',
       label: PAYMENT_METHOD_LABEL.CREDIT,
-      hint: agreements.isPending
+      hint: creditPending
         ? 'Checking your terms…'
         : line == null ? 'No credit with this supplier yet'
           : creditShort ? 'Not enough credit left' : 'Owed, not paid now',
       trailing: creditAvailable == null ? null : `${formatMoney(creditAvailable)} available`,
-      disabled: agreements.isPending || line == null || creditShort,
-      pending: agreements.isPending,
+      disabled: creditPending || line == null || creditShort,
+      pending: creditPending,
     },
   ];
 
@@ -132,15 +137,26 @@ export function PaymentMethodPicker({
 
   // Default to the first thing that works, once. Never silently: whatever is
   // chosen is rendered as chosen.
+  //
+  // And never keep a choice that has stopped working: the total moves (the delivery fee arrives, a quote is
+  // replaced) after a method was picked, and a wallet or credit line that covered the old figure may not cover
+  // the new one. The method is swapped for the first usable one, or cleared, so it cannot be sent.
   useEffect(() => {
-    if (selected != null || !autoSelect) return;
+    if (selected != null) {
+      const current = options.find((option) => option.key === selected);
+      if (current != null && current.disabled && !current.pending) {
+        onSelect(options.find((option) => !option.disabled)?.key ?? null);
+      }
+      return;
+    }
+    if (!autoSelect) return;
     const earlier = initialMethod == null ? undefined : options.find((option) => option.key === initialMethod);
     // The earlier choice waits for the figure it depends on, then stands or gives way to the first usable method.
     if (earlier?.pending) return;
     const usable = earlier != null && !earlier.disabled ? earlier : options.find((option) => !option.disabled);
     if (usable != null) onSelect(usable.key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, wallet.isPending, agreements.isPending, walletShort, creditShort, line == null]);
+  }, [selected, walletPending, creditPending, walletShort, creditShort, line == null]);
 
   return (
     <MandiCard>

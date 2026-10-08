@@ -63,6 +63,8 @@ interface SavedCheckout {
   scheduledDate: string | null;
   method: PaymentMethod | null;
 }
+const MODES: string[] = ['PICKUP', 'SUPPLIER_DELIVERY', 'COSTONOMY_DELIVERY'];
+const METHODS: string[] = ['PREPAID', 'WALLET', 'CREDIT'];
 const checkoutKey = (intentId: number) => `checkout:request:${intentId}`;
 
 /**
@@ -164,6 +166,11 @@ export default function RequestDetailScreen() {
   const [restored, setRestored] = React.useState(false);
   const [replyExpired, setReplyExpired] = React.useState(false);
   const [restoredMode, setRestoredMode] = React.useState<DeliveryMode | null>(null);
+  // What the restaurant last picked here. After a price change the picker starts again from this, not from the
+  // request's own preference, so a hand-picked Costonomy delivery is not swapped for free pickup under the toast.
+  const lastMode = React.useRef<DeliveryMode | null>(null);
+  // Costonomy delivery is chosen and its quote is being asked for again: the fee held here may be out of date.
+  const [quoteBusy, setQuoteBusy] = React.useState(false);
   // Handed to the payment picker, which only takes it up once the balances say it can still be used.
   const [restoredMethod, setRestoredMethod] = React.useState<PaymentMethod | null>(null);
   const orderPlaced = React.useRef(false);
@@ -173,14 +180,15 @@ export default function RequestDetailScreen() {
     void getJsonPreference<Partial<SavedCheckout> | null>(checkoutKey(intentId), null).then((saved) => {
       if (!live) return;
       if (saved != null && typeof saved === 'object') {
-        if (saved.mode != null) setRestoredMode(saved.mode);
+        // Only values this app knows: a saved field is data from disk, not something to act on unchecked.
+        if (typeof saved.mode === 'string' && MODES.includes(saved.mode)) setRestoredMode(saved.mode);
         // What was chosen wins over the day the request was sent for; a day that has gone by is as soon as possible.
         // Only the day comes back: the slot is the picker's to choose from what the supplier has free today, since a
         // saved slot may since have filled up or gone.
         const dayHolds = typeof saved.scheduledDate === 'string' && saved.scheduledDate >= istDay(0);
         prefilled.current = true;
         setSlot({ slotId: null, scheduledDate: dayHolds ? saved.scheduledDate ?? null : null });
-        if (saved.method != null) setRestoredMethod(saved.method);
+        if (typeof saved.method === 'string' && METHODS.includes(saved.method)) setRestoredMethod(saved.method);
       }
     }).catch(() => {
       // Storage that fails is as good as nothing saved: the pickers still start from their defaults.
@@ -630,9 +638,12 @@ export default function RequestDetailScreen() {
                 <DeliveryModePicker
                   request={request}
                   selected={delivery?.mode ?? null}
-                  initialMode={restoredMode}
-                  onSelect={(mode, fee, quoteReference) =>
-                    setDelivery({ mode, fee, quoteReference })}
+                  initialMode={lastMode.current ?? restoredMode}
+                  onQuoteBusy={setQuoteBusy}
+                  onSelect={(mode, fee, quoteReference) => {
+                    lastMode.current = mode;
+                    setDelivery({ mode, fee, quoteReference });
+                  }}
                 />
               </View>
               {delivery?.mode !== 'PICKUP' && (
@@ -874,8 +885,9 @@ export default function RequestDetailScreen() {
           amountCaption="TOTAL"
           ctaLabel="Place order"
           // Until both are chosen there is no fee and no funding, and an
-          // order cannot be created without either.
-          disabled={delivery == null || method == null}
+          // order cannot be created without either. Nor while the server's total for this exact choice is still
+          // on its way (the figure on the bar would be the one without carriage), or the quote is being renewed.
+          disabled={delivery == null || method == null || preview.isFetching || preview.data == null || quoteBusy}
           loading={order.isPending}
           onPress={placeOrder}
         />

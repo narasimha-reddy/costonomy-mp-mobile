@@ -117,6 +117,8 @@ describe('the checkout bar', () => {
     await waitFor(() => expect(screen.getByText('Wallet')).toBeTruthy());
     expect(createOrderFromIntent).not.toHaveBeenCalled();
 
+    // Not before the server's total for this choice has arrived: the button waits for it.
+    await waitFor(() => expect(screen.getByLabelText('Place order').props.accessibilityState?.disabled).not.toBe(true));
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalledTimes(1));
     expect((createOrderFromIntent as jest.Mock).mock.calls[0][2].paymentMethod).toBe('WALLET');
@@ -138,6 +140,8 @@ describe('the checkout bar', () => {
     await screen.findByText('Place order');
     fireEvent.press(screen.getByLabelText('pick pickup'));
     fireEvent.press(screen.getByLabelText('method CREDIT'));
+    // Not before the server's total for this choice has arrived: the button waits for it.
+    await waitFor(() => expect(screen.getByLabelText('Place order').props.accessibilityState?.disabled).not.toBe(true));
     fireEvent.press(screen.getByLabelText('Place order'));
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/restaurant/tracking/88'));
@@ -152,6 +156,8 @@ describe('the checkout bar', () => {
     await screen.findByText('Place order');
     fireEvent.press(screen.getByLabelText('pick pickup'));
     fireEvent.press(screen.getByLabelText('method PREPAID'));
+    // Not before the server's total for this choice has arrived: the button waits for it.
+    await waitFor(() => expect(screen.getByLabelText('Place order').props.accessibilityState?.disabled).not.toBe(true));
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/restaurant/pay/88'));
   });

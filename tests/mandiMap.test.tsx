@@ -210,6 +210,12 @@ describe('MandiMapSketch modes', () => {
     expect(screen.getByText('You')).toBeTruthy();
   });
 
+  it('the supplier screen labels the restaurant pin Restaurant, not You', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" audience="supplier" />);
+    expect(screen.getByText('Restaurant')).toBeTruthy();
+    expect(screen.queryByText('You')).toBeNull();
+  });
+
   it('the supplier pin and label stay after pickup, when the caller no longer passes a pickup', () => {
     render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="live" />);
     expect(screen.getByTestId('map-pickup')).toBeTruthy();

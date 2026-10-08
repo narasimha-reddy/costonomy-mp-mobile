@@ -100,3 +100,12 @@ Without a key, or if Google refuses it (`gm_authFailure`) or draws no tiles with
 3. Put `EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY=...` in `~/.costonomy-maps.env` (never commit it or paste it in a chat).
    If that name is empty the build falls back to `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`, only when that is set.
 4. Re-export the web build (the variable is inlined at build time).
+
+## Map label language (web delivery map)
+
+The loader puts `language=en&region=IN` on the bootstrap script URL (`lib/maps/googleWebLoader.ts`, asserted in
+`tests/googleWebLoader.test.ts`). Google still draws some place names in their local script (Kannada) on the base map
+tiles, because those labels come from the map data, not from the API language. A map style in code cannot hide only the
+non-English labels. The fix is a Cloud-based map style attached to a Map ID, with the language set to English only
+(Google Cloud console, Map Management, Map Styles); then pass that `mapId` when the map is created. Until a Map ID
+exists, mixed labels are expected.

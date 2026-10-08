@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/p28-map] - Web map created when its host exists, refits while the truck moves, audience pin labels
+#### Fixed
+- Google web map no longer falls back to the sketch when the first render had nothing to draw (map created once the host element exists, construction retried); the camera frames the truck and the next stop and refits while live; the restaurant pin reads 'Restaurant' on the supplier screen and 'You' for the buyer.
+
 ### [fix/p26-guard-and-verify-findings follow-up] - Lint guard against use-before-define crashes
 #### Added
 - `costonomy/no-tdz` ESLint error (a `no-use-before-define` that ignores module-level styles read inside functions) over app, components, hooks, lib, contexts, after the web-only crash where the supplier order screen read a later-declared `const` in a react-query callback. See docs/NO_USE_BEFORE_DEFINE.md.

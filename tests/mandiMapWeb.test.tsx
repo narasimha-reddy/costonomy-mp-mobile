@@ -39,7 +39,8 @@ function installGoogle() {
       return o;
     });
   maps = {
-    Map: jest.fn().mockImplementation((_h: unknown, opts: Obj) => {
+    Map: jest.fn().mockImplementation((h: unknown, opts: Obj) => {
+      if (h == null) throw new Error('Map: Expected mapDiv of type HTMLElement but was passed null');
       const m: Obj = { opts, fitBounds: jest.fn(), getBounds: () => ({ toJSON: () => viewBounds }) };
       mapInstances.push(m);
       return m;
@@ -140,7 +141,7 @@ describe('MandiMap (web)', () => {
     render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
     await flush();
     const labels = markers.map((m) => m.opts.label?.text).filter(Boolean);
-    expect(labels).toEqual(expect.arrayContaining(['Supplier', 'Restaurant']));
+    expect(labels).toEqual(expect.arrayContaining(['Supplier', 'You']));
     expect(markers.some((m) => String(m.opts.icon?.url ?? '').startsWith('data:image/svg+xml'))).toBe(true);
     expect(polylines).toHaveLength(2);
     expect(polylines[0]!.opts.strokeColor).toBe(Colors.deliveryRoute);
@@ -310,5 +311,68 @@ describe('MandiMap (web)', () => {
     view.rerender(<MandiMap driver={{ ...fix, latitude: '12.98', longitude: '77.61' }} destination={outlet} stale={false} mode="live" />);
     await flush();
     expect(fit).toHaveBeenCalledTimes(2);
+  });
+
+  it('creates the Google map (not the sketch) when the first render had nothing to draw', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    const view = render(<MandiMap driver={null} destination={null} stale={false} mode="live" />);
+    await flush();
+    view.rerender(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    expect(maps.Map).toHaveBeenCalled();
+    expect((maps.Map.mock.calls.at(-1) as any[])[0]).not.toBeNull();
+    expect(screen.queryByTestId('map-driver')).toBeNull();
+    expect(mapInstances.at(-1)!.fitBounds).toHaveBeenCalled();
+  });
+
+  it('retries a failed map construction instead of switching to the sketch', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    maps.Map.mockImplementationOnce(() => { throw new Error('Map: Expected mapDiv'); });
+    render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    act(() => { jest.advanceTimersByTime(600); });
+    await flush();
+    expect(screen.queryByTestId('map-driver')).toBeNull();
+    expect(mapInstances).toHaveLength(1);
+  });
+
+  it('before pickup fits the truck and the supplier, not the far restaurant', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    const far = { latitude: 13.3, longitude: 78.0 };
+    render(<MandiMap driver={fix} destination={far} pickup={pickup} stale={false} mode="live" />);
+    await flush();
+    const v = (mapInstances[0]!.fitBounds.mock.calls[0] as any[])[0];
+    expect(v.north).toBeLessThan(13.0);
+    expect(v.south).toBeLessThanOrEqual(12.95);
+  });
+
+  it('refits while the truck keeps moving: more than 10% of the view, or every 20 s', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    viewBounds = { north: 13.0, south: 12.9, east: 77.7, west: 77.5 }; // truck stays inside the padded view
+    const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    const fit = mapInstances[0]!.fitBounds;
+    expect(fit).toHaveBeenCalledTimes(1);
+    act(() => { tilesLoadedCb?.(); jest.advanceTimersByTime(9000); });
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.9701' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(1); // barely moved, not yet 20 s
+    act(() => { jest.advanceTimersByTime(12_000); });
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.9702' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(2); // 20 s passed
+    act(() => { jest.advanceTimersByTime(9000); });
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.9702', longitude: '77.62' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(3); // moved ~3 km, over 10% of the ~24 km view diagonal, only 9 s after the last fit
+  });
+
+  it('labels the restaurant pin by audience', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" audience="supplier" />);
+    await flush();
+    const labels = markers.map((m) => m.opts.label?.text).filter(Boolean);
+    expect(labels).toContain('Restaurant');
+    expect(labels).not.toContain('You');
   });
 });

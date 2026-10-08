@@ -136,3 +136,38 @@ export function shouldRefit(input: {
 }
 
 export const distanceM = haversineM;
+
+/** The restaurant counts as "close" to the truck (and joins the supplier in the view) inside this distance. */
+export const NEAR_DROP_M = 3000;
+/** While live the camera is refitted at least this often, and when the truck moved this share of the view. */
+export const REFIT_PERIOD_MS = 20_000;
+export const REFIT_MOVED_SHARE = 0.1;
+
+/**
+ * The points the camera should frame. Before pickup the truck and the supplier (plus the restaurant once it is close);
+ * after pickup the truck and the restaurant. With no truck yet, every known stop.
+ */
+export function fitTargetFor(
+  mode: LegMode, truck: LatLng | null, pickup: LatLng | null, drop: LatLng | null,
+): LatLng[] {
+  const known = (list: (LatLng | null)[]) => list.filter((p): p is LatLng => p != null);
+  const moving = truck != null && (mode === 'live' || mode === 'arriving' || mode === 'reached');
+  if (!moving) return known([truck, pickup, drop]);
+  if (pickup) {
+    const dropClose = drop != null && haversineM(truck, drop) <= NEAR_DROP_M;
+    return known([truck, pickup, dropClose ? drop : null]);
+  }
+  return known([truck, drop]);
+}
+
+/**
+ * Whether a live camera should be refitted for the moving truck: not within 8 s of the last fit, then when the truck
+ * moved more than 10% of the current view since the last fit, or when 20 s have passed.
+ */
+export function shouldRefitMoving(input: {
+  now: number; lastFitAt: number; movedM: number; viewSpanM: number;
+}): boolean {
+  const since = input.now - input.lastFitAt;
+  if (since < REFIT_MIN_GAP_MS) return false;
+  return since >= REFIT_PERIOD_MS || (input.viewSpanM > 0 && input.movedM > input.viewSpanM * REFIT_MOVED_SHARE);
+}

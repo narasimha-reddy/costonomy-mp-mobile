@@ -1,4 +1,4 @@
-import { legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, insidePadded, QUIET_MAP_STYLE } from '@/lib/maps/googleLegs';
+import { legsFor, truckLook, truckSvgDataUrl, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, shouldRefitMoving, fitTargetFor, insidePadded, QUIET_MAP_STYLE } from '@/lib/maps/googleLegs';
 import { Colors, TrackLayout } from '@/theme';
 
 const truck = { latitude: 12.97, longitude: 77.59 };
@@ -134,5 +134,39 @@ describe('shouldRefit', () => {
   it('refits when the distance to the next stop halved', () => {
     expect(shouldRefit({ ...base, distNow: 500 })).toBe(true);
     expect(shouldRefit({ ...base, distNow: 600 })).toBe(false);
+  });
+});
+
+describe('fitTargetFor', () => {
+  const far = { latitude: 13.2, longitude: 77.9 };
+  it('before pickup: the truck and the supplier, and the restaurant only when it is close', () => {
+    expect(fitTargetFor('live', truck, pickup, far)).toEqual([truck, pickup]);
+    const near = { latitude: 12.972, longitude: 77.592 };
+    expect(fitTargetFor('live', truck, pickup, near)).toEqual([truck, pickup, near]);
+  });
+  it('after pickup (and arriving, reached): the truck and the restaurant, never the supplier', () => {
+    for (const m of ['live', 'arriving', 'reached'] as const) {
+      expect(fitTargetFor(m, truck, null, drop)).toEqual([truck, drop]);
+    }
+  });
+  it('without a truck or before a partner: every known stop', () => {
+    expect(fitTargetFor('pending', null, pickup, drop)).toEqual([pickup, drop]);
+    expect(fitTargetFor('live', null, pickup, drop)).toEqual([pickup, drop]);
+    expect(fitTargetFor('live', truck, null, null)).toEqual([truck]);
+  });
+});
+
+describe('shouldRefitMoving', () => {
+  const base = { now: 100_000, lastFitAt: 90_000, movedM: 0, viewSpanM: 10_000 };
+  it('not within 8 s of the last fit', () => {
+    expect(shouldRefitMoving({ ...base, lastFitAt: 95_000, movedM: 5000 })).toBe(false);
+  });
+  it('when the truck moved more than 10% of the view', () => {
+    expect(shouldRefitMoving({ ...base, movedM: 1100 })).toBe(true);
+    expect(shouldRefitMoving({ ...base, movedM: 900 })).toBe(false);
+  });
+  it('every 20 s while live, even if barely moved', () => {
+    expect(shouldRefitMoving({ ...base, lastFitAt: 79_000 })).toBe(true);
+    expect(shouldRefitMoving({ ...base, lastFitAt: 85_000 })).toBe(false);
   });
 });

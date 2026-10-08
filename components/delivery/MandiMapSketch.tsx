@@ -26,6 +26,8 @@ export interface MandiMapProps {
   mode?: MapMode;
   /** Replaces the default label. */
   accessibilityLabel?: string;
+  /** Whose screen it is: the restaurant pin reads 'You' for the buyer and 'Restaurant' for the supplier. */
+  audience?: 'buyer' | 'supplier';
 }
 
 /**
@@ -69,6 +71,7 @@ export function MandiMapSketch({
   pickup = null,
   mode,
   accessibilityLabel,
+  audience = 'buyer',
 }: MandiMapProps) {
   if (!driver && !destination) return null;
 
@@ -132,7 +135,7 @@ export function MandiMapSketch({
       {showPickup && <View testID="map-pickup" style={[styles.pin, styles.pickup, at(ROUTE[0].x, ROUTE[0].y)]} />}
       <View style={[styles.pin, styles.drop, at(ROUTE[4].x, ROUTE[4].y)]} />
       {labelled && <PinLabel text="Supplier" x={ROUTE[0].x} y={ROUTE[0].y} />}
-      {labelled && <PinLabel text="You" x={ROUTE[4].x} y={ROUTE[4].y} />}
+      {labelled && <PinLabel text={audience === 'supplier' ? 'Restaurant' : 'You'} x={ROUTE[4].x} y={ROUTE[4].y} />}
 
       {driver && mode != null && mode !== 'placed' && mode !== 'pending' ? (
         <View testID="map-driver" style={[styles.dotSlot, at(dot.x, dot.y)]}>

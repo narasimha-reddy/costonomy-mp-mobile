@@ -288,6 +288,7 @@ export function BuyerTrackingLayout({
               stale={delivery?.locationStale === true}
               height={close ? TrackLayout.mapHeightClose : TrackLayout.mapHeight}
               accessibilityLabel={mapLabel}
+              audience={audience}
               bare
             />
           </View>

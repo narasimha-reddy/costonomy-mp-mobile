@@ -4,13 +4,16 @@ import { loadWebMaps } from '@/lib/maps/googleWebLoader';
 import { markTilesFailed, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
 import { toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
 import {
-  cssColor, distanceM, glideMs, insidePadded, legsFor, lerpPoint, QUIET_MAP_STYLE, shouldRefit, truckLook,
-  truckSvgDataUrl, viewportFor,
+  cssColor, distanceM, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint, QUIET_MAP_STYLE, shouldRefit,
+  shouldRefitMoving, truckLook, truckSvgDataUrl, viewportFor,
 } from '@/lib/maps/googleLegs';
 import { MandiMapSketch, type MandiMapProps } from './MandiMapSketch';
 import { Colors, Radius, TrackLayout } from '@/theme';
 
 const GLIDE_STEP_MS = 40;
+/** A map that could not be constructed (the host not ready) is retried this often, this many times, before giving up. */
+const CREATE_RETRY_MS = 500;
+const CREATE_TRIES = 3;
 /** After the user moves the map themselves, the camera is theirs for this long (a mode change still refits). */
 const USER_MOVED_HOLD_MS = 30_000;
 
@@ -43,29 +46,39 @@ const pt = (p: LatLng) => ({ lat: p.latitude, lng: p.longitude });
  * fix is drawn differently, never as current.
  */
 export function GoogleTrackMap(props: MandiMapProps) {
-  const { driver, destination, stale, height = 220, bare = false, pickup = null, mode, accessibilityLabel } = props;
+  const { driver, destination, stale, height = 220, bare = false, pickup = null, mode, accessibilityLabel, audience = 'buyer' } = props;
   const [failed, setFailed] = useState(tilesFailed());
   const [ready, setReady] = useState(false);
   const host = useRef<unknown>(null);
+  // The host element exists only once the first render had something to draw; the map is created when it does.
+  const [hostEl, setHostEl] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
+  const hostRef = (el: unknown) => {
+    host.current = el;
+    setHostEl((cur: unknown) => (cur === el ? cur : el));
+  };
   const map = useRef<G>(null);
   const truck = useRef<{ marker: G; look: string; at: LatLng } | null>(null);
   const overlays = useRef<G[]>([]);
   const lastFixAt = useRef<string | null>(null);
   const glide = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fittedMode = useRef<string | null>(null);
-  const lastFit = useRef<{ at: number; dist: number }>({ at: 0, dist: 0 });
+  const lastFit = useRef<{ at: number; dist: number; truck: LatLng | null }>({ at: 0, dist: 0, truck: null });
   const userMovedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tries = useRef(0);
 
   const clearTimer = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
   };
 
-  // Load the script and create the map, once per mount.
+  // Load the script and create the map once the host element exists (and again if building it threw).
   useEffect(() => {
-    if (failed) return undefined;
+    if (failed || hostEl == null) return undefined;
     let alive = true;
+    setReady(false);
     const fail = () => {
       if (!alive) return;
       clearTimer();
@@ -81,15 +94,25 @@ export function GoogleTrackMap(props: MandiMapProps) {
       .then(() => {
         if (!alive) return;
         const g: G = (window as any).google.maps;
-        map.current = new g.Map(host.current, {
-          center: { lat: 12.9716, lng: 77.5946 },
-          zoom: 14,
-          disableDefaultUI: true,
-          // Cooperative: the page still scrolls on a touch drag; ctrl/two fingers move the map.
-          gestureHandling: 'cooperative',
-          clickableIcons: false,
-          styles: QUIET_MAP_STYLE,
-        });
+        try {
+          map.current = new g.Map(host.current, {
+            center: { lat: 12.9716, lng: 77.5946 },
+            zoom: 14,
+            disableDefaultUI: true,
+            // Cooperative: the page still scrolls on a touch drag; ctrl/two fingers move the map.
+            gestureHandling: 'cooperative',
+            clickableIcons: false,
+            styles: QUIET_MAP_STYLE,
+          });
+        } catch (e) {
+          // Not a verdict on Google: try again shortly; only a script error, a refused key or no tiles falls back.
+          map.current = null;
+          if (tries.current >= CREATE_TRIES) throw e;
+          tries.current += 1;
+          retry.current = setTimeout(() => alive && setAttempt((a) => a + 1), CREATE_RETRY_MS);
+          return;
+        }
+        tries.current = 0;
         g.event.addListenerOnce(map.current, 'tilesloaded', clearTimer);
         g.event.addListener(map.current, 'dragstart', () => {
           userMovedAt.current = Date.now();
@@ -101,6 +124,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
       alive = false;
       authListeners.delete(fail);
       clearTimer();
+      if (retry.current) clearTimeout(retry.current);
       if (glide.current) clearTimeout(glide.current);
       overlays.current.forEach((o) => o.setMap(null));
       truck.current?.marker.setMap(null);
@@ -108,7 +132,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
       truck.current = null;
       map.current = null;
     };
-  }, [failed]);
+  }, [failed, hostEl, attempt]);
 
   // The container can paint before it has its final width (tiles over two thirds only): tell the map when it changes.
   useEffect(() => {
@@ -207,20 +231,21 @@ export function GoogleTrackMap(props: MandiMapProps) {
         }),
       );
     if (pickup && (mode != null || !driver)) pin(pickup, 'Supplier', Colors.textPrimary);
-    if (destination) pin(destination, 'Restaurant', Colors.success);
+    if (destination) pin(destination, audience === 'supplier' ? 'Restaurant' : 'You', Colors.success);
 
     moveTruck(g, scene.showTruck ? at : null);
 
-    // Fit on the first draw and when the mode changes. A new fix alone must not yank the camera, except when the truck
-    // left the padded view or got twice as close to the next stop, and then at most once per 8 s.
+    // Fit the truck and the NEXT stop (see `fitTargetFor`) on the first draw and when the mode changes. While live a new
+    // fix alone must not yank the camera: refit when the truck left the padded view, got twice as close to the next stop,
+    // moved over 10% of the view, or 20 s passed (never more than once per 8 s, never within 30 s of the user's drag).
     const modeKey = String(mode ?? 'none');
-    const pts = [at, pickup, destination].filter((p): p is LatLng => p != null);
+    const pts = fitTargetFor(mode, at, pickup, destination);
     const next = mode === 'live' && pickup ? pickup : destination;
     const distNow = at && next ? distanceM(at, next) : 0;
     const fit = () => {
       map.current.fitBounds(viewportFor(pts), 0);
-      lastFit.current = { at: Date.now(), dist: distNow };
-      userMovedAt.current = 0; // an explicit refit (a mode change) gives the camera back to the app
+      lastFit.current = { at: Date.now(), dist: distNow, truck: at };
+      userMovedAt.current = 0; // an explicit refit gives the camera back to the app
     };
     if (fittedMode.current !== modeKey) {
       if (pts.length > 0) {
@@ -232,10 +257,17 @@ export function GoogleTrackMap(props: MandiMapProps) {
       const outside = raw != null && !insidePadded(raw, at);
       const now = Date.now();
       const userHolds = userMovedAt.current > 0 && now - userMovedAt.current < USER_MOVED_HOLD_MS;
-      if (!userHolds && shouldRefit({ now, lastFitAt: lastFit.current.at, outside, distNow, distAtFit: lastFit.current.dist })) fit();
+      const from = lastFit.current.truck;
+      const movedM = from ? distanceM(from, at) : 0;
+      const viewSpanM = raw ? distanceM({ latitude: raw.north, longitude: raw.west }, { latitude: raw.south, longitude: raw.east }) : 0;
+      if (
+        !userHolds &&
+        (shouldRefit({ now, lastFitAt: lastFit.current.at, outside, distNow, distAtFit: lastFit.current.dist }) ||
+          shouldRefitMoving({ now, lastFitAt: lastFit.current.at, movedM, viewSpanM }))
+      ) fit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, driverKey, pickupKey, destKey, mode, stale]);
+  }, [ready, driverKey, pickupKey, destKey, mode, stale, audience]);
 
   function moveTruck(g: G, at: LatLng | null) {
     if (!at) {
@@ -298,7 +330,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
         (driver ? (stale ? 'Last known partner position' : 'Partner position') : 'Waiting for the partner')
       }
     >
-      <View ref={host as never} style={StyleSheet.absoluteFill} />
+      <View ref={hostRef as never} style={StyleSheet.absoluteFill} />
     </View>
   );
 }

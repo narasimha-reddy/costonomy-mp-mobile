@@ -36,7 +36,7 @@ const TRACK_MS = 500;
  * restaurant plans around it.
  */
 export function MandiMap(props: MandiMapProps) {
-  const { driver, destination, stale, height = 220, bare = false, pickup = null, mode } = props;
+  const { driver, destination, stale, height = 220, bare = false, pickup = null, mode, audience = 'buyer' } = props;
   const watched = MAPS_CONFIGURED && Platform.OS === 'android' && !forcedSketch();
   const watchdog = useTileWatchdog(undefined, watched);
 
@@ -74,7 +74,7 @@ export function MandiMap(props: MandiMapProps) {
         )}
         {mode != null && pickup && <Marker coordinate={pickup} title="Supplier" pinColor={Colors.textPrimary} />}
         {destination && (
-          <Marker coordinate={destination} title="You" pinColor={Colors.success} />
+          <Marker coordinate={destination} title={audience === 'supplier' ? 'Restaurant' : 'You'} pinColor={Colors.success} />
         )}
       </MapView>
     </View>

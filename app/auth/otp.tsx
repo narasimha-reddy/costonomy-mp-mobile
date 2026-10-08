@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { requestOtp } from '@/services/auth';
@@ -29,6 +29,8 @@ export default function OtpScreen() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
+  // Set synchronously, so the auto-submit and a tap on Verify cannot both send the same code.
+  const inFlight = useRef(false);
 
   const masked = useMemo(
     () => (phone ? `+91 ${phone.slice(0, 5)} ${phone.slice(5)}` : ''),
@@ -42,12 +44,14 @@ export default function OtpScreen() {
   }, [secondsLeft]);
 
   async function submit() {
+    if (inFlight.current) return;
     if (!phone) {
       // Unreachable while the guard below stands; kept so a future refactor that
       // removes it fails loudly rather than reinstating a dead button.
       setError('We lost your number. Enter it again.');
       return;
     }
+    inFlight.current = true;
     setError(null);
     setSubmitting(true);
     try {
@@ -65,9 +69,17 @@ export default function OtpScreen() {
       }
       setCode('');
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   }
+
+  // The sixth digit is the submit: nobody should have to find Verify after typing a code. A wrong code is cleared, so
+  // typing again submits again.
+  useEffect(() => {
+    if (code.length === 6) void submit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
 
   async function resend() {
     if (!phone || secondsLeft > 0) return;
@@ -112,6 +124,7 @@ export default function OtpScreen() {
             autoCapitalize="none"
             required
             error={error}
+            autoFocus
           />
 
           <MandiButton

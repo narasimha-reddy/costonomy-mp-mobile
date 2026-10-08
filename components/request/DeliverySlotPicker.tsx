@@ -30,7 +30,7 @@ export function DeliverySlotPicker({
     { label: 'In 2 days', value: istDay(2) },
   ];
 
-  // As soon as possible is no day and no slot, and is what "Immediate" in the cart means.
+  // As soon as possible is no day and no slot, and is what "As soon as possible" in the cart means.
   const asap = selectedDate == null;
 
   const [date, setDate] = useState<string>(selectedDate || istDay(1));
@@ -106,7 +106,7 @@ export function DeliverySlotPicker({
         <MandiSkeletonList count={2} />
       ) : slots.length === 0 ? (
         <MandiText variant="caption" color={Colors.textTertiary} style={styles.empty}>
-          Standard on-demand dispatch (no predefined slots configured)
+          A delivery partner will be arranged as soon as the supplier has packed your order
         </MandiText>
       ) : (
         <View style={styles.options}>

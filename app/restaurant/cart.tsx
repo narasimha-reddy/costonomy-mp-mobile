@@ -363,6 +363,7 @@ export default function BasketScreen() {
           onChangeQuantity={changeQuantity}
           onRemove={removeLine}
           onChangeDeliveryPreference={(value) => preference.mutate({ intentId: draft.id, value })}
+          onlyRequest={drafts.length === 1}
           onSend={() => send.mutate({ acceptPriceChanges: false, intentId: draft.id })}
           onOrderDirectly={() =>
             orderDirectly.mutate({ intentId: draft.id, acceptPriceChanges: false })}

@@ -154,6 +154,7 @@ export function SupplierSectionBody({
   onSend,
   onOrderDirectly,
   onOpenSku,
+  onlyRequest = false,
 }: {
   draft: Intent;
   expanded: boolean;
@@ -171,6 +172,8 @@ export function SupplierSectionBody({
   onOrderDirectly: () => void;
   /** Open the pack's own page. D-096. */
   onOpenSku: (supplierSkuId: number) => void;
+  /** The only request in the cart: the bar below already sends it, so a second button for it would duplicate. */
+  onlyRequest?: boolean;
 }) {
   return (
     <View style={styles.body}>
@@ -356,24 +359,32 @@ export function SupplierSectionBody({
 
         return (
           <>
-            <View style={styles.actions}>
-              <MandiButton
-                label="Send Request"
-                variant="secondary"
-                size="md"
-                loading={sending}
-                onPress={onSend}
-                style={styles.action}
-              />
-              <MandiButton
-                label="Create Order"
-                size="md"
-                loading={ordering}
-                disabled={!draft.directOrdersEnabled || isBelowMov}
-                onPress={onOrderDirectly}
-                style={styles.action}
-              />
-            </View>
+            {/* The bar sends everything, and with one supplier that is this request. Several: this one alone. */}
+            {(!onlyRequest || draft.directOrdersEnabled) && (
+              <View style={styles.actions}>
+                {!onlyRequest && (
+                  <MandiButton
+                    label="Send only this one"
+                    variant="secondary"
+                    size="md"
+                    loading={sending}
+                    onPress={onSend}
+                    style={styles.action}
+                  />
+                )}
+                {/* Only where it can be used: a button that is always disabled is just a hint wearing a button. */}
+                {draft.directOrdersEnabled && (
+                  <MandiButton
+                    label="Place order"
+                    size="md"
+                    loading={ordering}
+                    disabled={isBelowMov}
+                    onPress={onOrderDirectly}
+                    style={styles.action}
+                  />
+                )}
+              </View>
+            )}
 
             <MandiText
               variant="caption"

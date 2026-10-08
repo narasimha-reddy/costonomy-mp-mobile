@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
 import {
@@ -31,7 +31,19 @@ export function DeliveryDayChoice({
   onChange: (when: DeliveryWhen) => void;
 }) {
   const days = dayChoices();
+  // Today and tomorrow are always on show; the other days wait behind "Pick a date", which opens itself when one of
+  // them is already chosen so the choice is never hidden.
+  const [showDates, setShowDates] = useState(false);
+  const farther = days.filter((day) => day.offset >= 2);
+  const fartherChosen = value.offset != null && value.offset >= 2;
+  const chosenFarther = fartherChosen ? days.find((day) => day.offset === value.offset)?.label ?? null : null;
+  const datesOpen = showDates || fartherChosen;
   const hours = value.offset == null ? [] : deliverByHoursFor(value.offset);
+
+  const pick = (offset: number) => {
+    const stillAhead = value.byHour != null && deliverByHoursFor(offset).includes(value.byHour);
+    onChange({ offset, byHour: stillAhead ? value.byHour : null });
+  };
 
   return (
     <View style={styles.wrap}>
@@ -39,23 +51,41 @@ export function DeliveryDayChoice({
         Delivery
       </MandiText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {/* No day: sent out when ready. "Later today" is today with an optional hour to have it by. */}
         <Chip
-          label="Immediate"
+          label="As soon as possible"
           active={value.offset == null}
           onPress={() => onChange({ offset: null, byHour: null })}
         />
-        {days.map((day) => (
+        {days.filter((day) => day.offset < 2).map((day) => (
           <Chip
             key={day.offset}
-            label={day.label}
+            label={day.offset === 0 ? 'Later today' : day.label}
             active={value.offset === day.offset}
-            onPress={() => {
-              const stillAhead = value.byHour != null && deliverByHoursFor(day.offset).includes(value.byHour);
-              onChange({ offset: day.offset, byHour: stillAhead ? value.byHour : null });
-            }}
+            onPress={() => pick(day.offset)}
           />
         ))}
+        {/* Selected only when a farther day is chosen; open or closed is the toggle's own state. */}
+        <Chip
+          label={chosenFarther ?? 'Pick a date'}
+          spokenAs={chosenFarther == null ? undefined : `Pick a date, ${chosenFarther} chosen`}
+          active={fartherChosen}
+          expanded={datesOpen}
+          onPress={() => setShowDates((open) => !open)}
+        />
       </ScrollView>
+      {datesOpen && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {farther.map((day) => (
+            <Chip
+              key={day.offset}
+              label={day.label}
+              active={value.offset === day.offset}
+              onPress={() => pick(day.offset)}
+            />
+          ))}
+        </ScrollView>
+      )}
       {value.offset != null && (
         <View style={styles.wrapRow}>
           <Chip
@@ -77,13 +107,15 @@ export function DeliveryDayChoice({
   );
 }
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function Chip({ label, spokenAs, active, expanded, onPress }: {
+  label: string; spokenAs?: string; active: boolean; expanded?: boolean; onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={`Delivery: ${label}`}
+      accessibilityState={expanded == null ? { selected: active } : { selected: active, expanded }}
+      accessibilityLabel={`Delivery: ${spokenAs ?? label}`}
       style={[styles.chip, active && styles.chipActive]}
     >
       <MandiText variant="caption" color={active ? Colors.surface : Colors.textSecondary}>

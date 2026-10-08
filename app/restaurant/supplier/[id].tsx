@@ -278,6 +278,8 @@ export default function SupplierCatalogScreen() {
         <CartBar
           count={cartCount}
           total={thisDraft?.agreedTotal}
+          disableWhenEmpty
+          cartElsewhere={drafts.some((draft) => draft.items.length > 0)}
           onPress={() => router.push('/restaurant/cart')}
         />
       }

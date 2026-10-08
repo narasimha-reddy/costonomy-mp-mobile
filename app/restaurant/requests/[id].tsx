@@ -39,8 +39,10 @@ import type { IntentItem } from '@/models/intent';
 import type { DeliveryMode } from '@/models/procurement';
 import { DeliveryModePicker } from '@/components/request/DeliveryModePicker';
 import { DeliverySlotPicker } from '@/components/request/DeliverySlotPicker';
-import { istDay } from '@/lib/delivery/deliveryDay';
+import { describeDeliveryDay, istDay } from '@/lib/delivery/deliveryDay';
 import { PaymentMethodPicker, type PaymentMethod } from '@/components/request/PaymentMethodPicker';
+import { PAYMENT_METHOD_LABEL } from '@/components/request/paymentLabels';
+import { getJsonPreference, removePreference, setJsonPreference } from '@/lib/preferences';
 import { IntentFulfilment as FulfilmentDisplay, resolveStatus, restaurantIntentStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { newIdempotencyKey } from '@/lib/api/client';
@@ -54,12 +56,16 @@ import { feeNeedsRefreshing } from '@/lib/delivery/quoteMessages';
 
 const SCREEN = 'REST-REQ-02';
 
-/** The pay bar's name for each way of paying (the pickers keep their longer ones). */
-const METHOD_BAR_LABEL: Record<PaymentMethod, string> = {
-  CREDIT: 'Mandi Credit',
-  WALLET: 'Wallet',
-  PREPAID: 'Pay online',
-};
+/** What the restaurant has chosen on this screen, kept per request so a reload or a trip back does not reset it. */
+interface SavedCheckout {
+  mode: DeliveryMode | null;
+  slotId: number | null;
+  scheduledDate: string | null;
+  method: PaymentMethod | null;
+}
+const MODES: string[] = ['PICKUP', 'SUPPLIER_DELIVERY', 'COSTONOMY_DELIVERY'];
+const METHODS: string[] = ['PREPAID', 'WALLET', 'CREDIT'];
+const checkoutKey = (intentId: number) => `checkout:request:${intentId}`;
 
 /**
  * One request, and the decision at the end of it. D-088.
@@ -107,6 +113,12 @@ export default function RequestDetailScreen() {
 
   const request = query.data;
 
+  // Whether there is something to order right now; only then do the checkout choices matter or get kept.
+  const orderableNow = request != null
+    && request.status === 'RESPONSES_RECEIVED'
+    && request.withinOrderWindow
+    && request.fulfilment !== 'NOT_FULFILLED';
+
   /**
    * The chosen mode, its fee, and the quote that fee came from. D-091.
    *
@@ -145,6 +157,64 @@ export default function RequestDetailScreen() {
    * kitchen to a checkout, a wallet and a line of credit settle on the spot.
    */
   const [method, setMethod] = React.useState<PaymentMethod | null>(null);
+
+  /**
+   * Choices from an earlier visit to this request. Read once before the pickers mount, so the pickers start from
+   * them instead of from their defaults; `restoredMode` is handed to the delivery picker, which re-quotes the fee
+   * rather than trusting a saved one (a quote expires). Cleared once the order is placed.
+   */
+  const [restored, setRestored] = React.useState(false);
+  const [replyExpired, setReplyExpired] = React.useState(false);
+  const [restoredMode, setRestoredMode] = React.useState<DeliveryMode | null>(null);
+  // What the restaurant last picked here. After a price change the picker starts again from this, not from the
+  // request's own preference, so a hand-picked Costonomy delivery is not swapped for free pickup under the toast.
+  const lastMode = React.useRef<DeliveryMode | null>(null);
+  // Costonomy delivery is chosen and its quote is being asked for again: the fee held here may be out of date.
+  const [quoteBusy, setQuoteBusy] = React.useState(false);
+  // Handed to the payment picker, which only takes it up once the balances say it can still be used.
+  const [restoredMethod, setRestoredMethod] = React.useState<PaymentMethod | null>(null);
+  const orderPlaced = React.useRef(false);
+  React.useEffect(() => {
+    if (!Number.isFinite(intentId)) return;
+    let live = true;
+    void getJsonPreference<Partial<SavedCheckout> | null>(checkoutKey(intentId), null).then((saved) => {
+      if (!live) return;
+      if (saved != null && typeof saved === 'object') {
+        // Only values this app knows: a saved field is data from disk, not something to act on unchecked.
+        if (typeof saved.mode === 'string' && MODES.includes(saved.mode)) setRestoredMode(saved.mode);
+        // What was chosen wins over the day the request was sent for; a day that has gone by is as soon as possible.
+        // Only the day comes back: the slot is the picker's to choose from what the supplier has free today, since a
+        // saved slot may since have filled up or gone.
+        const dayHolds = typeof saved.scheduledDate === 'string' && saved.scheduledDate >= istDay(0);
+        prefilled.current = true;
+        setSlot({ slotId: null, scheduledDate: dayHolds ? saved.scheduledDate ?? null : null });
+        if (typeof saved.method === 'string' && METHODS.includes(saved.method)) setRestoredMethod(saved.method);
+      }
+    }).catch(() => {
+      // Storage that fails is as good as nothing saved: the pickers still start from their defaults.
+    }).finally(() => {
+      if (live) setRestored(true);
+    });
+    return () => { live = false; };
+  }, [intentId]);
+
+  // Save what is chosen, once the saved choices have been read (or the first render would overwrite them).
+  // Kept only while there is an order to place: a request that is open, closed or long gone has nothing to remember.
+  const requestLoaded = request != null;
+  React.useEffect(() => {
+    if (!restored || orderPlaced.current || !requestLoaded) return;
+    if (!orderableNow) {
+      void removePreference(checkoutKey(intentId));
+      return;
+    }
+    const choices: SavedCheckout = {
+      mode: delivery?.mode ?? restoredMode,
+      slotId: slot.slotId,
+      scheduledDate: slot.scheduledDate,
+      method: method ?? restoredMethod,
+    };
+    void setJsonPreference(checkoutKey(intentId), choices);
+  }, [restored, requestLoaded, orderableNow, delivery?.mode, slot.slotId, slot.scheduledDate, method, restoredMode, restoredMethod, intentId]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: intentKey(intentId) });
 
   // Where the payment picker sits, so the bar's method column can scroll to it. Presentation only.
@@ -207,8 +277,9 @@ export default function RequestDetailScreen() {
     mutationFn: (key: string) => createOrderFromIntent(accessToken as string, intentId, {
       deliveryMode: (delivery?.mode ?? 'PICKUP') as DeliveryMode,
       deliveryQuoteReference: delivery?.quoteReference,
-      deliverySlotId: slot.slotId ?? undefined,
-      scheduledDeliveryDate: slot.scheduledDate ?? undefined,
+      // Collecting has no slot and no day, whatever was picked before switching to it.
+      deliverySlotId: delivery?.mode === 'PICKUP' ? undefined : slot.slotId ?? undefined,
+      scheduledDeliveryDate: delivery?.mode === 'PICKUP' ? undefined : slot.scheduledDate ?? undefined,
       paymentMethod: method ?? 'PREPAID',
     }, key),
     onSettled: () => {
@@ -216,6 +287,9 @@ export default function RequestDetailScreen() {
     },
     onSuccess: (created) => {
       track('intent_ordered', { screen: SCREEN, entityId: intentId });
+      // Placed: these choices belong to an order that now exists, not to the next visit.
+      orderPlaced.current = true;
+      void removePreference(checkoutKey(intentId));
       void refresh();
       // Navigate to the authoritative state rather than claiming success here.
       // If payment is still outstanding the payment screen is where it belongs;
@@ -251,6 +325,7 @@ export default function RequestDetailScreen() {
       // The fee shown is no longer the right one (the goods have become chilled since it was quoted): ask for it
       // again and make the restaurant choose again, rather than leave a choice standing that the server will refuse.
       if (feeNeedsRefreshing(caught)) {
+        // The re-quote starts first; the picker will not choose delivery again until the new figure is in.
         void queryClient.invalidateQueries({ queryKey: ['delivery-quote', intentId] });
         setDelivery(null);
       }
@@ -349,11 +424,6 @@ export default function RequestDetailScreen() {
       toast.show(caught instanceof ApiError ? caught.message : 'Could not copy that.', 'error'),
   });
 
-  const orderableNow = request != null
-    && request.status === 'RESPONSES_RECEIVED'
-    && request.withinOrderWindow
-    && request.fulfilment !== 'NOT_FULFILLED';
-
   return (
     <MandiScreen
       header={
@@ -396,7 +466,9 @@ export default function RequestDetailScreen() {
                 {windowText}
               </MandiText>
               <MandiText variant="body" numberOfLines={1}>
-                {`to ${[request.outletName, request.outletLocality].filter(Boolean).join(' · ')}`}
+                {delivery?.mode === 'PICKUP'
+                  ? `Pickup at ${request.storeName}`
+                  : `to ${[request.outletName, request.outletLocality].filter(Boolean).join(' · ')}`}
               </MandiText>
               {/* The reply's clock moved here from the status card below. The small chip carries no
                   trailing "to order" (it wrapped under the time); its spoken label still says it. */}
@@ -430,8 +502,15 @@ export default function RequestDetailScreen() {
                 where the request is, and how much of it was available — and
                 stacked they read as one thing restated rather than two facts. */}
             <View style={styles.statusRow}>
-              <MandiStatusChip {...restaurantIntentStatus(request.status, request.fulfilment)} />
-              {request.fulfilment !== 'AWAITING' && (
+              {/* "Cancelled" read as something that happened to the request; the restaurant withdrew it. */}
+              <MandiStatusChip
+                {...(request.status === 'CANCELLED'
+                  ? { label: 'Request withdrawn', tone: 'neutral' as const }
+                  : restaurantIntentStatus(request.status, request.fulfilment))}
+              />
+              {/* One chip when they say the same thing: "Accepted in part" already is "Partly available". */}
+              {request.fulfilment !== 'AWAITING'
+                && !(request.status === 'RESPONSES_RECEIVED' && request.fulfilment !== 'FULFILLED') && (
                 <MandiStatusChip {...resolveStatus(FulfilmentDisplay, request.fulfilment)} />
               )}
             </View>
@@ -443,6 +522,8 @@ export default function RequestDetailScreen() {
               {formatMomentWithRecency(request.sentAt ?? request.createdAt)}
             </MandiText>
             {/* Through to the supplier's shelf, as on an order. */}
+            {/* At checkout the header card above already names the supplier; a second card for the same one is noise. */}
+            {!orderableNow && (
             <Pressable
               onPress={() => router.push(`/restaurant/supplier/${request.supplierStoreId}`)}
               accessibilityRole="button"
@@ -460,21 +541,39 @@ export default function RequestDetailScreen() {
               </View>
               <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
             </Pressable>
+            )}
+
+            {/* What was asked for, on the screen that confirms the request went. */}
+            {request.status === 'OPEN' && (
+              <MandiText variant="caption" color={Colors.textSecondary} testID="request-asked">
+                {requestedHow(request.deliveryPreference, request.preferredDeliveryDate)}
+              </MandiText>
+            )}
 
             {/* The supplier's clock, while it is theirs. Shown so a kitchen can
                 decide whether to keep waiting or go elsewhere, rather than
                 refreshing a screen that says only "waiting". */}
             {request.status === 'OPEN' && request.responseDeadline != null && (
-              <View style={styles.countdown}>
+              <View style={styles.replyRow}>
+                {/* One idea: how long they have to reply, and how much of that is left. */}
                 <MandiText variant="caption" color={Colors.textSecondary}>
-                  Usually accepts within
+                  {request.responseWindowSeconds != null
+                    ? `${request.storeName} replies within ${Math.max(1, Math.round(request.responseWindowSeconds / 60))} min ·`
+                    : `${request.storeName} will reply soon ·`}
                 </MandiText>
                 <MandiCountdown
+                  size="sm"
                   deadlineAt={request.responseDeadline}
                   slaSeconds={request.responseWindowSeconds ?? undefined}
-                  action="to accept"
-                  onExpire={() => void refresh()}
+                  action="to reply"
+                  onExpire={() => { setReplyExpired(true); void refresh(); }}
                 />
+                {/* The clock's own label already says "left"; this word is for the eye only. */}
+                {!replyExpired && (
+                  <MandiText variant="caption" color={Colors.textSecondary} accessibilityElementsHidden importantForAccessibility="no">
+                    left
+                  </MandiText>
+                )}
               </View>
             )}
 
@@ -496,6 +595,19 @@ export default function RequestDetailScreen() {
               </View>
             )}
 
+            {request.status === 'CANCELLED' && (
+              <View style={styles.countdown}>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  The supplier no longer sees this request. You can send a new one any time.
+                </MandiText>
+                <MandiButton
+                  label="Back to Home"
+                  variant="secondary"
+                  size="md"
+                  onPress={() => router.replace('/restaurant')}
+                />
+              </View>
+            )}
             {request.status === 'ORDER_CREATION_EXPIRED' && (
               <Note
                 icon="time-outline"
@@ -519,12 +631,19 @@ export default function RequestDetailScreen() {
             && request.withinOrderWindow
             && request.fulfilment !== 'NOT_FULFILLED' && (
             <>
+              {/* Not before the saved choices are read: the pickers start from their defaults otherwise. */}
+              {restored && (
+              <>
               <View onLayout={(e) => setModeY(e.nativeEvent.layout.y)}>
                 <DeliveryModePicker
                   request={request}
                   selected={delivery?.mode ?? null}
-                  onSelect={(mode, fee, quoteReference) =>
-                    setDelivery({ mode, fee, quoteReference })}
+                  initialMode={lastMode.current ?? restoredMode}
+                  onQuoteBusy={setQuoteBusy}
+                  onSelect={(mode, fee, quoteReference) => {
+                    lastMode.current = mode;
+                    setDelivery({ mode, fee, quoteReference });
+                  }}
                 />
               </View>
               {delivery?.mode !== 'PICKUP' && (
@@ -546,9 +665,12 @@ export default function RequestDetailScreen() {
                   supplierStoreId={request.supplierStoreId}
                   amount={preview.data?.grandTotal ?? request.acceptance?.offeredTotal}
                   selected={method}
+                  initialMethod={restoredMethod}
                   onSelect={setMethod}
                 />
               </View>
+              </>
+              )}
               {/* The bar below is the order button only, so withdrawing sits with the choices. */}
               <MandiButton
                 label="Withdraw Request"
@@ -612,17 +734,7 @@ export default function RequestDetailScreen() {
 
           {orderableNow && (
             <>
-              {/* No note field exists on this request, so no "Add a note" chip. */}
-              <View style={styles.chipRow}>
-                <Pressable
-                  onPress={() => router.push(`/restaurant/supplier/${request.supplierStoreId}`)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add more items"
-                  style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
-                >
-                  <MandiText variant="captionEmphasis" color={Colors.primaryDark}>+ Add more items</MandiText>
-                </Pressable>
-              </View>
+              {/* No "Add more items" here: the supplier has answered this request, so more items would be a new one. */}
               <View testID="checkout-rows">
                 <DetailRowCard
                   rows={[
@@ -636,8 +748,12 @@ export default function RequestDetailScreen() {
                     {
                       key: 'address',
                       icon: 'location-outline',
-                      title: `Delivery at ${request.outletName ?? 'your outlet'}`,
-                      subtitle: [request.outletLocality, request.outletCity].filter(Boolean).join(', ') || null,
+                      title: delivery?.mode === 'PICKUP'
+                        ? `Collect from ${request.storeName}`
+                        : `Delivery at ${request.outletName ?? 'your outlet'}`,
+                      subtitle: delivery?.mode === 'PICKUP'
+                        ? null
+                        : [request.outletLocality, request.outletCity].filter(Boolean).join(', ') || null,
                     },
                     {
                       key: 'total',
@@ -698,6 +814,8 @@ export default function RequestDetailScreen() {
         title="Withdraw this request?"
         message="The supplier will no longer see it. You can send a new one any time."
         confirmLabel="Withdraw"
+        // Nothing to edit once answered, so "keep editing" would promise something this sheet cannot give.
+        cancelLabel={request?.quantityEditable ? 'Keep editing' : 'Keep request'}
         destructive
         onConfirm={() => { setConfirmCancel(false); cancel.mutate(); }}
         onCancel={() => setConfirmCancel(false)}
@@ -760,15 +878,16 @@ export default function RequestDetailScreen() {
           variant="pay"
           left={{
             eyebrow: 'PAY USING',
-            label: method == null ? 'Choose a method' : METHOD_BAR_LABEL[method],
+            label: method == null ? 'Choose a method' : PAYMENT_METHOD_LABEL[method],
             onPress: () => scrollTo(pickerY),
           }}
           amount={formatMoney(preview.data?.grandTotal ?? request.acceptance?.offeredTotal ?? '0')}
           amountCaption="TOTAL"
           ctaLabel="Place order"
           // Until both are chosen there is no fee and no funding, and an
-          // order cannot be created without either.
-          disabled={delivery == null || method == null}
+          // order cannot be created without either. Nor while the server's total for this exact choice is still
+          // on its way (the figure on the bar would be the one without carriage), or the quote is being renewed.
+          disabled={delivery == null || method == null || preview.isFetching || preview.data == null || quoteBusy}
           loading={order.isPending}
           onPress={placeOrder}
         />
@@ -805,13 +924,22 @@ export default function RequestDetailScreen() {
   }
 }
 
+/** What was asked for when the request was sent: "Deliver to me · As soon as possible", "Pickup · Tomorrow". */
+function requestedHow(preference: 'DELIVERY' | 'PICKUP', day: string | null): string {
+  const how = preference === 'DELIVERY' ? 'Deliver to me' : 'Pickup';
+  const when = day == null ? 'As soon as possible'
+    : day === istDay(0) ? 'Later today'
+      : day === istDay(1) ? 'Tomorrow' : describeDeliveryDay(day);
+  return `${how} · ${when}`;
+}
+
 /** Where and when it arrives, in words: pickup, as soon as possible, or the day and the slot's hours. */
 function deliveryWindowText(
   mode: DeliveryMode | null,
   slot: { slotId: number | null; scheduledDate: string | null },
   chosen: { startTime: string; endTime: string } | undefined,
 ): string {
-  if (mode === 'PICKUP') return 'Pickup';
+  if (mode === 'PICKUP') return 'Collect when ready';
   if (slot.scheduledDate == null) return 'As soon as possible';
   const day = slot.scheduledDate === istDay(0) ? 'Today'
     : slot.scheduledDate === istDay(1) ? 'Tomorrow'
@@ -880,7 +1008,11 @@ function RequestLine({
             the eye re-find the number it was already looking at. */}
         <View style={styles.quantityRow}>
           <MandiQuantityStepper
-            value={editing ? editQuantity : Number(item.requestedQuantity)}
+            // Answered: what the supplier will actually send, so a shortfall is not shown as a box that says more.
+            // What was asked for is said underneath.
+            value={editing ? editQuantity : answered && item.offeredQuantity != null && !declined
+              ? Number(item.offeredQuantity)
+              : Number(item.requestedQuantity)}
             onChange={onChangeQuantity ?? (() => undefined)}
             // min 1: a sent request cannot be emptied by stepping to zero, and
             // the server refuses it — deleting a line or withdrawing the request
@@ -914,7 +1046,7 @@ function RequestLine({
           <View style={styles.lineNote}>
             <Ionicons name="alert-circle-outline" size={14} color={Colors.warning} />
             <MandiText variant="caption" color={Colors.warning}>
-              Only {formatQuantity(item.offeredQuantity)} {item.unit} available
+              You asked for {formatQuantity(item.requestedQuantity)} {item.unit}
             </MandiText>
           </View>
         )}
@@ -997,6 +1129,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
   },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
+  replyRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.md },
   noteRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

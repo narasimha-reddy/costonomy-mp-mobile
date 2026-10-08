@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { partyTitle } from '@/lib/supplier/partyTitle';
 import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -128,9 +129,8 @@ function RequestRow({ request, onPress }: { request: Intent; onPress: () => void
         accentColor={toneColors(supplierIntentStatus(request.status, request.fulfilment).tone).fg}
       >
         <RequestCardBody
-          primary={request.outletName ?? request.restaurantName}
+          primary={partyTitle(request.restaurantName, request.outletName)}
           secondary={[
-            request.outletName != null ? request.restaurantName : null,
             request.outletLocality ?? request.outletCity,
             request.distanceKm != null ? `${request.distanceKm} km away` : null,
           ]}

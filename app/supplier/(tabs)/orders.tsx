@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { partyTitle } from '@/lib/supplier/partyTitle';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -147,9 +148,8 @@ export default function SupplierOrdersScreen() {
                 for. After a partial acceptance those differ, and only the
                 first is theirs. */}
             <OrderCardBody
-              primary={order.outletName}
+              primary={partyTitle(order.restaurantName, order.outletName)}
               secondary={[
-                order.restaurantName,
                 order.outletLocality,
                 formatDistance(order.distanceKm),
               ]}

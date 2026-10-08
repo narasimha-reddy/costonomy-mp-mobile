@@ -59,7 +59,9 @@ export function supplierTrackingHeader(i: {
   nowMs: number;
 }): BuyerTrackHeader {
   const { view, order, delivery, drop } = i;
-  const restaurant = order.outletName ?? COPY.restaurantFallback;
+  // The restaurant's own name (the supplier asks "who is this for?"); the outlet name only when the DTO lacks it.
+  const restaurant = (order as { restaurantName?: string | null }).restaurantName?.trim()
+    || order.outletName || COPY.restaurantFallback;
   const oStatus = order.status;
   const dStatus = delivery?.status ?? null;
   const kind = kindOf(order, delivery);

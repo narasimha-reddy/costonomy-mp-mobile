@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { usePathname } from 'expo-router';
+import { useOptionalSession } from '@/contexts/SessionProvider';
 import { Colors } from '@/theme';
 
 /**
@@ -17,6 +18,49 @@ export const DEVICE_WIDTH = 390;
 export const SUPPLIER_WIDE_WIDTH = 560;
 const WIDE_VIEWPORT = 900;
 
+type Side = 'supplier' | 'restaurant';
+/** The side the user was last on, for the screens both roles share (/chat, /notifications). */
+let lastSide: Side | null = null;
+
+/** Test seam. */
+export function resetFrameSide(): void {
+  lastSide = null;
+}
+
+/**
+ * The column width for the current screen: the supplier's desktop width on a desktop-sized viewport, else the phone's.
+ *
+ * <p>Decided by the side the user is on, not by the path alone: /chat and /notifications are opened from the supplier
+ * header too and must not snap back to 390. A supplier-only account is always on the supplier side; someone with both
+ * roles keeps the side they came from.
+ */
+function useComputedFrameWidth(): number {
+  const { width } = useWindowDimensions();
+  const pathname = usePathname();
+  const audience = useOptionalSession()?.audience;
+  if (Platform.OS !== 'web') return DEVICE_WIDTH;
+
+  let side: Side;
+  if (pathname === '/supplier' || pathname?.startsWith('/supplier/')) side = 'supplier';
+  else if (pathname === '/restaurant' || pathname?.startsWith('/restaurant/')) side = 'restaurant';
+  else if (audience === 'SUPPLIER') side = 'supplier';
+  else if (audience === 'RESTAURANT') side = 'restaurant';
+  else side = lastSide ?? 'restaurant';
+  lastSide = side;
+
+  return width >= WIDE_VIEWPORT && side === 'supplier' ? SUPPLIER_WIDE_WIDTH : DEVICE_WIDTH;
+}
+
+const FrameWidthContext = createContext<number>(DEVICE_WIDTH);
+
+/**
+ * The width of the frame this component is in. `MandiBottomSheet` reads it so a sheet is never wider than its frame
+ * (a `Modal` is portalled out of the frame's layout but keeps its React context). Outside a frame it is the phone width.
+ */
+export function useFrameWidth(): number {
+  return useContext(FrameWidthContext);
+}
+
 /**
  * Constrains the app to a phone-sized column on web.
  *
@@ -32,16 +76,14 @@ const WIDE_VIEWPORT = 900;
  * <p>On iOS and Android this is a pass-through: the device is already the frame.
  */
 export function DeviceFrame({ children }: { children: React.ReactNode }) {
-  const { width } = useWindowDimensions();
-  const pathname = usePathname();
+  const frameWidth = useComputedFrameWidth();
   if (Platform.OS !== 'web') return <>{children}</>;
-
-  // Only the supplier's routes widen, and only on a desktop-sized viewport; restaurant screens stay at phone width.
-  const wide = width >= WIDE_VIEWPORT && (pathname === '/supplier' || pathname?.startsWith('/supplier/'));
 
   return (
     <View style={styles.backdrop}>
-      <View testID="device-frame" style={[styles.frame, wide && { maxWidth: SUPPLIER_WIDE_WIDTH }]}>{children}</View>
+      <View testID="device-frame" style={[styles.frame, { maxWidth: frameWidth }]}>
+        <FrameWidthContext.Provider value={frameWidth}>{children}</FrameWidthContext.Provider>
+      </View>
     </View>
   );
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, render } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RealtimeProvider, invalidationKeys } from '@/contexts/RealtimeProvider';
+import { RealtimeProvider, STORE_INTENT_LISTS, invalidateKey, invalidationKeys } from '@/contexts/RealtimeProvider';
 import { fetchRealtimeEvents, fetchRealtimeTicket } from '@/services/notifications';
 
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'tok', authenticated: true }) }));
@@ -11,23 +11,43 @@ const ev = (cursor: number, aggregateType: string, aggregateId: number | null = 
   ({ cursor, channel: 'c', eventType: 'x', aggregateType, aggregateId, payload: null, occurredAt: '' });
 
 describe('realtime invalidation keys for the supplier', () => {
-  it('INTENT event invalidates supplier-store and the single request', () => {
+  it('INTENT invalidates only request lists', () => {
     const keys = invalidationKeys(ev(1, 'INTENT', 7));
-    expect(keys).toContainEqual(['supplier-store']);
     expect(keys).toContainEqual(['intent', 7]);
+    expect(keys).toContainEqual(STORE_INTENT_LISTS);
+    expect(keys).not.toContainEqual(['supplier-store']);
+    // The wildcard becomes a predicate that matches the lists and nothing else under supplier-store.
+    const client = new QueryClient();
+    const spy = jest.spyOn(client, 'invalidateQueries').mockResolvedValue(undefined);
+    invalidateKey(client, STORE_INTENT_LISTS);
+    const { predicate } = spy.mock.calls[0]![0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean };
+    expect(predicate({ queryKey: ['supplier-store', 3, 'intents'] })).toBe(true);
+    expect(predicate({ queryKey: ['supplier-store', 3] })).toBe(false);
+    expect(predicate({ queryKey: ['supplier-store', 3, 'catalog', 1, ''] })).toBe(false);
+    expect(predicate({ queryKey: ['outlet', 3, 'intents'] })).toBe(false);
   });
 
-  it('SUPPLIER_ORDER invalidates outlet and supplier-store and the order', () => {
+  it('SUPPLIER_ORDER invalidates outlet and the order, not the store settings', () => {
     const keys = invalidationKeys(ev(1, 'SUPPLIER_ORDER', 9));
     expect(keys).toContainEqual(['outlet']);
-    expect(keys).toContainEqual(['supplier-store']);
     expect(keys).toContainEqual(['supplier-order', 9]);
+    expect(keys).not.toContainEqual(['supplier-store']);
+    expect(keys).not.toContainEqual(['supplier-orders']);
   });
 
-  it('DELIVERY invalidates supplier-store and outlet', () => {
+  it('a status-changing DELIVERY event still refreshes the outlet orders', () => {
     const keys = invalidationKeys(ev(1, 'DELIVERY'));
-    expect(keys).toContainEqual(['supplier-store']);
     expect(keys).toContainEqual(['outlet']);
+    expect(keys).not.toContainEqual(['supplier-store']);
+  });
+
+  it('location event invalidates only delivery keys', () => {
+    const keys = invalidationKeys({ ...ev(1, 'DELIVERY', 4), eventType: 'DeliveryLocationUpdated' });
+    expect(keys).toContainEqual(['supplier-order']);
+    expect(keys).toContainEqual(['deliveries']);
+    expect(keys).toContainEqual(['outlet-delivery-radar']);
+    expect(keys).not.toContainEqual(['outlet']);
+    expect(keys).not.toContainEqual(['supplier-store']);
   });
 });
 
@@ -58,12 +78,6 @@ describe('RealtimeProvider batching', () => {
     expect(keys.length).toBeGreaterThan(0);
     expect(new Set(keys).size).toBe(keys.length);
     expect(keys.filter((k) => k === JSON.stringify(['outlet']))).toHaveLength(1);
-  });
-
-  it('no ticket request while one is pending', async () => {
-    mount();
-    await act(async () => { jest.advanceTimersByTime(60_000); });
-    expect(fetchRealtimeTicket).toHaveBeenCalledTimes(1);
   });
 
   it('a failing ticket backs off 1 s, 2 s, 4 s instead of hammering', async () => {

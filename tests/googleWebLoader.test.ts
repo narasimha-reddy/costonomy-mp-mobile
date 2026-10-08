@@ -51,4 +51,35 @@ describe('googleWebLoader', () => {
     await p;
     expect(importLibrary.mock.calls.map((c) => c[0]).sort()).toEqual(['core', 'maps', 'marker']);
   });
+
+  it('a rejected importLibrary rejects the load and leaves the page ready for a retry without a second script', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'a';
+    const importLibrary = jest.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    const p = loadWebMaps();
+    (window as unknown as Record<string, unknown>).google = { maps: { importLibrary } };
+    (document.head.querySelector('script') as HTMLScriptElement).onload?.(new Event('load'));
+    await expect(p).rejects.toThrow();
+    // The bootstrap is still in the page with google.maps present but no Map: a second load must reuse it.
+    await expect(loadWebMaps()).resolves.toBeUndefined();
+    expect(document.head.querySelectorAll('script')).toHaveLength(1);
+    expect(importLibrary.mock.calls.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('a bootstrap already in the page is not injected twice', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'a';
+    const importLibrary = jest.fn().mockResolvedValue({});
+    (window as unknown as Record<string, unknown>).google = { maps: { importLibrary } };
+    await loadWebMaps();
+    expect(document.head.querySelectorAll('script')).toHaveLength(0);
+    expect(importLibrary.mock.calls.map((c) => c[0]).sort()).toEqual(['core', 'maps', 'marker']);
+  });
+
+  it('a failed script load clears the cache so the next mount can try again', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'a';
+    const p = loadWebMaps();
+    (document.head.querySelector('script') as HTMLScriptElement).onerror?.(new Event('error'));
+    await expect(p).rejects.toThrow();
+    void loadWebMaps();
+    expect(document.head.querySelectorAll('script')).toHaveLength(2);
+  });
 });

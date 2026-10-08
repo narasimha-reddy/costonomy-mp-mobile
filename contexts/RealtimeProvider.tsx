@@ -2,7 +2,7 @@ import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchRealtimeEvents, fetchRealtimeTicket } from '@/services/notifications';
 import type { RealtimeEvent } from '@/models/notification';
@@ -21,6 +21,23 @@ interface RealtimeState {
   cursor: number | null;
 }
 
+/** The event type the API publishes for every GPS fix (DeliveryEventService). */
+export const LOCATION_EVENT = 'DeliveryLocationUpdated';
+
+/** Wildcard for the supplier's request lists: ['supplier-store', <any store id>, 'intents'] (see `storeIntentsKey`). */
+export const STORE_INTENT_LISTS: unknown[] = ['supplier-store', '*', 'intents'];
+
+/** Invalidate one key from `invalidationKeys`; the wildcard store id becomes a predicate. */
+export function invalidateKey(queryClient: QueryClient, key: unknown[]): void {
+  if (key[0] === 'supplier-store' && key[1] === '*') {
+    void queryClient.invalidateQueries({
+      predicate: (q) => q.queryKey[0] === 'supplier-store' && q.queryKey[2] === key[2],
+    });
+    return;
+  }
+  void queryClient.invalidateQueries({ queryKey: key });
+}
+
 /**
  * Which cached queries an event makes stale.
  *
@@ -33,18 +50,18 @@ export function invalidationKeys(event: RealtimeEvent): unknown[][] {
   switch (event.aggregateType) {
     case 'SUPPLIER_ORDER':
       if (event.aggregateId != null) keys.push(['supplier-order', event.aggregateId]);
-      keys.push(['outlet'], ['store'], ['supplier-store'], ['supplier-orders']);
+      keys.push(['outlet'], ['store']);
       break;
     case 'DELIVERY':
-      keys.push(
-        ['supplier-order'], ['deliveries'], ['outlet-delivery-radar'], ['outlet-deliveries'], ['outlet'],
-        ['supplier-store'], ['supplier-orders'],
-      );
+      // Every GPS fix publishes a location-only event; it moves the truck, never an order's status, so it must not
+      // refetch the outlet lists (or anything else) every few seconds.
+      keys.push(['supplier-order'], ['deliveries'], ['outlet-delivery-radar'], ['outlet-deliveries']);
+      if (event.eventType !== LOCATION_EVENT) keys.push(['outlet']);
       break;
     case 'INTENT':
-      // ['supplier-store'] covers the supplier's request carousel and list; ['intent', id] the single request.
+      // The supplier's request lists only, never the rest of ['supplier-store', id, ...] (catalog, settings).
       if (event.aggregateId != null) keys.push(['intent', event.aggregateId]);
-      keys.push(['outlet'], ['store'], ['supplier-store']);
+      keys.push(['outlet'], ['store'], STORE_INTENT_LISTS);
       break;
     case 'PROCUREMENT':
       if (event.aggregateId != null) keys.push(['procurement', event.aggregateId]);
@@ -140,9 +157,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const stoppedRef = useRef(false);
   /** True from the ticket POST until the socket is built or the attempt failed: never two tickets at once. */
   const connectingRef = useRef(false);
+  /** Bumped whenever the auth effect starts or stops: an attempt from an earlier generation is stale and must go quiet. */
+  const genRef = useRef(0);
+  /** The latest `connect`, so a retry timer never runs a closure over an old token. */
+  const connectRef = useRef<() => Promise<void>>(async () => {});
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const batcher = useMemo(
-    () => createInvalidationBatcher((key) => void queryClient.invalidateQueries({ queryKey: key })),
+    () => createInvalidationBatcher((key) => invalidateKey(queryClient, key)),
     [queryClient],
   );
   useEffect(() => () => batcher.cancel(), [batcher]);
@@ -189,19 +210,22 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     if (accessToken == null || stoppedRef.current || connectingRef.current) return;
     if (socketRef.current != null) return;
     connectingRef.current = true;
+    const gen = genRef.current;
 
     const retry = () => {
+      if (stoppedRef.current || gen !== genRef.current) return;
       setTransport('polling');
       const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attemptRef.current);
       attemptRef.current += 1;
       if (retryTimerRef.current != null) clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = setTimeout(() => void connect(), delay);
+      retryTimerRef.current = setTimeout(() => void connectRef.current(), delay);
     };
 
     try {
       const ticket = await fetchRealtimeTicket(accessToken);
-      if (stoppedRef.current) {
-        connectingRef.current = false;
+      if (stoppedRef.current || gen !== genRef.current) {
+        // A newer attempt (or sign-out) owns the connection now; this one just goes away.
+        if (gen === genRef.current) connectingRef.current = false;
         return;
       }
       if (cursorRef.current == null && ticket.cursor != null) {
@@ -254,42 +278,63 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       };
 
       socket.onclose = () => {
-        socketRef.current = null;
-        if (stoppedRef.current) return;
+        if (socketRef.current === socket) socketRef.current = null;
+        if (stoppedRef.current || gen !== genRef.current) return;
         // A handshake that never opened (403, wrong origin) backs off like a failed ticket.
         retry();
       };
     } catch {
+      if (gen !== genRef.current) return;
       connectingRef.current = false;
       // No ticket — an expired session, or the server is unreachable. Polling
       // carries on regardless, which is the point of having it.
       retry();
     }
   }, [accessToken, apply, drain]);
+  connectRef.current = connect;
+
+  /** Drop the socket without letting its late events touch whatever replaces it. */
+  const closeSocket = useCallback(() => {
+    const s = socketRef.current;
+    socketRef.current = null;
+    if (s == null) return;
+    s.onopen = null;
+    s.onclose = null;
+    s.onmessage = null;
+    s.onerror = null;
+    s.close();
+  }, []);
 
   // Connect while signed in; tear down on sign-out.
   useEffect(() => {
     if (!authenticated || accessToken == null) {
+      genRef.current += 1;
+      connectingRef.current = false;
       stoppedRef.current = true;
       if (retryTimerRef.current != null) clearTimeout(retryTimerRef.current);
-      socketRef.current?.close();
-      socketRef.current = null;
+      retryTimerRef.current = null;
+      batcher.cancel();
+      closeSocket();
       setTransport('offline');
       return undefined;
     }
 
+    genRef.current += 1;
+    connectingRef.current = false;
     stoppedRef.current = false;
     attemptRef.current = 0;
     setTransport('connecting');
-    void connect();
+    void connectRef.current();
 
     return () => {
+      genRef.current += 1;
+      connectingRef.current = false;
       stoppedRef.current = true;
       if (retryTimerRef.current != null) clearTimeout(retryTimerRef.current);
-      socketRef.current?.close();
-      socketRef.current = null;
+      retryTimerRef.current = null;
+      closeSocket();
     };
-  }, [authenticated, accessToken, connect]);
+  }, [authenticated, accessToken, batcher, closeSocket]);
 
   // The floor. Runs whether or not the socket is up — cheap, and it closes the
   // window where a socket looks connected but is silently dead.

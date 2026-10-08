@@ -11,6 +11,8 @@ import { MandiMapSketch, type MandiMapProps } from './MandiMapSketch';
 import { Colors, Radius, TrackLayout } from '@/theme';
 
 const GLIDE_STEP_MS = 40;
+/** After the user moves the map themselves, the camera is theirs for this long (a mode change still refits). */
+const USER_MOVED_HOLD_MS = 30_000;
 
 type G = any; // the google.maps namespace is loaded at runtime; there is no typings package for it here
 
@@ -52,6 +54,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
   const glide = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fittedMode = useRef<string | null>(null);
   const lastFit = useRef<{ at: number; dist: number }>({ at: 0, dist: 0 });
+  const userMovedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTimer = () => {
@@ -88,6 +91,9 @@ export function GoogleTrackMap(props: MandiMapProps) {
           styles: QUIET_MAP_STYLE,
         });
         g.event.addListenerOnce(map.current, 'tilesloaded', clearTimer);
+        g.event.addListener(map.current, 'dragstart', () => {
+          userMovedAt.current = Date.now();
+        });
         setReady(true);
       })
       .catch(fail);
@@ -214,6 +220,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
     const fit = () => {
       map.current.fitBounds(viewportFor(pts), 0);
       lastFit.current = { at: Date.now(), dist: distNow };
+      userMovedAt.current = 0; // an explicit refit (a mode change) gives the camera back to the app
     };
     if (fittedMode.current !== modeKey) {
       if (pts.length > 0) {
@@ -223,7 +230,9 @@ export function GoogleTrackMap(props: MandiMapProps) {
     } else if (at && scene.showTruck && pts.length > 1) {
       const raw = map.current.getBounds?.()?.toJSON?.();
       const outside = raw != null && !insidePadded(raw, at);
-      if (shouldRefit({ now: Date.now(), lastFitAt: lastFit.current.at, outside, distNow, distAtFit: lastFit.current.dist })) fit();
+      const now = Date.now();
+      const userHolds = userMovedAt.current > 0 && now - userMovedAt.current < USER_MOVED_HOLD_MS;
+      if (!userHolds && shouldRefit({ now, lastFitAt: lastFit.current.at, outside, distNow, distAtFit: lastFit.current.dist })) fit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, driverKey, pickupKey, destKey, mode, stale]);

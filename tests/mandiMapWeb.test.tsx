@@ -22,12 +22,14 @@ let circles: Obj[];
 let mapInstances: Obj[];
 let viewBounds: Obj;
 let tilesLoadedCb: (() => void) | null;
+let dragStartCb: (() => void) | null;
 
 function installGoogle() {
   markers = [];
   polylines = [];
   circles = [];
   tilesLoadedCb = null;
+  dragStartCb = null;
   mapInstances = [];
   viewBounds = { north: 14, south: 12, east: 78, west: 77 };
   const mk = (list: Obj[]) =>
@@ -48,7 +50,10 @@ function installGoogle() {
     Size: jest.fn(),
     Point: jest.fn(),
     SymbolPath: { CIRCLE: 0 },
-    event: { trigger: jest.fn(), addListenerOnce: jest.fn((_m: unknown, _e: string, cb: () => void) => { tilesLoadedCb = cb; }) },
+    event: {
+      trigger: jest.fn(),
+      addListener: jest.fn((_m: unknown, e: string, cb: () => void) => { if (e === 'dragstart') dragStartCb = cb; return { remove: jest.fn() }; }),
+       addListenerOnce: jest.fn((_m: unknown, _e: string, cb: () => void) => { tilesLoadedCb = cb; }) },
   };
   (global as Obj).google = { maps };
 }
@@ -222,7 +227,7 @@ describe('MandiMap (web)', () => {
 
   it('triggers a resize after mount and when the container changes size', async () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
-    const observers: Array<() => void> = [];
+    const observers: (() => void)[] = [];
     (global as Obj).ResizeObserver = class {
       constructor(cb: () => void) { observers.push(cb); }
       observe() {}
@@ -262,5 +267,48 @@ describe('MandiMap (web)', () => {
     view.rerender(<MandiMap driver={fix} destination={outlet} stale={false} mode="arriving" />);
     await flush();
     expect(mapInstances[0]!.fitBounds).toHaveBeenCalledTimes(2);
+  });
+
+  it('after the user drags the map no automatic refit for 30 s, but a mode change still refits', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    viewBounds = { north: 12.96, south: 12.94, east: 77.58, west: 77.56 }; // the truck is always outside
+    const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    const fit = mapInstances[0]!.fitBounds;
+    act(() => { tilesLoadedCb?.(); });
+    expect(fit).toHaveBeenCalledTimes(1);
+    expect(dragStartCb).not.toBeNull();
+    act(() => { dragStartCb?.(); jest.advanceTimersByTime(8100); });
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.972' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(1);
+    act(() => { jest.advanceTimersByTime(20_000); });
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.973' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(1);
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.973' }} destination={outlet} stale={false} mode="arriving" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(2);
+    act(() => { dragStartCb?.(); jest.advanceTimersByTime(31_000); });
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.975' }} destination={outlet} stale={false} mode="arriving" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(3);
+  });
+
+  it('refits when the truck gets half as close to the next stop, even while still in view', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    const fit = mapInstances[0]!.fitBounds;
+    act(() => { tilesLoadedCb?.(); });
+    expect(fit).toHaveBeenCalledTimes(1);
+    act(() => { jest.advanceTimersByTime(8100); });
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.975', longitude: '77.6' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(1); // closer, but not yet half the distance
+    act(() => { jest.advanceTimersByTime(8100); });
+    view.rerender(<MandiMap driver={{ ...fix, latitude: '12.98', longitude: '77.61' }} destination={outlet} stale={false} mode="live" />);
+    await flush();
+    expect(fit).toHaveBeenCalledTimes(2);
   });
 });

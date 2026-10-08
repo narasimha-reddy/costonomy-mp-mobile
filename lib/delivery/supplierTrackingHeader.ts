@@ -1,4 +1,5 @@
 import { haversineM } from '@/lib/delivery/mapGeometry';
+import { partyTitle } from '@/lib/delivery/partyTitle';
 import type { LatLng } from '@/lib/delivery/mapGeometry';
 import type { OrderTrackingView, TrackingDelivery, TrackingOrder } from '@/lib/delivery/orderTracking';
 import {
@@ -59,7 +60,7 @@ export function supplierTrackingHeader(i: {
   nowMs: number;
 }): BuyerTrackHeader {
   const { view, order, delivery, drop } = i;
-  const restaurant = order.outletName ?? COPY.restaurantFallback;
+  const restaurant = partyTitle(order.restaurantName, order.outletName, COPY.restaurantFallback);
   const oStatus = order.status;
   const dStatus = delivery?.status ?? null;
   const kind = kindOf(order, delivery);

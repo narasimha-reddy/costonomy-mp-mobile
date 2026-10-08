@@ -11,6 +11,12 @@ export function webMapsKey(): string {
   return (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '').trim();
 }
 
+type GoogleNs = { maps?: { importLibrary?: (n: string) => Promise<unknown> } };
+type ImportLibrary = (n: string) => Promise<unknown>;
+
+const importLibraries = (importLibrary: ImportLibrary): Promise<void> =>
+  Promise.all(['maps', 'marker', 'core'].map((name) => importLibrary(name))).then(() => undefined);
+
 let pending: Promise<void> | null = null;
 
 /** Test seam. */
@@ -27,6 +33,17 @@ export function loadWebMaps(): Promise<void> {
   const key = webMapsKey();
   if (!key) return Promise.reject(new Error('No Google Maps web key'));
 
+  // The bootstrap is already in the page (an earlier import failed, or another loader added it) but the classes are not
+  // on the namespace yet: import them through it. A second script would be 'included multiple times'.
+  const bootstrap = (window as unknown as { google?: GoogleNs }).google?.maps;
+  if (bootstrap?.importLibrary) {
+    pending = importLibraries((n) => bootstrap.importLibrary!(n)).catch((e) => {
+      pending = null;
+      throw e instanceof Error ? e : new Error('Could not load Google Maps libraries');
+    });
+    return pending;
+  }
+
   pending = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
     // loading=async is Google's recommended bootstrap: the classes are not on the namespace at onload, so the libraries
@@ -35,12 +52,12 @@ export function loadWebMaps(): Promise<void> {
       `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&loading=async&language=en&region=IN`;
     script.async = true;
     script.onload = () => {
-      const maps = (window as { google?: { maps?: { importLibrary?: (n: string) => Promise<unknown> } } }).google?.maps;
+      const maps = (window as unknown as { google?: GoogleNs }).google?.maps;
       if (!maps?.importLibrary) {
         resolve();
         return;
       }
-      Promise.all(['maps', 'marker', 'core'].map((name) => maps.importLibrary!(name)))
+      importLibraries((n) => maps.importLibrary!(n))
         .then(() => resolve())
         .catch((e) => {
           pending = null;

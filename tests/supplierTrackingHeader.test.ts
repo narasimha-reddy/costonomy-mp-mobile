@@ -31,6 +31,12 @@ describe('supplierTrackingHeader state matrix', () => {
     expect(head(order(C, 'CONFIRMED')).supplierLine).toBe('Cafe Mocha');
     expect(head(order(C, 'CONFIRMED', { outletName: null })).supplierLine).toBe('The restaurant');
   });
+  it('names the restaurant and the outlet on the supplier line', () => {
+    expect(head(order(C, 'CONFIRMED', { restaurantName: 'Mocha Group' })).supplierLine).toBe('Mocha Group · Cafe Mocha');
+    expect(head(order(C, 'CONFIRMED', { restaurantName: 'Cafe Mocha' })).supplierLine).toBe('Cafe Mocha');
+    expect(head(order(C, 'CONFIRMED', { restaurantName: 'Mocha Group', outletName: null })).supplierLine)
+      .toBe('Mocha Group');
+  });
   it('cancelled', () => {
     expect(head(order(C, 'CANCELLED', { cancellationReason: 'Out of stock' }))).toMatchObject({
       state: 'cancelled', title: 'Order cancelled', tone: 'neutral', map: 'none', partner: 'none',

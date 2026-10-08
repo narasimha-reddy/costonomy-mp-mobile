@@ -1,5 +1,6 @@
 import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { usePathname } from 'expo-router';
 import { Colors } from '@/theme';
 
 /**
@@ -11,6 +12,10 @@ import { Colors } from '@/theme';
  * at this instead, which is the same number rather than a second one that drifts.
  */
 export const DEVICE_WIDTH = 390;
+
+/** The supplier's desktop column: wider than a phone so a 1280 px screen is not 70% empty. */
+export const SUPPLIER_WIDE_WIDTH = 560;
+const WIDE_VIEWPORT = 900;
 
 /**
  * Constrains the app to a phone-sized column on web.
@@ -27,11 +32,16 @@ export const DEVICE_WIDTH = 390;
  * <p>On iOS and Android this is a pass-through: the device is already the frame.
  */
 export function DeviceFrame({ children }: { children: React.ReactNode }) {
+  const { width } = useWindowDimensions();
+  const pathname = usePathname();
   if (Platform.OS !== 'web') return <>{children}</>;
+
+  // Only the supplier's routes widen, and only on a desktop-sized viewport; restaurant screens stay at phone width.
+  const wide = width >= WIDE_VIEWPORT && (pathname === '/supplier' || pathname?.startsWith('/supplier/'));
 
   return (
     <View style={styles.backdrop}>
-      <View style={styles.frame}>{children}</View>
+      <View testID="device-frame" style={[styles.frame, wide && { maxWidth: SUPPLIER_WIDE_WIDTH }]}>{children}</View>
     </View>
   );
 }

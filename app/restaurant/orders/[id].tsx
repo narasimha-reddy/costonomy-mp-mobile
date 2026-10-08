@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder } from '@/services/procurement';
+import { fetchRating } from '@/services/trust';
 import { fetchDelivery } from '@/services/delivery';
 import {
   MandiButton,
@@ -94,6 +95,15 @@ export default function OrderDetailScreen() {
     },
   });
 
+  // The receipt's own read (same key, a GET): a rated order no longer offers "Rate This Order". A 404 is "not rated yet".
+  const rating = useQuery({
+    queryKey: ['supplier-order', orderId, 'rating'],
+    queryFn: () => fetchRating(accessToken as string, orderId),
+    enabled: Number.isFinite(orderId) && accessToken != null && order?.status === 'COMPLETED',
+    retry: (count, error) => !isApiError(error) && count < 2,
+  });
+  const rated = rating.data != null;
+
   const deliveryStatus = delivery.data ?? null;
   const view = order == null
     ? null
@@ -133,6 +143,7 @@ export default function OrderDetailScreen() {
   /** Payment method, the delivery window, the address, and a way to report a problem once it has arrived. */
   function detailRows(o: NonNullable<typeof order>): DetailRow[] {
     const rows: DetailRow[] = [];
+    const onCredit = o.paymentMethod === 'CREDIT';
     if (o.paymentMethod != null || payment != null) {
       rows.push({
         key: 'payment',
@@ -140,8 +151,10 @@ export default function OrderDetailScreen() {
         title: 'Payment method',
         // Said by the server's status and instrument, never guessed: a UPI order that was cancelled has been
         // debited and is being refunded, which is not "no money was taken".
-        subtitle: payment == null ? null : [payment.label, payment.detail].filter(Boolean).join('. '),
-        right: o.paymentMethod != null ? <PaymentMethodPill method={o.paymentMethod} /> : undefined,
+        // A credit order already says "On credit" on the bar and in the bill, so the row does not say it a third and
+        // fourth time: it keeps only the extra detail and drops the pill.
+        subtitle: payment == null ? null : [onCredit ? null : payment.label, payment.detail].filter(Boolean).join('. '),
+        right: o.paymentMethod != null && !onCredit ? <PaymentMethodPill method={o.paymentMethod} /> : undefined,
       });
     }
     const when = o.deliverySlotName ?? o.scheduledDeliveryDate;
@@ -387,7 +400,10 @@ export default function OrderDetailScreen() {
           {/* ── Statutory Billing Documents ────────────────────────── */}
           {billingEligible && (
             <MandiCard>
-              <MandiText variant="bodyEmphasis">📄 GST Documents</MandiText>
+              <View style={styles.docsHead}>
+                <Ionicons name="document-text-outline" size={IconSize.md} color={Colors.textSecondary} />
+                <MandiText variant="bodyEmphasis">GST Documents</MandiText>
+              </View>
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                 <MandiButton
                   label={billingLoading ? 'Loading…' : 'View Invoice'}
@@ -515,7 +531,7 @@ export default function OrderDetailScreen() {
               onPress={() => router.push(`/restaurant/receiving/${order.id}`)}
             />
           )}
-          {settled && (
+          {settled && !rated && !rating.isPending && (
             <MandiButton
               label="Rate This Order"
               size="lg"
@@ -530,6 +546,7 @@ export default function OrderDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  docsHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   partyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   partyLink: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: Colors.border, marginVertical: Spacing.sm },

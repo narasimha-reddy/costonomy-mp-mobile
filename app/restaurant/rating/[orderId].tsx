@@ -77,7 +77,8 @@ export default function RatingScreen() {
     onSuccess: () => {
       track('rating_submitted', { screen: SCREEN, entityId: orderId }, { overall });
       toast.show('Thanks — that helps other kitchens', 'success');
-      router.replace('/restaurant/(tabs)/orders');
+      // Back to the order that was rated, which now shows its rating, not to a list it may not be on.
+      router.replace(`/restaurant/orders/${orderId}`);
     },
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not send that.', 'error'),
@@ -109,8 +110,8 @@ export default function RatingScreen() {
           icon="checkmark-circle-outline"
           title="You have already rated this order"
           description="One rating per order, so the averages mean something."
-          actionLabel="Back to orders"
-          onAction={() => router.replace('/restaurant/(tabs)/orders')}
+          actionLabel="Back to order"
+          onAction={() => router.replace(`/restaurant/orders/${orderId}`)}
         />
       ) : (
         <>

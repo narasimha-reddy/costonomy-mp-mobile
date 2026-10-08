@@ -1,5 +1,5 @@
 import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { billingFailureMessage } from '@/lib/billing/messages';
 import { fetchTaxInvoice, fetchCreditNotes, generateTaxInvoice, type TaxInvoice, type CreditNote } from '@/services/billing';
@@ -214,18 +214,22 @@ export default function SupplierOrderScreen() {
   // A Costonomy-delivery order that is Ready gets its delivery from auto-dispatch a few seconds later: until the row
   // exists the read 404s, so the screen keeps asking (fast) rather than offering a button for something in progress.
   const awaitingDelivery = order?.status === 'READY_FOR_PICKUP' && wantsDeliveryPartner(order.deliveryMode);
+  // The poll interval needs 'has the search timed out', which itself needs this query's data: a ref breaks the loop.
+  // (Reading a `const` declared below from react-query's first call throws a ReferenceError on web.)
+  const findTimedOutRef = useRef(false);
   const delivery = useQuery({
     queryKey: ['supplier-order', orderId, 'delivery'],
     queryFn: () => fetchDelivery(accessToken as string, orderId),
     enabled: Number.isFinite(orderId) && accessToken != null && (order?.status === 'READY_FOR_PICKUP' || order?.status === 'OUT_FOR_DELIVERY' || order?.status === 'DELIVERED'),
     retry: false,
     // While a partner is being found the screen follows it, so the bar moves and a booking shows up without a tap.
-    refetchInterval: (query) => deliveryPollMs(query.state.data, awaitingDelivery, findTimedOut),
+    refetchInterval: (query) => deliveryPollMs(query.state.data, awaitingDelivery, findTimedOutRef.current),
   });
   // Computed from the query's own data (not a state mirrored by an effect, which lags a render behind it). The poll
   // interval above reads findTimedOut lazily, after this render has set it.
   const deliveryExists = delivery.data != null;
   const findTimedOut = useTimeoutFlag(awaitingDelivery && !deliveryExists, FIND_TIMEOUT_MS);
+  findTimedOutRef.current = findTimedOut;
   const partnerPhase = partnerAwaitPhase({
     orderStatus: order?.status, deliveryMode: order?.deliveryMode, hasDelivery: deliveryExists, timedOut: findTimedOut,
   });

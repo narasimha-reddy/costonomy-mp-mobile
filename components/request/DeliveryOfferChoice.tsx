@@ -65,7 +65,7 @@ export function DeliveryOfferChoice({
   const offers = deliveryOffersFor(policy);
   if (offers.length === 0) return null;
 
-  const labels: Record<DeliveryOffer, { title: string; detail: string }> = {
+  const labels: Record<DeliveryOffer, { title: string; detail: string; note?: string }> = {
     SELF_FREE: {
       title: 'I will deliver it',
       detail: 'You handle the delivery yourself.',
@@ -81,6 +81,7 @@ export function DeliveryOfferChoice({
     COSTONOMY: {
       title: 'Use Costonomy delivery',
       detail: 'Riders are requested after you mark the order Ready for Pickup. The restaurant pays the delivery fee.',
+      note: 'Costonomy arranges a delivery partner; the restaurant pays the delivery fee',
     },
   };
 
@@ -91,45 +92,52 @@ export function DeliveryOfferChoice({
         {offers.map((offer) => {
           const active = value === offer;
           return (
-            <Pressable
-              key={offer}
-              onPress={() => onChange(offer)}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: active }}
-              style={[styles.option, active && styles.optionActive]}
-            >
-              <MandiText variant="body">{labels[offer].title}</MandiText>
-              <MandiText variant="caption" color={Colors.textSecondary}>
-                {labels[offer].detail}
-              </MandiText>
-            </Pressable>
+            <View key={offer} style={styles.optionGroup}>
+              <Pressable
+                onPress={() => onChange(offer)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active, checked: active }}
+                style={[styles.option, active && styles.optionActive]}
+              >
+                <MandiText variant="body">{labels[offer].title}</MandiText>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {labels[offer].detail}
+                </MandiText>
+                {active && labels[offer].note != null && (
+                  <MandiText variant="captionEmphasis" color={Colors.textSecondary}>{labels[offer].note}</MandiText>
+                )}
+              </Pressable>
+              {/* The charge belongs to this option, so it sits right under it and not under the last one. */}
+              {offer === 'SELF' && active && onFeeChange != null && (
+                <View style={styles.fee}>
+                  <MandiFormField
+                    label="Delivery charge for this order (₹)"
+                    value={fee ?? ''}
+                    onChangeText={(text) => onFeeChange(text.replace(/[^0-9.]/g, ''))}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                  />
+                  <MandiText variant="caption" color={deliveryChargeValid(fee) && Number(fee || '0') === 0 ? Colors.success : Colors.textSecondary}>
+                    {!deliveryChargeValid(fee)
+                      ? 'Enter a number, such as 0 or 40.'
+                      : Number(fee || '0') === 0
+                        ? 'Free delivery. The restaurant is told it is free.'
+                        : `The restaurant sees ${formatMoney(String(Number(fee)))} for delivery before they order.`}
+                  </MandiText>
+                </View>
+              )}
+            </View>
           );
         })}
       </View>
-      {value === 'SELF' && onFeeChange != null && (
-        <>
-          <MandiFormField
-            label="Delivery charge for this order (₹)"
-            value={fee ?? ''}
-            onChangeText={(text) => onFeeChange(text.replace(/[^0-9.]/g, ''))}
-            keyboardType="decimal-pad"
-            placeholder="0"
-          />
-          <MandiText variant="caption" color={deliveryChargeValid(fee) && Number(fee || '0') === 0 ? Colors.success : Colors.textSecondary}>
-            {!deliveryChargeValid(fee)
-              ? 'Enter a number, such as 0 or 40.'
-              : Number(fee || '0') === 0
-                ? 'Free delivery. The restaurant is told it is free.'
-                : `The restaurant sees ${formatMoney(String(Number(fee)))} for delivery before they order.`}
-          </MandiText>
-        </>
-      )}
     </MandiCard>
   );
 }
 
 const styles = StyleSheet.create({
   options: { gap: Spacing.sm, marginTop: Spacing.sm },
+  optionGroup: { gap: Spacing.sm },
+  fee: { gap: Spacing.xs, paddingHorizontal: Spacing.md },
   option: {
     gap: Spacing.xs,
     padding: Spacing.md,

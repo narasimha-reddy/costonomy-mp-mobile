@@ -1,4 +1,4 @@
-import { socketUrl } from '@/contexts/RealtimeProvider';
+import { invalidationKeys, socketUrl } from '@/contexts/RealtimeProvider';
 
 const BASE = 'http://localhost:7070/costonomy-mp-api';
 
@@ -35,5 +35,26 @@ describe('socketUrl', () => {
   it('tolerates a base with a trailing slash and a path without a leading one', () => {
     expect(socketUrl('api/v1/realtime/socket', 'abc', 'http://localhost:7070/mp/'))
       .toBe('ws://localhost:7070/mp/api/v1/realtime/socket?ticket=abc');
+  });
+});
+
+describe('invalidationKeys', () => {
+  const ev = (aggregateType: string, aggregateId: number | null = 5) =>
+    ({ cursor: 1, channel: 'c', eventType: 'x', aggregateType, aggregateId, payload: null, occurredAt: '' });
+
+  it('a request event refreshes the outlet lists, which hold the requests', () => {
+    // The Home pill for an answered request reads ['outlet', id, 'intents'].
+    expect(invalidationKeys(ev('INTENT'))).toContainEqual(['outlet']);
+    expect(invalidationKeys(ev('INTENT'))).toContainEqual(['notifications']);
+  });
+
+  it('a delivery event refreshes the outlet orders list', () => {
+    expect(invalidationKeys(ev('DELIVERY'))).toContainEqual(['outlet']);
+  });
+
+  it('an order event still refreshes that order and the outlet lists', () => {
+    const keys = invalidationKeys(ev('SUPPLIER_ORDER', 9));
+    expect(keys).toContainEqual(['supplier-order', 9]);
+    expect(keys).toContainEqual(['outlet']);
   });
 });

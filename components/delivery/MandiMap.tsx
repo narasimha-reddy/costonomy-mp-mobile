@@ -72,9 +72,9 @@ export function MandiMap(props: MandiMapProps) {
         {mode != null && truck && mode !== 'placed' && mode !== 'pending' && (
           <TruckMarker at={truck} stale={stale} flip={mirrored(driver?.bearing)} />
         )}
-        {mode != null && pickup && <Marker coordinate={pickup} title="Pickup" pinColor={Colors.textPrimary} />}
+        {mode != null && pickup && <Marker coordinate={pickup} title="Supplier" pinColor={Colors.textPrimary} />}
         {destination && (
-          <Marker coordinate={destination} title="Your outlet" pinColor={Colors.success} />
+          <Marker coordinate={destination} title="You" pinColor={Colors.success} />
         )}
       </MapView>
     </View>
@@ -100,7 +100,9 @@ function Route({ mode, truck, pickup, drop }: { mode: MapMode; truck: LatLng | n
   return (
     <>
       {mode === 'pending' && pickup && drop && dashed([pickup, drop])}
-      {(mode === 'live' || mode === 'arriving' || mode === 'reached') && truck && (
+      {/* Assigned, no rider location yet: the plan is the dashed route, no truck. */}
+      {(mode === 'live' || mode === 'arriving' || mode === 'reached') && !truck && pickup && drop && dashed([pickup, drop])}
+      {(mode === 'live' || mode === 'arriving') && truck && (
         pickup
           ? (
             <>

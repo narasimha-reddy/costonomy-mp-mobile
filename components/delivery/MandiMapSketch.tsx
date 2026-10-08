@@ -3,6 +3,7 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { DeliveryLocation } from '@/models/delivery';
 import { haversineM, mirrored } from '@/lib/delivery/mapGeometry';
+import { MandiText } from '@/components/common/MandiText';
 import { TruckIcon } from '@/components/delivery/TruckIcon';
 import { Colors, Radius, TrackLayout } from '@/theme';
 
@@ -75,12 +76,19 @@ export function MandiMapSketch({
     ? haversineM({ latitude: Number(driver.latitude), longitude: Number(driver.longitude) }, destination) / 1000
     : null;
   // With no outlet to measure against (a supplier has none) the dot sits mid-route: the sketch cannot place it.
-  const progress = distanceKm == null ? 0.5 : Math.min(0.95, Math.max(0.05, 1 - distanceKm / FULL_SCALE_KM));
+  // At the door the truck sits at the drop end; the ring, not a line, says it has arrived.
+  const progress = mode === 'reached' ? 0.95
+    : distanceKm == null ? 0.5 : Math.min(0.95, Math.max(0.05, 1 - distanceKm / FULL_SCALE_KM));
   const dot = pointAlong(progress);
-  const dashed = mode === 'pending' && pickup != null;
-  // In a mode the solid route is what is left: from the truck to the drop.
-  const remaining = mode != null && mode !== 'placed' && mode !== 'pending' && driver != null;
-  const showPickup = mode == null || pickup != null;
+  // Before pickup the whole supplier-to-restaurant route is the dashed plan; the caller passes `pickup` only then.
+  const dashed = mode != null && mode !== 'placed' && pickup != null;
+  const hasTruck = driver != null && (mode === 'live' || mode === 'arriving' || mode === 'reached');
+  // Solid is what the truck is doing now: heading to the pickup, else on to the drop. Nothing once it has reached.
+  const solid = hasTruck && mode !== 'reached'
+    ? (pickup != null ? legsBetween(0, progress) : legsBetween(progress, 1))
+    : [];
+  const labelled = mode != null;
+  const showPickup = mode == null || pickup != null || labelled;
   const ring = mode === 'arriving' ? RING_ARRIVE : mode === 'reached' ? RING_REACH : null;
 
   return (
@@ -111,10 +119,9 @@ export function MandiMapSketch({
           const from = ROUTE[i] as { x: number; y: number };
           return <Leg key={i} from={from} to={to} dashed testID={i === 0 ? 'map-route-pending' : undefined} />;
         })}
-      {remaining &&
-        legsFrom(progress).map(([from, to], i) => (
-          <Leg key={i} from={from} to={to} color={Colors.deliveryRoute} testID={i === 0 ? 'map-route-live' : undefined} />
-        ))}
+      {solid.map(([from, to], i) => (
+        <Leg key={i} from={from} to={to} color={Colors.deliveryRoute} testID={i === 0 ? 'map-route-live' : undefined} />
+      ))}
 
       {ring != null && (
         <View
@@ -124,6 +131,8 @@ export function MandiMapSketch({
       )}
       {showPickup && <View testID="map-pickup" style={[styles.pin, styles.pickup, at(ROUTE[0].x, ROUTE[0].y)]} />}
       <View style={[styles.pin, styles.drop, at(ROUTE[4].x, ROUTE[4].y)]} />
+      {labelled && <PinLabel text="Supplier" x={ROUTE[0].x} y={ROUTE[0].y} />}
+      {labelled && <PinLabel text="You" x={ROUTE[4].x} y={ROUTE[4].y} />}
 
       {driver && mode != null && mode !== 'placed' && mode !== 'pending' ? (
         <View testID="map-driver" style={[styles.dotSlot, at(dot.x, dot.y)]}>
@@ -140,6 +149,15 @@ export function MandiMapSketch({
           </View>
         )
       )}
+    </View>
+  );
+}
+
+/** A short name under a pin, so the two ends are never guesswork. */
+function PinLabel({ text, x, y }: { text: string; x: number; y: number }) {
+  return (
+    <View pointerEvents="none" style={[styles.labelSlot, at(x, y)]}>
+      <MandiText variant="captionEmphasis" color={Colors.textPrimary} style={styles.label}>{text}</MandiText>
     </View>
   );
 }
@@ -164,23 +182,27 @@ function pointAlong(progress: number): { x: number; y: number } {
   return ROUTE[0];
 }
 
-/** The route from `progress` of the way to the end, as axis-aligned legs. */
-function legsFrom(progress: number): [{ x: number; y: number }, { x: number; y: number }][] {
-  const start = pointAlong(progress);
+/** The part of the route between two progress values (0 to 1, by drawn length), as axis-aligned legs. */
+function legsBetween(fromProgress: number, toProgress: number): [{ x: number; y: number }, { x: number; y: number }][] {
   const total = ROUTE.slice(1).reduce((sum, to, i) => {
     const from = ROUTE[i] as { x: number; y: number };
     return sum + Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
   }, 0);
-  let walked = 0;
-  const target = progress * total;
+  const lo = fromProgress * total;
+  const hi = toProgress * total;
   const out: [{ x: number; y: number }, { x: number; y: number }][] = [];
-  let cursor = start;
+  let walked = 0;
   ROUTE.slice(1).forEach((to, i) => {
     const from = ROUTE[i] as { x: number; y: number };
     const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
-    if (walked + length > target) {
-      if (cursor.x !== to.x || cursor.y !== to.y) out.push([cursor, to]);
-      cursor = to;
+    const a = Math.max(lo, walked);
+    const b = Math.min(hi, walked + length);
+    if (b > a && length > 0) {
+      const point = (d: number) => ({
+        x: from.x + ((to.x - from.x) * (d - walked)) / length,
+        y: from.y + ((to.y - from.y) * (d - walked)) / length,
+      });
+      out.push([point(a), point(b)]);
     }
     walked += length;
   });
@@ -272,6 +294,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.geofenceFill,
     borderColor: Colors.geofenceStroke,
   },
+  labelSlot: { position: 'absolute', width: 0, height: 0, alignItems: 'center' },
+  label: { marginTop: PIN / 2 + 2, width: 80, textAlign: 'center' },
   dotSlot: { position: 'absolute', width: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
   halo: {
     position: 'absolute',

@@ -191,4 +191,80 @@ describe('MandiMapSketch modes', () => {
     const { UNSAFE_getByType } = render(<MandiMapSketch driver={fix} destination={outlet} stale mode="live" />);
     expect(UNSAFE_getByType(TruckIcon).props.muted).toBe(true);
   });
+
+  it('renders exactly one truck', () => {
+    for (const mode of ['live', 'arriving', 'reached'] as const) {
+      const { unmount } = render(<MandiMapSketch driver={fix} destination={outlet} pickup={pickup} stale={false} mode={mode} />);
+      expect(screen.getAllByTestId('truck-icon')).toHaveLength(1);
+      expect(screen.getAllByTestId('map-driver')).toHaveLength(1);
+      unmount();
+    }
+  });
+
+  it('pickup and drop pins carry labels', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+    expect(screen.getByText('Supplier')).toBeTruthy();
+    expect(screen.getByText('You')).toBeTruthy();
+  });
+
+  it('the supplier pin and label stay after pickup, when the caller no longer passes a pickup', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="live" />);
+    expect(screen.getByTestId('map-pickup')).toBeTruthy();
+    expect(screen.getByText('Supplier')).toBeTruthy();
+  });
+
+  it('before pickup draws solid truck-to-pickup and dashed pickup-to-drop', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+    expect(screen.getByTestId('map-route-live')).toBeTruthy();
+    expect(screen.getByTestId('map-route-pending')).toBeTruthy();
+    expect(screen.getAllByTestId('map-dash').length).toBeGreaterThan(4);
+  });
+
+  it('assigned with no rider location draws the dashed route and no truck', () => {
+    render(<MandiMapSketch driver={null} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+    expect(screen.getByTestId('map-route-pending')).toBeTruthy();
+    expect(screen.queryByTestId('truck-icon')).toBeNull();
+    expect(screen.queryByTestId('map-route-live')).toBeNull();
+  });
+
+  it('after pickup draws only truck-to-drop', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="live" />);
+    expect(screen.getByTestId('map-route-live')).toBeTruthy();
+    expect(screen.queryByTestId('map-route-pending')).toBeNull();
+    expect(screen.queryAllByTestId('map-dash')).toHaveLength(0);
+  });
+
+  it('reached draws no line', () => {
+    render(<MandiMapSketch driver={fix} destination={outlet} stale={false} mode="reached" />);
+    expect(screen.queryByTestId('map-route-live')).toBeNull();
+    expect(screen.queryByTestId('map-route-pending')).toBeNull();
+    expect(screen.getByTestId('map-geofence')).toBeTruthy();
+    expect(screen.getByTestId('map-pickup')).toBeTruthy();
+  });
+});
+
+describe('MandiMap native legs', () => {
+  beforeEach(() => {
+    mockConfigured = true;
+  });
+
+  it('before pickup draws solid truck-to-pickup and dashed pickup-to-drop', () => {
+    const { UNSAFE_getAllByType } = render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
+    const lines = UNSAFE_getAllByType('Polyline' as never) as unknown as P[];
+    expect(lines).toHaveLength(2);
+    expect(lines[0]?.props.coordinates).toEqual([{ latitude: 12.97, longitude: 77.59 }, pickup]);
+    expect(lines[1]?.props.lineDashPattern).toEqual([6, 5]);
+    expect(lines[1]?.props.coordinates).toEqual([pickup, outlet]);
+  });
+
+  it('reached draws no line, only the ring', () => {
+    const { UNSAFE_queryAllByType } = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="reached" />);
+    expect(UNSAFE_queryAllByType('Polyline' as never)).toHaveLength(0);
+    expect(UNSAFE_queryAllByType('Circle' as never)).toHaveLength(1);
+  });
+
+  it('renders exactly one truck', () => {
+    const { UNSAFE_getAllByType } = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
+    expect(UNSAFE_getAllByType(TruckIcon)).toHaveLength(1);
+  });
 });

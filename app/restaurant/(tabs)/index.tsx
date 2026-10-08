@@ -67,10 +67,11 @@ export default function RestaurantHome() {
       contentStyle={inFlight != null ? { paddingBottom: PILL_CLEARANCE } : undefined}
       floating={inFlight != null ? (
         <ActiveOrderPill
-          supplierName={inFlight.order.supplierName}
-          statusText={inFlight.header.title}
+          supplierName={inFlight.supplierName}
+          statusText={inFlight.statusText}
           etaMins={inFlight.etaMins}
-          onPress={() => router.push(`/restaurant/tracking/${inFlight.order.id}`)}
+          accessibilityLabel={inFlight.accessibilityLabel}
+          onPress={() => router.push(inFlight.href)}
         />
       ) : undefined}
     >

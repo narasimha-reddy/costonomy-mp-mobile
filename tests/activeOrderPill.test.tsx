@@ -31,4 +31,18 @@ describe('ActiveOrderPill', () => {
     fireEvent.press(screen.getByRole('button'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  it('a request pill carries its own label and no ETA', () => {
+    render(
+      <ActiveOrderPill
+        supplierName="Fresh Farms accepted your request"
+        statusText="Place your order before 6:30 pm"
+        accessibilityLabel="Request answered: Fresh Farms accepted your request. Place your order"
+        onPress={jest.fn()}
+      />,
+    );
+    expect(screen.getByLabelText(/Request answered/)).toBeTruthy();
+    expect(screen.queryByLabelText(/Order in progress/)).toBeNull();
+    expect(screen.queryByText('arriving in')).toBeNull();
+  });
 });

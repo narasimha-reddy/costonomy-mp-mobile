@@ -10,20 +10,22 @@ import { Colors, Elevation, IconSize, Radius, Spacing, TouchTarget } from '@/the
  * appears when the caller has a minutes figure, so a pill never promises a time nobody gave.
  */
 export function ActiveOrderPill({
-  supplierName, statusText, etaMins, onPress, bottom = Spacing.md,
+  supplierName, statusText, etaMins, onPress, bottom = Spacing.md, accessibilityLabel,
 }: {
   supplierName: string;
   statusText: string;
   etaMins?: number | null;
   onPress: () => void;
   bottom?: number;
+  /** Replaces the default "Order in progress" label, for a pill that is not about an order yet. */
+  accessibilityLabel?: string;
 }) {
   const hasEta = etaMins != null;
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Order in progress: ${statusText}. ${supplierName}${hasEta ? `, arriving in ${etaMins} mins` : ''}. Track`}
+      accessibilityLabel={accessibilityLabel ?? `Order in progress: ${statusText}. ${supplierName}${hasEta ? `, arriving in ${etaMins} mins` : ''}. Track`}
       style={[styles.pill, { bottom }]}
     >
       <View style={styles.text}>

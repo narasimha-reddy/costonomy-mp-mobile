@@ -21,6 +21,45 @@ interface RealtimeState {
   cursor: number | null;
 }
 
+/**
+ * Which cached queries an event makes stale.
+ *
+ * <p>Requests live under ['outlet', id, 'intents'] and orders under ['outlet', id, 'orders'], so ['outlet'] covers the
+ * Home pill for an answered request and for an order in flight. A delivery moves its order's status too, so it
+ * refreshes the outlet lists as well.
+ */
+export function invalidationKeys(event: RealtimeEvent): unknown[][] {
+  const keys: unknown[][] = [];
+  switch (event.aggregateType) {
+    case 'SUPPLIER_ORDER':
+      if (event.aggregateId != null) keys.push(['supplier-order', event.aggregateId]);
+      keys.push(['outlet'], ['store']);
+      break;
+    case 'DELIVERY':
+      keys.push(['supplier-order'], ['deliveries'], ['outlet-delivery-radar'], ['outlet-deliveries'], ['outlet']);
+      break;
+    case 'INTENT':
+      keys.push(['outlet'], ['store']);
+      break;
+    case 'PROCUREMENT':
+      if (event.aggregateId != null) keys.push(['procurement', event.aggregateId]);
+      keys.push(['outlet']);
+      break;
+    case 'CREDIT_AGREEMENT':
+      if (event.aggregateId != null) keys.push(['credit-agreement', event.aggregateId]);
+      keys.push(['outlet'], ['store']);
+      break;
+    case 'PAYMENT':
+      keys.push(['supplier-order'], ['procurement']);
+      break;
+    default:
+      break;
+  }
+  // Every event can produce a notification, and the badge is server-backed.
+  keys.push(['notifications']);
+  return keys;
+}
+
 const RealtimeContext = createContext<RealtimeState>({ transport: 'connecting', cursor: null });
 
 /**
@@ -68,39 +107,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       setCursor(event.cursor);
     }
 
-    const invalidate = (key: unknown[]) => void queryClient.invalidateQueries({ queryKey: key });
-
-    switch (event.aggregateType) {
-      case 'SUPPLIER_ORDER':
-        if (event.aggregateId != null) invalidate(['supplier-order', event.aggregateId]);
-        invalidate(['outlet']);
-        invalidate(['store']);
-        break;
-      case 'DELIVERY':
-        invalidate(['supplier-order']);
-        invalidate(['deliveries']);
-        invalidate(['outlet-delivery-radar']);
-        invalidate(['outlet-deliveries']);
-        break;
-      case 'PROCUREMENT':
-        if (event.aggregateId != null) invalidate(['procurement', event.aggregateId]);
-        invalidate(['outlet']);
-        break;
-      case 'CREDIT_AGREEMENT':
-        if (event.aggregateId != null) invalidate(['credit-agreement', event.aggregateId]);
-        invalidate(['outlet']);
-        invalidate(['store']);
-        break;
-      case 'PAYMENT':
-        invalidate(['supplier-order']);
-        invalidate(['procurement']);
-        break;
-      default:
-        break;
-    }
-
-    // Every event can produce a notification, and the badge is server-backed.
-    invalidate(['notifications']);
+    invalidationKeys(event).forEach((key) => void queryClient.invalidateQueries({ queryKey: key }));
   }, [queryClient]);
 
   /** Catch up over REST. Also the whole transport when the socket is down. */

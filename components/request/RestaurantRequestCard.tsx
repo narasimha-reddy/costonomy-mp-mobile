@@ -46,6 +46,7 @@ export function RestaurantRequestCard({
   const status = restaurantIntentStatus(request.status, request.fulfilment);
 
   const awaitingReply = request.status === 'OPEN';
+  const answered = request.acceptance != null;
   const readyToOrder = request.status === 'RESPONSES_RECEIVED' && request.withinOrderWindow;
 
   const open = onPress ?? (() => router.push(`/restaurant/requests/${request.id}`));
@@ -67,8 +68,10 @@ export function RestaurantRequestCard({
         deadlineAction={awaitingReply ? 'for their reply' : 'to order'}
         reference={request.reference}
         occurredAt={request.sentAt ?? request.createdAt}
-        amount={request.agreedTotal}
-        amountLabel={`${request.items.length} item${request.items.length === 1 ? '' : 's'}`}
+        // Once the supplier has answered, what they accepted is what the order would cost; the requested
+        // total is what was asked before then, and the label says which one this is.
+        amount={answered ? request.acceptance?.offeredTotal : request.agreedTotal}
+        amountLabel={`${answered ? 'Accepted' : 'Requested'} · ${request.items.length} item${request.items.length === 1 ? '' : 's'}`}
         items={request.items}
     />
   );
@@ -93,7 +96,7 @@ export function RestaurantRequestCard({
       {/* The card's colour, as on the detail screen this opens: the state and
           the act on it are the same thing, so they are the same violet. */}
       <MandiButton
-        label="Create Order"
+        label="Place order"
         size="sm"
         tone={status.tone}
         style={styles.cta}

@@ -112,3 +112,38 @@ describe('the supplier menu', () => {
     expect(pad).toBeGreaterThanOrEqual(CART_BAR_HEIGHT + MENU_BOTTOM_CLEARANCE);
   });
 });
+
+describe('the supplier menu header and cart bar', () => {
+  it('does not repeat the supplier name under the store name', async () => {
+    (fetchStorefrontHeader as jest.Mock).mockResolvedValue({ ...header(0, null), storeName: 'Metro', supplierName: 'Metro' });
+    setup();
+    await screen.findByText('3.2 km · Bengaluru');
+    expect(screen.getAllByText('Metro')).toHaveLength(1);
+  });
+
+  it('still names the supplier when the store has its own name', async () => {
+    setup();
+    await screen.findByText('3.2 km · Bengaluru');
+    expect(screen.getByText('Metro')).toBeTruthy();
+  });
+
+  it('labels the ETA', async () => {
+    setup();
+    expect(await screen.findByText('Delivery in ~40 min')).toBeTruthy();
+    expect(screen.queryByText('~40 min')).toBeNull();
+  });
+
+  it('Continue is inert with an empty cart and says what to do', async () => {
+    setup();
+    await screen.findByText('Paneer');
+    expect(screen.getByText('Add items to continue')).toBeTruthy();
+    expect(screen.getByLabelText('Continue ›').props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('keeps the way to the cart when only other suppliers have items in it', async () => {
+    mockDrafts.current = [{ supplierStoreId: 5, agreedTotal: '10.00', items: [draftItem(3, 9)] }];
+    setup();
+    await screen.findByText('Paneer');
+    expect(screen.getByLabelText('Continue ›').props.accessibilityState.disabled).toBeFalsy();
+  });
+});

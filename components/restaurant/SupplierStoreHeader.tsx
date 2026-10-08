@@ -48,6 +48,10 @@ export function SupplierStoreTitle({
   const [switching, setSwitching] = useState(false);
   const branches = header?.otherStores.length ?? 0;
   const title = header?.storeName ?? fallbackTitle;
+  const supplierLine = header?.supplierName ?? fallbackSubtitle ?? null;
+  const subtitle = supplierLine != null && supplierLine.trim().toLowerCase() !== title.trim().toLowerCase()
+    ? supplierLine
+    : null;
 
   return (
     <View style={styles.bar}>
@@ -100,9 +104,12 @@ export function SupplierStoreTitle({
             <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
           )}
         </View>
-        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {header?.supplierName ?? fallbackSubtitle ?? ''}
-        </MandiText>
+        {/* Not the name again: a store that trades under the supplier's own name has nothing more to say here. */}
+        {subtitle != null && (
+          <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+            {subtitle}
+          </MandiText>
+        )}
       </Pressable>
 
       {/* Messaging is offered here because this is where a kitchen is standing
@@ -188,7 +195,7 @@ export function SupplierStoreFacts({
         {/* Absent rather than guessed: an ETA invented without coordinates is
             a number somebody plans a service around. */}
         {header.etaMinutes != null && (
-          <Fact icon="time-outline" text={`~${header.etaMinutes} min`} />
+          <Fact icon="time-outline" text={`Delivery in ~${header.etaMinutes} min`} />
         )}
         {!header.openNow && (
           <Fact

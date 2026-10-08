@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/restyle-p22-checkout] - Request, cart and checkout fixes from the flow review (issues 4, 10, 13-16, 19, 22)
+#### Fixed
+- Checkout opens on Costonomy delivery (fee shown) when the restaurant asked for delivery, never silently on pickup; the header says "Pickup at {supplier}" for pickup; delivery mode, day/slot and payment method are kept per request (`lib/preferences`) and cleared once the order is placed.
+- Open Requests / Requests list show "Accepted" (offered total) once answered, "Requested" before; "Create Order" is now "Place order"; payment options read "Mandi Credit" / "Wallet" / "Card / UPI" (one shared label map, also used by the PAY USING bar) with "{amount} available"; the on-demand slot text is customer-friendly; the cart has one Send button and no always-disabled Create Order; checkout shows one status chip, one supplier card, no "Add more items" after the answer, and "You asked for N" beside the offered quantity; Withdraw offers "Keep request" and ends on "Request withdrawn" with "Back to Home".
+- Supplier menu header no longer repeats the name and labels the ETA; the menu's Continue is inert with an empty cart; the cart's date chips are As soon as possible / Later today / Tomorrow / Pick a date; the open-request screen says "{Store} usually replies in N min · m:ss left" and shows "Deliver to me · As soon as possible".
 ### [feat/restyle-p17-supplier-tracking] - The supplier's tracking screen matches the restaurant's
 #### Changed
 - `/supplier/tracking/:id` now uses the green header, ETA pill, map, partner card (with plate), placed hero and delivered receipt via `BuyerTrackingLayout audience="supplier"` and a new `supplierTrackingHeader`; the sandbox card, partner search, retry and switch-to-own controls are kept. Supplier tracking polling now also pauses when the screen is not focused.

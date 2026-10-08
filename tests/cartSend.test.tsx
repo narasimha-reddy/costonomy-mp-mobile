@@ -38,7 +38,7 @@ const mockDraft = {
 };
 jest.mock('@/hooks/useRequestBasket', () => ({
   useRequestBasket: () => ({
-    basket: { requests: [mockDraft] }, drafts: [mockDraft], loading: false, error: null, refetch: jest.fn(),
+    basket: { requests: [mockDraft], itemCount: 1, supplierCount: 1, agreedTotal: '1291.50', pricedComplete: true }, drafts: [mockDraft], loading: false, error: null, refetch: jest.fn(),
   }),
   useInvalidateBasket: () => () => Promise.resolve(),
 }));
@@ -68,6 +68,14 @@ beforeEach(() => {
 });
 
 describe('the cart', () => {
+  it('has one Send Request button (the bar) and no permanently disabled Create Order', () => {
+    setup();
+    expect(screen.getAllByText('Send Request')).toHaveLength(1);
+    expect(screen.queryByText('Create Order')).toBeNull();
+    // The reason it cannot be ordered directly stays, as a hint.
+    expect(screen.getByText(/can't order directly from this supplier/)).toBeTruthy();
+  });
+
   it('writes a tapped quantity before it sends, so the request goes out with what was tapped', async () => {
     setup();
 

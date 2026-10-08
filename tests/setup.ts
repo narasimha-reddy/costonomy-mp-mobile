@@ -6,3 +6,8 @@ import { resetAttemptKeys } from '@/lib/credit/attemptKeys';
 // The credit attempt keys live in a module-level store; never let one test's
 // undecided attempt leak its key into the next.
 afterEach(() => { resetAttemptKeys(); });
+
+// The native storage module does not exist under Jest; the checkout remembers its choices through it. The official
+// in-memory mock keeps every screen test that reaches `lib/preferences` loadable (tests that care mock the helper itself).
+jest.mock('@react-native-async-storage/async-storage', () =>
+  jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock'));

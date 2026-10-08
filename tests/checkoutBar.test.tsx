@@ -105,7 +105,7 @@ describe('the checkout bar', () => {
     fireEvent.press(screen.getByLabelText('method WALLET'));
     expect(screen.getByText('Wallet')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('method PREPAID'));
-    expect(screen.getByText('Pay online')).toBeTruthy();
+    expect(screen.getByText('Card / UPI')).toBeTruthy();
   });
 
   it('changing the method does not place the order', async () => {

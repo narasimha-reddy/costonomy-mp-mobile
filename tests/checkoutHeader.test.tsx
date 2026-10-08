@@ -104,10 +104,10 @@ describe('the checkout header and delivery rows', () => {
     expect(screen.getAllByText('Order from this reply within')).toHaveLength(1);
   });
 
-  it('Add more items opens the supplier menu', async () => {
+  it('does not offer Add more items once the supplier has answered', async () => {
     setup();
-    fireEvent.press(await screen.findByLabelText('Add more items'));
-    expect(mockPush).toHaveBeenCalledWith('/restaurant/supplier/4');
+    await screen.findByTestId('checkout-header');
+    expect(screen.queryByLabelText('Add more items')).toBeNull();
     expect(screen.queryByText('Add a note for the supplier')).toBeNull();
   });
 

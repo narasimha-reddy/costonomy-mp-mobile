@@ -6,6 +6,7 @@ import { fetchWallet } from '@/services/wallet';
 import { fetchOutletAgreements } from '@/services/credit';
 import { MandiCard, MandiText } from '@/components/common';
 import { formatMoney, type Money } from '@/utils/money';
+import { PAYMENT_METHOD_LABEL } from '@/components/request/paymentLabels';
 import { Colors, Radius, Spacing } from '@/theme';
 
 export type PaymentMethod = 'PREPAID' | 'WALLET' | 'CREDIT';
@@ -90,28 +91,29 @@ export function PaymentMethodPicker({
   }[] = [
     {
       key: 'PREPAID',
-      label: 'Pay by card',
+      label: PAYMENT_METHOD_LABEL.PREPAID,
       hint: 'Authorise on the next screen',
       trailing: null,
       disabled: false,
     },
     {
       key: 'WALLET',
-      label: 'Pay from wallet',
+      label: PAYMENT_METHOD_LABEL.WALLET,
       hint: wallet.isPending
         ? 'Checking your balance…'
         : walletShort ? 'Not enough for this order' : 'Settles straight away',
-      trailing: walletBalance == null ? null : formatMoney(walletBalance),
+      // "available", so a balance is not read as the price of paying this way.
+      trailing: walletBalance == null ? null : `${formatMoney(walletBalance)} available`,
       disabled: wallet.isPending || walletBalance == null || walletShort,
     },
     {
       key: 'CREDIT',
-      label: 'Pay on credit',
+      label: PAYMENT_METHOD_LABEL.CREDIT,
       hint: agreements.isPending
         ? 'Checking your terms…'
         : line == null ? 'No credit with this supplier yet'
           : creditShort ? 'Not enough credit left' : 'Owed, not paid now',
-      trailing: creditAvailable == null ? null : formatMoney(creditAvailable),
+      trailing: creditAvailable == null ? null : `${formatMoney(creditAvailable)} available`,
       disabled: agreements.isPending || line == null || creditShort,
     },
   ];

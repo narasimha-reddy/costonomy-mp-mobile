@@ -34,9 +34,12 @@ export function DeliveryModePicker({
   request,
   selected,
   onSelect,
+  initialMode = null,
 }: {
   request: Intent;
   selected: DeliveryMode | null;
+  /** A choice made on an earlier visit to this request; it wins over the defaults below when still offered. */
+  initialMode?: DeliveryMode | null;
   onSelect: (mode: DeliveryMode, fee: Money, quoteReference?: string) => void;
 }) {
   const { accessToken } = useSession();
@@ -73,14 +76,20 @@ export function DeliveryModePicker({
   // Default to the cheapest thing that needs no explanation, once, so the bar
   // below can show a total. Never silently: the choice is rendered selected.
   useEffect(() => {
-    // When the supplier offered to deliver this request themselves (free or at a fee), start on that: it is what they
-    // proposed, it is shown selected with its fee, and pickup is one tap away. Otherwise the choice that needs no
-    // explanation, as before: pickup. Costonomy delivery is never chosen on the buyer's behalf (it has a quoted fee).
+    // Where it starts, in order: a choice the restaurant already made here; the supplier's own delivery when they
+    // proposed it (shown selected with its fee, pickup one tap away); Costonomy delivery when the restaurant asked
+    // for delivery in the cart and it is offered (its quoted fee shown on the option); otherwise pickup.
+    // Never pickup by silence: a delivery request whose quote has not arrived waits for it (or for a tap).
     const offeredOwn = available.includes('SUPPLIER_DELIVERY')
       && (request.acceptance?.deliveryOffer === 'SELF_FREE' || request.acceptance?.deliveryOffer === 'SELF');
-    const first: DeliveryMode | undefined = offeredOwn
-      ? 'SUPPLIER_DELIVERY'
-      : available.includes('PICKUP') ? 'PICKUP' : available[0];
+    const wantsDelivery = request.deliveryPreference === 'DELIVERY' && available.includes('COSTONOMY_DELIVERY');
+    const first: DeliveryMode | undefined = initialMode != null && available.includes(initialMode)
+      ? initialMode
+      : offeredOwn
+        ? 'SUPPLIER_DELIVERY'
+        : wantsDelivery
+          ? 'COSTONOMY_DELIVERY'
+          : available.includes('PICKUP') ? 'PICKUP' : available[0];
     if (selected == null && first != null) {
       const fee = feeFor(first);
       if (fee != null) {

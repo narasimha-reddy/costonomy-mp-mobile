@@ -24,6 +24,8 @@ export const MENU_BOTTOM_CLEARANCE = 72;
 export function CartBar({
   count,
   supplierCount,
+  disableWhenEmpty = false,
+  cartElsewhere = false,
   onPress,
 }: {
   count: number;
@@ -31,10 +33,18 @@ export function CartBar({
   total?: Money | null;
   /** Only where the selection spans more than one: a shelf is one supplier. */
   supplierCount?: number;
+  /**
+   * An empty cart has nothing to continue to, so the bar says so and is inert. Opt-in, because the other screens that
+   * show this bar count one supplier and have not told it about the rest of the cart.
+   */
+  disableWhenEmpty?: boolean;
+  /** This screen's count is zero but the cart holds other suppliers' items: the way to it stays. */
+  cartElsewhere?: boolean;
   onPress: () => void;
 }) {
+  const inert = disableWhenEmpty && count === 0 && !cartElsewhere;
   const label = count === 0
-    ? 'Nothing added yet'
+    ? inert ? 'Add items to continue' : 'Nothing added yet'
     : `${count} item${count === 1 ? '' : 's'} added`
       + (supplierCount != null && supplierCount > 1 ? ` · ${supplierCount} suppliers` : '');
 
@@ -43,6 +53,7 @@ export function CartBar({
       variant="continue"
       left={{ eyebrow: '', label }}
       ctaLabel="Continue ›"
+      disabled={inert}
       onPress={onPress}
     />
   );

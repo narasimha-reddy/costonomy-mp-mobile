@@ -8,7 +8,7 @@ import { ApiError } from '@/lib/api/errors';
 import { fetchSupplierOrder } from '@/services/procurement';
 import { receiveOrder } from '@/services/trust';
 import {
-  ORDER_READY_SETTLED_9_6, RECEIVING_APPLIED_NO_NOTE_YET, RECEIVING_PENDING_CAPTURE, RECEIVING_WITH_CREDIT_NOTE,
+  ORDER_READY_SETTLED_9_6, RECEIVING_APPLIED_NO_NOTE_YET, RECEIVING_IN_FULL, RECEIVING_PENDING_CAPTURE, RECEIVING_WITH_CREDIT_NOTE,
 } from './fixtures/catchWeightContract';
 
 jest.mock('@expo/vector-icons', () => {
@@ -173,5 +173,33 @@ describe('the rejection-reason chips', () => {
     expect(chip.props.accessibilityRole).toBe('radio');
     expect(chip.props.accessibilityState.selected).toBe(true);
     expect(screen.getByLabelText('Short Delivery for Chicken').props.accessibilityState.selected).toBe(false);
+  });
+});
+
+describe('the check-in confirmation step (before rating)', () => {
+  it('summarises received, damaged and missing from the server totals, and rates only on request', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue({ ...RECEIVING_APPLIED_NO_NOTE_YET, instantRefundAmount: 0, refundStatus: null });
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+
+    expect(await screen.findByText('Delivery checked in. Received 9.5 of 10. 0.1 missing.')).toBeTruthy();
+    // It does not skip straight on to rating or a dispute.
+    expect(mockReplace).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByText('Rate this order'));
+    expect(mockReplace).toHaveBeenCalledWith('/restaurant/rating/501');
+  });
+
+  it('Done goes to the order, and a full delivery says so without damaged or missing', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue(RECEIVING_IN_FULL);
+    setup();
+    fireEvent.press(await screen.findByText('Complete check-in'));
+
+    expect(await screen.findByText('Delivery checked in. Received 9.6 of 10.')).toBeTruthy();
+    expect(screen.queryByText(/missing|damaged/)).toBeNull();
+    fireEvent.press(screen.getByText('Done'));
+    expect(mockReplace).toHaveBeenCalledWith('/restaurant/orders/501');
   });
 });

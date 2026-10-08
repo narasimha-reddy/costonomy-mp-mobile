@@ -147,7 +147,7 @@ describe('buyerTrackingHeader state matrix', () => {
   it('arriving', () => {
     expect(head(order(C, 'OUT_FOR_DELIVERY'), delivery('IN_TRANSIT', { location: northOf(200) }))).toMatchObject({
       state: 'arriving', title: 'Arriving now', map: 'arriving', partner: 'card',
-      pill: { text: 'Be ready to collect your order' },
+      pill: { text: 'Be ready to receive your order' },
     });
   });
   it('on_the_way', () => {

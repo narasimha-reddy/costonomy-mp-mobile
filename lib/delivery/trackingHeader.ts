@@ -74,7 +74,7 @@ const COPY = {
   reached: 'Reached your location',
   reachedPill: 'Coming to your doorstep',
   arriving: 'Arriving now',
-  arrivingPill: 'Be ready to collect your order',
+  arrivingPill: 'Be ready to receive your order',
   onTheWay: 'Order is on the way',
   onTheWayPill: 'On the way',
   late: (mins: number | null) => (mins != null ? `Running late by ${mins} min` : 'Running late'),

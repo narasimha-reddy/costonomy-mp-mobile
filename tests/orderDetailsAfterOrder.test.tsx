@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MandiToastProvider } from '@/components/common';
@@ -205,5 +205,42 @@ describe('rating screen', () => {
     expect(star.props.accessibilityRole ?? star.props.role).toBe('radio');
     fireEvent.press(star);
     expect(screen.getAllByLabelText('4 stars')[0].props.accessibilityState).toMatchObject({ checked: true });
+  });
+});
+
+describe('order details card (flow review 4)', () => {
+  it('names the supplier once, with the store locality as the caption', async () => {
+    notRated();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({
+      ...completed, supplierName: 'Sri Balaji Traders', storeName: 'Sri Balaji Traders — Domlur',
+    });
+    setup(RestaurantOrderScreen);
+    expect(await screen.findByText('Domlur')).toBeTruthy();
+    expect(screen.getAllByText('Sri Balaji Traders')).toHaveLength(1);
+    expect(screen.queryByText('Sri Balaji Traders — Domlur')).toBeNull();
+  });
+
+  it('a store with a name of its own keeps it, with the supplier beneath', async () => {
+    notRated();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...completed, supplierName: 'Fresh Farms', storeName: 'FF Koramangala' });
+    setup(RestaurantOrderScreen);
+    expect(await screen.findByText('FF Koramangala')).toBeTruthy();
+    expect(screen.getByText('Fresh Farms')).toBeTruthy();
+  });
+
+  it('a completed order\'s status row has a check, not the navigate arrow', async () => {
+    notRated();
+    setup(RestaurantOrderScreen);
+    const row = await screen.findByLabelText(/^Order status, /);
+    expect(within(row).getByText('icon:checkmark-circle-outline')).toBeTruthy();
+    expect(within(row).queryByText('icon:navigate-outline')).toBeNull();
+  });
+
+  it('a moving order\'s status row keeps the navigate arrow', async () => {
+    notRated();
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...completed, status: 'PREPARING' });
+    setup(RestaurantOrderScreen);
+    const row = await screen.findByLabelText(/^Order status, /);
+    expect(within(row).getByText('icon:navigate-outline')).toBeTruthy();
   });
 });

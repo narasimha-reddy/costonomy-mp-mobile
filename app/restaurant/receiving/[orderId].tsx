@@ -27,16 +27,16 @@ import { formatMoney, formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
 import type { Receiving } from '@/models/trust';
 import { Colors, Elevation, FontSize, IconSize, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'REST-RECEIVE-01';
 
 const REJECTION_REASONS = [
-  { key: 'DAMAGED_CRATE', label: 'Damaged Crate' },
-  { key: 'SPOILED_PERISHABLE', label: 'Spoiled Goods' },
-  { key: 'WRONG_GRADE', label: 'Wrong Grade' },
-  { key: 'SHORT_DELIVERY', label: 'Short Delivery' },
-  { key: 'TEMPERATURE_ABUSE', label: 'Warm/Melted' },
+  { key: 'DAMAGED_CRATE', label: 'Damaged crate' },
+  { key: 'SPOILED_PERISHABLE', label: 'Spoiled goods' },
+  { key: 'WRONG_GRADE', label: 'Wrong grade' },
+  { key: 'SHORT_DELIVERY', label: 'Short delivery' },
+  { key: 'TEMPERATURE_ABUSE', label: 'Warm/melted' },
   { key: 'OTHER', label: 'Other' },
 ];
 
@@ -307,6 +307,7 @@ export default function ReceivingScreen() {
 
                 <Line
                   label="Received"
+                  item={item.productName}
                   value={state.received}
                   max={agreed}
                   unit={item.unit}
@@ -314,6 +315,7 @@ export default function ReceivingScreen() {
                 />
                 <Line
                   label="Damaged"
+                  item={item.productName}
                   value={state.damaged}
                   max={agreed}
                   unit={item.unit}
@@ -321,6 +323,7 @@ export default function ReceivingScreen() {
                 />
                 <Line
                   label="Missing"
+                  item={item.productName}
                   value={state.missing}
                   max={agreed}
                   unit={item.unit}
@@ -341,7 +344,7 @@ export default function ReceivingScreen() {
                             style={[styles.reasonChip, active && styles.reasonChipActive]}
                             onPress={() => setLine(item.id, { reason: r.key })}
                             accessibilityRole="radio"
-                            accessibilityState={radioState(active)}
+                            {...radioProps(active)}
                             accessibilityLabel={`${r.label} for ${item.productName}`}
                           >
                             <MandiText
@@ -416,7 +419,7 @@ export default function ReceivingScreen() {
               <View style={{ gap: Spacing.sm, marginTop: Spacing.lg, width: '100%' }}>
                 {completionModal?.toWallet && (
                   <MandiButton
-                    label="View Wallet Balance"
+                    label="View wallet balance"
                     size="md"
                     onPress={() => {
                       setCompletionModal(null);
@@ -464,12 +467,15 @@ export default function ReceivingScreen() {
 
 function Line({
   label,
+  item,
   value,
   max,
   unit,
   onChange,
 }: {
   label: string;
+  /** The line's product, so each box is named by field and line ("Received quantity for Onion"). */
+  item: string;
   value: number;
   max: number;
   unit: string;
@@ -478,7 +484,15 @@ function Line({
   return (
     <View style={styles.line}>
       <MandiText variant="body" color={Colors.textSecondary}>{label}</MandiText>
-      <MandiQuantityStepper value={value} onChange={onChange} min={0} max={max} unit={unit} editable />
+      <MandiQuantityStepper
+        value={value}
+        onChange={onChange}
+        min={0}
+        max={max}
+        unit={unit}
+        editable
+        quantityLabel={`${label} quantity for ${item}`}
+      />
     </View>
   );
 }

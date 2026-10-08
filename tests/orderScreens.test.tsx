@@ -207,14 +207,14 @@ describe('supplier order screen', () => {
     expect(screen.queryByText(/Pidge/)).toBeNull();
   });
 
-  it('offers Request Delivery Partner when ready with no delivery, once the automatic search has had its minute', async () => {
+  it('offers Request delivery partner when ready with no delivery, once the automatic search has had its minute', async () => {
     jest.useFakeTimers({ now: new Date('2026-01-01T10:00:00Z') });
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
     noDelivery();
     setup(SupplierOrderScreen);
     expect(await screen.findByText('Finding a delivery partner…')).toBeTruthy();
     await act(async () => { jest.advanceTimersByTime(61000); });
-    expect(await screen.findByText('Request Delivery Partner')).toBeTruthy();
+    expect(await screen.findByText('Request delivery partner')).toBeTruthy();
     expect(screen.queryByText(/Pidge/)).toBeNull();
     jest.useRealTimers();
   });

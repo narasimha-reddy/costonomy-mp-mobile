@@ -17,7 +17,7 @@ import type { WalletRepayment } from '@/models/credit';
 import { fetchWallet } from '@/services/wallet';
 import { formatMoney, type Money } from '@/utils/money';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 type Choice = 'full' | 'overdue' | 'other';
 
@@ -194,7 +194,7 @@ export function PayFromWalletSheet({
                 disabled={payment.pending}
                 accessibilityRole="radio"
                 accessibilityLabel={option.label}
-                accessibilityState={radioState(selected, payment.pending)}
+                {...radioProps(selected, payment.pending)}
                 style={[styles.option, selected && styles.optionSelected]}
               >
                 <Ionicons

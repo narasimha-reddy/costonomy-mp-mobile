@@ -66,11 +66,17 @@ import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
 import { Colors, FontSize, Radius, Spacing } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'SUP-ORD-01';
 /** A fee the server sent as nothing (`0`, `0.00`): not worth a line. A text check, not arithmetic. */
 const ZERO_MONEY = /^0*\.?0*$/;
+
+/** A line's doorstep rejection: the reason, then the refund (when the server sent one) as its own piece. */
+function doorstepLine(item: SupplierOrder['items'][number]): [string, string | null] {
+  const why = `Doorstep rejected: ${item.doorstepRejectedQty} ${item.unit} (${rejectionReasonLabel(item.doorstepRejectionReason)})`;
+  return [why, item.doorstepRefundAmount != null ? `Refund: -${formatMoney(item.doorstepRefundAmount)}` : null];
+}
 
 /**
  * Why a supplier is backing out. D-091 turned these from rejection reasons into
@@ -339,12 +345,12 @@ export default function SupplierOrderScreen() {
     try {
       const notes = await fetchCreditNotes(accessToken, orderId);
       if (notes.length === 0) {
-        Alert.alert('Credit Notes', 'No credit notes have been issued for this order.');
+        Alert.alert('Credit notes', 'No credit notes have been issued for this order.');
       } else {
         setCreditNotes(notes);
       }
     } catch (caught) {
-      Alert.alert('Credit Notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
+      Alert.alert('Credit notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -516,7 +522,7 @@ export default function SupplierOrderScreen() {
 
             {order.finalPayableAmount != null && (
               <View style={styles.valueRow}>
-                <MandiText variant="caption" color={Colors.textSecondary}>Final Payable:</MandiText>
+                <MandiText variant="caption" color={Colors.textSecondary}>Final payable</MandiText>
                 <MandiText variant="bodyEmphasis">{formatMoney(order.finalPayableAmount)}</MandiText>
               </View>
             )}
@@ -564,14 +570,14 @@ export default function SupplierOrderScreen() {
               </View>
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                 <MandiButton
-                  label={billingLoading ? 'Loading…' : (invoice ? 'View Invoice' : 'Generate Invoice')}
+                  label={billingLoading ? 'Loading…' : (invoice ? 'View invoice' : 'Generate invoice')}
                   size="sm"
                   variant="secondary"
                   onPress={invoice ? handleViewInvoice : handleGenerateInvoice}
                   disabled={billingLoading}
                 />
                 <MandiButton
-                  label={billingLoading ? 'Loading…' : 'Credit Notes'}
+                  label={billingLoading ? 'Loading…' : 'Credit notes'}
                   size="sm"
                   variant="secondary"
                   onPress={handleViewCreditNotes}
@@ -622,7 +628,7 @@ export default function SupplierOrderScreen() {
             <MandiCard>
               <View style={styles.deliveryRow}>
                 <View style={styles.flex}>
-                  <MandiText variant="bodyEmphasis">⚖️ Catch-Weight Perishables</MandiText>
+                  <MandiText variant="bodyEmphasis">⚖️ Catch-weight perishables</MandiText>
                   <MandiText variant="caption" color={Colors.textSecondary}>
                     {catchWeightItems.every((i) => i.dispatchedWeight != null)
                       ? 'All perishable items weighed. Dispatched scale weights verified.'
@@ -630,7 +636,7 @@ export default function SupplierOrderScreen() {
                   </MandiText>
                 </View>
                 <MandiButton
-                  label={catchWeightItems.some((i) => i.dispatchedWeight != null) ? 'Re-weigh' : 'Weigh Items'}
+                  label={catchWeightItems.some((i) => i.dispatchedWeight != null) ? 'Re-weigh' : 'Weigh items'}
                   size="sm"
                   variant="secondary"
                   onPress={() => {
@@ -702,15 +708,22 @@ export default function SupplierOrderScreen() {
                     </View>
                   )}
 
-                  {item.doorstepRejectedQty != null && parseFloat(item.doorstepRejectedQty) > 0 && (
-                    <View style={styles.itemDoorstepRow}>
-                      <Ionicons name="close-circle-outline" size={14} color={Colors.danger} />
-                      <MandiText variant="caption" color={Colors.danger} style={styles.shrink}>
-                        Doorstep rejected: {item.doorstepRejectedQty} {item.unit} ({rejectionReasonLabel(item.doorstepRejectionReason)})
-                        {item.doorstepRefundAmount != null ? ` · Refund: -${formatMoney(item.doorstepRefundAmount)}` : ''}
-                      </MandiText>
-                    </View>
-                  )}
+                  {item.doorstepRejectedQty != null && parseFloat(item.doorstepRejectedQty) > 0 && (() => {
+                    // The refund is its own one-line text beside the reason: inside one wrapping string the web broke
+                    // "-" away from "₹34.00". Read as one phrase by a screen reader.
+                    const [why, refund] = doorstepLine(item);
+                    return (
+                      <View style={styles.itemDoorstepRow} accessible accessibilityLabel={[why, refund].filter(Boolean).join(', ')}>
+                        <Ionicons name="close-circle-outline" size={14} color={Colors.danger} />
+                        <MandiText variant="caption" color={Colors.danger} style={styles.shrink}>{why}</MandiText>
+                        {refund != null && (
+                          <MandiText variant="caption" color={Colors.danger} numberOfLines={1} style={styles.noShrink}>
+                            {refund}
+                          </MandiText>
+                        )}
+                      </View>
+                    );
+                  })()}
                 </View>
               ))}
             </MandiCard>
@@ -719,7 +732,7 @@ export default function SupplierOrderScreen() {
           <MandiBottomSheet
             visible={weighingModalOpen}
             onClose={() => setWeighingModalOpen(false)}
-            title="Weigh Catch-Weight Items"
+            title="Weigh catch-weight items"
           >
             <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.md }}>
               Enter the weight shown on the scale for each line. The buyer is billed the weighed amount, never more than was ordered; the price is fixed when you mark the order ready.
@@ -788,7 +801,7 @@ export default function SupplierOrderScreen() {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Cancel Order"
+            label="Cancel order"
             variant="destructive"
             size="md"
             loading={cancel.isPending}
@@ -819,7 +832,7 @@ export default function SupplierOrderScreen() {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Request Delivery Partner"
+            label="Request delivery partner"
             size="lg"
             icon="bicycle-outline"
             loading={requestPartner.isPending}
@@ -930,7 +943,7 @@ function CancelPanel({
               key={option.key}
               onPress={() => onReason(option.key)}
               accessibilityRole="radio"
-              accessibilityState={radioState(active)}
+              {...radioProps(active)}
               style={[styles.reason, active && styles.reasonActive]}
             >
               <MandiText
@@ -983,6 +996,7 @@ const styles = StyleSheet.create({
   finding: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, minHeight: 48 },
   stars: { flexDirection: 'row', gap: 2 },
   shrink: { flexShrink: 1 },
+  noShrink: { flexShrink: 0 },
   valueRow: {
     flexDirection: 'row',
     alignItems: 'center',

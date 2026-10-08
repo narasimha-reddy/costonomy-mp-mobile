@@ -2,6 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StyleSheet } from 'react-native';
 import { MandiToastProvider } from '@/components/common';
 import SupplierOrderScreen from '@/app/supplier/orders/[id]';
 import { fetchDelivery } from '@/services/delivery';
@@ -120,5 +121,35 @@ describe('the GST documents card', () => {
     expect(await screen.findByText('GST documents')).toBeTruthy();
     expect(screen.queryByText(/📄/)).toBeNull();
     expect(screen.getByText('icon:document-text-outline')).toBeTruthy();
+  });
+});
+
+describe('sentence case and the refund row (flow review 4)', () => {
+  beforeEach(() => (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...refunded, finalPayableAmount: '974.00' }));
+
+  it('labels the final amount and the GST buttons in sentence case', async () => {
+    setup();
+    expect(await screen.findByText('Final payable')).toBeTruthy();
+    expect(screen.queryByText(/Final Payable/)).toBeNull();
+    expect(screen.getByText('Generate invoice')).toBeTruthy();
+    expect(screen.getByText('Credit notes')).toBeTruthy();
+    expect(screen.queryByText('Generate Invoice')).toBeNull();
+    expect(screen.queryByText('Credit Notes')).toBeNull();
+  });
+
+  it('keeps a line\'s refund value whole: "-" never wraps away from the amount', async () => {
+    setup();
+    expect(await screen.findByText('Doorstep rejected: 1 KG (Short delivery)')).toBeTruthy();
+    const value = screen.getByText('Refund: -₹26.00');
+    expect(value.props.numberOfLines).toBe(1);
+    expect(StyleSheet.flatten(value.props.style).flexShrink).toBe(0);
+  });
+
+  it('says Cancel order, not Cancel Order', async () => {
+    (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...refunded, status: 'CONFIRMED' });
+    setup();
+    fireEvent.press(await screen.findByText('Cannot fulfil'));
+    expect(await screen.findByText('Cancel order')).toBeTruthy();
+    expect(screen.queryByText('Cancel Order')).toBeNull();
   });
 });

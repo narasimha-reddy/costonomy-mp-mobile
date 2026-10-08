@@ -13,7 +13,7 @@ import { formatMoney } from '@/utils/money';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { Colors, Elevation, FontSize, IconSize, Radius, Spacing } from '@/theme';
 import { CatchWeightNote } from '@/components/order';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 /**
  * One supplier's request in the cart, as a heading and a body.
@@ -268,7 +268,7 @@ export function SupplierSectionBody({
                 key={value}
                 onPress={() => onChangeDeliveryPreference(value)}
                 accessibilityRole="radio"
-                accessibilityState={radioState(active)}
+                {...radioProps(active)}
                 accessibilityLabel={`${draft.storeName ?? 'Supplier'}: ${label}`}
                 style={[styles.preferenceOption, active && styles.preferenceActive]}
               >

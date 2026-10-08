@@ -14,7 +14,7 @@ import {
   type DateRangeKey,
 } from '@/utils/dateRange';
 import { Colors, ControlHeight, Radius, Spacing, TouchTarget } from '@/theme';
-import { radioState } from '@/lib/a11y';
+import { radioProps } from '@/lib/a11y';
 
 const PRESETS: Exclude<DateRangeKey, 'custom'>[] = ['today', 'week', 'month', 'quarter'];
 
@@ -100,7 +100,7 @@ export function MandiDateRangeFilter({
               key={key}
               onPress={() => choose(key)}
               accessibilityRole="radio"
-              accessibilityState={radioState(chosen)}
+              {...radioProps(chosen)}
               style={styles.option}
             >
               <MandiText variant="body" style={styles.flex}>{RANGE_LABELS[key]}</MandiText>
@@ -112,7 +112,7 @@ export function MandiDateRangeFilter({
         <Pressable
           onPress={() => setCustomising(!customising)}
           accessibilityRole="radio"
-          accessibilityState={radioState(value.key === 'custom')}
+          {...radioProps(value.key === 'custom')}
           style={styles.option}
         >
           <MandiText variant="body" style={styles.flex}>{RANGE_LABELS.custom}</MandiText>

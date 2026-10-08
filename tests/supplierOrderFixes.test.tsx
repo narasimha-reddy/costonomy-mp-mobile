@@ -114,7 +114,7 @@ describe('issue 3: finding a delivery partner after Ready', () => {
   it('says "Finding a delivery partner…" instead of offering the manual button', async () => {
     setup();
     expect(await screen.findByText('Finding a delivery partner…')).toBeTruthy();
-    expect(screen.queryByText('Request Delivery Partner')).toBeNull();
+    expect(screen.queryByText('Request delivery partner')).toBeNull();
   });
 
   it('asks for the delivery again every few seconds while there is none', async () => {
@@ -131,7 +131,7 @@ describe('issue 3: finding a delivery partner after Ready', () => {
     setup();
     await screen.findByText('Finding a delivery partner…');
     await act(async () => { jest.advanceTimersByTime(61000); });
-    expect(await screen.findByText('Request Delivery Partner')).toBeTruthy();
+    expect(await screen.findByText('Request delivery partner')).toBeTruthy();
   });
 
   it('stops saying finding once the delivery exists', async () => {
@@ -139,7 +139,7 @@ describe('issue 3: finding a delivery partner after Ready', () => {
     setup();
     expect(await screen.findByText('Ravi Kumar')).toBeTruthy();
     expect(screen.queryByText('Finding a delivery partner…')).toBeNull();
-    expect(screen.queryByText('Request Delivery Partner')).toBeNull();
+    expect(screen.queryByText('Request delivery partner')).toBeNull();
   });
 });
 

@@ -46,7 +46,7 @@ function mount() {
 beforeEach(() => {
   jest.clearAllMocks();
   (fetchOutletDeliveryRadar as jest.Mock).mockResolvedValue({
-    outletId: 7, summary: { totalActive: 3 }, items: [],
+    outletId: 7, summary: { totalActive: 3, pendingCheckInCount: 0 }, items: [],
   });
 });
 
@@ -72,6 +72,17 @@ describe('Restaurant Orders tab', () => {
     const button = await screen.findByLabelText('Deliveries, 3 active');
     fireEvent.press(button);
     expect(mockPush).toHaveBeenCalledWith('/restaurant/deliveries');
+  });
+
+  it('does not call a delivered order waiting for check-in active (flow review 4)', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([]);
+    (fetchOutletDeliveryRadar as jest.Mock).mockResolvedValue({
+      outletId: 7, summary: { totalActive: 2, pendingCheckInCount: 1 }, items: [],
+    });
+    mount();
+    expect(await screen.findByText('Deliveries · 1 active · 1 to check in')).toBeTruthy();
+    expect(screen.getByLabelText('Deliveries, 1 active, 1 to check in')).toBeTruthy();
+    expect(screen.queryByText('Deliveries · 2 active')).toBeNull();
   });
 
   it('still offers Deliveries when the count is not known', async () => {

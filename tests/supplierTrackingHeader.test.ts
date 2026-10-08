@@ -63,7 +63,7 @@ describe('supplierTrackingHeader state matrix', () => {
   it('failed shows the reason to the supplier', () => {
     expect(head(order(C, 'OUT_FOR_DELIVERY'), delivery('DELIVERY_FAILED'))).toMatchObject({
       state: 'failed', title: 'Delivery failed', tone: 'neutral', map: 'none', partner: 'none',
-      pill: { text: 'Rider app timed out', tone: 'warning' },
+      pill: { text: 'Delivery partner app timed out', tone: 'warning' },
     });
     expect(head(order(C, 'OUT_FOR_DELIVERY'), delivery('DELIVERY_FAILED', { failureReason: null })).pill).toBeNull();
   });
@@ -109,7 +109,7 @@ describe('supplierTrackingHeader state matrix', () => {
   it('no_partner when the search stopped', () => {
     expect(head(order(C, 'READY_FOR_PICKUP'), delivery('QUOTE_FAILED', { driverName: null, trackable: false }))).toMatchObject({
       state: 'no_partner', title: 'No partner found yet', map: 'pending', partner: 'none',
-      pill: { text: 'Rider app timed out', tone: 'warning' },
+      pill: { text: 'Delivery partner app timed out', tone: 'warning' },
     });
   });
   it('assigned', () => {

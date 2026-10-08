@@ -19,7 +19,7 @@ const readyFor = (mode: string) => (order: IncomingOrder) =>
 
 /**
  * What each stage asks of the store, in the order a supplier works through them. A Ready order means three different
- * things by delivery mode: the supplier's own van is theirs to send out (an action), a Costonomy rider is awaited, and a
+ * things by delivery mode: the supplier's own van is theirs to send out (an action), a Costonomy delivery partner is awaited, and a
  * collecting restaurant is awaited too. "Ready to send out" sits above the waiting sections because it is the only
  * Ready state that needs the store to do something.
  */
@@ -27,7 +27,7 @@ const SECTIONS: SectionDef[] = [
   { key: 'CONFIRMED', title: 'New orders to start', matches: at('CONFIRMED') },
   { key: 'PREPARING', title: 'Packing', matches: at('PREPARING') },
   { key: 'READY_SEND', title: 'Ready to send out', matches: readyFor('SUPPLIER_DELIVERY') },
-  { key: 'READY_RIDER', title: 'Waiting for rider', matches: readyFor('COSTONOMY_DELIVERY') },
+  { key: 'READY_RIDER', title: 'Waiting for delivery partner', matches: readyFor('COSTONOMY_DELIVERY') },
   { key: 'READY_PICKUP', title: 'Waiting for pickup', matches: readyFor('PICKUP') },
   // A Ready order whose mode the list did not say: still shown, but not claimed to be waiting on anyone in particular.
   { key: 'READY_OTHER', title: 'Ready', matches: (order) => order.status === 'READY_FOR_PICKUP' && !READY_MODES.has(String(order.deliveryMode)) },

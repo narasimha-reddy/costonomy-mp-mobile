@@ -39,7 +39,7 @@ describe('order inbox sections', () => {
   it('orders sections as an action inbox and each section newest first', () => {
     const sections = orderInbox(orders);
     expect(sections.map((section) => section.title)).toEqual([
-      'New orders to start', 'Packing', 'Waiting for rider', 'Out for delivery',
+      'New orders to start', 'Packing', 'Waiting for delivery partner', 'Out for delivery',
     ]);
     expect(sections[0]?.orders.map((order) => order.id)).toEqual([4, 3]);
   });
@@ -47,9 +47,9 @@ describe('order inbox sections', () => {
   const ready = (id: number, deliveryMode: string | null) =>
     mk(id, 'READY_FOR_PICKUP', '2026-10-07T12:00:00Z', { deliveryMode });
 
-  it('a Ready order for a Costonomy rider waits for the rider', () => {
+  it('a Ready order for a Costonomy delivery partner waits for the delivery partner', () => {
     const sections = orderInbox([ready(1, 'COSTONOMY_DELIVERY')] as never);
-    expect(sections.map((section) => section.title)).toEqual(['Waiting for rider']);
+    expect(sections.map((section) => section.title)).toEqual(['Waiting for delivery partner']);
   });
 
   it('a Ready order the supplier delivers is an action ("Ready to send out"), not waiting', () => {
@@ -65,7 +65,7 @@ describe('order inbox sections', () => {
   it('puts "Ready to send out" above the waiting sections', () => {
     const sections = orderInbox([ready(1, 'PICKUP'), ready(2, 'COSTONOMY_DELIVERY'), ready(3, 'SUPPLIER_DELIVERY')] as never);
     const titles = sections.map((section) => section.title);
-    expect(titles).toEqual(['Ready to send out', 'Waiting for rider', 'Waiting for pickup']);
+    expect(titles).toEqual(['Ready to send out', 'Waiting for delivery partner', 'Waiting for pickup']);
   });
 
   it('shows a Ready order with no delivery mode (older API) as plain "Ready", not as waiting on anyone', () => {

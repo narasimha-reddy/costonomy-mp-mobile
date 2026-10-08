@@ -13,8 +13,9 @@ jest.mock('@expo/vector-icons', () => {
   return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
 });
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
   useLocalSearchParams: () => ({ id: '7' }),
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
@@ -156,5 +157,21 @@ describe('delivery choice', () => {
   it('says the restaurant pays only once when Costonomy delivery is selected', () => {
     render(<DeliveryOfferChoice policy={policy as never} value="COSTONOMY" onChange={jest.fn()} />);
     expect(screen.getAllByText(/restaurant pays the delivery fee/i)).toHaveLength(1);
+  });
+
+  it('offers View order once the request has become an order, and opens that order', async () => {
+    (fetchIntent as jest.Mock).mockResolvedValue({
+      ...request, status: 'ORDERED', supplierOrderId: 41, supplierOrderNumber: 'ORD-41',
+      acceptance: { offeredValue: '104.00', offeredGst: '0.00', offeredTotal: '104.00' },
+    });
+    setup();
+    fireEvent.press(await screen.findByText('View order'));
+    expect(mockPush).toHaveBeenCalledWith('/supplier/orders/41');
+  });
+
+  it('has no View order button while there is no order', async () => {
+    setup();
+    await screen.findByText('What can you supply?');
+    expect(screen.queryByText('View order')).toBeNull();
   });
 });

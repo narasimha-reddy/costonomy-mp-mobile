@@ -57,4 +57,19 @@ describe('invalidationKeys', () => {
     expect(keys).toContainEqual(['supplier-order', 9]);
     expect(keys).toContainEqual(['outlet']);
   });
+
+  it('a rating event refreshes the supplier order it belongs to (payload supplierOrderId)', () => {
+    const rating = { ...ev('RATING', 77), eventType: 'RatingSubmitted', payload: { supplierOrderId: 9, overall: 5 } };
+    expect(invalidationKeys(rating)).toContainEqual(['supplier-order', 9]);
+  });
+
+  it('a rating event without a usable order id refreshes every cached supplier order', () => {
+    const rating = { ...ev('RATING', 77), eventType: 'RatingSubmitted', payload: null };
+    expect(invalidationKeys(rating)).toContainEqual(['supplier-order']);
+  });
+
+  it('a check-in event (ReceivingCompleted) refreshes that supplier order', () => {
+    const checkedIn = { ...ev('SUPPLIER_ORDER', 12), eventType: 'ReceivingCompleted' };
+    expect(invalidationKeys(checkedIn)).toContainEqual(['supplier-order', 12]);
+  });
 });

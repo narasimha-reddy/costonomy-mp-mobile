@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MandiButton, MandiText } from '@/components/common';
+import { useTimeoutFlag } from '@/hooks/useTimeoutFlag';
 import { SearchProgressBar } from '@/components/delivery/SearchProgressBar';
 import { canRetryPartner, noPartnerNote, searchProgress } from '@/lib/delivery/deliveryPartner';
 import type { TrackingDelivery } from '@/lib/delivery/orderTracking';
+import { FIND_TIMEOUT_MS } from '@/lib/delivery/partnerSearch';
 import { Colors, Elevation, Radius, Spacing } from '@/theme';
 
 /**
@@ -25,6 +27,14 @@ export function PartnerSearchPanel({
   switching?: boolean;
 }) {
   const buyer = audience === 'buyer';
+  // "Try again now" is for a search that looks stuck, not one that has only just begun: a minute after it started
+  // (by the server's start time when we have it, else from when this panel appeared).
+  const [waitMs] = useState(() => {
+    const started = delivery?.searchStartedAt ? Date.parse(delivery.searchStartedAt) : NaN;
+    return Number.isNaN(started) ? FIND_TIMEOUT_MS : Math.max(0, FIND_TIMEOUT_MS - (nowMs - started));
+  });
+  const waited = useTimeoutFlag(true, waitMs);
+  const stuck = waitMs === 0 || waited;
   const stopped = delivery != null && canRetryPartner(delivery.mode, delivery.status);
 
   if (buyer) {
@@ -81,7 +91,7 @@ export function PartnerSearchPanel({
           note="Auto-retrying"
         />
       )}
-      {onRetry && (
+      {onRetry && stuck && (
         <View style={styles.actions}>
           <MandiButton label="Try again now" variant="secondary" size="md" onPress={onRetry} loading={retrying} />
         </View>

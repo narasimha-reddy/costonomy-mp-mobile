@@ -150,14 +150,14 @@ describe('orderTrackingView, every delivery status x mode x audience', () => {
     });
     expect(v.currentIndex).toBe(5);
     expect(v.problem).toBe('danger');
-    expect(v.subline).toBe(REASON);
+    expect(v.subline).toBe('Delivery partner app timed out at gate 4');
   });
 
   it('gives the supplier the reason and the buyer calm copy for a retryable failure', () => {
     const sup = orderTrackingView({ audience: 'supplier', order: order('COSTONOMY_DELIVERY'), delivery: delivery('QUOTE_FAILED'), nowMs: NOW });
     const buy = orderTrackingView({ audience: 'buyer', order: order('COSTONOMY_DELIVERY'), delivery: delivery('QUOTE_FAILED'), nowMs: NOW });
     expect(sup.headline).toBe('No partner found yet');
-    expect(sup.subline).toBe(REASON);
+    expect(sup.subline).toBe('Delivery partner app timed out at gate 4');
     expect(buy.headline).toBe('Still arranging delivery');
     expect(buy.tone).toBe('warning');
   });

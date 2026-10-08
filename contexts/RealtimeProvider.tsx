@@ -74,6 +74,13 @@ export function invalidationKeys(event: RealtimeEvent): unknown[][] {
     case 'PAYMENT':
       keys.push(['supplier-order'], ['procurement']);
       break;
+    case 'RATING': {
+      // RatingSubmitted is published on the rating, not the order; the order id rides in the payload. Without it,
+      // refresh every cached supplier order rather than leave the open one without its rating.
+      const orderId = Number(event.payload?.supplierOrderId);
+      keys.push(Number.isFinite(orderId) && orderId > 0 ? ['supplier-order', orderId] : ['supplier-order']);
+      break;
+    }
     default:
       break;
   }

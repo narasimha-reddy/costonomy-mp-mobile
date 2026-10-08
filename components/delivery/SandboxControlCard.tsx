@@ -24,7 +24,10 @@ export function SandboxControlCard({
     <View style={styles.card} accessibilityLabel="Test mode">
       <MandiText variant="captionEmphasis" color={Colors.info}>Test mode</MandiText>
       <MandiText variant="caption" color={Colors.textSecondary}>
-        Pidge sandbox has no real riders. Move the rider to the next step to see the flow.
+        Pidge sandbox has no real delivery partners. Move the delivery partner to the next step to see the flow.
+      </MandiText>
+      <MandiText variant="caption" color={Colors.textSecondary}>
+        Test mode: the simulator also advances this delivery automatically
       </MandiText>
       <MandiButton label={label} variant="secondary" size="md" onPress={() => onAdvance(delivery.id)} loading={pending} />
     </View>

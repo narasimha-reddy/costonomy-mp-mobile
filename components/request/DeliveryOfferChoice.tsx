@@ -81,7 +81,7 @@ export function DeliveryOfferChoice({
     },
     COSTONOMY: {
       title: 'Use Costonomy delivery',
-      detail: 'Riders are requested after you mark the order Ready for Pickup. The restaurant pays the delivery fee.',
+      detail: 'Delivery partners are requested after you mark the order Ready for Pickup. The restaurant pays the delivery fee.',
     },
   };
 

@@ -427,7 +427,7 @@ export default function StoreDetailScreen() {
           <Section title="How you deliver">
             <Toggle
               label="Costonomy delivery"
-              hint="We find and pay a courier, and quote the restaurant one fee."
+              hint="We find and pay a delivery partner, and quote the restaurant one fee."
               value={partnerValue}
               onValueChange={setPartner}
             />

@@ -22,8 +22,9 @@ jest.mock('@/components/delivery/MandiMap', () => {
   return { MandiMap: (props: any) => { mockMap(props); return <View accessibilityLabel={props.accessibilityLabel} />; } };
 });
 const mockPush = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useRouter: () => ({ push: mockPush, navigate: mockNavigate, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
 }));
 const mockApi = jest.fn();
 jest.mock('@/lib/api/client', () => ({ ...jest.requireActual('@/lib/api/client'), apiRequest: (...a: unknown[]) => mockApi(...a) }));
@@ -71,7 +72,7 @@ function setup(orderOver: object = {}, deliveryOver: object | null = {}) {
 }
 
 const notRated = () => mockApi.mockRejectedValue(new ApiError({ code: 'NOT_FOUND', message: 'No rating', status: 404 }));
-beforeEach(() => { mockStatusBar.mockClear(); mockPush.mockClear(); mockMap.mockClear(); mockApi.mockReset(); notRated(); });
+beforeEach(() => { mockStatusBar.mockClear(); mockPush.mockClear(); mockNavigate.mockClear(); mockMap.mockClear(); mockApi.mockReset(); notRated(); });
 
 describe('BuyerTrackingLayout', () => {
   it('buyer IN_TRANSIT renders green header, ETA pill, map, partner card', () => {
@@ -107,6 +108,25 @@ describe('BuyerTrackingLayout', () => {
     expect(screen.getByTestId('placed-tick', { includeHiddenElements: true })).toBeTruthy();
     expect(screen.queryByTestId('tracking-header')).toBeNull();
     expect(screen.queryByTestId('eta-pill')).toBeNull();
+  });
+
+  it('CONFIRMED placed hero says what happens next, the total, the credit line and has View order / Back to Home', () => {
+    setup({ status: 'CONFIRMED', paymentMethod: 'CREDIT', creditDueDate: '2026-11-07', totalAmount: '1180.00' }, null);
+    expect(screen.getByText('Fresh Farms will start packing soon')).toBeTruthy();
+    expect(screen.queryByText('Waiting for supplier confirmation')).toBeNull();
+    expect(screen.getByText('₹1,180.00')).toBeTruthy();
+    expect(screen.getByText(/^On credit, due /)).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'View order' }));
+    expect(mockPush).toHaveBeenCalledWith('/restaurant/orders/5');
+    fireEvent.press(screen.getByRole('button', { name: 'Back to Home' }));
+    // Navigate back to the existing Home rather than stacking a second Home on top of the tracking screen.
+    expect(mockNavigate).toHaveBeenCalledWith('/restaurant/(tabs)');
+    expect(mockPush).not.toHaveBeenCalledWith('/restaurant');
+  });
+
+  it('a prepaid CONFIRMED order says Paid on the placed hero', () => {
+    setup({ status: 'CONFIRMED', paymentMethod: 'PREPAID', paymentStatus: 'CAPTURED' }, null);
+    expect(screen.getByText('Paid')).toBeTruthy();
   });
 
   it('own READY has no map and no partner', () => {

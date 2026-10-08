@@ -10,6 +10,14 @@ export const RECOMMENDED_COLUMNS = 3;
 /** Share of the row each cell takes: a third, less room for the two gaps. */
 export const RECOMMENDED_CELL_WIDTH = '31%';
 
+/** "Fresh Farms — Koramangala Outlet" is a store and its outlet: the name leads, the outlet is a small caption. */
+export function splitStoreName(storeName: string): { name: string; outlet: string | null } {
+  const at = storeName.indexOf(' — ');
+  if (at <= 0) return { name: storeName, outlet: null };
+  const outlet = storeName.slice(at + 3).trim();
+  return { name: storeName.slice(0, at).trim(), outlet: outlet === '' ? null : outlet };
+}
+
 /**
  * One supplier in the Recommended grid: an initial disc, the store name on up
  * to two lines (ellipsis after that), and the distance when known.
@@ -24,6 +32,7 @@ export function RecommendedTile({
   supplier: PopularSupplier;
   onPress: () => void;
 }) {
+  const { name, outlet } = splitStoreName(supplier.storeName);
   const initial = supplier.storeName.trim().charAt(0).toUpperCase();
   return (
     <Pressable
@@ -36,14 +45,14 @@ export function RecommendedTile({
       <View style={styles.disc}>
         <MandiText variant="bodyEmphasis" color={Colors.primaryDark}>{initial}</MandiText>
       </View>
-      <MandiText
-        variant="captionEmphasis"
-        numberOfLines={2}
-        ellipsizeMode="tail"
-        style={styles.name}
-      >
-        {supplier.storeName}
+      <MandiText variant="captionEmphasis" numberOfLines={2} ellipsizeMode="tail" style={styles.name}>
+        {name}
       </MandiText>
+      {outlet != null && (
+        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1} ellipsizeMode="tail" style={styles.name}>
+          {outlet}
+        </MandiText>
+      )}
       {supplier.distanceKm != null && (
         <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
           {`${formatQuantity(supplier.distanceKm)} km`}
@@ -60,7 +69,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: 2,
     borderRadius: Radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,

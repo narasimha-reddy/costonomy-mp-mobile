@@ -25,6 +25,7 @@ import {
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { track } from '@/analytics';
+import type { Receiving } from '@/models/trust';
 import { Colors, Elevation, FontSize, IconSize, Radius, Spacing } from '@/theme';
 
 const SCREEN = 'REST-RECEIVE-01';
@@ -37,6 +38,34 @@ const REJECTION_REASONS = [
   { key: 'TEMPERATURE_ABUSE', label: 'Warm/Melted' },
   { key: 'OTHER', label: 'Other' },
 ];
+
+/**
+ * What was recorded, line by line as the server sent it: "Chicken: 0.1 KG missing". A total across lines would add
+ * kilos to packets and weighed to ordered quantities, so none is shown and nothing is added up here.
+ */
+function problemLines(r: Receiving): string[] {
+  const out: string[] = [];
+  for (const i of r.items) {
+    if (Number(i.damagedQuantity) > 0) out.push(`${i.productName}: ${formatQuantity(i.damagedQuantity, i.unit)} damaged`);
+    if (Number(i.missingQuantity) > 0) out.push(`${i.productName}: ${formatQuantity(i.missingQuantity, i.unit)} missing`);
+  }
+  return out;
+}
+
+function CheckInSummary({ receiving, centred }: { receiving: Receiving; centred?: boolean }) {
+  const lines = problemLines(receiving);
+  if (!receiving.hasDiscrepancy && lines.length === 0) {
+    return <MandiText variant="bodyEmphasis" style={centred ? styles.centred : undefined}>All items received as billed</MandiText>;
+  }
+  return (
+    <>
+      <MandiText variant="bodyEmphasis" style={centred ? styles.centred : undefined}>Delivery checked in.</MandiText>
+      {lines.map((line) => (
+        <MandiText key={line} variant="body" color={Colors.textSecondary} style={centred ? styles.centred : undefined}>{line}</MandiText>
+      ))}
+    </>
+  );
+}
 
 interface LineState {
   received: number;
@@ -59,6 +88,8 @@ export default function ReceivingScreen() {
   // A key fixed for the whole screen made every retry after one refusal report "previous attempt failed".
   const idempotency = useIdempotencyKey();
   const [completionModal, setCompletionModal] = useState<RefundOutcome | null>(null);
+  // The server's answer to the check-in, kept to say what was recorded before the buyer is asked to rate.
+  const [checkedIn, setCheckedIn] = useState<Receiving | null>(null);
 
   const order = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -148,16 +179,9 @@ export default function ReceivingScreen() {
       void queryClient.invalidateQueries({ queryKey: ['credit'] });
 
       // Only what the server said: its refund amount, where it went, and a credit note if it has issued one.
+      setCheckedIn(receiving);
       const outcome = refundOutcome(receiving, order.data?.paymentMethod);
-      if (outcome != null) {
-        setCompletionModal(outcome);
-      } else if (receiving.hasDiscrepancy) {
-        toast.show('Recorded with discrepancies. Dispute opened.', 'info');
-        router.replace(`/restaurant/dispute/${orderId}`);
-      } else {
-        toast.show('Order received successfully', 'success');
-        router.replace(`/restaurant/rating/${orderId}`);
-      }
+      if (outcome != null) setCompletionModal(outcome);
     },
     onError: (caught) => {
       idempotency.settle(caught);
@@ -172,7 +196,7 @@ export default function ReceivingScreen() {
     <MandiScreen
       header={<MandiHeader title="Check in delivery" subtitle={order.data?.orderNumber} back />}
       footer={
-        items.length === 0 ? undefined : (
+        items.length === 0 || checkedIn != null ? undefined : (
           <MandiStickyBar>
             {problems.length > 0 && (
               <View style={styles.problemRow}>
@@ -199,6 +223,36 @@ export default function ReceivingScreen() {
         <MandiSkeletonList count={3} />
       ) : order.error ? (
         <MandiErrorState message="Couldn't load this order." onRetry={() => order.refetch()} />
+      ) : checkedIn != null && completionModal == null ? (
+        <MandiCard>
+          <View style={styles.successIconCircle}>
+            <Ionicons name="checkmark-done" size={32} color={Colors.success} />
+          </View>
+          <CheckInSummary receiving={checkedIn} centred />
+          {checkedIn.hasDiscrepancy && (
+            // Receiving and disputes are independent on the API: checking in opens nothing, so say what to do.
+            <MandiText variant="caption" color={Colors.textSecondary} style={styles.centred}>
+              Something was short or damaged. Raise a dispute to get it resolved.
+            </MandiText>
+          )}
+          <View style={styles.confirmActions}>
+            {checkedIn.hasDiscrepancy && (
+              <MandiButton label="Raise a dispute" size="lg" onPress={() => router.replace(`/restaurant/dispute/${orderId}`)} />
+            )}
+            <MandiButton
+              label="Rate this order"
+              size="lg"
+              variant={checkedIn.hasDiscrepancy ? 'secondary' : undefined}
+              onPress={() => router.replace(`/restaurant/rating/${orderId}`)}
+            />
+            <MandiButton
+              label="Done"
+              size="lg"
+              variant={checkedIn.hasDiscrepancy ? 'tertiary' : 'secondary'}
+              onPress={() => router.replace(`/restaurant/orders/${orderId}`)}
+            />
+          </View>
+        </MandiCard>
       ) : (
         <>
           <MandiText variant="caption" color={Colors.textSecondary}>
@@ -321,6 +375,8 @@ export default function ReceivingScreen() {
                 </MandiText>
               )}
 
+              {checkedIn != null && <CheckInSummary receiving={checkedIn} centred />}
+
               <View style={styles.creditNoteCard}>
                 {completionModal?.lines.map((line) => (
                   <View key={line.name} style={styles.creditNoteRow}>
@@ -347,6 +403,26 @@ export default function ReceivingScreen() {
                   onPress={() => {
                     setCompletionModal(null);
                     router.replace('/restaurant/wallet');
+                  }}
+                />
+                {checkedIn?.hasDiscrepancy && (
+                  <MandiButton
+                    label="Raise a dispute"
+                    variant="secondary"
+                    size="md"
+                    onPress={() => {
+                      setCompletionModal(null);
+                      router.replace(`/restaurant/dispute/${orderId}`);
+                    }}
+                  />
+                )}
+                <MandiButton
+                  label="Done"
+                  variant="secondary"
+                  size="md"
+                  onPress={() => {
+                    setCompletionModal(null);
+                    router.replace(`/restaurant/orders/${orderId}`);
                   }}
                 />
                 <MandiButton
@@ -390,6 +466,8 @@ function Line({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  centred: { textAlign: 'center' },
+  confirmActions: { gap: Spacing.sm, marginTop: Spacing.md },
   itemHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

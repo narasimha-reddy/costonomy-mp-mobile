@@ -8,7 +8,7 @@ import { ApiError } from '@/lib/api/errors';
 import { fetchSupplierOrder } from '@/services/procurement';
 import { receiveOrder } from '@/services/trust';
 import {
-  ORDER_READY_SETTLED_9_6, RECEIVING_APPLIED_NO_NOTE_YET, RECEIVING_PENDING_CAPTURE, RECEIVING_WITH_CREDIT_NOTE,
+  ORDER_READY_SETTLED_9_6, RECEIVING_APPLIED_NO_NOTE_YET, RECEIVING_IN_FULL, RECEIVING_PENDING_CAPTURE, RECEIVING_WITH_CREDIT_NOTE,
 } from './fixtures/catchWeightContract';
 
 jest.mock('@expo/vector-icons', () => {
@@ -173,5 +173,89 @@ describe('the rejection-reason chips', () => {
     expect(chip.props.accessibilityRole).toBe('radio');
     expect(chip.props.accessibilityState.selected).toBe(true);
     expect(screen.getByLabelText('Short Delivery for Chicken').props.accessibilityState.selected).toBe(false);
+  });
+});
+
+describe('the check-in confirmation step (before rating)', () => {
+  it('names only the lines with a problem, with the server\'s own units, never a cross-item total', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue({ ...RECEIVING_APPLIED_NO_NOTE_YET, instantRefundAmount: 0, refundStatus: null });
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+
+    expect(await screen.findByText('Delivery checked in.')).toBeTruthy();
+    expect(screen.getByText('Chicken: 0.1 KG missing')).toBeTruthy();
+    expect(screen.queryByText(/Received \d/)).toBeNull();
+    expect(screen.queryByText(/ of 10/)).toBeNull();
+    // It does not skip straight on to rating or a dispute.
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('lists damaged quantity too, line by line', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue({
+      ...RECEIVING_APPLIED_NO_NOTE_YET, instantRefundAmount: 0, refundStatus: null,
+      items: [
+        { ...RECEIVING_APPLIED_NO_NOTE_YET.items[0], damagedQuantity: 2, missingQuantity: 0 },
+        { ...RECEIVING_APPLIED_NO_NOTE_YET.items[0], id: 802, productName: 'Onion', unit: 'PKT', damagedQuantity: 0, missingQuantity: 0 },
+      ],
+    });
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+
+    expect(await screen.findByText('Chicken: 2 KG damaged')).toBeTruthy();
+    expect(screen.queryByText(/Onion/)).toBeNull();
+  });
+
+  it('with a discrepancy, says nothing is open yet and makes Raise a dispute the primary action', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue({ ...RECEIVING_APPLIED_NO_NOTE_YET, instantRefundAmount: 0, refundStatus: null });
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+
+    expect(await screen.findByText('Something was short or damaged. Raise a dispute to get it resolved.')).toBeTruthy();
+    expect(screen.queryByText(/a dispute is open/)).toBeNull();
+    expect(screen.queryByText('View dispute')).toBeNull();
+    const labels = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel ?? '').filter((l: string) => /dispute|Rate|Done/.test(l));
+    expect(labels[0]).toMatch(/Raise a dispute/);
+    fireEvent.press(screen.getByText('Raise a dispute'));
+    expect(mockReplace).toHaveBeenCalledWith('/restaurant/dispute/501');
+  });
+
+  it('Rate this order still goes to rating after a discrepancy', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue({ ...RECEIVING_APPLIED_NO_NOTE_YET, instantRefundAmount: 0, refundStatus: null });
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+    fireEvent.press(await screen.findByText('Rate this order'));
+    expect(mockReplace).toHaveBeenCalledWith('/restaurant/rating/501');
+  });
+
+  it('Done goes to the order, and a full delivery says all received as billed with no figures or dispute', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue(RECEIVING_IN_FULL);
+    setup();
+    fireEvent.press(await screen.findByText('Complete check-in'));
+
+    expect(await screen.findByText('All items received as billed')).toBeTruthy();
+    expect(screen.queryByText(/missing|damaged|Raise a dispute|\d of \d/)).toBeNull();
+    fireEvent.press(screen.getByText('Done'));
+    expect(mockReplace).toHaveBeenCalledWith('/restaurant/orders/501');
+  });
+
+  it('the refund sheet also offers the dispute link when something was short', async () => {
+    paidBy('PREPAID');
+    (receiveOrder as jest.Mock).mockResolvedValue(RECEIVING_APPLIED_NO_NOTE_YET);
+    setup();
+    await enterShortDelivery();
+    fireEvent.press(screen.getByText('Complete check-in'));
+
+    await screen.findByText('Refund of ₹10.50');
+    fireEvent.press(screen.getByText('Raise a dispute'));
+    expect(mockReplace).toHaveBeenCalledWith('/restaurant/dispute/501');
   });
 });

@@ -114,31 +114,6 @@ export default function DeliveriesScreen() {
         onSelect={(key) => setFilter(key as DeliveryFilter)}
       />
 
-      {summary && !isHistory && (
-        <View style={styles.summaryBar}>
-          <SummaryBadge
-            count={summary.atDoorCount}
-            label="At Door"
-            tone={summary.atDoorCount > 0 ? 'warning' : 'neutral'}
-          />
-          <SummaryBadge
-            count={summary.approachingCount}
-            label="Approaching"
-            tone={summary.approachingCount > 0 ? 'primary' : 'neutral'}
-          />
-          <SummaryBadge
-            count={summary.delayedCount}
-            label="Delayed"
-            tone={summary.delayedCount > 0 ? 'danger' : 'neutral'}
-          />
-          <SummaryBadge
-            count={summary.pendingCheckInCount}
-            label="Check-in"
-            tone={summary.pendingCheckInCount > 0 ? 'info' : 'neutral'}
-          />
-        </View>
-      )}
-
       {outletId == null ? (
         <MandiEmptyState
           icon="storefront-outline"
@@ -167,6 +142,9 @@ export default function DeliveriesScreen() {
           // The server decides lateness and how late; the app only displays it.
           const late = item.scheduleStatus !== 'ON_SCHEDULE';
           const needsCheckIn = item.recommendedAction === 'CHECK_IN' && !item.isCheckedIn;
+          const delivered = item.status === 'DELIVERED' || item.arrivalStage === 'DELIVERED_UNCHECKED';
+          // The rank orders arrivals among several; on its own, or once delivered, it says nothing.
+          const showRank = item.arrivalRank > 0 && !isHistory && !delivered && visibleItems.length > 1;
 
           return (
             <MandiCard
@@ -186,15 +164,15 @@ export default function DeliveriesScreen() {
                   <MandiText variant="caption" color={Colors.textSecondary}>
                     {`Order ${item.orderNumber}`}
                   </MandiText>
-                  {item.arrivalRank > 0 && !isHistory && (
-                    <View style={styles.rankBadge}>
+                  {showRank && (
+                    <View style={styles.rankBadge} accessible accessibilityLabel={`Arrival number ${item.arrivalRank}`}>
                       <MandiText variant="captionEmphasis" color={Colors.primaryDark}>
-                        #{item.arrivalRank}
+                        Arrival #{item.arrivalRank}
                       </MandiText>
                     </View>
                   )}
                 </View>
-                {item.arrivalStage && (
+                {item.arrivalStage && !delivered && (
                   <MandiText variant="captionEmphasis" color={stageColor(item.arrivalStage)}>
                     {formatStage(item.arrivalStage)}
                   </MandiText>
@@ -225,7 +203,11 @@ export default function DeliveriesScreen() {
 
               <View style={styles.hairline} />
               <View style={styles.bottomRow}>
-                {late ? (
+                {delivered ? (
+                  <MandiText variant="body" color={Colors.textSecondary} style={styles.flex}>
+                    {item.deliveredAt ? `Delivered at ${formatClock(item.deliveredAt)}` : 'Waiting for your check-in'}
+                  </MandiText>
+                ) : late ? (
                   <MandiText variant="bodyEmphasis" color={Colors.primaryDark} style={styles.flex}>
                     {item.minutesOverdue != null ? `${item.minutesOverdue} mins past slot` : 'Past slot'}
                   </MandiText>
@@ -287,30 +269,6 @@ function filterCount(key: DeliveryFilter, summary: RadarSummary | undefined): nu
   if (key === 'late') return summary.delayedCount;
   if (key === 'check_in') return summary.pendingCheckInCount;
   return null;
-}
-
-function SummaryBadge({ count, label, tone }: { count: number; label: string; tone: 'primary' | 'warning' | 'danger' | 'info' | 'neutral' }) {
-  const color =
-    tone === 'danger'
-      ? Colors.danger
-      : tone === 'warning'
-        ? Colors.warning
-        : tone === 'info'
-          ? Colors.info
-          : tone === 'primary'
-            ? Colors.primary
-            : Colors.textTertiary;
-
-  return (
-    <View style={styles.summaryBadge}>
-      <MandiText variant="captionEmphasis" color={color}>
-        {count}
-      </MandiText>
-      <MandiText variant="caption" color={Colors.textSecondary}>
-        {label}
-      </MandiText>
-    </View>
-  );
 }
 
 function formatClock(value: string): string {
@@ -375,20 +333,6 @@ function actionBannerStyle(action: KitchenAction) {
 }
 
 const styles = StyleSheet.create({
-  summaryBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surfaceSunken,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  summaryBadge: {
-    alignItems: 'center',
-    gap: 1,
-  },
   cardTop: {
     flexDirection: 'row',
     alignItems: 'center',

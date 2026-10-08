@@ -45,8 +45,9 @@ export function StarRating({
               key={star}
               onPress={() => onChange(star)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: value === star }}
-              accessibilityLabel={`${star} out of 5, ${LABELS[star]}`}
+              accessibilityState={{ checked: value === star }}
+              accessibilityLabel={star === 1 ? '1 star' : `${star} stars`}
+              accessibilityHint={LABELS[star]}
               style={styles.star}
             >
               <Ionicons

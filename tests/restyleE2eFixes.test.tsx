@@ -67,8 +67,8 @@ describe('orders list status label (T15 item 5)', () => {
   it('pickup keeps Ready for pickup, as the list always showed', () => {
     expect(buyerOrderStatus('READY_FOR_PICKUP', 'PICKUP').label).toBe('Ready for pickup');
   });
-  it('supplier delivery and other statuses are unchanged', () => {
-    expect(buyerOrderStatus('READY_FOR_PICKUP', 'SUPPLIER_DELIVERY').label).toBe('Ready for pickup');
+  it('other statuses are unchanged (a ready supplier-delivery order is relabelled in buyerOrderStatus.test)', () => {
+    expect(buyerOrderStatus('READY_FOR_PICKUP', 'PICKUP').label).toBe('Ready for pickup');
     expect(buyerOrderStatus('OUT_FOR_DELIVERY', 'COSTONOMY_DELIVERY').label).toBe('Out for delivery');
   });
 });

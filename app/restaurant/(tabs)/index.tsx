@@ -21,10 +21,7 @@ import {
   MandiSkeletonList,
   toneColors,
 } from '@/components/common';
-import {
-  resolveStatus,
-  SupplierOrderStatus,
-} from '@/models/status';
+import { buyerOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { RestaurantRequestCard } from '@/components/request/RestaurantRequestCard';
@@ -35,7 +32,7 @@ import { track } from '@/analytics';
 import { searchHints } from '@/lib/search/hints';
 import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
 import { ActiveOrderPill } from '@/components/delivery/ActiveOrderPill';
-import { useLatestInFlight } from '@/hooks/useLatestInFlight';
+import { inFlightOrders, useLatestInFlight } from '@/hooks/useLatestInFlight';
 import { useCreditAttention } from '@/hooks/useCreditAttention';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Spacing } from '@/theme';
@@ -226,7 +223,8 @@ function ordersSubtitle(active: SupplierOrder[]): string | undefined {
   if (active.length === 0) return undefined;
 
   const onTheWay = active.filter((order) => order.status === 'OUT_FOR_DELIVERY').length;
-  const ready = active.filter((order) => order.status === 'READY_FOR_PICKUP').length;
+  // Only a collect-yourself order is "ready to collect"; a delivery order that is ready is waiting for a rider.
+  const ready = active.filter((order) => order.status === 'READY_FOR_PICKUP' && order.deliveryMode === 'PICKUP').length;
 
   if (onTheWay > 0) return `${onTheWay} on the way`;
   if (ready > 0) return `${ready} ready to collect`;
@@ -303,15 +301,10 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
     enabled: outletId != null && accessToken != null,
   });
 
-  // "Active" is everything the restaurant is still waiting on a supplier for. A
-  // terminal order belongs in the Orders tab's history, and a DRAFT one never
-  // reached a supplier at all — its payment did not complete — so presenting it
-  // as in flight would tell the restaurant something untrue about an order
-  // nobody is working on.
-  const active = (query.data ?? []).filter(
-    (order) => !['DRAFT', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED']
-      .includes(order.status),
-  );
+  // "Active" is what the restaurant is still waiting on a supplier for, the same statuses as the Orders tab's Active
+  // filter: a terminal order belongs in history and a DRAFT one never reached a supplier. No age rule here: an order
+  // scheduled for the day after tomorrow is on schedule, not stuck. The count and the "on the way" line use this list.
+  const active = inFlightOrders(query.data);
 
   return (
     <View style={styles.section}>
@@ -338,7 +331,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
           <MandiCard
             key={order.id}
             onPress={() => router.push(`/restaurant/orders/${order.id}`)}
-            accentColor={toneColors(resolveStatus(SupplierOrderStatus, order.status).tone).fg}
+            accentColor={toneColors(buyerOrderStatus(order.status, order.deliveryMode).tone).fg}
           >
             <OrderCardBody
               primary={order.supplierName}
@@ -351,7 +344,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
               paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
               amount={order.totalAmount}
-              status={resolveStatus(SupplierOrderStatus, order.status)}
+              status={buyerOrderStatus(order.status, order.deliveryMode)}
             />
           </MandiCard>
         ))

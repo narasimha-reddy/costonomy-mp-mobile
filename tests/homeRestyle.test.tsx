@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react-native
 import { StyleSheet } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { splitStoreName } from '@/components/home/RecommendedTile';
 import RestaurantHome from '@/app/restaurant/(tabs)/index';
 import { fetchPopularSuppliers, fetchCategories } from '@/services/catalog';
 import { fetchOutletOrders } from '@/services/procurement';
@@ -101,6 +102,23 @@ describe('home restyle', () => {
     expect(StyleSheet.flatten(cell.props.style).height).toBeUndefined();
   });
 
+  it('a store name with an outlet suffix shows the name large and the outlet as its own small line', async () => {
+    (fetchPopularSuppliers as jest.Mock).mockResolvedValue([supplier(1, 'Sri Balaji Traders — Kukatpally Outlet')]);
+    mount();
+    const name = await screen.findByText('Sri Balaji Traders');
+    expect(name.props.numberOfLines).toBe(2);
+    const outlet = screen.getByText('Kukatpally Outlet');
+    expect(outlet.props.numberOfLines).toBe(1);
+    expect(screen.queryByText(/—/)).toBeNull();
+  });
+
+  it('splitStoreName leaves a name with no suffix alone and never returns an empty name', () => {
+    expect(splitStoreName('Green Farm')).toEqual({ name: 'Green Farm', outlet: null });
+    expect(splitStoreName('A — B — C')).toEqual({ name: 'A', outlet: 'B — C' });
+    expect(splitStoreName('— Outlet')).toEqual({ name: '— Outlet', outlet: null });
+    expect(splitStoreName('Shop — ')).toEqual({ name: 'Shop', outlet: null });
+  });
+
   it('category scroller marks the selected category', async () => {
     mount();
     const dairy = await screen.findByLabelText('Dairy');
@@ -137,7 +155,7 @@ describe('home restyle', () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([{
       id: 1, orderNumber: 'ORD-1', status: 'OUT_FOR_DELIVERY', deliveryMode: 'COSTONOMY_DELIVERY',
       supplierName: 'Fresh Farms', storeName: 'FF', outletName: 'Cafe', outletLocality: null,
-      createdAt: '2026-01-01T08:00:00Z', totalAmount: '100.00', paymentMethod: 'PREPAID', items: [],
+      createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), totalAmount: '100.00', paymentMethod: 'PREPAID', items: [],
     }]);
     (fetchDelivery as jest.Mock).mockResolvedValue({
       id: 9, status: 'IN_TRANSIT', mode: 'COSTONOMY', driverName: 'Ravi', trackable: true,

@@ -2,6 +2,7 @@ import React from 'react';
 import { act, render, screen } from '@testing-library/react-native';
 import { MandiMap } from '@/components/delivery/MandiMap.web';
 import { resetTileWatchdog, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
+import { distanceM } from '@/lib/maps/googleLegs';
 import { Colors } from '@/theme';
 import { LOGO_DEEP_D } from '@/lib/maps/truckSvg';
 
@@ -307,7 +308,7 @@ describe('MandiMap (web)', () => {
     render(<MandiMap driver={fix} destination={outlet} pickup={pickup} stale={false} mode="live" />);
     await flush();
     const truck = truckOf();
-    const pins = markers.filter((m) => m.opts.icon?.path === 0);
+    const pins = markers.filter((m) => m.opts.icon?.path === 0 && m.opts.icon.fillOpacity === 1);
     expect(pins).toHaveLength(2);
     pins.forEach((p) => expect(p.opts.label).toBeUndefined());
     expect(chips().map(chipText).sort()).toEqual(['Supplier', 'You']);
@@ -316,7 +317,23 @@ describe('MandiMap (web)', () => {
       expect(c.opts.icon.anchor.y).toBeGreaterThan(c.opts.icon.scaledSize.h); // the chip's bottom edge is above the pin
       expect(c.opts.clickable).toBe(false);
     });
-    pins.forEach((p) => expect(p.opts.zIndex).toBeLessThan(truck.opts.zIndex));
+    // The pins are drawn above the truck, so the truck can never hide one.
+    pins.forEach((p) => expect(p.opts.zIndex).toBeGreaterThan(truck.opts.zIndex));
+    // Each pin has a halo under the truck.
+    const halos = markers.filter((m) => m.opts.icon?.path === 0 && m.opts.icon.fillOpacity < 1);
+    expect(halos).toHaveLength(2);
+    halos.forEach((h) => expect(h.opts.zIndex).toBeLessThan(truck.opts.zIndex));
+  });
+
+  it('a truck within 40 m of a pin is drawn pushed clear of it, both stay visible', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    render(<MandiMap driver={{ ...fix, latitude: '12.99005', longitude: '77.62' }} destination={outlet} stale={false} mode="arriving" />);
+    await flush();
+    const at = truckOf().getPosition();
+    const lat = typeof at.lat === 'function' ? at.lat() : at.lat;
+    const lng = typeof at.lng === 'function' ? at.lng() : at.lng;
+    const shown = { latitude: lat, longitude: lng };
+    expect(distanceM(shown, outlet)).toBeGreaterThanOrEqual(39);
   });
 
   it('a truck right on top of the supplier pushes the Supplier chip below the pin', async () => {

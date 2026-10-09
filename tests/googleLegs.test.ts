@@ -1,6 +1,6 @@
 import {
   legsFor, truckLook, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, shouldRefitMoving, fitTargetFor, insidePadded,
-  QUIET_MAP_STYLE, cameraFor, MIN_ZOOM, MAX_ZOOM, SINGLE_POINT_ZOOM, NEAR_DROP_M, chipIcon, chipSide, metersPerPixel,
+  QUIET_MAP_STYLE, cameraFor, MIN_ZOOM, MAX_ZOOM, SINGLE_POINT_ZOOM, NEAR_DROP_M, chipIcon, chipSide, metersPerPixel, truckShownAt, TRUCK_PIN_CLEAR_M, distanceM,
 } from '@/lib/maps/googleLegs';
 import { Colors, TrackLayout } from '@/theme';
 
@@ -235,5 +235,41 @@ describe('pin label chips', () => {
     // Zoomed further in, the same metres are many pixels apart; with no zoom known the chip stays above.
     expect(chipSide(pin, north, 19)).toBe('above');
     expect(chipSide(pin, north, undefined)).toBe('above');
+  });
+});
+
+describe('pin label font', () => {
+  it('quotes the multi-word family so "3" is not an invalid bare token, and ends on a sans fallback', () => {
+    const svg = decodeURIComponent(chipIcon('You').url);
+    expect(svg).toContain("font-family=\"'Source Sans 3', ");
+    expect(svg).toMatch(/sans-serif"/);
+    expect(svg).not.toMatch(/font-family="Source Sans 3,/);
+  });
+});
+
+describe('truckShownAt', () => {
+  const pin = { latitude: 12.97, longitude: 77.59 };
+  const metresNorth = (m: number) => ({ latitude: pin.latitude + m / 111_195, longitude: pin.longitude });
+  it('leaves a truck that is clear of every pin where it is', () => {
+    const t = metresNorth(100);
+    expect(truckShownAt(t, [pin], 0)).toBe(t);
+    expect(truckShownAt(t, [], 0)).toBe(t);
+  });
+  it('moves a truck within 40 m of a pin out to 40 m, on the side it came from', () => {
+    const t = metresNorth(10);
+    const shown = truckShownAt(t, [pin], 0);
+    expect(distanceM(shown, pin)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
+    expect(shown.latitude).toBeGreaterThan(pin.latitude);
+  });
+  it('a truck exactly on the pin steps back behind its heading (heading east: shown to the west)', () => {
+    const shown = truckShownAt(pin, [pin], 90);
+    expect(distanceM(shown, pin)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
+    expect(shown.longitude).toBeLessThan(pin.longitude);
+  });
+  it('clears the nearest pin when several are close', () => {
+    const other = metresNorth(30);
+    const shown = truckShownAt(metresNorth(5), [pin, other], 0);
+    expect(distanceM(shown, pin)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
+    expect(distanceM(shown, other)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
   });
 });

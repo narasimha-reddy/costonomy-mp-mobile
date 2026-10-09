@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Refund lines (bill summary, supplier order, credit notes) lay out as a wrapping label and a whole, right-aligned amount.
 - A fully accepted request shows one "Accepted in full" chip at checkout instead of "Supplier accepted" plus "All available".
 
+### [fix/bug-map] - Tracking map: pins never hidden, pin label font, clearer arriving copy
+#### Fixed
+- The truck icon is drawn pushed out to 40 m from a pin it is on top of, and pins now sit above the truck (with a soft halo), so the supplier and 'You' pins stay visible at pickup and arrival.
+- Web map pin labels used a serif font (the unquoted `Source Sans 3` family is invalid CSS); the family is quoted with a sans-serif fallback.
+- Arriving header reads 'Your order is arriving now' with the pill 'Please have someone ready to receive it'; the minutes ('Arriving in N mins') show under the pill when the payload has them.
 ### [fix/p28-map] - Web map created when its host exists, refits while the truck moves, audience pin labels
 #### Fixed
 - Google web map no longer falls back to the sketch when the first render had nothing to draw (map created once the host element exists, construction retried); the camera frames the truck and the next stop and refits while live; the restaurant pin reads 'Restaurant' on the supplier screen and 'You' for the buyer.

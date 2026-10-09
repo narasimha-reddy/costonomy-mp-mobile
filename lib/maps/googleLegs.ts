@@ -2,7 +2,7 @@
  * What the Google web map draws, decided in plain data so it can be tested without a map.
  * The native map (MandiMap.tsx) draws the same legs; display only, nothing decides anything on it.
  */
-import { haversineM, regionFor, type LatLng } from '@/lib/delivery/mapGeometry';
+import { bearingBetween, haversineM, normDeg, regionFor, type LatLng } from '@/lib/delivery/mapGeometry';
 import { Colors, TrackLayout } from '@/theme';
 
 export type LegMode = 'placed' | 'pending' | 'live' | 'arriving' | 'reached' | undefined;
@@ -213,7 +213,7 @@ export function chipIcon(text: string): { url: string; width: number; height: nu
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${CHIP_HEIGHT}" viewBox="0 0 ${width} ${CHIP_HEIGHT}" data-chip="${t}">` +
     `<rect x="0.5" y="0.5" width="${width - 1}" height="${CHIP_HEIGHT - 1}" rx="${(CHIP_HEIGHT - 1) / 2}" fill="${Colors.surface}" stroke="${Colors.border}" stroke-width="1"/>` +
-    `<text x="${width / 2}" y="15" text-anchor="middle" font-family="Source Sans 3, -apple-system, Segoe UI, Roboto, sans-serif" font-size="${CHIP_FONT_PX}" font-weight="600" fill="${Colors.textPrimary}">${t}</text>` +
+    `<text x="${width / 2}" y="15" text-anchor="middle" font-family="'Source Sans 3', -apple-system, Segoe UI, Roboto, sans-serif" font-size="${CHIP_FONT_PX}" font-weight="600" fill="${Colors.textPrimary}">${t}</text>` +
     '</svg>';
   return { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`, width, height: CHIP_HEIGHT };
 }
@@ -243,4 +243,30 @@ export function shouldRefitMoving(input: {
   const since = input.now - input.lastFitAt;
   if (since < REFIT_MIN_GAP_MS) return false;
   return since >= REFIT_PERIOD_MS || (input.viewSpanM > 0 && input.movedM > input.viewSpanM * REFIT_MOVED_SHARE);
+}
+
+/** A truck nearer than this to a pin is drawn pushed out to this distance, so it never hides the pin (or its label). */
+export const TRUCK_PIN_CLEAR_M = 40;
+
+/**
+ * Where to draw the truck icon: its fix, unless the fix is within TRUCK_PIN_CLEAR_M of a pin, then moved out to that
+ * distance along the line from the pin (behind its heading when it is right on the pin). Display only: the route
+ * lines and every decision keep the real fix. Repeats for a second pin the first push landed near.
+ */
+export function truckShownAt(truck: LatLng, pins: LatLng[], heading: number): LatLng {
+  let at = truck;
+  for (let pass = 0; pass < 4; pass++) {
+    let near: LatLng | null = null;
+    for (const p of pins) {
+      if (haversineM(p, at) < TRUCK_PIN_CLEAR_M && (near == null || haversineM(p, at) < haversineM(near, at))) near = p;
+    }
+    if (near == null) return at;
+    const bearing = haversineM(near, at) < 1 ? normDeg(heading + 180) : bearingBetween(near, at);
+    const rad = (bearing * Math.PI) / 180;
+    at = {
+      latitude: near.latitude + (TRUCK_PIN_CLEAR_M * Math.cos(rad)) / 111_195,
+      longitude: near.longitude + (TRUCK_PIN_CLEAR_M * Math.sin(rad)) / (111_195 * Math.cos((near.latitude * Math.PI) / 180)),
+    };
+  }
+  return at;
 }

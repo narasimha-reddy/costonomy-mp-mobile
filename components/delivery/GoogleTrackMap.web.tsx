@@ -6,7 +6,7 @@ import { hostHasTiles, hostShown, watchHost } from '@/lib/maps/hostVisibility';
 import { toLatLng, turnLerp, type LatLng } from '@/lib/delivery/mapGeometry';
 import {
   cameraFor, chipAnchor, chipIcon, chipSide, cssColor, distanceM, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint,
-  MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook,
+  MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook, truckShownAt,
 } from '@/lib/maps/googleLegs';
 import { headingBucket, truckIconUrl } from '@/lib/maps/truckSvg';
 import { useTruckHeading } from '@/hooks/useTruckHeading';
@@ -19,9 +19,10 @@ const CREATE_RETRY_MS = 500;
 const CREATE_TRIES = 3;
 /** After the user moves the map themselves, the camera is theirs for this long (a mode change still refits). */
 const USER_MOVED_HOLD_MS = 30_000;
-/** Stacking: pins, then the truck, then the label chips (a chip moves aside rather than hide under the truck). */
-const PIN_Z = 10;
+/** Stacking: halos, the truck, then the pins (the truck never hides one), then the label chips (a chip moves aside rather than hide under the truck). */
+const HALO_Z = 5;
 const TRUCK_Z = 20;
+const PIN_Z = 25;
 const CHIP_Z = 30;
 
 type G = any; // the google.maps namespace is loaded at runtime; there is no typings package for it here
@@ -267,6 +268,16 @@ export function GoogleTrackMap(props: MandiMapProps) {
     );
     chips.current = [];
     const pin = (p: LatLng, text: string, fill: string) => {
+      // A soft halo in the pin's colour, under the truck, so a pin the truck passes stays findable.
+      own(
+        new g.Marker({
+          map: map.current,
+          position: pt(p),
+          clickable: false,
+          zIndex: HALO_Z,
+          icon: { path: g.SymbolPath.CIRCLE, scale: 15, fillColor: fill, fillOpacity: 0.25, strokeWeight: 0 },
+        }),
+      );
       own(
         new g.Marker({
           map: map.current,
@@ -300,7 +311,9 @@ export function GoogleTrackMap(props: MandiMapProps) {
     if (pickup && (mode != null || !driver)) pin(pickup, 'Supplier', Colors.textPrimary);
     if (destination) pin(destination, audience === 'supplier' ? 'Restaurant' : 'You', Colors.success);
 
-    moveTruck(g, scene.showTruck ? at : null);
+    // The icon steps aside for a pin within 40 m; the lines, the framing and the chips use where the truck really is.
+    const pinsDrawn = [pickup && (mode != null || !driver) ? pickup : null, destination].filter((p): p is LatLng => p != null);
+    moveTruck(g, scene.showTruck && at ? truckShownAt(at, pinsDrawn, heading) : null);
     const truckAt = scene.showTruck ? at : null;
     placeChips.current = () => {
       if (!map.current) return;

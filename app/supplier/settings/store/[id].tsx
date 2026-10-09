@@ -357,6 +357,8 @@ export default function StoreDetailScreen() {
               onCapture={location.capture}
               onCoordinatesChange={setPin}
               subject="store"
+              address={[line1Value, line2Value, cityValue, stateValue, pincodeValue]
+                .map((part) => part.trim()).filter(Boolean).join(', ')}
             />
           </Section>
 

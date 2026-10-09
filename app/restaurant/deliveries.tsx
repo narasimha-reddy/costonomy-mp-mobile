@@ -19,7 +19,7 @@ import {
   MandiText,
 } from '@/components/common';
 import { partnerWording } from '@/lib/delivery/partnerWording';
-import { clockTime } from '@/lib/delivery/deliveryPartner';
+import { clockTime, partnerDisplayName } from '@/lib/delivery/deliveryPartner';
 import { resolveStatus, DeliveryStatus as DeliveryStatusRegistry } from '@/models/status';
 import {
   fetchOutletDeliveries,
@@ -83,7 +83,7 @@ export default function DeliveriesScreen() {
       item.orderNumber,
       item.supplier?.supplierStoreName,
       item.supplier?.supplierOrgName,
-      item.driver?.name,
+      partnerDisplayName(item.driver?.name),
       item.driver?.vehicle,
       item.actionReason ? partnerWording(item.actionReason) : null,
     ].filter(Boolean).join(' ').toLowerCase();
@@ -188,7 +188,7 @@ export default function DeliveriesScreen() {
                   <View style={styles.driverMeta}>
                     <Ionicons name="person-outline" size={13} color={Colors.textSecondary} />
                     <MandiText variant="caption" color={Colors.textSecondary}>
-                      {item.driver.name}
+                      {partnerDisplayName(item.driver.name) ?? 'Delivery partner'}
                       {item.driver.vehicle ? ` · ${item.driver.vehicle}` : ''}
                     </MandiText>
                   </View>

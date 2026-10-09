@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
+import { MapUnavailable } from './MapUnavailable';
 import { loadGoogleMaps } from '@/lib/maps/loader';
 import {
   DEFAULT_CENTER,
@@ -32,6 +32,7 @@ export function MandiMapPicker({
   onChange,
   height = 260,
   searchPlaceholder = 'Search for an address',
+  address,
 }: MandiMapPickerProps) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const searchHost = useRef<HTMLDivElement | null>(null);
@@ -174,7 +175,7 @@ export function MandiMapPicker({
   }, [ready, value?.latitude, value?.longitude]);
 
   if (!MAPS_CONFIGURED) {
-    return <NotConfigured height={height} />;
+    return <NotConfigured height={height} address={address} />;
   }
 
   return (
@@ -223,7 +224,7 @@ export function MandiMapPicker({
  * holding the phone gets the two things they can act on — that the map is
  * unavailable, and that they can still pin the place another way.
  */
-function NotConfigured({ height }: { height: number }) {
+function NotConfigured({ height, address }: { height: number; address?: string | null }) {
   useEffect(() => {
     // For whoever is running the app, not for whoever is using it.
     console.warn(
@@ -232,14 +233,7 @@ function NotConfigured({ height }: { height: number }) {
   }, []);
 
   return (
-    <View style={[styles.missing, { minHeight: height }]}>
-      <Ionicons name="map-outline" size={24} color={Colors.textTertiary} />
-      <MandiText variant="bodyEmphasis">Map unavailable</MandiText>
-      <MandiText variant="caption" color={Colors.textSecondary} center>
-        We cannot show the map now. You can still pin this place with the buttons
-        below, and everything else on this screen works as usual.
-      </MandiText>
-    </View>
+    <MapUnavailable height={height} address={address} />
   );
 }
 
@@ -248,14 +242,6 @@ const styles = StyleSheet.create({
   canvas: {
     borderRadius: Radius.lg,
     overflow: 'hidden',
-    backgroundColor: Colors.surfaceSunken,
-  },
-  missing: {
-    gap: Spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.xl,
-    borderRadius: Radius.lg,
     backgroundColor: Colors.surfaceSunken,
   },
 });

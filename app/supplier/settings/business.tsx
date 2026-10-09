@@ -17,6 +17,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { gstinBadge } from '@/lib/supplier/gstinBadge';
 import { ApiError } from '@/lib/api/errors';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
@@ -79,6 +80,7 @@ export default function BusinessSettingsScreen() {
       || phoneValue.trim() !== (supplier.contactPhone ?? '')
       || emailValue.trim() !== (supplier.contactEmail ?? ''));
 
+  const badge = gstinBadge(supplier?.gstin, supplier?.verificationStatus ?? '');
   const validGstin = supplier?.gstin != null && GSTIN.test(supplier.gstin);
 
   return (
@@ -149,16 +151,14 @@ export default function BusinessSettingsScreen() {
                   {supplier.gstin ?? 'Not provided'}
                 </MandiText>
               </View>
-              <MandiStatusChip
-                label={supplier.verificationStatus.replace(/_/g, ' ').toLowerCase()}
-                tone={supplier.verificationStatus === 'VERIFIED' ? 'success' : 'pending'}
-                size="sm"
-              />
+              <MandiStatusChip label={badge.label} tone={badge.tone} size="sm" />
             </View>
             <View style={styles.note}>
               <Ionicons name="lock-closed-outline" size={16} color={Colors.textTertiary} />
               <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
-                {validGstin || supplier.gstin == null
+                {supplier.gstin == null
+                  ? 'No GSTIN is on file. Contact support to add one.'
+                  : validGstin
                   ? 'Your verification is tied to this number, so it cannot be edited here. Contact support to change it.'
                   : 'This GSTIN does not look valid. Contact support to correct it.'}
               </MandiText>

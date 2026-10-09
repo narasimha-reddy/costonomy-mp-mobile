@@ -2,6 +2,7 @@ import React from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from '@/components/common';
+import { partnerDisplayName } from '@/lib/delivery/deliveryPartner';
 import { initials } from '@/lib/delivery/orderTracking';
 import { AvatarSize, Colors, Elevation, IconSize, Radius, Spacing, TrackingLayout, hitSlopFor } from '@/theme';
 
@@ -39,6 +40,8 @@ export function DeliveryPartnerCard({
       </View>
     );
   }
+  // A placeholder such as "Rider name" is not a name: say who they are, not what the field was called.
+  const realName = partnerDisplayName(name);
   const callable = !delivered && showCall && !!phone;
   const supplierLayout = !!vehicle;
   return (
@@ -48,11 +51,17 @@ export function DeliveryPartnerCard({
       )}
       <View style={styles.row}>
         <View style={styles.avatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <MandiText variant="subtitle" color={Colors.partnerAvatarText}>{initials(name)}</MandiText>
+          {realName != null ? (
+            <MandiText variant="subtitle" color={Colors.partnerAvatarText}>{initials(realName)}</MandiText>
+          ) : (
+            <Ionicons name="person-outline" size={IconSize.lg} color={Colors.partnerAvatarText} />
+          )}
         </View>
         <View style={styles.info}>
-          <MandiText variant="subtitle">{delivered ? `Delivered by ${name}` : name}</MandiText>
-          {!delivered && !supplierLayout && (
+          <MandiText variant="subtitle">{delivered
+              ? (realName != null ? `Delivered by ${realName}` : 'Delivered by a delivery partner')
+              : (realName ?? 'Delivery partner')}</MandiText>
+          {!delivered && !supplierLayout && realName != null && (
             <MandiText variant="caption" color={Colors.textSecondary}>Delivery partner</MandiText>
           )}
           {vehicle ? (
@@ -65,7 +74,7 @@ export function DeliveryPartnerCard({
           <Pressable
             onPress={() => { void Linking.openURL(`tel:${phone}`); }}
             accessibilityRole="button"
-            accessibilityLabel={`Call ${name}`}
+            accessibilityLabel={`Call ${realName ?? 'delivery partner'}`}
             hitSlop={hitSlopFor(TrackingLayout.callButton)}
             style={({ pressed }) => [styles.call, pressed && styles.pressed]}
           >

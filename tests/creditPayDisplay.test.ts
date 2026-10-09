@@ -72,10 +72,12 @@ describe('payout wording', () => {
     expect(t).not.toContain('Paid through Mandi by');
   });
 
-  it('the sheet and the row both show "Paid through Mandi · UPI" for an online payout', () => {
+  it('the sheet shows "Paid through Mandi · UPI" for an online payout', () => {
     render(React.createElement(PayoutSheet, { payout: payout(), visible: true, onClose: jest.fn(), onCopy: jest.fn() }));
     expect(renderedText(screen.toJSON() as never)).toContain('Paid through Mandi · UPI');
-    cleanup();
+  });
+
+  it('the row shows "Paid through Mandi · UPI" for an online payout', () => {
     render(React.createElement(PayoutRow, { payout: payout(), onPress: jest.fn() }));
     expect(renderedText(screen.toJSON() as never)).toContain('Paid through Mandi · UPI');
   });

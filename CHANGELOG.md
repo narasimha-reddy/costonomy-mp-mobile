@@ -11,6 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Store editor says "Hours not set" instead of 00:00-00:00; the address picker shows "Map unavailable" with the address when Google refuses the key or does not load; chat "Go back" works with no history.
 - Approved dispute refunds show as a row on both order screens (amounts from the order's disputes, never computed); Credit notes and invoice answers appear on the card (Alert is silent on web).
 - Dispute list chip shows the real status; a collected pickup reads "Step 3 of 3 - Collected"; the slot is neutral once delivered; the cart delivery chips keep a gap above the supplier card.
+### [fix/bug2-track] - Tracking map fixes from the on-screen check
+#### Fixed
+- Web tracking map is framed again when its box changes size (taller when the order is close), so the truck is no longer left outside the drawn area while arriving.
+- The camera keeps the truck and the stop it heads for inside the view with padding for the truck icon, and refits sooner when one is at the edge.
+- The truck badge stays 60 m (was 40) from a pin, clear of the "You" dot; the arriving 300 m ring is outline only so it no longer washes the map.
+- Supplier Test mode card no longer says "Test mode" twice.
 
 ### [fix/bug-copy] - On-screen audit copy and layout fixes
 #### Fixed

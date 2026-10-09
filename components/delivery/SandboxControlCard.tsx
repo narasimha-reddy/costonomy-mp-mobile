@@ -27,7 +27,7 @@ export function SandboxControlCard({
         Pidge sandbox has no real delivery partners. Move the delivery partner to the next step to see the flow.
       </MandiText>
       <MandiText variant="caption" color={Colors.textSecondary}>
-        Test mode: the simulator also advances this delivery automatically
+        The simulator also advances this delivery automatically
       </MandiText>
       <MandiButton label={label} variant="secondary" size="md" onPress={() => onAdvance(delivery.id)} loading={pending} />
     </View>

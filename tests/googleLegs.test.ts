@@ -1,6 +1,6 @@
 import {
   legsFor, truckLook, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, shouldRefitMoving, fitTargetFor, insidePadded,
-  QUIET_MAP_STYLE, cameraFor, MIN_ZOOM, MAX_ZOOM, SINGLE_POINT_ZOOM, NEAR_DROP_M, chipIcon, chipSide, metersPerPixel, truckShownAt, TRUCK_PIN_CLEAR_M, distanceM,
+  QUIET_MAP_STYLE, cameraFor, MIN_ZOOM, MAX_ZOOM, SINGLE_POINT_ZOOM, NEAR_DROP_M, chipIcon, chipSide, metersPerPixel, truckShownAt, TRUCK_PIN_CLEAR_M, distanceM, FIT_PADDING, edgeOf, REFIT_EDGE_GAP_MS,
 } from '@/lib/maps/googleLegs';
 import { Colors, TrackLayout } from '@/theme';
 
@@ -32,14 +32,15 @@ describe('legsFor', () => {
   it('arriving: solid line and the 300 m ring on the drop', () => {
     const s = legsFor({ mode: 'arriving', truck, pickup: null, drop });
     expect(s.lines).toEqual([{ kind: 'solid', path: [truck, drop] }]);
-    expect(s.circles).toEqual([{ center: drop, radiusM: 300 }]);
+    // Outline only: a filled 300 m ring covers the whole street-level view and washes the map grey-green.
+    expect(s.circles).toEqual([{ center: drop, radiusM: 300, filled: false }]);
     expect(TrackLayout.geofenceArriveM).toBe(300);
   });
 
   it('reached: no line and the 50 m ring on the drop', () => {
     const s = legsFor({ mode: 'reached', truck, pickup: null, drop });
     expect(s.lines).toEqual([]);
-    expect(s.circles).toEqual([{ center: drop, radiusM: 50 }]);
+    expect(s.circles).toEqual([{ center: drop, radiusM: 50, filled: true }]);
   });
 
   it('placed and no mode draw no legs', () => {
@@ -271,5 +272,36 @@ describe('truckShownAt', () => {
     const shown = truckShownAt(metresNorth(5), [pin, other], 0);
     expect(distanceM(shown, pin)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
     expect(distanceM(shown, other)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
+  });
+});
+
+describe('truck clearance and framing (on-screen fixes)', () => {
+  const pin = { latitude: 12.97, longitude: 77.59 };
+  it('keeps the truck at least 60 m from a pin so its badge clears the pin dot', () => {
+    expect(TRUCK_PIN_CLEAR_M).toBeGreaterThanOrEqual(60);
+  });
+  it('never returns a position that is not a number, even for an unreadable heading', () => {
+    const shown = truckShownAt(pin, [pin], NaN);
+    expect(Number.isFinite(shown.latitude)).toBe(true);
+    expect(Number.isFinite(shown.longitude)).toBe(true);
+  });
+  it('the fit padding leaves room for half the truck icon above and below, and at the sides', () => {
+    const half = TrackLayout.truckSize / 2;
+    expect(FIT_PADDING.bottom).toBeGreaterThan(half);
+    expect(FIT_PADDING.top).toBeGreaterThan(half);
+    expect(FIT_PADDING.left).toBeGreaterThan(half);
+    expect(FIT_PADDING.right).toBeGreaterThan(half);
+  });
+  const view = { north: 13, south: 12, east: 78, west: 77 };
+  it('edgeOf is true when any framed point is within 8% of the view edge or outside', () => {
+    expect(edgeOf(view, [{ latitude: 12.5, longitude: 77.5 }])).toBe(false);
+    expect(edgeOf(view, [{ latitude: 12.5, longitude: 77.5 }, { latitude: 12.03, longitude: 77.5 }])).toBe(true);
+    expect(edgeOf(view, [{ latitude: 14, longitude: 77.5 }])).toBe(true);
+  });
+  it('a truck at the edge is refitted after a short gap, not the 8 s one', () => {
+    const base = { now: 100_000, lastFitAt: 100_000 - REFIT_EDGE_GAP_MS - 1, outside: true, distNow: 1000, distAtFit: 1000 };
+    expect(shouldRefit({ ...base, edge: true })).toBe(true);
+    expect(shouldRefit({ ...base })).toBe(false);
+    expect(shouldRefit({ ...base, edge: true, lastFitAt: 100_000 - 100 })).toBe(false);
   });
 });

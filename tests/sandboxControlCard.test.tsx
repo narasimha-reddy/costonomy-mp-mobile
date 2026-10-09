@@ -65,7 +65,9 @@ describe('sandbox rider control (test only)', () => {
     setup('supplier');
     expect(await screen.findByText('Test mode')).toBeTruthy();
     expect(screen.getByText('Pidge sandbox has no real delivery partners. Move the delivery partner to the next step to see the flow.')).toBeTruthy();
-    expect(screen.getByText('Test mode: the simulator also advances this delivery automatically')).toBeTruthy();
+    expect(screen.getByText('The simulator also advances this delivery automatically')).toBeTruthy();
+    // The heading says it once; the body does not repeat it.
+    expect(screen.getAllByText(/Test mode/)).toHaveLength(1);
     fireEvent.press(screen.getByText('Assign a delivery partner'));
     await waitFor(() => expect(advanceSandboxDelivery).toHaveBeenCalledWith('token', 9, expect.any(String)));
     // The delivery and order are fetched again so the screen follows the server.

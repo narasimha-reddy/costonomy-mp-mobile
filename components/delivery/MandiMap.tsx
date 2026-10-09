@@ -128,7 +128,8 @@ function Route({ mode, truck, pickup, drop }: { mode: MapMode; truck: LatLng | n
         <Circle
           center={drop}
           radius={mode === 'arriving' ? TrackLayout.geofenceArriveM : TrackLayout.geofenceReachM}
-          fillColor={Colors.geofenceFill}
+          // Outline only while arriving: the 300 m ring would fill the whole view and wash the map.
+          fillColor={mode === 'reached' ? Colors.geofenceFill : 'transparent'}
           strokeColor={Colors.geofenceStroke}
         />
       )}

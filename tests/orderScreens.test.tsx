@@ -85,7 +85,7 @@ describe('buyer order screen', () => {
     noDelivery();
     setup(RestaurantOrderScreen);
     expect(await screen.findByText('Packing your order')).toBeTruthy();
-    expect(screen.queryByText('Track Delivery')).toBeNull();
+    expect(screen.queryByText('Track delivery')).toBeNull();
   });
 
   it('credit order bar says On credit', async () => {
@@ -112,7 +112,7 @@ describe('buyer order screen', () => {
       ...order, status: 'CANCELLED', paymentStatus: 'CAPTURED', paymentInstrument: 'UPI',
     });
     setup(RestaurantOrderScreen);
-    await screen.findByText('Bill Summary');
+    await screen.findByText('Bill summary');
     expect(screen.queryByText('Track ›')).toBeNull();
     expect(screen.queryByText('Order cancelled')).toBeNull();
   });
@@ -144,14 +144,14 @@ describe('buyer order screen', () => {
     noDelivery();
     setup(RestaurantOrderScreen);
     expect(await screen.findByText('Assigning a delivery partner')).toBeTruthy();
-    expect(screen.queryByText('Track Delivery')).toBeNull();
+    expect(screen.queryByText('Track delivery')).toBeNull();
     expect(screen.queryByLabelText('Call Ravi Kumar')).toBeNull();
   });
 
   it('shows Track Delivery and the partner status once a partner is assigned', async () => {
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
     setup(RestaurantOrderScreen);
-    expect(await screen.findByText('Track Delivery')).toBeTruthy();
+    expect(await screen.findByText('Track delivery')).toBeTruthy();
     expect(screen.getByText('Ravi is on the way to the supplier')).toBeTruthy();
     expect(screen.getByText('10 x Paneer')).toBeTruthy();
   });
@@ -177,7 +177,7 @@ describe('buyer order screen', () => {
     expect(await screen.findByText('Still arranging delivery')).toBeTruthy();
     expect(screen.queryByText(/secret reason/)).toBeNull();
     expect(screen.queryByText('Try again')).toBeNull();
-    expect(screen.queryByText('Track Delivery')).toBeNull();
+    expect(screen.queryByText('Track delivery')).toBeNull();
   });
 
   it('still offers check-in when the order is receivable, with a report link and no Track', async () => {
@@ -188,7 +188,7 @@ describe('buyer order screen', () => {
     fireEvent.press(screen.getByText('Report an issue'));
     expect(mockPush).toHaveBeenCalledWith('/restaurant/dispute/5');
     expect(screen.queryByText('Track ›')).toBeNull();
-    expect(screen.queryByText('Track Delivery')).toBeNull();
+    expect(screen.queryByText('Track delivery')).toBeNull();
     expect(screen.queryByLabelText('Call Ravi Kumar')).toBeNull();
   });
 });

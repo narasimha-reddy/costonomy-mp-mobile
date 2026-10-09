@@ -271,7 +271,7 @@ export default function StoreDetailScreen() {
                 style={styles.flex}
               />
               <MandiButton
-                label="Save Changes"
+                label="Save changes"
                 size="lg"
                 disabled={!touched || problem != null}
                 loading={save.isPending}
@@ -469,7 +469,7 @@ export default function StoreDetailScreen() {
             ) : null}
             <View style={{ marginTop: Spacing.sm }}>
               <MandiButton
-                label="Manage Delivery Slots"
+                label="Manage delivery slots"
                 variant="secondary"
                 size="md"
                 icon="time-outline"

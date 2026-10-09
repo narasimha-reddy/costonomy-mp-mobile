@@ -96,7 +96,7 @@ export default function SupplierOrdersScreen() {
         <View style={styles.manifestBannerLeft}>
           <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
           <View>
-            <MandiText variant="bodyEmphasis">Daily Subscriptions Manifest</MandiText>
+            <MandiText variant="bodyEmphasis">Daily subscriptions manifest</MandiText>
             <MandiText variant="caption" color={Colors.textSecondary}>
               Packing lists & scheduled slot dispatches
             </MandiText>

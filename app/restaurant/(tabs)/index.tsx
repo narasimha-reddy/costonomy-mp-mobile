@@ -124,7 +124,7 @@ function HomeSearch({ outletId }: { outletId: number | null }) {
 }
 
 /**
- * The "Money Transfers" section: Quick Scan, Wallet and Credit in a row of four slots.
+ * The "Money transfers" section: Quick Scan, Wallet and Credit in a row of four slots.
  *
  * <p><b>QuickScan is hidden rather than broken.</b> Loading and erroring both
  * leave it out: a feature the outlet cannot use yet, or that this call failed to
@@ -152,7 +152,7 @@ function QuickActions({ outletId }: { outletId: number | null }) {
   const actions: MoneyAction[] = [
     {
       key: 'quickscan',
-      label: 'Quick Scan',
+      label: 'Quick scan',
       icon: 'qr-code-outline',
       renderIcon: (size) => <ScanQrIcon size={size} variant="white" />,
       accessibilityLabel: 'Quick Scan. Pay a shop by scanning its QR.',
@@ -263,7 +263,7 @@ function RequestsSection({ outletId }: { outletId: number | null }) {
   return (
     <View style={styles.section}>
       <MandiSectionHeader
-        title="Open Requests"
+        title="Open requests"
         count={live.length}
         subtitle={requestsSubtitle(live)}
         actionLabel="New request"
@@ -310,7 +310,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
   return (
     <View style={styles.section}>
       <MandiSectionHeader
-        title="Active Orders"
+        title="Active orders"
         count={active.length}
         subtitle={ordersSubtitle(active)}
         actionLabel={active.length > 3 ? 'See all' : undefined}

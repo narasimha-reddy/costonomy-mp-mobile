@@ -186,7 +186,7 @@ export function TermsEditorSheet({
         )}
         <MandiButton
           testID="terms-save"
-          label={mode === 'modify' ? 'Save New Terms' : 'Approve At These Terms'}
+          label={mode === 'modify' ? 'Save new terms' : 'Approve at these terms'}
           loading={pending}
           disabled={!check.valid || pending || offline}
           onPress={() => onSubmit(draft)}

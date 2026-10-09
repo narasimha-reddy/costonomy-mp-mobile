@@ -255,7 +255,7 @@ describe('delivery wording says delivery partner, not driver', () => {
       actionReason: 'Driver running late or GPS stale. Call driver', driver: { name: 'Ravi', phone: null, vehicle: null },
     })]);
     renderScreen();
-    expect(await screen.findByText('Awaiting Delivery Partner')).toBeTruthy();
+    expect(await screen.findByText('Awaiting delivery partner')).toBeTruthy();
     expect(screen.getByText('Delivery partner running late or GPS stale. Call delivery partner')).toBeTruthy();
     expect(screen.queryByText(/driver/i)).toBeNull();
   });

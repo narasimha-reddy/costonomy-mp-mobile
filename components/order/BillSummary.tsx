@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from '@/components/common/MandiText';
+import { AmountRow } from './AmountRow';
 import { paymentLine, type CreditDates } from '@/lib/payments/paymentLine';
 import type { SupplierOrder } from '@/models/procurement';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
@@ -80,14 +81,14 @@ export function itemTaxLine(item: {
   return !packShown && item.unit ? `${item.unit} · ${gst}` : gst;
 }
 
-/** "Bill Summary": one card, a row per server figure, the grand total, then what is left to pay or was paid. */
+/** "Bill summary": one card, a row per server figure, the grand total, then what is left to pay or was paid. */
 export function BillSummary({ lines, grandTotal, refundLine, finalLine, savings }: BillSummaryProps) {
   const saved = savings != null && Number(savings) > 0;
   return (
     <View style={styles.card} testID="bill-summary">
       <View style={styles.header}>
         <Ionicons name="receipt-outline" size={IconSize.lg} color={Colors.textSecondary} />
-        <MandiText variant="bodyEmphasis" accessibilityRole="header">Bill Summary</MandiText>
+        <MandiText variant="bodyEmphasis" accessibilityRole="header">Bill summary</MandiText>
       </View>
       {lines.map((line) => (
         <View key={line.label} style={styles.row}>
@@ -110,10 +111,7 @@ export function BillSummary({ lines, grandTotal, refundLine, finalLine, savings 
         <MandiText variant="bodyEmphasis">{formatMoney(grandTotal)}</MandiText>
       </View>
       {refundLine != null && (
-        <View style={styles.row}>
-          <MandiText variant="body" color={Colors.successText} style={styles.label}>{refundLine.label}</MandiText>
-          <MandiText variant="body" color={Colors.successText}>{formatMoney(refundLine.amount)}</MandiText>
-        </View>
+        <AmountRow label={refundLine.label} amount={formatMoney(refundLine.amount)} color={Colors.successText} />
       )}
       <View style={styles.row}>
         <MandiText variant="bodyEmphasis" style={styles.label}>{finalLine.label}</MandiText>

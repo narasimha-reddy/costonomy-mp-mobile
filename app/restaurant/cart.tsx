@@ -431,7 +431,7 @@ export default function BasketScreen() {
             }}
             ctaLabel={
               basket.supplierCount === 1
-                ? 'Send Request'
+                ? 'Send request'
                 : `Send ${basket.supplierCount} Requests`
             }
             loading={send.isPending && send.variables?.intentId == null}
@@ -507,12 +507,12 @@ function PriceChangeSheet({
       {/* The label says what agreeing does, which is not the same on both
           paths: one sends a request, the other starts an order. */}
       <MandiButton
-        label={direct ? 'Accept And Continue' : 'Accept And Send'}
+        label={direct ? 'Accept and continue' : 'Accept and send'}
         size="lg"
         loading={accepting}
         onPress={onAccept}
       />
-      <MandiButton label="Keep In Basket" variant="tertiary" size="md" onPress={onDismiss} />
+      <MandiButton label="Keep in basket" variant="tertiary" size="md" onPress={onDismiss} />
     </MandiBottomSheet>
   );
 }

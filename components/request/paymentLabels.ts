@@ -5,7 +5,7 @@ import type { PaymentMethod } from '@/components/request/PaymentMethodPicker';
  * Two lists drifted before ("Pay by card" in one place, "Pay online" in the other); this is the only copy.
  */
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
-  CREDIT: 'Mandi Credit',
+  CREDIT: 'Mandi credit',
   WALLET: 'Wallet',
   PREPAID: 'Card / UPI',
 };

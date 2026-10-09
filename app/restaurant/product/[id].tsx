@@ -106,7 +106,7 @@ export default function ProductScreen() {
           other section got — same words, different shape, on a screen a kitchen
           reaches from those sections. */}
       <MandiSectionHeader
-        title="Compare Suppliers"
+        title="Compare suppliers"
         count={offers.length}
         subtitle="Prices exclude delivery, which is quoted when you order."
       />

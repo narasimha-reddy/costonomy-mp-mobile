@@ -7,6 +7,7 @@ import { fetchOutletOrders } from '@/services/procurement';
 import { fetchIntents } from '@/services/intent';
 import { intentsKey } from '@/lib/queryKeys';
 import { isApiError } from '@/lib/api/errors';
+import { clockTime } from '@/lib/delivery/deliveryPartner';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { buyerTrackingHeader, type BuyerTrackHeader } from '@/lib/delivery/trackingHeader';
 import type { Intent } from '@/models/intent';
@@ -67,14 +68,6 @@ export function latestAnsweredRequest(intents: Intent[] | undefined): Intent | n
   const candidates = (intents ?? []).filter((i) => i.status === 'RESPONSES_RECEIVED' && i.withinOrderWindow);
   candidates.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return candidates[0] ?? null;
-}
-
-/** "6:30 pm" in the device's locale; display only. */
-function clockTime(iso: string | null): string | null {
-  if (iso == null) return null;
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return null;
-  return t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 /** What the floating pill shows and where it goes: an order in flight, or an answered request awaiting an order. */

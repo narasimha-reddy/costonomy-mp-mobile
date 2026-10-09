@@ -24,7 +24,7 @@ import {
   MandiStickyBar,
   MandiText,
 } from '@/components/common';
-import { BillSummary, billSummaryFor, CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
+import { AmountRow, BillSummary, billSummaryFor, CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { isApiError } from '@/lib/api/errors';
 import { useServerNow } from '@/hooks/useServerNow';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
@@ -96,7 +96,7 @@ export default function OrderDetailScreen() {
     },
   });
 
-  // The receipt's own read (same key, a GET): a rated order no longer offers "Rate This Order". A 404 is "not rated yet".
+  // The receipt's own read (same key, a GET): a rated order no longer offers "Rate this order". A 404 is "not rated yet".
   const rating = useQuery({
     queryKey: ['supplier-order', orderId, 'rating'],
     queryFn: () => fetchRating(accessToken as string, orderId),
@@ -176,7 +176,7 @@ export default function OrderDetailScreen() {
       });
     }
     if (o.isSubscriptionOrder) {
-      rows.push({ key: 'subscription', icon: 'repeat-outline', title: 'Order type', subtitle: 'Daily Subscription' });
+      rows.push({ key: 'subscription', icon: 'repeat-outline', title: 'Order type', subtitle: 'Daily subscription' });
     }
     const address = [o.outletName, o.outletLocality, o.outletCity].filter(Boolean).join(', ');
     if (address) {
@@ -222,12 +222,12 @@ export default function OrderDetailScreen() {
     try {
       const notes = await fetchCreditNotes(accessToken, orderId);
       if (notes.length === 0) {
-        Alert.alert('Credit Notes', 'No credit notes have been issued for this order.');
+        Alert.alert('Credit notes', 'No credit notes have been issued for this order.');
       } else {
         setCreditNotes(notes);
       }
     } catch (caught) {
-      Alert.alert('Credit Notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
+      Alert.alert('Credit notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -414,18 +414,18 @@ export default function OrderDetailScreen() {
             <MandiCard>
               <View style={styles.docsHead}>
                 <Ionicons name="document-text-outline" size={IconSize.md} color={Colors.textSecondary} />
-                <MandiText variant="bodyEmphasis">GST Documents</MandiText>
+                <MandiText variant="bodyEmphasis">GST documents</MandiText>
               </View>
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                 <MandiButton
-                  label={billingLoading ? 'Loading…' : 'View Invoice'}
+                  label={billingLoading ? 'Loading…' : 'View invoice'}
                   size="sm"
                   variant="secondary"
                   onPress={handleViewInvoice}
                   disabled={billingLoading}
                 />
                 <MandiButton
-                  label={billingLoading ? 'Loading…' : 'Credit Notes'}
+                  label={billingLoading ? 'Loading…' : 'Credit notes'}
                   size="sm"
                   variant="secondary"
                   onPress={handleViewCreditNotes}
@@ -455,9 +455,12 @@ export default function OrderDetailScreen() {
 
               {creditNotes != null && creditNotes.length > 0 && creditNotes.map((cn) => (
                 <View key={cn.id} style={{ marginTop: 12 }}>
-                  <MandiText variant="captionEmphasis" color={Colors.danger}>
-                    {cn.creditNoteNumber} — Refund {formatMoney(cn.totalRefundAmount)}
-                  </MandiText>
+                  <AmountRow
+                    variant="captionEmphasis"
+                    color={Colors.danger}
+                    label={`${cn.creditNoteNumber} — Refund`}
+                    amount={formatMoney(cn.totalRefundAmount)}
+                  />
                   <MandiText variant="caption" color={Colors.textSecondary}>
                     Reason: {cn.reasonCode} • Issued {formatMoment(cn.issuedAt)}
                   </MandiText>
@@ -520,7 +523,7 @@ export default function OrderDetailScreen() {
         <View style={styles.barActions}>
           {unpaid && (
             <MandiButton
-              label="Pay Now"
+              label="Pay now"
               size="lg"
               style={styles.barAction}
               onPress={() => router.push(`/restaurant/pay/${order.id}`)}
@@ -528,7 +531,7 @@ export default function OrderDetailScreen() {
           )}
           {trackable && (
             <MandiButton
-              label="Track Delivery"
+              label="Track delivery"
               size="lg"
               icon="navigate-outline"
               style={styles.barAction}
@@ -537,7 +540,7 @@ export default function OrderDetailScreen() {
           )}
           {receivable && (
             <MandiButton
-              label={carried ? 'Check in delivery' : 'Confirm Collection'}
+              label={carried ? 'Check in delivery' : 'Confirm collection'}
               size="lg"
               style={styles.barAction}
               onPress={() => router.push(`/restaurant/receiving/${order.id}`)}
@@ -545,7 +548,7 @@ export default function OrderDetailScreen() {
           )}
           {settled && !rated && !rating.isPending && (
             <MandiButton
-              label="Rate This Order"
+              label="Rate this order"
               size="lg"
               style={styles.barAction}
               onPress={() => router.push(`/restaurant/rating/${order.id}`)}

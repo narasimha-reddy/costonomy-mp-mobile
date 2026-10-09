@@ -515,9 +515,9 @@ export default function RequestDetailScreen() {
                   ? { label: 'Request withdrawn', tone: 'neutral' as const }
                   : restaurantIntentStatus(request.status, request.fulfilment))}
               />
-              {/* One chip when they say the same thing: "Accepted in part" already is "Partly available". */}
-              {request.fulfilment !== 'AWAITING'
-                && !(request.status === 'RESPONSES_RECEIVED' && request.fulfilment !== 'FULFILLED') && (
+              {/* One chip when they say the same thing: "Accepted in part" already is "Partly available", and
+                  "Accepted in full" is "All available". */}
+              {request.fulfilment !== 'AWAITING' && request.status !== 'RESPONSES_RECEIVED' && (
                 <MandiStatusChip {...resolveStatus(FulfilmentDisplay, request.fulfilment)} />
               )}
             </View>
@@ -674,7 +674,7 @@ export default function RequestDetailScreen() {
               )}
               {/* The bar below is the order button only, so withdrawing sits with the choices. */}
               <MandiButton
-                label="Withdraw Request"
+                label="Withdraw request"
                 variant="tertiary"
                 size="lg"
                 onPress={() => setConfirmCancel(true)}
@@ -903,7 +903,7 @@ export default function RequestDetailScreen() {
         <View style={styles.barActions}>
           {withdrawable && (
             <MandiButton
-              label="Withdraw Request"
+              label="Withdraw request"
               variant="tertiary"
               size="lg"
               style={styles.barAction}
@@ -912,7 +912,7 @@ export default function RequestDetailScreen() {
           )}
           {repeatable && (
             <MandiButton
-              label="Ask Again"
+              label="Ask again"
               size="lg"
               style={styles.barAction}
               loading={repeat.isPending}

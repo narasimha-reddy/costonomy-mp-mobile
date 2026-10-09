@@ -99,9 +99,10 @@ describe('supplier order screen shows people words, not raw values', () => {
     expect(screen.queryByText(/SHORT_DELIVERY/)).toBeNull();
   });
 
-  it('keeps the refund label and its amount in one text', async () => {
+  it('lays the refund label and its amount out as a row, read together', async () => {
     setup();
-    expect(await screen.findByText('Doorstep rejection refund: -₹26.00')).toBeTruthy();
+    expect(await screen.findByLabelText('Doorstep rejection refund, -₹26.00')).toBeTruthy();
+    expect(screen.getByText('-₹26.00')).toBeTruthy();
     expect(screen.getByText(/Refund: -₹26\.00/)).toBeTruthy();
   });
 

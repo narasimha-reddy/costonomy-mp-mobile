@@ -144,7 +144,7 @@ describe('Supplier statement screen', () => {
     renderScreen();
     expect(await screen.findByTestId('statement-error')).toBeTruthy();
     respond(STATEMENT);
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     expect(await screen.findByTestId('statement-list')).toBeTruthy();
   });
 
@@ -152,7 +152,7 @@ describe('Supplier statement screen', () => {
     respond(new ApiError({ code: 'NOT_FOUND', message: 'nope', status: 404 }));
     renderScreen();
     expect(await screen.findByText('This credit line is not available to you')).toBeTruthy();
-    expect(screen.queryByText('Try Again')).toBeNull();
+    expect(screen.queryByText('Try again')).toBeNull();
   });
 
   it('shows the offline banner', async () => {

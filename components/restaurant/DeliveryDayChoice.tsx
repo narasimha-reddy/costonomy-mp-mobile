@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
 import {
   dayChoices, deliverByHoursFor, deliverByLabel,
@@ -21,7 +21,7 @@ export interface DeliveryWhen {
  * a slot: slots belong to each supplier and are booked when the order is
  * created, so the exact slot is chosen then, starting from this day. It is a
  * preference the supplier sees, not a promise. A party is planned weeks ahead,
- * so the days scroll to the furthest the server accepts.
+ * so the dates run to the furthest the server accepts, wrapping onto further lines.
  */
 export function DeliveryDayChoice({
   value,
@@ -50,7 +50,7 @@ export function DeliveryDayChoice({
       <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
         Delivery
       </MandiText>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      <View style={styles.chips}>
         {/* No day: sent out when ready. "Later today" is today with an optional hour to have it by. */}
         <Chip
           label="As soon as possible"
@@ -73,9 +73,9 @@ export function DeliveryDayChoice({
           expanded={datesOpen}
           onPress={() => setShowDates((open) => !open)}
         />
-      </ScrollView>
+      </View>
       {datesOpen && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        <View style={styles.chips}>
           {farther.map((day) => (
             <Chip
               key={day.offset}
@@ -84,7 +84,7 @@ export function DeliveryDayChoice({
               onPress={() => pick(day.offset)}
             />
           ))}
-        </ScrollView>
+        </View>
       )}
       {value.offset != null && (
         <View style={styles.wrapRow}>
@@ -127,9 +127,11 @@ function Chip({ label, spokenAs, active, expanded, onPress }: {
 
 const styles = StyleSheet.create({
   wrap: { gap: Spacing.xs },
-  chips: { flexDirection: 'row', gap: Spacing.sm },
+  // Rows wrap rather than scroll: a scroller cut the last visible chip at the screen edge, and nothing said to swipe.
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   chip: {
+    flexShrink: 1,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: Radius.full,

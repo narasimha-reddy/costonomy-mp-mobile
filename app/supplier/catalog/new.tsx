@@ -271,7 +271,7 @@ export default function NewSkuScreen() {
               </MandiText>
             </View>
             <MandiButton
-              label="Add To Catalog"
+              label="Add to catalog"
               size="lg"
               disabled={!canSave}
               loading={create.isPending}

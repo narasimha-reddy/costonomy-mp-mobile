@@ -52,7 +52,7 @@ export default function CreditRequestScreen() {
    * Arriving from a supplier's own shelf, the supplier is already decided.
    *
    * <p>Asking somebody to search for the store whose page they just tapped
-   * "Request Credit" on is asking them to prove they meant it.
+   * "Request credit" on is asking them to prove they meant it.
    */
   const { storeId: preset } = useLocalSearchParams<{ storeId?: string }>();
   const presetId = preset != null && preset !== '' ? Number(preset) : null;
@@ -187,7 +187,7 @@ export default function CreditRequestScreen() {
         <MandiStickyBar>
           <MandiButton
             testID="send-request"
-            label="Send Request"
+            label="Send request"
             size="lg"
             disabled={!valid || offline}
             loading={submit.isPending}

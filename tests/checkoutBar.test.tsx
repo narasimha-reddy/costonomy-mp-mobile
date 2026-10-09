@@ -101,7 +101,7 @@ describe('the checkout bar', () => {
     expect(screen.getByText('PAY USING')).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('method CREDIT'));
-    expect(screen.getByText('Mandi Credit')).toBeTruthy();
+    expect(screen.getByText('Mandi credit')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('method WALLET'));
     expect(screen.getByText('Wallet')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('method PREPAID'));

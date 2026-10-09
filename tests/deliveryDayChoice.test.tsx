@@ -63,3 +63,31 @@ describe('the Pick a date chip', () => {
     expect(screen.getAllByText(dayLabel(5)).length).toBe(2);
   });
 });
+
+describe('chip rows never clip a chip', () => {
+  // A horizontal scroller leaves its last visible chip cut off at the screen edge (seen at 360 px, 1.3x font), and
+  // nothing says to swipe. Rows wrap instead, so every chip is whole.
+  const flat = (style: unknown) => Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
+
+  it('uses no horizontal scroller, with the farther dates open', () => {
+    const { UNSAFE_queryAllByType } = render(<DeliveryDayChoice value={{ offset: 5, byHour: null }} onChange={jest.fn()} />);
+    const { ScrollView } = jest.requireActual('react-native');
+    expect(UNSAFE_queryAllByType(ScrollView)).toHaveLength(0);
+  });
+
+  it('the day row and the farther-dates row wrap', () => {
+    render(<DeliveryDayChoice value={{ offset: 5, byHour: null }} onChange={jest.fn()} />);
+    // The nearest host ancestor that is a flex row is the chip row.
+    const rowOf = (chip: { parent: any }) => {
+      let node = chip.parent;
+      while (node != null && flat(node.props.style).flexDirection !== 'row') node = node.parent;
+      return node;
+    };
+    const chips = [screen.getByLabelText('Delivery: As soon as possible'), screen.getAllByLabelText(`Delivery: ${dayLabel(5)}`)[0]];
+    for (const chip of chips) {
+      const style = flat(rowOf(chip)?.props.style);
+      expect(style.flexDirection).toBe('row');
+      expect(style.flexWrap).toBe('wrap');
+    }
+  });
+});

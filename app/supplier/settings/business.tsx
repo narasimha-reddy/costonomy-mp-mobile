@@ -88,7 +88,7 @@ export default function BusinessSettingsScreen() {
         dirty ? (
           <MandiStickyBar>
             <MandiButton
-              label="Save Changes"
+              label="Save changes"
               size="lg"
               disabled={displayValue.trim().length < 2}
               loading={save.isPending}

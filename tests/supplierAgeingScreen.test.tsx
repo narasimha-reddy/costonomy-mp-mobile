@@ -109,7 +109,7 @@ describe('Ageing screen', () => {
     mockOffline = true;
     renderScreen();
     expect(screen.getByTestId('offline-banner')).toBeTruthy();
-    fireEvent.press(await screen.findByText('Try Again'));
+    fireEvent.press(await screen.findByText('Try again'));
     expect(await screen.findByTestId('ageing-bar')).toBeTruthy();
     expect(ageingM).toHaveBeenCalledTimes(2);
   });

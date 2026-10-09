@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/bug-copy] - On-screen audit copy and layout fixes
+#### Fixed
+- The restaurant Home request pill shows the order deadline in 12-hour time ("6:30 PM"), from the shared clock helper.
+- Cart delivery-day chips wrap instead of scrolling, so none is clipped at 360 px and large font scale.
+- Title Case labels and buttons are sentence case across both apps (GST documents, Credit notes, Mark all as read, and the rest); brand and product names keep their capitals.
+- Refund lines (bill summary, supplier order, credit notes) lay out as a wrapping label and a whole, right-aligned amount.
+- A fully accepted request shows one "Accepted in full" chip at checkout instead of "Supplier accepted" plus "All available".
+
 ### [fix/p28-map] - Web map created when its host exists, refits while the truck moves, audience pin labels
 #### Fixed
 - Google web map no longer falls back to the sketch when the first render had nothing to draw (map created once the host element exists, construction retried); the camera frames the truck and the next stop and refits while live; the restaurant pin reads 'Restaurant' on the supplier screen and 'You' for the buyer.

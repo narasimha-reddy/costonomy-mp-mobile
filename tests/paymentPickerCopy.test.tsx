@@ -31,10 +31,10 @@ describe('payment options', () => {
     wrap(<PaymentMethodPicker outletId={9} supplierStoreId={4} amount="100.00" selected="WALLET" onSelect={jest.fn()} />);
     expect(await screen.findByText('₹79,601.06 available')).toBeTruthy();
     expect(screen.getByText('₹69,296.00 available')).toBeTruthy();
-    expect(screen.getByText('Mandi Credit')).toBeTruthy();
+    expect(screen.getByText('Mandi credit')).toBeTruthy();
     expect(screen.getByText('Wallet')).toBeTruthy();
     expect(screen.getByText('Card / UPI')).toBeTruthy();
-    expect(PAYMENT_METHOD_LABEL).toEqual({ CREDIT: 'Mandi Credit', WALLET: 'Wallet', PREPAID: 'Card / UPI' });
+    expect(PAYMENT_METHOD_LABEL).toEqual({ CREDIT: 'Mandi credit', WALLET: 'Wallet', PREPAID: 'Card / UPI' });
   });
 });
 

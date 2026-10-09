@@ -212,7 +212,7 @@ export default function ItemVariantsScreen() {
     <MandiScreen
       header={
         <MandiHeader
-          title={query.data?.productName ?? 'Manage Item Variants'}
+          title={query.data?.productName ?? 'Manage item variants'}
           subtitle={query.data?.categoryName ? `${query.data.categoryName} · Brands & Grades` : undefined}
           back
         />
@@ -229,7 +229,7 @@ export default function ItemVariantsScreen() {
               </MandiText>
             </View>
             <MandiButton
-              label="Save All Variants"
+              label="Save all variants"
               size="md"
               loading={saveMutation.isPending}
               disabled={!canSave}
@@ -405,7 +405,7 @@ export default function ItemVariantsScreen() {
 
                   {/* Brand Selector */}
                   <View style={styles.fieldSection}>
-                    <MandiText variant="label">Brand Name</MandiText>
+                    <MandiText variant="label">Brand name</MandiText>
                     <View style={styles.chipRow}>
                       {COMMON_BRANDS.map((b) => {
                         const isLoose = b === 'Loose / Unbranded';
@@ -438,7 +438,7 @@ export default function ItemVariantsScreen() {
 
                   {/* Grade Selector */}
                   <View style={styles.fieldSection}>
-                    <MandiText variant="label">Grade / Quality Tier</MandiText>
+                    <MandiText variant="label">Grade / quality tier</MandiText>
                     <View style={styles.chipRow}>
                       {STANDARD_GRADES.map((g) => {
                         const isSelected = v.grade === g;
@@ -482,7 +482,7 @@ export default function ItemVariantsScreen() {
                   {/* Pack Size & Unit */}
                   <View style={styles.twoCol}>
                     <MandiFormField
-                      label="Pack Size"
+                      label="Pack size"
                       value={v.packSize}
                       onChangeText={(val) =>
                         updateVariantField(v.id, 'packSize', val.replace(/[^\d.]/g, ''))
@@ -493,7 +493,7 @@ export default function ItemVariantsScreen() {
                       required
                     />
                     <MandiFormField
-                      label="Pack Unit"
+                      label="Pack unit"
                       value={v.packUnit}
                       onChangeText={(val) =>
                         updateVariantField(v.id, 'packUnit', val.toUpperCase())
@@ -544,7 +544,7 @@ export default function ItemVariantsScreen() {
                   {/* GST & Stock Availability */}
                   <View style={styles.twoCol}>
                     <View style={styles.flex}>
-                      <MandiText variant="label">GST Rate</MandiText>
+                      <MandiText variant="label">GST rate</MandiText>
                       <View style={styles.chipRow}>
                         {GST_RATES.map((rate) => {
                           const isSelected = v.gstRate === rate;
@@ -567,7 +567,7 @@ export default function ItemVariantsScreen() {
                     </View>
 
                     <View style={styles.flex}>
-                      <MandiText variant="label">Stock Status</MandiText>
+                      <MandiText variant="label">Stock status</MandiText>
                       <View style={styles.chipRow}>
                         <Pressable
                           onPress={() => updateVariantField(v.id, 'availability', 'AVAILABLE')}

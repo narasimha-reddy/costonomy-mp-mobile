@@ -138,7 +138,7 @@ export default function RestaurantDisputeScreen() {
             <RefundStatusCard refund={dispute.data.refundRequest} viewer="restaurant">
               {(dispute.data.refundRequest.status === 'APPROVED'
                 || dispute.data.refundRequest.status === 'OPS_APPROVED') && (
-                <MandiButton label="Open Wallet" variant="secondary" size="md"
+                <MandiButton label="Open wallet" variant="secondary" size="md"
                   onPress={() => router.push('/restaurant/wallet')} />
               )}
             </RefundStatusCard>
@@ -177,7 +177,7 @@ export default function RestaurantDisputeScreen() {
                     maxLength={500}
                   />
                   <MandiButton
-                    label="Ask for Refund"
+                    label="Ask for refund"
                     size="lg"
                     disabled={!amountOk}
                     loading={ask.isPending}
@@ -196,7 +196,7 @@ export default function RestaurantDisputeScreen() {
         visible={confirming}
         title={`Ask for ${formatMoney(amount.trim())}?`}
         message="The supplier is told now and has 48 hours to answer. You can ask once on this dispute."
-        confirmLabel="Ask for Refund"
+        confirmLabel="Ask for refund"
         onConfirm={() => ask.mutate()}
         onCancel={() => setConfirming(false)}
       />

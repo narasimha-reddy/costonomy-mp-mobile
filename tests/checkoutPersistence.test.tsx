@@ -134,7 +134,7 @@ describe('checkout choices', () => {
     await waitFor(() => expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(true));
     fireEvent.press(radio(/I will collect/));
     fireEvent.press(screen.getByLabelText('method CREDIT'));
-    await waitFor(() => expect(screen.getByText('Mandi Credit')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Mandi credit')).toBeTruthy());
     await waitFor(() => expect(mockStore.size).toBe(1));
     first.unmount();
 
@@ -142,7 +142,7 @@ describe('checkout choices', () => {
     // The preference alone would put delivery back; the saved choice is pickup.
     await waitFor(() => expect(radio(/I will collect/).props.accessibilityState.checked).toBe(true));
     expect(radio(/Deliver it for me/).props.accessibilityState.checked).toBe(false);
-    expect(await screen.findByText('Mandi Credit')).toBeTruthy();
+    expect(await screen.findByText('Mandi credit')).toBeTruthy();
   });
 
   it('a saved day and slot come back and are what is ordered', async () => {

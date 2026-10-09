@@ -138,7 +138,7 @@ export default function MorningRateSheetScreen() {
     <MandiScreen
       header={
         <MandiHeader
-          title="Morning Rate Sheet"
+          title="Morning rate sheet"
           subtitle="60-Second Fast Repricing"
           back
         />
@@ -154,7 +154,7 @@ export default function MorningRateSheetScreen() {
                 </MandiText>
               </View>
               <MandiButton
-                label="Save Morning Rates"
+                label="Save morning rates"
                 size="md"
                 loading={saveMutation.isPending}
                 onPress={() => saveMutation.mutate()}
@@ -167,7 +167,7 @@ export default function MorningRateSheetScreen() {
       <View style={styles.introCard}>
         <Ionicons name="flash-outline" size={24} color={Colors.primary} />
         <View style={styles.flex}>
-          <MandiText variant="bodyEmphasis">Mandi Morning Reprice</MandiText>
+          <MandiText variant="bodyEmphasis">Mandi morning reprice</MandiText>
           <MandiText variant="caption" color={Colors.textSecondary}>
             Update daily market prices in under a minute. New rates take effect immediately for incoming orders.
           </MandiText>
@@ -273,7 +273,7 @@ export default function MorningRateSheetScreen() {
                       variant="caption"
                       color={isOutOfStock ? Colors.danger : Colors.success}
                     >
-                      {isOutOfStock ? 'OOS' : 'In Stock'}
+                      {isOutOfStock ? 'OOS' : 'In stock'}
                     </MandiText>
                   </Pressable>
                 </View>

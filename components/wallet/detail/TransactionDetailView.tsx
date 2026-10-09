@@ -112,13 +112,13 @@ export function TransactionDetailView({
         <Pressable
           onPress={onSupport}
           accessibilityRole="button"
-          accessibilityLabel="Contact Support"
+          accessibilityLabel="Contact support"
           style={styles.support}
           testID="contact-support"
           android_ripple={{ color: DetailColors.divider }}
         >
           <HelpGlyph size={DetailLayout.supportIcon} color={DetailColors.icon} />
-          <Text style={styles.supportText}>Contact Support</Text>
+          <Text style={styles.supportText}>Contact support</Text>
           <Ionicons name="chevron-forward" size={DetailLayout.chevron} color={DetailColors.icon} />
         </Pressable>
       </ScrollView>

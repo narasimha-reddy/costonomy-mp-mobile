@@ -270,7 +270,7 @@ function CreditPanel({
               : 'You have no credit with this supplier.'}
           </MandiText>
         </View>
-        <MandiButton label="Request Credit" variant="secondary" size="sm" onPress={onRequestCredit} />
+        <MandiButton label="Request credit" variant="secondary" size="sm" onPress={onRequestCredit} />
       </View>
     );
   }

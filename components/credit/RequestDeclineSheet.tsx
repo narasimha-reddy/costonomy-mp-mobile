@@ -69,7 +69,7 @@ export function RequestDeclineSheet({
         )}
         <MandiButton
           testID={`${testID}-confirm`}
-          label="Decline Request"
+          label="Decline request"
           variant="destructive"
           loading={pending}
           disabled={!valid || pending || offline}

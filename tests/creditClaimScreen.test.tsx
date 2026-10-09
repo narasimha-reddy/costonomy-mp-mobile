@@ -407,7 +407,7 @@ describe('loading', () => {
     invoicesM.mockRejectedValueOnce(new Error('boom'));
     renderScreen();
     expect(await screen.findByTestId('claim-load-error')).toBeTruthy();
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     expect(await screen.findByTestId('claim-send')).toBeTruthy();
   });
 });

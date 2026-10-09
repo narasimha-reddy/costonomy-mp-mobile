@@ -70,6 +70,15 @@ describe('an answered request at checkout', () => {
     expect(screen.queryByText('Partly available')).toBeNull();
   });
 
+  it('a fully accepted request shows one chip that keeps both facts', async () => {
+    (fetchIntent as jest.Mock).mockResolvedValue({ ...base, fulfilment: 'FULFILLED' });
+    setup();
+    await screen.findByTestId('checkout-header');
+    expect(screen.getByText('Accepted in full')).toBeTruthy();
+    expect(screen.queryByText('Supplier accepted')).toBeNull();
+    expect(screen.queryByText('All available')).toBeNull();
+  });
+
   it('names the supplier once', async () => {
     setup();
     await screen.findByTestId('checkout-header');
@@ -87,7 +96,7 @@ describe('an answered request at checkout', () => {
   it('withdraw offers Keep request, not Keep editing, when nothing is editable', async () => {
     setup();
     await screen.findByTestId('checkout-header');
-    fireEvent.press(screen.getAllByText('Withdraw Request')[0] as never);
+    fireEvent.press(screen.getAllByText('Withdraw request')[0] as never);
     expect(await screen.findByText('Keep request')).toBeTruthy();
     expect(screen.queryByText('Keep editing')).toBeNull();
   });

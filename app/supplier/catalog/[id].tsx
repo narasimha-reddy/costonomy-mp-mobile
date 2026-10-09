@@ -168,7 +168,7 @@ export default function SkuEditorScreen() {
               </MandiText>
             )}
             <MandiButton
-              label="Save Changes"
+              label="Save changes"
               size="lg"
               disabled={!dirty || !canSave}
               loading={save.isPending}

@@ -135,7 +135,7 @@ describe('the checkout header and delivery rows', () => {
     await screen.findByText('Place order');
     expect(screen.getByLabelText('pick courier')).toBeTruthy();
     expect(screen.getByText('PAY USING')).toBeTruthy();
-    expect(screen.getByText('Withdraw Request')).toBeTruthy();
+    expect(screen.getByText('Withdraw request')).toBeTruthy();
     await waitFor(() => expect(
       within(screen.getByLabelText('Place order')).queryByText('₹1,181.40'),
     ).toBeTruthy());

@@ -146,7 +146,7 @@ export default function SkuDetailScreen() {
                   </MandiText>
                 )}
                 <MandiButton
-                  label="Subscribe Daily"
+                  label="Subscribe daily"
                   size="sm"
                   variant="secondary"
                   onPress={() => setSubscribeOpen(true)}

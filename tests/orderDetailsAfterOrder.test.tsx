@@ -68,7 +68,7 @@ describe('restaurant order details after the order', () => {
   it('shows Rate This Order while the order is unrated', async () => {
     notRated();
     setup(RestaurantOrderScreen);
-    fireEvent.press(await screen.findByText('Rate This Order'));
+    fireEvent.press(await screen.findByText('Rate this order'));
     expect(mockPush).toHaveBeenCalledWith('/restaurant/rating/5');
   });
 
@@ -76,21 +76,21 @@ describe('restaurant order details after the order', () => {
     (fetchRating as jest.Mock).mockResolvedValue({ id: 1, overall: 4 });
     setup(RestaurantOrderScreen);
     await waitFor(() => expect(fetchRating).toHaveBeenCalled());
-    await screen.findByText('Bill Summary');
-    await waitFor(() => expect(screen.queryByText('Rate This Order')).toBeNull());
+    await screen.findByText('Bill summary');
+    await waitFor(() => expect(screen.queryByText('Rate this order')).toBeNull());
   });
 
   it('never creates a rating just by opening the order', async () => {
     notRated();
     setup(RestaurantOrderScreen);
-    await screen.findByText('Rate This Order');
+    await screen.findByText('Rate this order');
     expect(createRating).not.toHaveBeenCalled();
   });
 
   it('says On credit once on the sticky bar, not in the payment row, and has no emoji icons', async () => {
     notRated();
     setup(RestaurantOrderScreen);
-    await screen.findByText('Bill Summary');
+    await screen.findByText('Bill summary');
     expect(screen.getAllByText('On credit')).toHaveLength(1);
     expect(screen.getByText(/^Due 7th Nov 2026/)).toBeTruthy();
     expect(screen.queryByText(/📄/)).toBeNull();
@@ -99,7 +99,7 @@ describe('restaurant order details after the order', () => {
   it('a plain on-credit order has no Payment method row at all', async () => {
     notRated();
     setup(RestaurantOrderScreen);
-    await screen.findByText('Bill Summary');
+    await screen.findByText('Bill summary');
     expect(screen.queryByText('Payment method')).toBeNull();
   });
 
@@ -111,7 +111,7 @@ describe('restaurant order details after the order', () => {
     notRated();
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...completed, status: 'CANCELLED', paymentStatus });
     setup(RestaurantOrderScreen);
-    await screen.findByText('Bill Summary');
+    await screen.findByText('Bill summary');
     expect(screen.getByText('Payment method')).toBeTruthy();
     expect(screen.getAllByText(new RegExp(label)).length).toBeGreaterThan(0);
   });
@@ -123,7 +123,7 @@ describe('restaurant order details after the order', () => {
       acceptedAmount: '901.00', doorstepRefundAmount: '430.50', finalPayableAmount: '470.50',
     });
     setup(RestaurantOrderScreen);
-    await screen.findByText('Bill Summary');
+    await screen.findByText('Bill summary');
     expect(screen.getByText('Refunded to wallet')).toBeTruthy();
     expect(screen.getAllByText('₹430.50')).toHaveLength(1);
     // "You paid" and the last bill line both say 470.50, never the 901.00 that was first debited.
@@ -135,7 +135,7 @@ describe('restaurant order details after the order', () => {
     notRated();
     (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...completed, paymentMethod: 'WALLET', paymentStatus: 'PAID' });
     setup(RestaurantOrderScreen);
-    await screen.findByText('Bill Summary');
+    await screen.findByText('Bill summary');
     expect(screen.getAllByText(/from wallet/i)).toHaveLength(1);
     expect(screen.queryByText('Payment method')).toBeNull();
   });
@@ -162,7 +162,7 @@ describe('restaurant order details after the order', () => {
   it('GST Documents carries a document icon', async () => {
     notRated();
     setup(RestaurantOrderScreen);
-    await screen.findByText('GST Documents');
+    await screen.findByText('GST documents');
     expect(screen.getByText('icon:document-text-outline')).toBeTruthy();
   });
 });
@@ -172,7 +172,7 @@ describe('rating screen', () => {
     notRated();
     setup(RatingScreen);
     fireEvent.press((await screen.findAllByLabelText('5 stars'))[0]);
-    fireEvent.press(screen.getByText('Submit Rating'));
+    fireEvent.press(screen.getByText('Submit rating'));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/restaurant/orders/5'));
   });
 
@@ -188,14 +188,14 @@ describe('rating screen', () => {
     (createRating as jest.Mock).mockResolvedValue({ id: 1, overall: 5 });
     // The order page stays mounted under the rating screen, as it is in a navigation stack.
     const orderPage = render(wrap(<RestaurantOrderScreen />));
-    await orderPage.findByText('Rate This Order');
+    await orderPage.findByText('Rate this order');
     render(wrap(<RatingScreen />));
     fireEvent.press((await screen.findAllByLabelText('5 stars'))[0]);
-    fireEvent.press(screen.getByText('Submit Rating'));
+    fireEvent.press(screen.getByText('Submit rating'));
     await waitFor(() => expect(createRating).toHaveBeenCalled());
-    await waitFor(() => expect(orderPage.queryByText('Rate This Order')).toBeNull());
+    await waitFor(() => expect(orderPage.queryByText('Rate this order')).toBeNull());
     await new Promise((r) => setTimeout(r, 50));   // and it does not come back when the lagging read lands
-    expect(orderPage.queryByText('Rate This Order')).toBeNull();
+    expect(orderPage.queryByText('Rate this order')).toBeNull();
   });
 
   it('stars say how many and expose the selection', async () => {

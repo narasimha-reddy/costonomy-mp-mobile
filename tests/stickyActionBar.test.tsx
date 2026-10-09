@@ -15,7 +15,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 const payProps = {
   variant: 'pay' as const,
-  left: { eyebrow: 'PAY USING', label: 'Mandi Credit', onPress: jest.fn() },
+  left: { eyebrow: 'PAY USING', label: 'Mandi credit', onPress: jest.fn() },
   amount: '₹1,250.00',
   amountCaption: 'TOTAL',
   ctaLabel: 'Place order',
@@ -26,7 +26,7 @@ describe('StickyActionBar', () => {
     const onPress = jest.fn();
     render(<StickyActionBar {...payProps} onPress={onPress} />);
     expect(screen.getByText('PAY USING')).toBeTruthy();
-    expect(screen.getByText('Mandi Credit')).toBeTruthy();
+    expect(screen.getByText('Mandi credit')).toBeTruthy();
     expect(screen.getByText('₹1,250.00')).toBeTruthy();
     expect(screen.getByText('TOTAL')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('Place order'));
@@ -36,7 +36,7 @@ describe('StickyActionBar', () => {
   it('left column press opens the method picker', () => {
     const open = jest.fn();
     render(<StickyActionBar {...payProps} left={{ ...payProps.left, onPress: open }} onPress={jest.fn()} />);
-    fireEvent.press(screen.getByLabelText('PAY USING, Mandi Credit'));
+    fireEvent.press(screen.getByLabelText('PAY USING, Mandi credit'));
     expect(open).toHaveBeenCalledTimes(1);
   });
 

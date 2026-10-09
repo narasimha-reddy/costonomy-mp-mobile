@@ -97,7 +97,7 @@ describe('Automatic reminders setting', () => {
   it('saves the change with the credit policy', async () => {
     renderScreen();
     fireEvent.press(await sw());
-    await act(async () => { fireEvent.press(screen.getByText('Save Changes')); });
+    await act(async () => { fireEvent.press(screen.getByText('Save changes')); });
     await waitFor(() => expect(saveCreditPolicy).toHaveBeenCalled());
     expect((saveCreditPolicy as jest.Mock).mock.calls[0][2]).toEqual(expect.objectContaining({ autoRemindersEnabled: false }));
   });
@@ -108,7 +108,7 @@ describe('Automatic reminders setting', () => {
     fireEvent.press(screen.getByLabelText(/^Offer credit\./));
     fireEvent.press(screen.getByLabelText(/^Offer credit\./));
     fireEvent.changeText(screen.getByDisplayValue('30'), '45');
-    await act(async () => { fireEvent.press(screen.getByText('Save Changes')); });
+    await act(async () => { fireEvent.press(screen.getByText('Save changes')); });
     await waitFor(() => expect(saveCreditPolicy).toHaveBeenCalled());
     expect((saveCreditPolicy as jest.Mock).mock.calls[0][2]).not.toHaveProperty('autoRemindersEnabled');
   });

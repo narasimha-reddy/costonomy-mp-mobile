@@ -53,7 +53,7 @@ import {
 import { formatDistance, orderValue } from '@/utils/orders';
 import { formatDay, formatMomentWithRecency } from '@/utils/dateRange';
 import { rejectionReasonLabel } from '@/lib/supplier/rejectionReason';
-import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
+import { AmountRow, ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { TrackingCards } from '@/components/delivery/TrackingCards';
 import { usePressGuard } from '@/hooks/usePressGuard';
@@ -512,12 +512,13 @@ export default function SupplierOrderScreen() {
             })()}
 
             {order.doorstepRefundAmount != null && parseFloat(order.doorstepRefundAmount) > 0 && (
-              <View style={styles.valueRow}>
-                <Ionicons name="receipt-outline" size={16} color={Colors.danger} />
-                <MandiText variant="captionEmphasis" color={Colors.danger} style={styles.shrink}>
-                  Doorstep rejection refund: -{formatMoney(order.doorstepRefundAmount)}
-                </MandiText>
-              </View>
+              <AmountRow
+                variant="captionEmphasis"
+                color={Colors.danger}
+                label="Doorstep rejection refund"
+                amount={`-${formatMoney(order.doorstepRefundAmount)}`}
+                style={styles.refundRow}
+              />
             )}
 
             {order.finalPayableAmount != null && (
@@ -607,9 +608,12 @@ export default function SupplierOrderScreen() {
 
               {creditNotes != null && creditNotes.length > 0 && creditNotes.map((cn) => (
                 <View key={cn.id} style={{ marginTop: 12 }}>
-                  <MandiText variant="captionEmphasis" color={Colors.danger}>
-                    {cn.creditNoteNumber} — Refund {formatMoney(cn.totalRefundAmount)}
-                  </MandiText>
+                  <AmountRow
+                    variant="captionEmphasis"
+                    color={Colors.danger}
+                    label={`${cn.creditNoteNumber} — Refund`}
+                    amount={formatMoney(cn.totalRefundAmount)}
+                  />
                   <MandiText variant="caption" color={Colors.textSecondary}>
                     Reason: {cn.reasonCode} • Issued {formatMomentWithRecency(cn.issuedAt)}
                   </MandiText>
@@ -997,6 +1001,7 @@ const styles = StyleSheet.create({
   stars: { flexDirection: 'row', gap: 2 },
   shrink: { flexShrink: 1 },
   noShrink: { flexShrink: 0 },
+  refundRow: { marginTop: Spacing.xs },
   valueRow: {
     flexDirection: 'row',
     alignItems: 'center',

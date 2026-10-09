@@ -174,7 +174,7 @@ describe('a saved payment method that cannot be used (blocker 2)', () => {
     (fetchOutletAgreements as jest.Mock).mockResolvedValue([{ supplierStoreId: 4, status: 'ACTIVE', available: '10.00' }]);
     setup();
     await waitFor(() => expect(radio(/Card \/ UPI/).props.accessibilityState.checked).toBe(true));
-    expect(radio(/Mandi Credit/).props.accessibilityState.checked).toBe(false);
+    expect(radio(/Mandi credit/).props.accessibilityState.checked).toBe(false);
     fireEvent.press(screen.getByLabelText('Place order'));
     await waitFor(() => expect(createOrderFromIntent).toHaveBeenCalled());
     expect(sent().paymentMethod).toBe('PREPAID');

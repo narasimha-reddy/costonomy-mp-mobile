@@ -227,7 +227,7 @@ export default function WalletHistoryScreen() {
           testID="open-statements"
           onPress={() => router.push('/restaurant/wallet/statement')}
           accessibilityRole="button"
-          accessibilityLabel="My Statements"
+          accessibilityLabel="My statements"
           hitSlop={{ top: 5, bottom: 5 }}
           style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
         >
@@ -236,7 +236,7 @@ export default function WalletHistoryScreen() {
             size={WalletLayout.pillIcon}
             color={WalletColors.ink}
           />
-          <Text style={styles.pillText}>My Statements</Text>
+          <Text style={styles.pillText}>My statements</Text>
         </Pressable>
       </View>
       <HistorySearch

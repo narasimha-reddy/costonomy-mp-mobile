@@ -282,12 +282,12 @@ function formatClock(value: string): string {
 
 function formatStage(stage: string): string {
   switch (stage) {
-    case 'AT_KITCHEN_DOOR': return 'At Kitchen Door';
+    case 'AT_KITCHEN_DOOR': return 'At kitchen door';
     case 'APPROACHING': return 'Approaching';
-    case 'EN_ROUTE': return 'En Route';
-    case 'AT_SUPPLIER_PICKUP': return 'At Pickup';
-    case 'DRIVER_DISPATCHED': return 'Delivery Partner Dispatched';
-    case 'AWAITING_DRIVER': return 'Awaiting Delivery Partner';
+    case 'EN_ROUTE': return 'En route';
+    case 'AT_SUPPLIER_PICKUP': return 'At pickup';
+    case 'DRIVER_DISPATCHED': return 'Delivery partner dispatched';
+    case 'AWAITING_DRIVER': return 'Awaiting delivery partner';
     case 'DELIVERED_UNCHECKED': return 'Delivered (Unchecked)';
     default: return stage.replace(/_/g, ' ');
   }

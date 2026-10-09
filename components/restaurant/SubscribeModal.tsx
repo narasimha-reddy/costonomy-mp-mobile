@@ -90,9 +90,9 @@ export function SubscribeModal({
   });
 
   const frequencies: { label: string; value: SubscriptionFrequency }[] = [
-    { label: 'Every Day', value: 'DAILY' },
+    { label: 'Every day', value: 'DAILY' },
     { label: 'Weekdays (Mon-Fri)', value: 'WEEKDAYS' },
-    { label: 'Alternate Days', value: 'ALTERNATE_DAYS' },
+    { label: 'Alternate days', value: 'ALTERNATE_DAYS' },
     { label: 'Weekly', value: 'WEEKLY' },
   ];
 
@@ -100,7 +100,7 @@ export function SubscribeModal({
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <MandiHeader title="Daily Subscription" back onBack={onClose} />
+          <MandiHeader title="Daily subscription" back onBack={onClose} />
           <ScrollView contentContainerStyle={styles.content}>
             <MandiCard>
               <MandiText variant="bodyEmphasis">{productName}</MandiText>
@@ -251,7 +251,7 @@ export function SubscribeModal({
 
             <View style={styles.buttonRow}>
               <MandiButton
-                label="Confirm Subscription"
+                label="Confirm subscription"
                 size="lg"
                 loading={mutation.isPending}
                 onPress={() => {

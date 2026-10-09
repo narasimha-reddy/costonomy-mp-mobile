@@ -165,7 +165,7 @@ describe('home restyle', () => {
     expect(await screen.findByLabelText(/Order in progress/)).toBeTruthy();
     expect(screen.getByLabelText('Wallet')).toBeTruthy();
     expect(screen.getByLabelText('Credit')).toBeTruthy();
-    expect(screen.getByText('Money Transfers')).toBeTruthy();
-    expect(screen.getByText('Open Requests')).toBeTruthy();
+    expect(screen.getByText('Money transfers')).toBeTruthy();
+    expect(screen.getByText('Open requests')).toBeTruthy();
   });
 });

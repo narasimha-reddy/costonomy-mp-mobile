@@ -134,6 +134,25 @@ describe('home active-order pill', () => {
     expect(mockPush).toHaveBeenCalledWith('/restaurant/requests/12');
   });
 
+  it('the reply deadline reads in the app 12-hour style, not 24-hour', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([]);
+    const at = (h: number, m: number) => new Date(2026, 0, 1, h, m).toISOString();
+    (fetchIntents as jest.Mock).mockResolvedValue([
+      { ...intent(12, 'RESPONSES_RECEIVED', '2026-01-01T08:00:00Z'), orderCreationDeadline: at(18, 5) },
+    ]);
+    mount(<RestaurantHome />);
+    expect(await screen.findByText('Place your order before 6:05 PM')).toBeTruthy();
+  });
+
+  it('a deadline just after midnight reads 12:30 AM', async () => {
+    (fetchOutletOrders as jest.Mock).mockResolvedValue([]);
+    (fetchIntents as jest.Mock).mockResolvedValue([
+      { ...intent(12, 'RESPONSES_RECEIVED', '2026-01-01T08:00:00Z'), orderCreationDeadline: new Date(2026, 0, 2, 0, 30).toISOString() },
+    ]);
+    mount(<RestaurantHome />);
+    expect(await screen.findByText('Place your order before 12:30 AM')).toBeTruthy();
+  });
+
   it('an answered request past its order window does not show the pill', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([]);
     (fetchIntents as jest.Mock).mockResolvedValue([intent(12, 'RESPONSES_RECEIVED', '2026-01-01T08:00:00Z', false)]);
@@ -164,13 +183,13 @@ describe('home active-order pill', () => {
     (fetchIntents as jest.Mock).mockResolvedValue([intent(12, 'RESPONSES_RECEIVED', '2026-01-01T10:00:00Z')]);
     mount(<RestaurantHome />);
     expect(await screen.findByText('Fresh Farms accepted your request')).toBeTruthy();
-    expect(screen.getByText(/Active Orders.*\(1\)/)).toBeTruthy();
+    expect(screen.getByText(/Active orders.*\(1\)/)).toBeTruthy();
   });
 
   it('a stuck order alone gives no pill, but is still listed and counted', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([order(97, 'PREPARING', ago(30), 'SUPPLIER_DELIVERY')]);
     mount(<RestaurantHome />);
-    await screen.findByText(/Active Orders.*\(1\)/);
+    await screen.findByText(/Active orders.*\(1\)/);
     await new Promise((r) => setTimeout(r, 50));
     expect(pill()).toBeNull();
     expect(screen.getAllByText('Fresh Farms').length).toBeGreaterThan(0);
@@ -182,7 +201,7 @@ describe('home active-order pill', () => {
       { ...order(41, 'CONFIRMED', ago(30), 'SUPPLIER_DELIVERY'), scheduledDeliveryDate: inTwoDays },
     ]);
     mount(<RestaurantHome />);
-    expect(await screen.findByText(/Active Orders.*\(1\)/)).toBeTruthy();
+    expect(await screen.findByText(/Active orders.*\(1\)/)).toBeTruthy();
     expect(screen.getAllByText('Fresh Farms').length).toBeGreaterThan(0);
     await waitFor(() => expect(pill()).toBeTruthy());
   });
@@ -195,13 +214,13 @@ describe('home active-order pill', () => {
     ]);
     mount(<RestaurantHome />);
     await screen.findByText('1 on the way');
-    expect(screen.getByText(/Active Orders.*\(3\)/)).toBeTruthy();
+    expect(screen.getByText(/Active orders.*\(3\)/)).toBeTruthy();
   });
 
   it('only a collect-yourself order is "ready to collect"; a ready delivery order is not', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([order(4, 'READY_FOR_PICKUP', ago(2), 'SUPPLIER_DELIVERY')]);
     mount(<RestaurantHome />);
-    await screen.findByText(/Active Orders.*\(1\)/);
+    await screen.findByText(/Active orders.*\(1\)/);
     expect(screen.queryByText('1 ready to collect')).toBeNull();
     expect(screen.getByText('Being prepared')).toBeTruthy();
   });
@@ -232,7 +251,7 @@ describe('home active-order pill', () => {
   it('active order cards say Arranging delivery for a partner-delivery order that is ready', async () => {
     (fetchOutletOrders as jest.Mock).mockResolvedValue([order(4, 'READY_FOR_PICKUP', ago(2))]);
     mount(<RestaurantHome />);
-    await screen.findByText('Active Orders');
+    await screen.findByText('Active orders');
     expect((await screen.findAllByText('Arranging delivery')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Ready for pickup')).toBeNull();
   });

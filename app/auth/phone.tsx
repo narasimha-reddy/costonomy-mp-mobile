@@ -93,7 +93,7 @@ export default function PhoneScreen() {
           </View>
 
           <MandiButton
-            label="Send Code"
+            label="Send code"
             onPress={submit}
             size="lg"
             loading={submitting}

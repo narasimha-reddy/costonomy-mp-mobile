@@ -546,7 +546,7 @@ function RequestCard({ agreement, offline }: { agreement: CreditAgreement; offli
       {offer == null && (
       <View style={styles.actionsRow}>
         <MandiButton
-          label="Approve As Asked"
+          label="Approve as asked"
           size="md"
           loading={approve.isPending}
           disabled={offline}

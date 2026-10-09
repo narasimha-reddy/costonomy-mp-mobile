@@ -96,7 +96,7 @@ export default function RatingScreen() {
         alreadyRated ? undefined : (
           <MandiStickyBar>
             <MandiButton
-              label="Submit Rating"
+              label="Submit rating"
               size="lg"
               disabled={overall == null}
               loading={submit.isPending}

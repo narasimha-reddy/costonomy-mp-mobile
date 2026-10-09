@@ -317,6 +317,10 @@ export function restaurantIntentStatus(
     if (fulfilment === 'PARTIALLY_FULFILLED') {
       return { label: 'Accepted in part', tone: 'warning' };
     }
+    // "Supplier accepted" plus "All available" said one thing twice; this is both facts in one chip.
+    if (fulfilment === 'FULFILLED') {
+      return { label: 'Accepted in full', tone: 'ready' };
+    }
   }
   return resolveStatus(IntentStatus, status);
 }

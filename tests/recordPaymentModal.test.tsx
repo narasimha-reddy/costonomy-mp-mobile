@@ -49,9 +49,9 @@ describe('recording a repayment twice by retrying', () => {
       .mockResolvedValue({});
     setup();
 
-    fireEvent.press(screen.getByText('Confirm Payment'));
+    fireEvent.press(screen.getByText('Confirm payment'));
     await waitFor(() => expect(recordPayment).toHaveBeenCalledTimes(1));
-    fireEvent.press(await screen.findByText('Confirm Payment'));
+    fireEvent.press(await screen.findByText('Confirm payment'));
     await waitFor(() => expect(recordPayment).toHaveBeenCalledTimes(2));
 
     expect(keys()[1]).toBe(keys()[0]);
@@ -63,9 +63,9 @@ describe('recording a repayment twice by retrying', () => {
       .mockResolvedValue({});
     setup();
 
-    fireEvent.press(screen.getByText('Confirm Payment'));
+    fireEvent.press(screen.getByText('Confirm payment'));
     await waitFor(() => expect(recordPayment).toHaveBeenCalledTimes(1));
-    fireEvent.press(await screen.findByText('Confirm Payment'));
+    fireEvent.press(await screen.findByText('Confirm payment'));
     await waitFor(() => expect(recordPayment).toHaveBeenCalledTimes(2));
 
     expect(keys()[1]).not.toBe(keys()[0]);
@@ -77,10 +77,10 @@ describe('recording a repayment twice by retrying', () => {
       .mockResolvedValue({});
     setup();
 
-    fireEvent.press(screen.getByText('Confirm Payment'));
+    fireEvent.press(screen.getByText('Confirm payment'));
     await waitFor(() => expect(recordPayment).toHaveBeenCalledTimes(1));
     fireEvent.changeText(screen.getByDisplayValue('1050'), '500');
-    fireEvent.press(await screen.findByText('Confirm Payment'));
+    fireEvent.press(await screen.findByText('Confirm payment'));
     await waitFor(() => expect(recordPayment).toHaveBeenCalledTimes(2));
 
     expect(keys()[1]).not.toBe(keys()[0]);
@@ -93,6 +93,6 @@ describe('the payment-mode chips', () => {
     const upi = screen.getByLabelText('UPI');
     expect(upi.props.accessibilityRole).toBe('radio');
     expect(upi.props.accessibilityState.checked).toBe(false);
-    expect(screen.getByLabelText('Bank Transfer / NEFT').props.accessibilityState.checked).toBe(true);
+    expect(screen.getByLabelText('Bank transfer / NEFT').props.accessibilityState.checked).toBe(true);
   });
 });

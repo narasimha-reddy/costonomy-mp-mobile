@@ -122,7 +122,7 @@ export function TrackingScreenBody({ audience, orderId }: { audience: 'buyer' | 
     ? <MandiHeader title="Tracking" subtitle={o?.orderNumber} back />
     : (
       <MandiHeader
-        title="Delivery Tracking"
+        title="Delivery tracking"
         subtitle={o?.orderNumber ?? `Order #${orderId}`}
         back
         fallbackHref={`/supplier/orders/${orderId}`}

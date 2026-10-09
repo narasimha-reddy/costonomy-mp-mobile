@@ -1,7 +1,7 @@
 import { paymentStatusCopy } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
-import { billingFailureMessage } from '@/lib/billing/messages';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { billingFailureMessage, creditNotesNotice } from '@/lib/billing/messages';
 import { fetchTaxInvoice, fetchCreditNotes, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -24,7 +24,7 @@ import {
   MandiStickyBar,
   MandiText,
 } from '@/components/common';
-import { AmountRow, BillSummary, billSummaryFor, CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
+import { AmountRow, BillSummary, DisputeRefundLines, billSummaryFor, CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
 import { isApiError } from '@/lib/api/errors';
 import { useServerNow } from '@/hooks/useServerNow';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
@@ -198,6 +198,8 @@ export default function OrderDetailScreen() {
   const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
   const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  // On the card, not an Alert: Alert.alert does nothing on the web.
+  const [billingNotice, setBillingNotice] = useState<string | null>(null);
 
   const billingEligible = order != null && [
     'DELIVERED', 'COMPLETED', 'SETTLED',
@@ -206,11 +208,12 @@ export default function OrderDetailScreen() {
   async function handleViewInvoice() {
     if (!accessToken || !orderId) return;
     setBillingLoading(true);
+    setBillingNotice(null);
     try {
       const inv = await fetchTaxInvoice(accessToken, orderId);
       setInvoice(inv);
     } catch (caught) {
-      Alert.alert('Invoice', billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
+      setBillingNotice(billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -219,15 +222,16 @@ export default function OrderDetailScreen() {
   async function handleViewCreditNotes() {
     if (!accessToken || !orderId) return;
     setBillingLoading(true);
+    setBillingNotice(null);
     try {
       const notes = await fetchCreditNotes(accessToken, orderId);
       if (notes.length === 0) {
-        Alert.alert('Credit notes', 'No credit notes have been issued for this order.');
+        setBillingNotice('No credit notes yet.');
       } else {
         setCreditNotes(notes);
       }
     } catch (caught) {
-      Alert.alert('Credit notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
+      setBillingNotice(creditNotesNotice(caught));
     } finally {
       setBillingLoading(false);
     }
@@ -403,6 +407,7 @@ export default function OrderDetailScreen() {
 
           {/* Each figure is a server field: nothing is added here. */}
           <BillSummary {...billSummaryFor(order, settled)} />
+          {billingEligible && <DisputeRefundLines orderId={orderId} />}
 
           {order.hasColdChainItems && (
             <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />
@@ -432,6 +437,12 @@ export default function OrderDetailScreen() {
                   disabled={billingLoading}
                 />
               </View>
+
+              {billingNotice != null && (
+                <MandiText variant="caption" color={Colors.textSecondary} style={{ marginTop: 8 }} testID="billing-notice">
+                  {billingNotice}
+                </MandiText>
+              )}
 
               {invoice != null && (
                 <View style={{ marginTop: 12 }}>

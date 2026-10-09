@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/bug2-ui] - Second on-screen audit fixes
+#### Fixed
+- Store editor says "Hours not set" instead of 00:00-00:00; the address picker shows "Map unavailable" with the address when Google refuses the key or does not load; chat "Go back" works with no history.
+- Approved dispute refunds show as a row on both order screens (amounts from the order's disputes, never computed); Credit notes and invoice answers appear on the card (Alert is silent on web).
+- Dispute list chip shows the real status; a collected pickup reads "Step 3 of 3 - Collected"; the slot is neutral once delivered; the cart delivery chips keep a gap above the supplier card.
+
 ### [fix/bug-copy] - On-screen audit copy and layout fixes
 #### Fixed
 - The restaurant Home request pill shows the order deadline in 12-hour time ("6:30 PM"), from the shared clock helper.

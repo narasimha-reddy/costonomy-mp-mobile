@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useChatThreads } from '@/hooks/useChat';
+import { useSession } from '@/contexts/SessionProvider';
 import {
   MandiCard,
   MandiEmptyState,
@@ -28,6 +29,7 @@ import { Colors, Radius, Spacing } from '@/theme';
  */
 export default function ChatInboxScreen() {
   const router = useRouter();
+  const { audience } = useSession();
   /**
    * Which side, and whose inbox, comes from the route.
    *
@@ -42,6 +44,13 @@ export default function ChatInboxScreen() {
   const side = storeId ? 'SUPPLIER' : 'RESTAURANT';
   const scopeId = Number(storeId || outletId);
   const hasScope = Number.isFinite(scopeId) && scopeId > 0;
+  // router.back() does nothing when this page was opened directly (a refresh or a link): go to the role's home then.
+  const goBack = () => {
+    const noHistory = router.canGoBack?.() === false
+      || (typeof window !== 'undefined' && (window.history?.length ?? 2) <= 1);
+    if (!noHistory) return router.back();
+    router.replace(audience === 'SUPPLIER' ? '/supplier' : audience === 'RESTAURANT' || audience === 'BOTH' ? '/restaurant' : '/');
+  };
   const { threads, loading, error, refetch } = useChatThreads(side, hasScope ? scopeId : null);
 
   return (
@@ -56,7 +65,7 @@ export default function ChatInboxScreen() {
           title="Choose where to read messages from"
           description="Open Messages from your outlet or store so we know whose conversations to show."
           actionLabel="Go back"
-          onAction={() => router.back()}
+          onAction={goBack}
         />
       ) : loading ? (
         <MandiSkeletonList count={4} />

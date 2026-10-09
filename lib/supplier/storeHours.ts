@@ -25,6 +25,11 @@ export function dayLabel(days: string[]): string {
   return indexes.map((index) => SHORT[index]).join(', ');
 }
 
+/** Whether the store has a real opening window (opening time different from closing time). */
+export function hoursAreSet(hours: OperatingHours | null | undefined): boolean {
+  return !!hours && hours.opensAt !== hours.closesAt;
+}
+
 /**
  * One line for a store's trading hours.
  *
@@ -36,6 +41,6 @@ export function storeHoursLine(hours: OperatingHours | null | undefined): string
   if (!hours) return 'Hours not set';
   const days = dayLabel(hours.days);
   if (days === 'No days set') return days;
-  if (hours.opensAt === hours.closesAt) return 'Hours not set';
+  if (!hoursAreSet(hours)) return 'Hours not set';
   return `${days} · ${hours.opensAt}–${hours.closesAt}`;
 }

@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { MandiText } from './MandiText';
 import { MapUnavailable } from './MapUnavailable';
 import { loadGoogleMaps } from '@/lib/maps/loader';
+import { mapsAuthFailed, onMapsAuthFailure } from '@/lib/maps/authFailure';
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -42,6 +43,8 @@ export function MandiMapPicker({
 
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  // The key exists but Google refused it or the script never loaded: Google's own error panel is replaced by ours.
+  const [failed, setFailed] = useState(mapsAuthFailed());
 
   // The callback changes identity every render; a ref keeps the listeners we
   // attach once from capturing a stale one.
@@ -50,6 +53,7 @@ export function MandiMapPicker({
 
   useEffect(() => {
     if (!MAPS_CONFIGURED) return;
+    const stopWatching = onMapsAuthFailure(() => setFailed(true));
     let cancelled = false;
 
     loadGoogleMaps()
@@ -156,10 +160,12 @@ export function MandiMapPicker({
         setReady(true);
       })
       .catch((caught: Error) => {
-        if (!cancelled) setError(caught.message);
+        if (cancelled) return;
+        console.warn(`[maps] ${caught.message}`);
+        setFailed(true);
       });
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; stopWatching(); };
     // Mounted once. Later value changes move the marker below rather than
     // rebuilding the map, which would lose the zoom the person just set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,6 +182,9 @@ export function MandiMapPicker({
 
   if (!MAPS_CONFIGURED) {
     return <NotConfigured height={height} address={address} />;
+  }
+  if (failed) {
+    return <MapUnavailable height={height} address={address} reason="failed" />;
   }
 
   return (

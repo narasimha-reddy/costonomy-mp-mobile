@@ -1,7 +1,7 @@
 import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { billingFailureMessage } from '@/lib/billing/messages';
+import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { billingFailureMessage, creditNotesNotice } from '@/lib/billing/messages';
 import { fetchTaxInvoice, fetchCreditNotes, generateTaxInvoice, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -53,7 +53,7 @@ import {
 import { formatDistance, orderValue } from '@/utils/orders';
 import { formatDay, formatMomentWithRecency } from '@/utils/dateRange';
 import { rejectionReasonLabel } from '@/lib/supplier/rejectionReason';
-import { AmountRow, ColdChainBanner, PaymentMethodPill } from '@/components/order';
+import { AmountRow, ColdChainBanner, DisputeRefundLines, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { TrackingCards } from '@/components/delivery/TrackingCards';
 import { usePressGuard } from '@/hooks/usePressGuard';
@@ -135,6 +135,8 @@ export default function SupplierOrderScreen() {
   const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
   const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  // Said on the card: Alert.alert does nothing on the web, which made a failed press look like a dead button.
+  const [billingNotice, setBillingNotice] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -309,6 +311,10 @@ export default function SupplierOrderScreen() {
   const catchWeightItems = catchWeightLines(order);
   const hasCatchWeight = catchWeightItems.length > 0;
 
+  // The slot is a promise only until it has been kept: after delivery (or cancellation) it is history, not a warning.
+  const slotDone = order != null && ['DELIVERED', 'COMPLETED', 'SETTLED', 'CANCELLED'].includes(order.status);
+  const slotColour = slotDone ? Colors.textSecondary : Colors.primary;
+
   const billingEligible = order != null && [
     'DELIVERED', 'COMPLETED', 'SETTLED',
   ].includes(order.status);
@@ -316,11 +322,12 @@ export default function SupplierOrderScreen() {
   async function handleViewInvoice() {
     if (!accessToken || !orderId) return;
     setBillingLoading(true);
+    setBillingNotice(null);
     try {
       const inv = await fetchTaxInvoice(accessToken, orderId);
       setInvoice(inv);
     } catch (caught) {
-      Alert.alert('Invoice', billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
+      setBillingNotice(billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -329,11 +336,12 @@ export default function SupplierOrderScreen() {
   async function handleGenerateInvoice() {
     if (!accessToken || !orderId) return;
     setBillingLoading(true);
+    setBillingNotice(null);
     try {
       const inv = await generateTaxInvoice(accessToken, orderId);
       setInvoice(inv);
     } catch (caught) {
-      Alert.alert('Invoice', billingFailureMessage(caught, 'Could not generate tax invoice for this order.'));
+      setBillingNotice(billingFailureMessage(caught, 'Could not generate tax invoice for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -342,15 +350,16 @@ export default function SupplierOrderScreen() {
   async function handleViewCreditNotes() {
     if (!accessToken || !orderId) return;
     setBillingLoading(true);
+    setBillingNotice(null);
     try {
       const notes = await fetchCreditNotes(accessToken, orderId);
       if (notes.length === 0) {
-        Alert.alert('Credit notes', 'No credit notes have been issued for this order.');
+        setBillingNotice('No credit notes yet.');
       } else {
         setCreditNotes(notes);
       }
     } catch (caught) {
-      Alert.alert('Credit notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
+      setBillingNotice(creditNotesNotice(caught));
     } finally {
       setBillingLoading(false);
     }
@@ -485,8 +494,8 @@ export default function SupplierOrderScreen() {
 
             {(order.scheduledDeliveryDate || order.deliverySlotName) && (
               <View style={styles.valueRow}>
-                <Ionicons name="time-outline" size={16} color={Colors.primary} />
-                <MandiText variant="captionEmphasis" color={Colors.primary}>
+                <Ionicons name="time-outline" size={16} color={slotColour} />
+                <MandiText variant="captionEmphasis" color={slotColour}>
                   Slot: {formatDay(order.scheduledDeliveryDate) ?? 'Today'} {order.deliverySlotName ? `(${order.deliverySlotName})` : ''}
                 </MandiText>
                 {order.isSubscriptionOrder && (
@@ -520,6 +529,9 @@ export default function SupplierOrderScreen() {
                 style={styles.refundRow}
               />
             )}
+
+            {/* Approved dispute refunds, as the server sends them. */}
+            {billingEligible && <DisputeRefundLines orderId={orderId} />}
 
             {order.finalPayableAmount != null && (
               <View style={styles.valueRow}>
@@ -585,6 +597,12 @@ export default function SupplierOrderScreen() {
                   disabled={billingLoading}
                 />
               </View>
+
+              {billingNotice != null && (
+                <MandiText variant="caption" color={Colors.textSecondary} style={{ marginTop: 8 }} testID="billing-notice">
+                  {billingNotice}
+                </MandiText>
+              )}
 
               {invoice != null && (
                 <View style={{ marginTop: 12 }}>

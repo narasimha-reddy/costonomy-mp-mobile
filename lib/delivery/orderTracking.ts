@@ -373,7 +373,9 @@ export function orderTrackingView(input: {
   const rank = Math.max(0, Math.min(6, canonicalIndex));
   const segmentIndex = complete && kind !== 'pickup' ? segments.length - 1 : SEGMENT_OF_RANK[kind][rank] ?? 0;
   const atEnd = segmentIndex >= segments.length - 1;
-  const stepLine = `Step ${segmentIndex + 1} of ${segments.length} · ${segments[segmentIndex]}`;
+  // A finished collection has gone past Ready: the restaurant has the goods.
+  const stepName = complete && kind === 'pickup' ? 'Collected' : segments[segmentIndex];
+  const stepLine = `Step ${segmentIndex + 1} of ${segments.length} · ${stepName}`;
   const nextLine = complete && atEnd ? 'Complete' : atEnd ? null : `Next: ${segments[segmentIndex + 1]}`;
 
   let tag: TrackerTag | null = null;

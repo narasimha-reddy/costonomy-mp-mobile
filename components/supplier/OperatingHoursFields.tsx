@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiFormField, MandiText } from '@/components/common';
 import type { OperatingHours } from '@/services/supplier';
+import { hoursAreSet } from '@/lib/supplier/storeHours';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 /** Monday first, and abbreviated — seven full names do not fit a phone row. */
@@ -102,7 +103,9 @@ export function OperatingHoursFields({
       <MandiText variant="caption" color={Colors.textSecondary}>
         {value.days.length === 0
           ? 'Choose at least one day. To stop taking orders, go offline below.'
-          : `Restaurants can order from you ${everyDay ? 'every day' : `on ${value.days.length} days`}`
+          : !hoursAreSet(value)
+            ? 'Hours not set. Add opening and closing times so restaurants know when they can order.'
+            : `Restaurants can order from you ${everyDay ? 'every day' : `on ${value.days.length} days`}`
             + `, ${value.opensAt}–${value.closesAt}. Outside that they see you as closed.`}
       </MandiText>
     </View>

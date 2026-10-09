@@ -12,6 +12,7 @@ import { headingBucket, truckIconUrl } from '@/lib/maps/truckSvg';
 import { useTruckHeading } from '@/hooks/useTruckHeading';
 import { MandiMapSketch, type MandiMapProps } from './MandiMapSketch';
 import { Colors, Radius, TrackLayout } from '@/theme';
+import { onMapsAuthFailure } from '@/lib/maps/authFailure';
 
 const GLIDE_STEP_MS = 40;
 /** A map that could not be constructed (the host not ready) is retried this often, this many times, before giving up. */
@@ -34,9 +35,8 @@ type G = any; // the google.maps namespace is loaded at runtime; there is no typ
  */
 const authListeners = new Set<() => void>();
 function installAuthHook(): void {
-  const w = window as unknown as { gm_authFailure?: () => void };
-  if (w.gm_authFailure === authHook) return;
-  w.gm_authFailure = authHook;
+  // The page has one hook shared with the address picker (lib/maps/authFailure); subscribing again is harmless.
+  onMapsAuthFailure(authHook);
 }
 function authHook(): void {
   markTilesFailed('auth');

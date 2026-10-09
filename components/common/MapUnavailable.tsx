@@ -12,15 +12,23 @@ import { Colors, Radius, Spacing } from '@/theme';
  * person holding the phone is told why there is no map, what still works, and is
  * shown the address they are pinning so the empty box is not the only thing there.
  */
-export function MapUnavailable({ height, address }: { height: number; address?: string | null }) {
+export function MapUnavailable({ height, address, reason = 'not-configured' }: {
+  height: number;
+  address?: string | null;
+  /** `failed`: a key is set but Google refused it or did not load. */
+  reason?: 'not-configured' | 'failed';
+}) {
   const line = (address ?? '').trim();
   return (
     <View style={[styles.missing, { minHeight: height }]}>
       <Ionicons name="map-outline" size={24} color={Colors.textTertiary} />
       <MandiText variant="bodyEmphasis">Map unavailable</MandiText>
       <MandiText variant="caption" color={Colors.textSecondary} center>
-        Maps are not set up in this version of the app, so the map and place search cannot be shown. Your address
-        is saved as normal. You can still pin the place with the buttons below.
+        {reason === 'failed'
+          ? 'The map could not be loaded right now, so the map and place search cannot be shown. Your address '
+            + 'is saved as normal. You can still pin the place with the buttons below.'
+          : 'Maps are not set up in this version of the app, so the map and place search cannot be shown. Your '
+            + 'address is saved as normal. You can still pin the place with the buttons below.'}
       </MandiText>
       {line !== '' ? (
         <MandiText variant="caption" color={Colors.textPrimary} center>{line}</MandiText>

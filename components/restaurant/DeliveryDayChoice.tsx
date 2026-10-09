@@ -46,7 +46,7 @@ export function DeliveryDayChoice({
   };
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} testID="delivery-day-choice">
       <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
         Delivery
       </MandiText>
@@ -126,7 +126,8 @@ function Chip({ label, spokenAs, active, expanded, onPress }: {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: Spacing.xs },
+  // The bottom margin keeps wrapped chip rows off the supplier card that follows.
+  wrap: { gap: Spacing.xs, marginBottom: Spacing.md },
   // Rows wrap rather than scroll: a scroller cut the last visible chip at the screen edge, and nothing said to swipe.
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },

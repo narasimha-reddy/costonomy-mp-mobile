@@ -14,6 +14,28 @@ export interface CheckoutRequest {
   merchantName: string;
   description: string;
   themeColor: string;
+  /**
+   * Opens the window on this method and hides net banking, wallets, pay later and EMI.
+   * Only credit-dues payments set it; order pay and top-up leave it out and see everything.
+   * It is a hint: the server accepts whatever is captured.
+   */
+  method?: 'upi' | 'card';
+}
+
+/** Razorpay options for a pre-selected method: prefill it, and hide the methods we do not offer. */
+export function methodOptions(method: 'upi' | 'card' | undefined): {
+  prefill?: { method: string };
+  config?: { display: { hide: { method: string }[] } };
+} {
+  if (method == null) return {};
+  return {
+    prefill: { method },
+    config: {
+      display: {
+        hide: [{ method: 'netbanking' }, { method: 'wallet' }, { method: 'paylater' }, { method: 'emi' }],
+      },
+    },
+  };
 }
 
 /**

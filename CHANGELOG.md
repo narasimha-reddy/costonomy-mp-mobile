@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [feat/credit-pay-c] - [Credit] Pay credit dues with UPI, card or the wallet
+#### Added
+- Pay dues: a picker of open credit invoices across suppliers (server order and amounts, whole invoices only, up to the server's limit), a method sheet (UPI, card, wallet) from the server's quote, and a result screen (paid with receipt, partly or wholly returned, still confirming, not completed). Routes `/restaurant/credit/pay` and `/restaurant/credit/pay/[attemptId]`; `lib/credit/pay/` holds the pure selection, pay sequence, copy and error mapping.
+- The pay sequence never says a payment failed once Razorpay returned a payment id: a slow or failed confirm is polled and ends as "We're confirming your payment"; a closed checkout is checked once before it is called cancelled.
+- Razorpay checkout takes an optional `method` (`upi` or `card`) that pre-selects it and hides net banking, wallets, pay later and EMI; order pay and top-up are unchanged.
+#### Changed
+- Credit overview: when the server reports `onlinePayEnabled`, the Pay action becomes "Pay dues" and opens the picker, and "Paid direct" is not offered. With it off or absent, nothing changes.
+- The app sends invoice ids and the outstanding it was shown, never an amount; every total, fee and shortfall is the server's.
 ### [fix/bug3-track] - Web tracking map: truck, line and camera agree (found with a live recorder)
 #### Fixed
 - Arriving: the truck glides 5 s to each fix while the line and camera used the new fix only, so the truck was off the map or at its bottom edge with the line ending ahead of it. The camera now frames where the truck is drawn as well as the fix, and the line starts at the drawn truck all through the glide.

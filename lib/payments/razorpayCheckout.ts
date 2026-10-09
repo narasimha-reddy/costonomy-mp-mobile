@@ -2,6 +2,7 @@ import {
   CheckoutDismissed,
   CheckoutFailed,
   CheckoutUnavailable,
+  methodOptions,
   type CheckoutRequest,
   type CheckoutResult,
 } from './types';
@@ -34,6 +35,7 @@ export async function openRazorpayCheckout(request: CheckoutRequest): Promise<Ch
       name: request.merchantName,
       description: request.description,
       theme: { color: request.themeColor },
+      ...methodOptions(request.method),
     });
     return {
       providerPaymentId: result.razorpay_payment_id,

@@ -1,6 +1,7 @@
 import {
   legsFor, truckLook, cssColor, viewportFor, lerpPoint, glideMs, shouldRefit, shouldRefitMoving, fitTargetFor, insidePadded,
-  QUIET_MAP_STYLE, cameraFor, MIN_ZOOM, MAX_ZOOM, SINGLE_POINT_ZOOM, NEAR_DROP_M, chipIcon, chipSide, metersPerPixel, truckShownAt, TRUCK_PIN_CLEAR_M, distanceM, FIT_PADDING, edgeOf, REFIT_EDGE_GAP_MS,
+  QUIET_MAP_STYLE, cameraFor, MIN_ZOOM, MAX_ZOOM, SINGLE_POINT_ZOOM, NEAR_DROP_M, chipIcon, chipSide, metersPerPixel, truckShownAt, TRUCK_PIN_CLEAR_PX, FIT_PADDING, edgeOf, REFIT_EDGE_GAP_MS,
+  offsetPx, pinColumnPx, withDrawnTruck, GLIDE_FRAME_M, type PinSides, truckClearOfPinsM, TRUCK_PIN_CLEAR_M, distanceM,
 } from '@/lib/maps/googleLegs';
 import { Colors, TrackLayout } from '@/theme';
 
@@ -220,22 +221,26 @@ describe('pin label chips', () => {
   it('escapes markup in the text', () => {
     expect(decodeURIComponent(chipIcon('A & <B>').url)).toContain('A &amp; &lt;B&gt;');
   });
-  it('sits above the pin unless the truck is within ~30 px north of it', () => {
+  it('sits above the pin unless the truck is drawn in its column within reach north of it', () => {
     const pin = { latitude: 12.96109, longitude: 77.63869 };
+    const w = chipIcon('Restaurant').width;
     const mpp = metersPerPixel(pin.latitude, 15);
     expect(mpp).toBeGreaterThan(4);
     expect(mpp).toBeLessThan(5);
-    expect(chipSide(pin, null, 15)).toBe('above');
-    expect(chipSide(pin, { latitude: 13.2, longitude: 77.6 }, 15)).toBe('above');
-    // ~20 px north of the pin at zoom 15: the chip moves below so the truck does not cover it.
-    const north = { latitude: pin.latitude + (20 * mpp) / 111_320, longitude: pin.longitude };
-    expect(chipSide(pin, north, 15)).toBe('below');
-    // ~20 px south: the chip above is clear of the truck.
-    const south = { latitude: pin.latitude - (20 * mpp) / 111_320, longitude: pin.longitude };
-    expect(chipSide(pin, south, 15)).toBe('above');
-    // Zoomed further in, the same metres are many pixels apart; with no zoom known the chip stays above.
-    expect(chipSide(pin, north, 19)).toBe('above');
-    expect(chipSide(pin, north, undefined)).toBe('above');
+    const px = (x: number, y: number) => ({
+      latitude: pin.latitude + (y * mpp) / 111_195,
+      longitude: pin.longitude + (x * mpp) / (111_195 * Math.cos((pin.latitude * Math.PI) / 180)),
+    });
+    expect(chipSide(pin, w, null, 15)).toBe('above');
+    expect(chipSide(pin, w, { latitude: 13.2, longitude: 77.6 }, 15)).toBe('above');
+    // 36 px north (where a close truck is drawn): the chip goes below, away from it.
+    expect(chipSide(pin, w, px(0, 36), 15)).toBe('below');
+    expect(chipSide(pin, w, px(w / 2 + 10, 36), 15)).toBe('below'); // still over the wide chip's corner
+    // South, far north, or beside the chip's column: above is clear.
+    expect(chipSide(pin, w, px(0, -36), 15)).toBe('above');
+    expect(chipSide(pin, w, px(0, 80), 15)).toBe('above');
+    expect(chipSide(pin, w, px(pinColumnPx(w) + 1, 20), 15)).toBe('above');
+    expect(chipSide(pin, w, px(0, 36), undefined)).toBe('above');
   });
 });
 
@@ -248,46 +253,90 @@ describe('pin label font', () => {
   });
 });
 
-describe('truckShownAt', () => {
+describe('truckShownAt (pixels at the map zoom)', () => {
+  const pin = { latitude: 12.97, longitude: 77.59 };
+  const spot = { at: pin, chipWidth: chipIcon('Restaurant').width };
+  const at = (zoom: number, x: number, y: number) => {
+    const mpp = metersPerPixel(pin.latitude, zoom);
+    return { latitude: pin.latitude + (y * mpp) / 111_195, longitude: pin.longitude + (x * mpp) / (111_195 * Math.cos((pin.latitude * Math.PI) / 180)) };
+  };
+  it('leaves a truck that is clear of every pin where it is', () => {
+    const t = at(16, 0, 60);
+    expect(truckShownAt(t, [spot], 16, 0)).toBe(t);
+    expect(truckShownAt(t, [], 16, 0)).toBe(t);
+    const beside = at(16, pinColumnPx(spot.chipWidth) + 1, 0);
+    expect(truckShownAt(beside, [spot], 16, 0)).toBe(beside);
+  });
+  it.each([15, 16, 17])('at zoom %i a truck in the pin column is drawn 36 px above or below it, on its own side, keeping its x', (zoom) => {
+    const n = offsetPx(pin, truckShownAt(at(zoom, 5, 10), [spot], zoom, 0), zoom);
+    expect(n.y).toBeCloseTo(TRUCK_PIN_CLEAR_PX, 3);
+    expect(n.x).toBeCloseTo(5, 3);
+    const s = offsetPx(pin, truckShownAt(at(zoom, -5, -10), [spot], zoom, 0), zoom);
+    expect(s.y).toBeCloseTo(-TRUCK_PIN_CLEAR_PX, 3);
+  });
+  it('the clearance keeps the 44 px truck off the pin dot and its chip', () => {
+    expect(TRUCK_PIN_CLEAR_PX - TrackLayout.truckSize / 2).toBeGreaterThanOrEqual(12); // pin dot radius 10, plus a gap
+    expect(pinColumnPx(40)).toBeGreaterThanOrEqual(20 + TrackLayout.truckSize / 2);
+  });
+  it('a truck right on the pin is drawn behind its heading (heading north: below; heading south: above)', () => {
+    expect(offsetPx(pin, truckShownAt(pin, [spot], 16, 0), 16).y).toBeLessThan(0);
+    expect(offsetPx(pin, truckShownAt(pin, [spot], 16, 180), 16).y).toBeGreaterThan(0);
+  });
+  it('keeps the side it was drawn on while the fixes jitter round the pin, and forgets it once the truck leaves', () => {
+    const sides: PinSides = {};
+    expect(offsetPx(pin, truckShownAt(at(16, 0, -8), [spot], 16, 0, sides), 16).y).toBeLessThan(0);
+    for (const [x, y] of [[0, 6], [3, 0], [-4, 12], [0, -3]]) {
+      expect(offsetPx(pin, truckShownAt(at(16, x!, y!), [spot], 16, 0, sides), 16).y).toBeCloseTo(-TRUCK_PIN_CLEAR_PX, 3);
+    }
+    truckShownAt(at(16, 0, 200), [spot], 16, 0, sides);
+    expect(offsetPx(pin, truckShownAt(at(16, 0, 6), [spot], 16, 0, sides), 16).y).toBeGreaterThan(0);
+  });
+  it('a truck drawn south of the pin whose fix lands just north of it stays south: it never glides across the pin', () => {
+    // Live: arriving from the south, the reached fix was 4 px north of the pin and the truck slid through the pin to the north.
+    const shown = truckShownAt(at(16, 0, 4), [spot], 16, 0, {}, at(16, 4, -61)); // y is north: drawn 61 px south
+    expect(offsetPx(pin, shown, 16).y).toBeCloseTo(-TRUCK_PIN_CLEAR_PX, 3);
+    expect(offsetPx(pin, truckShownAt(at(16, 0, -4), [spot], 16, 180, {}, at(16, 0, 80)), 16).y).toBeCloseTo(TRUCK_PIN_CLEAR_PX, 3);
+  });
+  it('without a zoom, or with an unreadable heading, never returns a position that is not a number', () => {
+    expect(truckShownAt(pin, [spot], undefined, 0)).toBe(pin);
+    const shown = truckShownAt(pin, [spot], 16, NaN);
+    expect(Number.isFinite(shown.latitude)).toBe(true);
+    expect(Number.isFinite(shown.longitude)).toBe(true);
+  });
+});
+
+describe('truckClearOfPinsM (native map, unchanged)', () => {
   const pin = { latitude: 12.97, longitude: 77.59 };
   const metresNorth = (m: number) => ({ latitude: pin.latitude + m / 111_195, longitude: pin.longitude });
-  it('leaves a truck that is clear of every pin where it is', () => {
+  it('leaves a clear truck, pushes a close one out to 60 m on its side, a truck on the pin behind its heading', () => {
     const t = metresNorth(100);
-    expect(truckShownAt(t, [pin], 0)).toBe(t);
-    expect(truckShownAt(t, [], 0)).toBe(t);
-  });
-  it('moves a truck within 40 m of a pin out to 40 m, on the side it came from', () => {
-    const t = metresNorth(10);
-    const shown = truckShownAt(t, [pin], 0);
+    expect(truckClearOfPinsM(t, [pin], 0)).toBe(t);
+    const shown = truckClearOfPinsM(metresNorth(10), [pin], 0);
     expect(distanceM(shown, pin)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
     expect(shown.latitude).toBeGreaterThan(pin.latitude);
+    expect(truckClearOfPinsM(pin, [pin], 90).longitude).toBeLessThan(pin.longitude);
+    expect(Number.isFinite(truckClearOfPinsM(pin, [pin], NaN).latitude)).toBe(true);
   });
-  it('a truck exactly on the pin steps back behind its heading (heading east: shown to the west)', () => {
-    const shown = truckShownAt(pin, [pin], 90);
-    expect(distanceM(shown, pin)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
-    expect(shown.longitude).toBeLessThan(pin.longitude);
+});
+
+describe('withDrawnTruck', () => {
+  const fix = { latitude: 12.97, longitude: 77.59 };
+  const drop = { latitude: 12.99, longitude: 77.62 };
+  const behind = { latitude: 12.965, longitude: 77.59 };
+  it('frames where the truck is drawn and where it glides to, with the fix', () => {
+    expect(withDrawnTruck([fix, drop], fix, [behind, null])).toEqual([fix, drop, behind]);
   });
-  it('clears the nearest pin when several are close', () => {
-    const other = metresNorth(30);
-    const shown = truckShownAt(metresNorth(5), [pin, other], 0);
-    expect(distanceM(shown, pin)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
-    expect(distanceM(shown, other)).toBeGreaterThanOrEqual(TRUCK_PIN_CLEAR_M - 1);
+  it('not when the fix itself is not framed, nor a drawn point far from it', () => {
+    expect(withDrawnTruck([drop], fix, [behind])).toEqual([drop]);
+    const far = { latitude: fix.latitude + (GLIDE_FRAME_M + 100) / 111_195, longitude: fix.longitude };
+    expect(withDrawnTruck([fix, drop], fix, [far])).toEqual([fix, drop]);
   });
 });
 
 describe('truck clearance and framing (on-screen fixes)', () => {
-  const pin = { latitude: 12.97, longitude: 77.59 };
-  it('keeps the truck at least 60 m from a pin so its badge clears the pin dot', () => {
-    expect(TRUCK_PIN_CLEAR_M).toBeGreaterThanOrEqual(60);
-  });
-  it('never returns a position that is not a number, even for an unreadable heading', () => {
-    const shown = truckShownAt(pin, [pin], NaN);
-    expect(Number.isFinite(shown.latitude)).toBe(true);
-    expect(Number.isFinite(shown.longitude)).toBe(true);
-  });
   it('the fit padding leaves room for half the truck icon above and below, and at the sides', () => {
     const half = TrackLayout.truckSize / 2;
-    expect(FIT_PADDING.bottom).toBeGreaterThan(half);
+    expect(FIT_PADDING.bottom).toBeGreaterThanOrEqual(half + 26); // clear of Google's logo and attribution row
     expect(FIT_PADDING.top).toBeGreaterThan(half);
     expect(FIT_PADDING.left).toBeGreaterThan(half);
     expect(FIT_PADDING.right).toBeGreaterThan(half);

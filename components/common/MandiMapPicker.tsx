@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
 import { MandiFormField } from './MandiFormField';
 import { MandiText } from './MandiText';
+import { MapUnavailable } from './MapUnavailable';
 import {
   DEFAULT_CENTER,
   GOOGLE_MAPS_API_KEY,
@@ -17,6 +17,8 @@ export interface MandiMapPickerProps {
   onChange: (place: PickedPlace) => void;
   height?: number;
   searchPlaceholder?: string;
+  /** Shown under the "Map unavailable" message so the address stays in view. */
+  address?: string | null;
 }
 
 /** Roughly a kilometre across, which frames a neighbourhood. */
@@ -39,6 +41,7 @@ export function MandiMapPicker({
   onChange,
   height = 260,
   searchPlaceholder = 'Search for an address',
+  address,
 }: MandiMapPickerProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ description: string; placeId: string }[]>([]);
@@ -105,14 +108,7 @@ export function MandiMapPicker({
     // store owner is reading. They get the two things they can act on.
     console.warn('[maps] No API key configured — see docs/GOOGLE_MAPS.md.');
     return (
-      <View style={[styles.missing, { minHeight: height }]}>
-        <Ionicons name="map-outline" size={24} color={Colors.textTertiary} />
-        <MandiText variant="bodyEmphasis">Map unavailable</MandiText>
-        <MandiText variant="caption" color={Colors.textSecondary} center>
-          We cannot show the map now. You can still pin this place with the buttons
-          below, and everything else on this screen works as usual.
-        </MandiText>
-      </View>
+      <MapUnavailable height={height} address={address} />
     );
   }
 
@@ -182,12 +178,4 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   result: { padding: Spacing.md },
-  missing: {
-    gap: Spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.xl,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surfaceSunken,
-  },
 });

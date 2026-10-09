@@ -41,15 +41,24 @@ export default function ChatInboxScreen() {
   }>();
   const side = storeId ? 'SUPPLIER' : 'RESTAURANT';
   const scopeId = Number(storeId || outletId);
-  const { threads, loading, error, refetch } = useChatThreads(
-    side, Number.isFinite(scopeId) && scopeId > 0 ? scopeId : null);
+  const hasScope = Number.isFinite(scopeId) && scopeId > 0;
+  const { threads, loading, error, refetch } = useChatThreads(side, hasScope ? scopeId : null);
 
   return (
     <MandiScreen
       header={<MandiHeader title="Messages" back />}
       onRefresh={() => refetch()}
     >
-      {loading ? (
+      {!hasScope ? (
+        // No outlet or store in the link: the query is disabled, so "loading" would never end.
+        <MandiEmptyState
+          icon="chatbubbles-outline"
+          title="Choose where to read messages from"
+          description="Open Messages from your outlet or store so we know whose conversations to show."
+          actionLabel="Go back"
+          onAction={() => router.back()}
+        />
+      ) : loading ? (
         <MandiSkeletonList count={4} />
       ) : error ? (
         <MandiErrorState message="Couldn't load your messages." onRetry={() => refetch()} />

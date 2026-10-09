@@ -19,6 +19,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - The truck icon is drawn pushed out to 40 m from a pin it is on top of, and pins now sit above the truck (with a soft halo), so the supplier and 'You' pins stay visible at pickup and arrival.
 - Web map pin labels used a serif font (the unquoted `Source Sans 3` family is invalid CSS); the family is quoted with a sans-serif fallback.
 - Arriving header reads 'Your order is arriving now' with the pill 'Please have someone ready to receive it'; the minutes ('Arriving in N mins') show under the pill when the payload has them.
+### [fix/bug-data] - Audit data bugs: placeholder names, GSTIN chip, unset hours, /chat scope, map fallback
+#### Fixed
+- A delivery partner name that is a placeholder ("Rider name") is never shown: the deliveries list and the partner card say "Delivery partner" instead.
+- Business settings shows "verified" only with a GSTIN on file and a VERIFIED status from the server; with no GSTIN it shows a neutral "Add GSTIN" chip and says to contact support.
+- A store whose opening and closing times are identical (00:00-00:00) reads "Hours not set"; the model has no 24-hour flag, so it is not guessed to mean always open.
+- /chat without an outlet or store in the link shows "Choose where to read messages from" with Go back, instead of a skeleton that never ends.
+- "Map unavailable" says why (maps are not set up in this version of the app), and the store address stays in view beneath it.
+
 ### [fix/p28-map] - Web map created when its host exists, refits while the truck moves, audience pin labels
 #### Fixed
 - Google web map no longer falls back to the sketch when the first render had nothing to draw (map created once the host element exists, construction retried); the camera frames the truck and the next stop and refits while live; the restaurant pin reads 'Restaurant' on the supplier screen and 'You' for the buyer.

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
-import { feeLine, methodAndReference, paymentSourceLabel, payoutStatusLabel } from '@/lib/credit/payouts';
+import { feeLine, methodAndReference, paymentSourceLabel, payoutSourceLine, payoutStatusLabel } from '@/lib/credit/payouts';
 import type { CreditPayout, StorePayment } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
@@ -10,7 +10,7 @@ import { Colors, Radius, Spacing } from '@/theme';
 const ROW_MIN = 48;
 
 /**
- * One wallet repayment Mandi collected. Gross, fee and net are the server's three figures
+ * One repayment Mandi collected (from the wallet or online). Gross, fee and net are the server's three figures
  * and the net, what the supplier gets, is the bold one. Long names and large amounts wrap.
  */
 export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: () => void }) {
@@ -18,6 +18,7 @@ export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: 
   const outlet = payout.outletName != null && payout.outletName !== name ? payout.outletName : null;
   const gross = `Paid ${formatMoney(payout.grossAmount)}`;
   const fee = feeLine(payout);
+  const sourceLine = payoutSourceLine(payout);
   const created = formatDay(payout.createdAt);
   const settled = payout.status === 'APPLIED' && payout.settlementNumber != null
     ? [`Settlement ${payout.settlementNumber}`, formatDay(payout.settlementDate)].filter(Boolean).join(' · ')
@@ -37,6 +38,9 @@ export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: 
         {outlet != null && <MandiText variant="caption" color={Colors.textSecondary}>{outlet}</MandiText>}
         <MandiText variant="caption" color={Colors.textSecondary}>{gross}</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>{fee}</MandiText>
+        {sourceLine != null && (
+          <MandiText variant="caption" color={Colors.textSecondary} testID={`payout-source-${payout.payoutId}`}>{sourceLine}</MandiText>
+        )}
         {created != null && <MandiText variant="caption" color={Colors.textSecondary}>{created}</MandiText>}
         {settled != null && <MandiText variant="caption" color={Colors.success}>{settled}</MandiText>}
       </View>

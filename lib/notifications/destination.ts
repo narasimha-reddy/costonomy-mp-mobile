@@ -47,6 +47,10 @@ export function destinationFor(notification: AppNotification): string | null {
     case 'CREDIT_AGREEMENT':
       return supplier ? `/supplier/credit/${id}` : `/restaurant/credit/${id}`;
 
+    // The restaurant's online credit payment: its result screen. The supplier hears of it as a repayment instead.
+    case 'CREDIT_PAYMENT_ATTEMPT':
+      return supplier ? null : `/restaurant/credit/pay/${id}`;
+
     // A procurement is a cart, and only its buyer has one.
     case 'PROCUREMENT':
       return supplier ? null : `/restaurant/checkout/${id}`;

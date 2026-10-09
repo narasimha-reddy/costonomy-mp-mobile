@@ -8,7 +8,7 @@ const item = (id: number, o: Partial<CreditPayout> = {}): CreditPayout => ({
   payoutId: id, repaymentId: id, agreementId: 1, outletId: 2, outletName: 'HSR', restaurantName: 'Spice Co',
   grossAmount: '1000.0000', commissionRatePercent: '2.5000', commissionAmount: '25.0000', netAmount: '975.0000',
   status: 'PENDING', settlementId: null, settlementNumber: null, settlementDate: null, appliedAt: null,
-  createdAt: '2026-10-01T05:00:00Z', invoices: [], ...o,
+  createdAt: '2026-10-01T05:00:00Z', invoices: [], source: 'WALLET', paymentMethod: null, ...o,
 });
 
 describe('groupPayouts', () => {

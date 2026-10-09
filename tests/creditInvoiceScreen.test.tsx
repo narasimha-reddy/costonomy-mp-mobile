@@ -7,6 +7,8 @@ import { ApiError } from '@/lib/api/errors';
 import { Colors } from '@/theme';
 import { renderedText } from './fixtures/renderedText';
 
+// Online payment is off here; tests/creditPaidDirectHidden.test.tsx covers it on.
+jest.mock('@/hooks/useOnlinePayOn', () => ({ useOnlinePayOn: () => false }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };

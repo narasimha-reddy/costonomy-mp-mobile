@@ -16,6 +16,7 @@ export function paymentBadge(source: string | null | undefined): string | null {
     case 'SUPPLIER_RECORDED': return 'You recorded';
     case 'CLAIM_CONFIRMED': return 'Confirmed claim';
     case 'WALLET': return 'Through Mandi';
+    case 'ONLINE': return 'Paid through Mandi';
     default: return null;
   }
 }

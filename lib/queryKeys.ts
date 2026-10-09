@@ -190,3 +190,15 @@ export function supplierWriteKeys(storeId: number | null | undefined, agreementI
     ['credit-invoice'],
   ] as const;
 }
+
+// ── Paying credit dues (WP-C) ─────────────────────────────────────────
+
+/** The pay picker's invoices. Under ['outlet', id, 'credit'] so every credit refresh refetches it. */
+export function creditPayableKey(outletId: number | null | undefined) {
+  return ['outlet', outletId, 'credit', 'payable'] as const;
+}
+
+/** One credit payment attempt, as the result screen reads it. */
+export function creditPayAttemptKey(outletId: number | null | undefined, attemptId: number | string) {
+  return ['outlet', outletId, 'credit-pay', String(attemptId)] as const;
+}

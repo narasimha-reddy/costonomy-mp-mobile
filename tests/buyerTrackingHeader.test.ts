@@ -146,9 +146,15 @@ describe('buyerTrackingHeader state matrix', () => {
   });
   it('arriving', () => {
     expect(head(order(C, 'OUT_FOR_DELIVERY'), delivery('IN_TRANSIT', { location: northOf(200) }))).toMatchObject({
-      state: 'arriving', title: 'Arriving now', map: 'arriving', partner: 'card',
-      pill: { text: 'Be ready to receive your order' },
+      state: 'arriving', title: 'Your order is arriving now', map: 'arriving', partner: 'card',
+      pill: { text: 'Please have someone ready to receive it' },
     });
+  });
+  it('arriving shows the minutes under the pill only when the payload has them', () => {
+    const none = head(order(C, 'OUT_FOR_DELIVERY'), delivery('IN_TRANSIT', { location: northOf(200) }));
+    expect(none.pill?.subText).toBeNull();
+    const eta = head(order(C, 'OUT_FOR_DELIVERY'), delivery('IN_TRANSIT', { location: northOf(200), etaMinutes: 2 }));
+    expect(eta.pill?.subText).toBe('Arriving in 2 mins');
   });
   it('on_the_way', () => {
     const h = head(order(C, 'OUT_FOR_DELIVERY'), delivery('IN_TRANSIT'));

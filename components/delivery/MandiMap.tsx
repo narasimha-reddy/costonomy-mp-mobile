@@ -3,7 +3,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import MapView, { Circle, Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MAPS_CONFIGURED } from '@/lib/maps/config';
 import { useTileWatchdog } from '@/lib/maps/tileWatchdog';
-import { fitTargetFor } from '@/lib/maps/googleLegs';
+import { fitTargetFor, truckShownAt } from '@/lib/maps/googleLegs';
 import { regionFor, toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
 import { useSmoothHeading, useTruckHeading } from '@/hooks/useTruckHeading';
 import { TruckTopIcon } from './TruckTopIcon';
@@ -14,6 +14,8 @@ export type { MandiMapProps, MapMode };
 
 /** How long a custom marker is redrawn after it appears or changes: the Android blank-marker workaround. */
 const TRACK_MS = 500;
+/** Pins sit above the truck marker (which has no zIndex of its own, so 0). */
+const PIN_Z = 10;
 
 /**
  * The delivery map. Doc 05 §16.
@@ -76,11 +78,15 @@ export function MandiMap(props: MandiMapProps) {
           />
         )}
         {mode != null && truck && mode !== 'placed' && mode !== 'pending' && (
-          <TruckMarker at={truck} stale={stale} heading={heading} />
+          <TruckMarker
+            at={truckShownAt(truck, [pickup, destination].filter((p): p is LatLng => p != null), heading)}
+            stale={stale}
+            heading={heading}
+          />
         )}
-        {mode != null && pickup && <Marker coordinate={pickup} title="Supplier" pinColor={Colors.textPrimary} />}
+        {mode != null && pickup && <Marker coordinate={pickup} title="Supplier" pinColor={Colors.textPrimary} zIndex={PIN_Z} />}
         {destination && (
-          <Marker coordinate={destination} title={audience === 'supplier' ? 'Restaurant' : 'You'} pinColor={Colors.success} />
+          <Marker coordinate={destination} title={audience === 'supplier' ? 'Restaurant' : 'You'} pinColor={Colors.success} zIndex={PIN_Z} />
         )}
       </MapView>
     </View>
@@ -144,7 +150,7 @@ function TruckMarker({ at, stale, heading }: { at: LatLng; stale: boolean; headi
     return () => clearTimeout(t);
   }, [stale]);
   return (
-    <Marker coordinate={at} anchor={{ x: 0.5, y: 0.5 }} flat rotation={rotation} tracksViewChanges={track}>
+    <Marker coordinate={at} anchor={{ x: 0.5, y: 0.5 }} zIndex={1} flat rotation={rotation} tracksViewChanges={track}>
       <TruckTopIcon size={TrackLayout.truckSize} muted={stale} />
     </Marker>
   );

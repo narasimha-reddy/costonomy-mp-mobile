@@ -73,8 +73,8 @@ const COPY = {
   atPickupPill: 'Collecting your order',
   reached: 'Reached your location',
   reachedPill: 'Coming to your doorstep',
-  arriving: 'Arriving now',
-  arrivingPill: 'Be ready to receive your order',
+  arriving: 'Your order is arriving now',
+  arrivingPill: 'Please have someone ready to receive it',
   onTheWay: 'Order is on the way',
   onTheWayPill: 'On the way',
   late: (mins: number | null) => (mins != null ? `Running late by ${mins} min` : 'Running late'),
@@ -224,6 +224,12 @@ export function buyerTrackingHeader(i: {
     return { ...p, subText };
   };
 
+  // The minutes (only when the payload has them) go under the arriving pill; a stale-fix note takes the line instead.
+  const arrivingPill = (): Pill | null => {
+    const p = withSub(pill(COPY.arrivingPill), 'arriving');
+    return p && p.subText == null && view.etaText && !view.delayed ? { ...p, subText: view.etaText } : p;
+  };
+
   if (dStatus === 'DRIVER_ASSIGNED') {
     return out('assigned', COPY.assigned(first), {
       pill: withSub(etaPill() ?? pill(COPY.assignedPill), 'live'), map: 'live', partner: 'card',
@@ -249,7 +255,7 @@ export function buyerTrackingHeader(i: {
   if (driving && !view.delayed
     && ((metres != null && metres <= ARRIVING_M) || (eta != null && eta <= ARRIVING_ETA_MINS))) {
     return out('arriving', COPY.arriving, {
-      pill: withSub(pill(COPY.arrivingPill), 'arriving'), map: 'arriving', partner: 'card',
+      pill: arrivingPill(), map: 'arriving', partner: 'card',
     });
   }
   if (driving) {

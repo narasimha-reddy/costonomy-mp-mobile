@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/bug3-track] - Web tracking map: truck, line and camera agree (found with a live recorder)
+#### Fixed
+- Arriving: the truck glides 5 s to each fix while the line and camera used the new fix only, so the truck was off the map or at its bottom edge with the line ending ahead of it. The camera now frames where the truck is drawn as well as the fix, and the line starts at the drawn truck all through the glide.
+- Reached: the truck keeps a pixel clearance (36 px straight above or below the pin, at the map's zoom, re-placed when the zoom changes) instead of 60 m, which was 26 px at zoom 16 and covered the pin and its chip; it keeps its side while the fixes jitter, and the chip goes on the other side.
+- The fit leaves room at the bottom for Google's logo and attribution row. The native map keeps its 60 m rule (`truckClearOfPinsM`).
 ### [fix/bug2-ui] - Second on-screen audit fixes
 #### Fixed
 - Store editor says "Hours not set" instead of 00:00-00:00; the address picker shows "Map unavailable" with the address when Google refuses the key or does not load; chat "Go back" works with no history.

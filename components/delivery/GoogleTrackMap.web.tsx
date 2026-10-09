@@ -6,7 +6,8 @@ import { hostHasTiles, hostShown, watchHost } from '@/lib/maps/hostVisibility';
 import { toLatLng, turnLerp, type LatLng } from '@/lib/delivery/mapGeometry';
 import {
   cameraFor, chipAnchor, chipIcon, chipSide, cssColor, distanceM, edgeOf, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint,
-  MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook, truckShownAt,
+  MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook, truckShownAt, withDrawnTruck,
+  type PinSides, type PinSpot,
 } from '@/lib/maps/googleLegs';
 import { headingBucket, truckIconUrl } from '@/lib/maps/truckSvg';
 import { useTruckHeading } from '@/hooks/useTruckHeading';
@@ -15,6 +16,8 @@ import { Colors, Radius, TrackLayout } from '@/theme';
 import { onMapsAuthFailure } from '@/lib/maps/authFailure';
 
 const GLIDE_STEP_MS = 40;
+/** A zoom change moves where the truck is drawn near a pin (the clearance is in pixels): it slides there this fast. */
+const RELAYOUT_GLIDE_MS = 300;
 /** A map that could not be constructed (the host not ready) is retried this often, this many times, before giving up. */
 const CREATE_RETRY_MS = 500;
 const CREATE_TRIES = 3;
@@ -72,7 +75,11 @@ export function GoogleTrackMap(props: MandiMapProps) {
     setHostEl((cur: unknown) => (cur === el ? cur : el));
   };
   const map = useRef<G>(null);
-  const truck = useRef<{ marker: G; look: string; at: LatLng; heading: number } | null>(null);
+  /** The truck marker: `at` is where it is drawn this moment (mid-glide), `target` where it glides to, by `endsAt`. */
+  const truck = useRef<{ marker: G; look: string; at: LatLng; target: LatLng; endsAt: number; heading: number } | null>(null);
+  /** The solid leg from the truck: its first point follows the marker, so the line always reaches the truck. */
+  const truckLine = useRef<{ line: G; rest: LatLng[] } | null>(null);
+  const pinSides = useRef<PinSides>({});
   const overlays = useRef<G[]>([]);
   const lastFixAt = useRef<string | null>(null);
   const glide = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,7 +90,10 @@ export function GoogleTrackMap(props: MandiMapProps) {
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tries = useRef(0);
   const chips = useRef<{ marker: G; pin: LatLng; url: string; width: number; height: number; side: 'above' | 'below' }[]>([]);
-  /** Puts each label chip above its pin, or below when the truck is right there (see `chipSide`). */
+  /**
+   * After the camera settles (idle): draws the truck clear of the pins for the zoom it settled at (the clearance is in
+   * pixels, see `truckShownAt`) and puts each label chip on the side away from it (see `chipSide`).
+   */
   const placeChips = useRef<() => void>(() => undefined);
   /** Frames the current points again: the map's box changes size after a mode change (taller when the order is close). */
   const refitNow = useRef<() => void>(() => undefined);
@@ -187,6 +197,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
       overlays.current = [];
       chips.current = [];
       truck.current = null;
+      truckLine.current = null;
       map.current = null;
     };
   }, [failed, hostEl, attempt]);
@@ -238,6 +249,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
 
     const at = driver ? toLatLng(driver) : null;
     const scene = legsFor({ mode, truck: at, pickup, drop: destination });
+    truckLine.current = null;
     const own = (o: G) => {
       overlays.current.push(o);
       return o;
@@ -245,7 +257,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
 
     scene.lines.forEach((leg) => {
       const solid = leg.kind === 'solid';
-      own(
+      const line = own(
         new g.Polyline({
           map: map.current,
           path: leg.path.map(pt),
@@ -260,6 +272,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
               }),
         }),
       );
+      if (solid && at != null && leg.path[0] === at) truckLine.current = { line, rest: leg.path.slice(1) };
     });
     const ring = cssColor(Colors.geofenceFill);
     const edge = cssColor(Colors.geofenceStroke);
@@ -278,6 +291,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
       ),
     );
     chips.current = [];
+    const spots: PinSpot[] = [];
     const pin = (p: LatLng, text: string, fill: string) => {
       // A soft halo in the pin's colour, under the truck, so a pin the truck passes stays findable.
       own(
@@ -318,19 +332,30 @@ export function GoogleTrackMap(props: MandiMapProps) {
         }),
       );
       chips.current.push({ marker, pin: p, url: chip.url, width: chip.width, height: chip.height, side: 'above' });
+      spots.push({ at: p, chipWidth: chip.width });
     };
     if (pickup && (mode != null || !driver)) pin(pickup, 'Supplier', Colors.textPrimary);
     if (destination) pin(destination, audience === 'supplier' ? 'Restaurant' : 'You', Colors.success);
 
-    // The icon steps aside for a pin within 60 m; the lines, the framing and the chips use where the truck really is.
-    const pinsDrawn = [pickup && (mode != null || !driver) ? pickup : null, destination].filter((p): p is LatLng => p != null);
-    moveTruck(g, scene.showTruck && at ? truckShownAt(at, pinsDrawn, heading) : null);
-    const truckAt = scene.showTruck ? at : null;
+    // The icon is drawn clear of the pins at the map's zoom; the decisions use where the truck really is. The line from
+    // the truck starts where the icon is drawn (see moveTruck), so it reaches the truck even while it glides.
+    const zoomNow = () => map.current?.getZoom?.() as number | undefined;
+    const shownFor = (zoom: number | undefined) => (scene.showTruck && at ? truckShownAt(at, spots, zoom, heading, pinSides.current) : null);
+    let shownZoom = zoomNow();
+    const drawnBefore = truck.current?.at ?? null;
+    const shown = shownFor(shownZoom);
+    moveTruck(g, shown);
     placeChips.current = () => {
       if (!map.current) return;
-      const zoom = map.current.getZoom?.();
+      const zoom = zoomNow();
+      if (zoom !== shownZoom) {
+        shownZoom = zoom;
+        const next = shownFor(zoom);
+        if (next && truck.current && distanceM(next, truck.current.target) > 0.5) moveTruck(g, next, RELAYOUT_GLIDE_MS);
+      }
+      const drawnAt = truck.current?.target ?? null;
       chips.current.forEach((c) => {
-        const side = chipSide(c.pin, truckAt, zoom);
+        const side = chipSide(c.pin, c.width, drawnAt, zoom);
         if (side === c.side) return;
         c.side = side;
         const a = chipAnchor(side, c.width, c.height);
@@ -343,9 +368,11 @@ export function GoogleTrackMap(props: MandiMapProps) {
     // stops changes (the order collected, the restaurant coming close). While live a new fix alone must not yank the
     // camera: refit when the truck left the padded view, got twice as close to the next stop, moved over 10% of the view,
     // or 20 s passed (never more than once per 8 s, never within 30 s of the user's drag).
-    const pts = fitTargetFor(mode, at, pickup, destination);
-    const has = (p: LatLng | null) => p != null && pts.includes(p);
+    const target = fitTargetFor(mode, at, pickup, destination);
+    const has = (p: LatLng | null) => p != null && target.includes(p);
     const modeKey = `${String(mode ?? 'none')}|${has(at) ? 't' : ''}${has(pickup) ? 'p' : ''}${has(destination) ? 'd' : ''}`;
+    // With the truck framed, also frame where it is drawn now and where it glides to: the whole glide stays in view.
+    const pts = withDrawnTruck(target, at, [drawnBefore, shown]);
     const next = mode === 'live' && pickup ? pickup : destination;
     const distNow = at && next ? distanceM(at, next) : 0;
     const fit = () => {
@@ -388,7 +415,12 @@ export function GoogleTrackMap(props: MandiMapProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, driverKey, pickupKey, destKey, mode, stale, audience]);
 
-  function moveTruck(g: G, at: LatLng | null) {
+  /**
+   * Draws the truck at `at`: a new marker, or a glide from where it is drawn now. A new fix glides over the gap between
+   * the fixes (see `glideMs`); a zoom change (`relayoutMs`) is not a new fix: it slides over what is left of the glide,
+   * or `relayoutMs` when that is longer.
+   */
+  function moveTruck(g: G, at: LatLng | null, relayoutMs?: number) {
     if (!at) {
       truck.current?.marker.setMap(null);
       truck.current = null;
@@ -402,6 +434,11 @@ export function GoogleTrackMap(props: MandiMapProps) {
       scaledSize: new g.Size(TrackLayout.truckSize, TrackLayout.truckSize),
       anchor: new g.Point(TrackLayout.truckSize / 2, TrackLayout.truckSize / 2),
     });
+    // The solid leg from the truck starts where the marker is drawn, not at the fix it is still gliding to.
+    const followLine = (here: LatLng) => {
+      const l = truckLine.current;
+      if (l) l.line.setPath([here, ...l.rest].map(pt));
+    };
     const cur = truck.current;
     if (!cur) {
       const marker = new g.Marker({
@@ -412,15 +449,23 @@ export function GoogleTrackMap(props: MandiMapProps) {
         title: stale ? 'Last known position' : 'Delivery partner',
         zIndex: TRUCK_Z,
       });
-      truck.current = { marker, look: lookKey(heading), at, heading };
+      truck.current = { marker, look: lookKey(heading), at, target: at, endsAt: 0, heading };
       lastFixAt.current = driver?.recordedAt ?? null;
+      followLine(at);
       return;
     }
     cur.marker.setOpacity(look.opacity);
+    cur.target = at;
     // Glide from where the marker is now to the new fix, taking as long as the fixes are apart (1 to 5 s), turning to
     // the new heading the short way round over the same time (a new image only when the 5 degree bucket changes).
-    const glideFor = glideMs(lastFixAt.current, driver?.recordedAt);
-    lastFixAt.current = driver?.recordedAt ?? null;
+    // A zoom change mid-glide keeps the time left of the glide, so the truck does not jump ahead of its pace.
+    let glideFor = Math.max(relayoutMs ?? 0, cur.endsAt - Date.now());
+    if (relayoutMs == null) {
+      glideFor = glideMs(lastFixAt.current, driver?.recordedAt);
+      lastFixAt.current = driver?.recordedAt ?? null;
+    }
+    glideFor = Math.max(1, glideFor);
+    cur.endsAt = Date.now() + glideFor;
     if (glide.current) clearTimeout(glide.current);
     const from = cur.at;
     const fromHeading = cur.heading;
@@ -430,6 +475,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
       const here = lerpPoint(from, at, t);
       cur.at = here;
       cur.marker.setPosition(pt(here));
+      followLine(here);
       cur.heading = t < 1 ? turnLerp(fromHeading, heading, t) : heading;
       const key = lookKey(cur.heading);
       if (cur.look !== key) {

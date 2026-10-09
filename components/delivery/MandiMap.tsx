@@ -3,7 +3,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import MapView, { Circle, Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MAPS_CONFIGURED } from '@/lib/maps/config';
 import { useTileWatchdog } from '@/lib/maps/tileWatchdog';
-import { fitTargetFor, truckShownAt } from '@/lib/maps/googleLegs';
+import { fitTargetFor, truckClearOfPinsM } from '@/lib/maps/googleLegs';
 import { regionFor, toLatLng, type LatLng } from '@/lib/delivery/mapGeometry';
 import { useSmoothHeading, useTruckHeading } from '@/hooks/useTruckHeading';
 import { TruckTopIcon } from './TruckTopIcon';
@@ -79,7 +79,7 @@ export function MandiMap(props: MandiMapProps) {
         )}
         {mode != null && truck && mode !== 'placed' && mode !== 'pending' && (
           <TruckMarker
-            at={truckShownAt(truck, [pickup, destination].filter((p): p is LatLng => p != null), heading)}
+            at={truckClearOfPinsM(truck, [pickup, destination].filter((p): p is LatLng => p != null), heading)}
             stale={stale}
             heading={heading}
           />

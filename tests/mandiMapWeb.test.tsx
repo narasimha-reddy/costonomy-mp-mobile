@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render, screen } from '@testing-library/react-native';
 import { MandiMap } from '@/components/delivery/MandiMap.web';
 import { resetTileWatchdog, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
-import { distanceM } from '@/lib/maps/googleLegs';
+import { distanceM, metersPerPixel } from '@/lib/maps/googleLegs';
 import { Colors } from '@/theme';
 import { LOGO_DEEP_D } from '@/lib/maps/truckSvg';
 
@@ -70,7 +70,7 @@ function installGoogle() {
   viewBounds = { north: 14, south: 12, east: 78, west: 77 };
   const mk = (list: Obj[]) =>
     jest.fn().mockImplementation((opts: Obj) => {
-      const o: Obj = { opts, setMap: jest.fn(), setPosition: jest.fn(), setIcon: jest.fn(), setOpacity: jest.fn(), getPosition: () => ({ lat: () => opts.position?.lat, lng: () => opts.position?.lng }) };
+      const o: Obj = { opts, setMap: jest.fn(), setPosition: jest.fn(), setIcon: jest.fn(), setOpacity: jest.fn(), setPath: jest.fn(), getPosition: () => ({ lat: () => opts.position?.lat, lng: () => opts.position?.lng }) };
       list.push(o);
       return o;
     });
@@ -672,6 +672,108 @@ describe('MandiMap (web)', () => {
       expect(fit).toHaveBeenCalledTimes(2);
       const [b] = fit.mock.calls[1] as any[];
       expect(b.south).toBeCloseTo(12.97, 6); // the supplier (12.95) left the frame
+    });
+  });
+
+  // Seen on the live map (scratchpad fx3/t/live, recorder dumps): fixes arrive every 5 s and the marker glides 5 s to
+  // each one, so it is always drawn one fix behind. The line and the camera used the new fix only: in arriving the
+  // camera zoomed onto the new fix and the destination, the truck (still at the old fix) was outside the box, and the
+  // line ended in the street ahead of it. In reached the truck was pushed 60 m from the pin, which is 26 px at the
+  // zoom the camera picked (16), so the 44 px truck covered the pin and its chip and swung round it with each fix.
+  describe('the truck, its line and the camera agree', () => {
+    beforeEach(() => { process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k'; });
+    const at = (s: number) => `2026-01-01T10:00:${String(s).padStart(2, '0')}Z`;
+    const drawn = (m: Obj) => (m.setPosition.mock.calls.at(-1)?.[0] ?? m.opts.position) as { lat: number; lng: number };
+    const inside = (b: Obj, p: { lat: number; lng: number }) => p.lat <= b.north + 1e-9 && p.lat >= b.south - 1e-9 && p.lng <= b.east + 1e-9 && p.lng >= b.west - 1e-9;
+    const liveLine = () => polylines.filter((l) => !l.setMap.mock.calls.some((c: any[]) => c[0] === null)).at(-1)!;
+    const lineStart = (l: Obj) => ((l.setPath.mock.calls.at(-1)?.[0] ?? l.opts.path) as { lat: number; lng: number }[])[0]!;
+
+    async function arriving() {
+      const view = render(<MandiMap driver={{ ...fix, latitude: '12.986', longitude: '77.62', recordedAt: at(0) }} destination={outlet} stale={false} mode="live" />);
+      await flush();
+      mapInstances[0]!.zoom = 17; // street level, as on the device: the fix is ~140 px from the pin, not pushed clear of it
+      view.rerender(<MandiMap driver={{ ...fix, latitude: '12.9885', longitude: '77.62', recordedAt: at(5) }} destination={outlet} stale={false} mode="arriving" />);
+      await flush();
+      return { m: mapInstances[0]!, truck: truckOf() };
+    }
+
+    it('a new fix is framed together with where the truck is drawn, so the truck stays in view all through its glide', async () => {
+      const { m, truck } = await arriving();
+      const [b] = m.fitBounds.mock.calls.at(-1) as any[];
+      expect(inside(b, drawn(truck))).toBe(true);
+      for (const ms of [1000, 2000, 2500]) {
+        act(() => { jest.advanceTimersByTime(ms); });
+        expect(inside(b, drawn(truck))).toBe(true);
+      }
+      expect(drawn(truck).lat).toBeCloseTo(12.9885, 6);
+    });
+
+    it('the route line starts where the truck is drawn, all through the glide', async () => {
+      const { truck } = await arriving();
+      for (const ms of [0, 1000, 2000, 2500]) {
+        act(() => { jest.advanceTimersByTime(ms); });
+        const s = lineStart(liveLine());
+        expect(s.lat).toBeCloseTo(drawn(truck).lat, 7);
+        expect(s.lng).toBeCloseTo(drawn(truck).lng, 7);
+      }
+    });
+
+    /** Screen boxes in px around the pin (x east, y down): the truck icon, the pin dot and the chip. */
+    function overlaps(truck: Obj, chip: Obj, zoom: number) {
+      const mpp = metersPerPixel(outlet.latitude, zoom);
+      const p = drawn(truck);
+      const tx = ((p.lng - outlet.longitude) * 111_195 * Math.cos((outlet.latitude * Math.PI) / 180)) / mpp;
+      const ty = -((p.lat - outlet.latitude) * 111_195) / mpp;
+      const half = 22;
+      const hit = (l: number, t: number, r: number, b: number) => tx + half > l && tx - half < r && ty + half > t && ty - half < b;
+      const icon = (chip.setIcon.mock.calls.at(-1)?.[0] ?? chip.opts.icon) as Obj;
+      return {
+        pin: hit(-10, -10, 10, 10),
+        chip: hit(-icon.anchor.x, -icon.anchor.y, -icon.anchor.x + icon.scaledSize.w, -icon.anchor.y + icon.scaledSize.h),
+        ty,
+      };
+    }
+
+    it.each([15, 16, 17])('reached at zoom %i: the truck covers neither the pin nor its chip, and does not swing round it', async (zoom) => {
+      const north = (m: number) => String(outlet.latitude + m / 111_195);
+      const east = (m: number) => String(outlet.longitude + m / (111_195 * Math.cos((outlet.latitude * Math.PI) / 180)));
+      const view = render(<MandiMap driver={{ ...fix, latitude: north(-150), longitude: String(outlet.longitude), recordedAt: at(0) }} destination={outlet} stale={false} mode="arriving" />);
+      await flush();
+      const m = mapInstances[0]!;
+      const truck = truckOf();
+      const sides = new Set<number>();
+      // Jitter round the restaurant as the simulator's fixes do once the partner has reached it.
+      const jitter = [[0, 0], [8, 0], [-6, 4], [3, -9], [0, 0]];
+      for (const [i, [n, e]] of jitter.entries()) {
+        view.rerender(<MandiMap driver={{ ...fix, latitude: north(n!), longitude: east(e!), recordedAt: at(5 * (i + 1)) }} destination={outlet} stale={false} mode="reached" />);
+        await flush();
+        m.zoom = zoom; // where the camera settled
+        fire(m, 'idle');
+        act(() => { jest.advanceTimersByTime(5100); });
+        const you = chips().find((c) => chipText(c) === 'You' && !c.setMap.mock.calls.some((x: any[]) => x[0] === null))!;
+        const o = overlaps(truck, you, zoom);
+        expect(o.pin).toBe(false);
+        expect(o.chip).toBe(false);
+        sides.add(Math.sign(o.ty));
+      }
+      expect(sides.size).toBe(1);
+    });
+
+    it('when the camera zooms out after the truck was placed (arriving at 17, reached settles at 16) the truck is placed again', async () => {
+      const view = render(<MandiMap driver={{ ...fix, latitude: String(outlet.latitude - 150 / 111_195), longitude: String(outlet.longitude), recordedAt: at(0) }} destination={outlet} stale={false} mode="arriving" />);
+      await flush();
+      const m = mapInstances[0]!;
+      m.zoom = 17;
+      view.rerender(<MandiMap driver={{ ...fix, latitude: String(outlet.latitude), longitude: String(outlet.longitude), recordedAt: at(5) }} destination={outlet} stale={false} mode="reached" />);
+      await flush();
+      act(() => { jest.advanceTimersByTime(5100); });
+      m.zoom = 16;
+      fire(m, 'idle');
+      act(() => { jest.advanceTimersByTime(400); });
+      const you = chips().find((c) => chipText(c) === 'You' && !c.setMap.mock.calls.some((x: any[]) => x[0] === null))!;
+      const o = overlaps(truckOf(), you, 16);
+      expect(o.pin).toBe(false);
+      expect(o.chip).toBe(false);
     });
   });
 });

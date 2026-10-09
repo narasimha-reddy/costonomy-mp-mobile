@@ -148,12 +148,15 @@ describe('MandiMap modes (native)', () => {
     expect(circles).toHaveLength(1);
     expect(circles[0]?.props.radius).toBe(300);
     expect(circles[0]?.props.center).toEqual(outlet);
-    expect(circles[0]?.props.fillColor).toBe(Colors.geofenceFill);
+    // Outline only: a filled 300 m ring would wash the whole street-level view.
+    expect(circles[0]?.props.fillColor).toBe('transparent');
   });
 
   it('reached draws a 50 m circle', () => {
     const { UNSAFE_getAllByType } = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="reached" />);
-    expect((UNSAFE_getAllByType('Circle' as never)[0] as unknown as P).props.radius).toBe(50);
+    const ring = UNSAFE_getAllByType('Circle' as never)[0] as unknown as P;
+    expect(ring.props.radius).toBe(50);
+    expect(ring.props.fillColor).toBe(Colors.geofenceFill);
   });
 
   it('stale mutes the truck', () => {

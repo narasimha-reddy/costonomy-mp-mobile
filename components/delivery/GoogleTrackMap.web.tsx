@@ -5,7 +5,7 @@ import { markTilesFailed, markTilesLoaded, tilesFailed, TILE_TIMEOUT_MS } from '
 import { hostHasTiles, hostShown, watchHost } from '@/lib/maps/hostVisibility';
 import { toLatLng, turnLerp, type LatLng } from '@/lib/delivery/mapGeometry';
 import {
-  cameraFor, chipAnchor, chipIcon, chipSide, cssColor, distanceM, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint,
+  cameraFor, chipAnchor, chipIcon, chipSide, cssColor, distanceM, edgeOf, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint,
   MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook, truckShownAt,
 } from '@/lib/maps/googleLegs';
 import { headingBucket, truckIconUrl } from '@/lib/maps/truckSvg';
@@ -85,6 +85,8 @@ export function GoogleTrackMap(props: MandiMapProps) {
   const chips = useRef<{ marker: G; pin: LatLng; url: string; width: number; height: number; side: 'above' | 'below' }[]>([]);
   /** Puts each label chip above its pin, or below when the truck is right there (see `chipSide`). */
   const placeChips = useRef<() => void>(() => undefined);
+  /** Frames the current points again: the map's box changes size after a mode change (taller when the order is close). */
+  const refitNow = useRef<() => void>(() => undefined);
 
   const clearTimer = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -193,16 +195,25 @@ export function GoogleTrackMap(props: MandiMapProps) {
   useEffect(() => {
     if (!ready || !map.current) return undefined;
     const g: G = (window as any).google.maps;
-    const resize = () => {
-      if (map.current) g.event.trigger(map.current, 'resize');
+    let lastSize = '';
+    const resize = (refit: boolean) => {
+      if (!map.current) return;
+      g.event.trigger(map.current, 'resize');
+      // The camera was fitted for the old box size: a truck framed near the bottom of a 200 px box falls outside a
+      // 280 px one until the map knows its new size, and the marker is not drawn there. Frame it again, but only
+      // when the box really changed size.
+      const el = host.current as { clientWidth?: number; clientHeight?: number } | null;
+      const size = `${el?.clientWidth ?? ''}x${el?.clientHeight ?? ''}`;
+      if (refit && size !== lastSize) refitNow.current();
+      lastSize = size;
     };
-    const first = setTimeout(resize, 0);
+    const first = setTimeout(() => resize(false), 0);
     const node = host.current as Element | null;
     const Observer = (globalThis as any).ResizeObserver;
     let ro: { observe: (n: Element) => void; disconnect: () => void } | null = null;
     try {
       if (Observer && node) {
-        ro = new Observer(resize);
+        ro = new Observer(() => resize(true));
         ro?.observe(node);
       }
     } catch {
@@ -259,7 +270,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
           center: pt(c.center),
           radius: c.radiusM,
           fillColor: ring.color,
-          fillOpacity: ring.opacity,
+          fillOpacity: c.filled ? ring.opacity : 0,
           strokeColor: edge.color,
           strokeOpacity: edge.opacity,
           strokeWeight: 1,
@@ -311,7 +322,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
     if (pickup && (mode != null || !driver)) pin(pickup, 'Supplier', Colors.textPrimary);
     if (destination) pin(destination, audience === 'supplier' ? 'Restaurant' : 'You', Colors.success);
 
-    // The icon steps aside for a pin within 40 m; the lines, the framing and the chips use where the truck really is.
+    // The icon steps aside for a pin within 60 m; the lines, the framing and the chips use where the truck really is.
     const pinsDrawn = [pickup && (mode != null || !driver) ? pickup : null, destination].filter((p): p is LatLng => p != null);
     moveTruck(g, scene.showTruck && at ? truckShownAt(at, pinsDrawn, heading) : null);
     const truckAt = scene.showTruck ? at : null;
@@ -349,6 +360,10 @@ export function GoogleTrackMap(props: MandiMapProps) {
       lastFit.current = { at: Date.now(), dist: distNow, truck: at };
       userMovedAt.current = 0; // an explicit refit gives the camera back to the app
     };
+    refitNow.current = () => {
+      const userHolds = userMovedAt.current > 0 && Date.now() - userMovedAt.current < USER_MOVED_HOLD_MS;
+      if (fittedMode.current === modeKey && !userHolds && map.current) fit();
+    };
     if (fittedMode.current !== modeKey) {
       if (pts.length > 0) {
         fit();
@@ -356,7 +371,9 @@ export function GoogleTrackMap(props: MandiMapProps) {
       }
     } else if (at && scene.showTruck && has(at)) {
       const raw = map.current.getBounds?.()?.toJSON?.();
-      const outside = raw != null && !insidePadded(raw, at);
+      // Every framed point (the truck and the stop it heads for), not only the truck, must stay inside the view.
+      const outside = raw != null && pts.some((p) => !insidePadded(raw, p));
+      const atEdge = raw != null && edgeOf(raw, pts);
       const now = Date.now();
       const userHolds = userMovedAt.current > 0 && now - userMovedAt.current < USER_MOVED_HOLD_MS;
       const from = lastFit.current.truck;
@@ -364,7 +381,7 @@ export function GoogleTrackMap(props: MandiMapProps) {
       const viewSpanM = raw ? distanceM({ latitude: raw.north, longitude: raw.west }, { latitude: raw.south, longitude: raw.east }) : 0;
       if (
         !userHolds &&
-        (shouldRefit({ now, lastFitAt: lastFit.current.at, outside, distNow, distAtFit: lastFit.current.dist }) ||
+        (shouldRefit({ now, lastFitAt: lastFit.current.at, outside, distNow, distAtFit: lastFit.current.dist, edge: atEdge }) ||
           shouldRefitMoving({ now, lastFitAt: lastFit.current.at, movedM, viewSpanM }))
       ) fit();
     }

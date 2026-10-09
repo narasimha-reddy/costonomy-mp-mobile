@@ -198,6 +198,7 @@ describe('MandiMap (web)', () => {
     await flush();
     expect(circles).toHaveLength(1);
     expect(circles[0]!.opts.radius).toBe(300);
+    expect(circles[0]!.opts.fillOpacity).toBe(0); // outline only: a filled ring would wash the whole view
   });
 
   it('truck marker is the top-view truck with the logo, rotated to the bearing, and mutes when stale', async () => {
@@ -348,6 +349,29 @@ describe('MandiMap (web)', () => {
     expect(lastIcon(you).anchor.y).toBeGreaterThan(0);
   });
 
+  it('frames the points again when the box changes size (the card grows when the order is close), not when it stays', async () => {
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
+    const observers: (() => void)[] = [];
+    (global as Obj).ResizeObserver = class {
+      constructor(cb: () => void) { observers.push(cb); }
+      observe() {}
+      disconnect() {}
+    };
+    render(<MandiMap driver={fix} destination={outlet} stale={false} mode="arriving" />);
+    await flush();
+    act(() => { jest.advanceTimersByTime(50); });
+    const m = mapInstances[0]!;
+    (m.host as Obj).clientHeight = 200;
+    act(() => observers.forEach((cb) => cb()));
+    const fits = m.fitBounds.mock.calls.length;
+    act(() => observers.forEach((cb) => cb()));
+    expect(m.fitBounds.mock.calls.length).toBe(fits); // same size: no refit
+    (m.host as Obj).clientHeight = 280;
+    act(() => observers.forEach((cb) => cb()));
+    expect(m.fitBounds.mock.calls.length).toBe(fits + 1);
+    delete (global as Obj).ResizeObserver;
+  });
+
   it('triggers a resize after mount and when the container changes size', async () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
     const observers: (() => void)[] = [];
@@ -470,7 +494,7 @@ describe('MandiMap (web)', () => {
 
   it('refits while the truck keeps moving: more than 10% of the view, or every 20 s', async () => {
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY = 'k';
-    viewBounds = { north: 13.0, south: 12.9, east: 77.7, west: 77.5 }; // truck stays inside the padded view
+    viewBounds = { north: 13.1, south: 12.9, east: 77.7, west: 77.5 }; // the truck and the outlet stay well inside the view
     const view = render(<MandiMap driver={fix} destination={outlet} stale={false} mode="live" />);
     await flush();
     const fit = mapInstances[0]!.fitBounds;

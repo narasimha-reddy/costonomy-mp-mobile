@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/bug2-track] - Tracking map fixes from the on-screen check
+#### Fixed
+- Web tracking map is framed again when its box changes size (taller when the order is close), so the truck is no longer left outside the drawn area while arriving.
+- The camera keeps the truck and the stop it heads for inside the view with padding for the truck icon, and refits sooner when one is at the edge.
+- The truck badge stays 60 m (was 40) from a pin, clear of the "You" dot; the arriving 300 m ring is outline only so it no longer washes the map.
+- Supplier Test mode card no longer says "Test mode" twice.
+
 ### [fix/bug-copy] - On-screen audit copy and layout fixes
 #### Fixed
 - The restaurant Home request pill shows the order deadline in 12-hour time ("6:30 PM"), from the shared clock helper.

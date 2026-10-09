@@ -14,6 +14,8 @@ export interface Leg {
 export interface Ring {
   center: LatLng;
   radiusM: number;
+  /** False draws the outline only: a filled 300 m ring covers a whole street-level view and washes the map. */
+  filled: boolean;
 }
 export interface Scene {
   lines: Leg[];
@@ -36,7 +38,7 @@ export function legsFor(input: { mode: LegMode; truck: LatLng | null; pickup: La
     }
   }
   if ((mode === 'arriving' || mode === 'reached') && drop) {
-    circles.push({ center: drop, radiusM: mode === 'arriving' ? TrackLayout.geofenceArriveM : TrackLayout.geofenceReachM });
+    circles.push({ center: drop, radiusM: mode === 'arriving' ? TrackLayout.geofenceArriveM : TrackLayout.geofenceReachM, filled: mode === 'reached' });
   }
   const showTruck = truck != null && mode !== 'placed' && mode !== 'pending';
   return { lines, circles, showTruck };
@@ -97,6 +99,10 @@ export const QUIET_MAP_STYLE: { featureType: string; elementType: string; styler
 ];
 
 export const REFIT_MIN_GAP_MS = 8000;
+/** The shortest gap between two refits when a framed point is at the edge of the view. */
+export const REFIT_EDGE_GAP_MS = 2000;
+/** A framed point within this share of the view's side from its edge is 'at the edge' (its icon is partly cut off). */
+export const EDGE_SHARE = 0.08;
 
 /** True when the point sits inside the view with a margin (default 15% of each side) to spare. */
 export function insidePadded(view: Viewport, p: LatLng, pad: number = 0.15): boolean {
@@ -113,10 +119,17 @@ export function insidePadded(view: Viewport, p: LatLng, pad: number = 0.15): boo
  * the padded view or the distance to the next stop is half of (or less than) what it was at the last fit.
  */
 export function shouldRefit(input: {
-  now: number; lastFitAt: number; outside: boolean; distNow: number; distAtFit: number;
+  now: number; lastFitAt: number; outside: boolean; distNow: number; distAtFit: number; edge?: boolean;
 }): boolean {
+  // A framed point at the very edge of the view (a truck half out of the map) cannot wait the full 8 s.
+  if (input.edge && input.now - input.lastFitAt >= REFIT_EDGE_GAP_MS) return true;
   if (input.now - input.lastFitAt < REFIT_MIN_GAP_MS) return false;
   return input.outside || (input.distAtFit > 0 && input.distNow <= input.distAtFit / 2);
+}
+
+/** True when any framed point is at the edge of the view (within EDGE_SHARE of it) or outside it. */
+export function edgeOf(view: Viewport, points: LatLng[]): boolean {
+  return points.some((p) => !insidePadded(view, p, EDGE_SHARE));
 }
 
 export const distanceM = haversineM;
@@ -139,7 +152,8 @@ export const SINGLE_POINT_ZOOM = 16;
 /** Points closer than this are one point to the camera: fitting them would zoom to the maximum. */
 export const SAME_POINT_M = 30;
 /** Pixels kept clear around the framed points: more on top for the label chip drawn above a pin. */
-export const FIT_PADDING = { top: 36, right: 24, bottom: 20, left: 24 };
+/** Room for half the truck icon (it is drawn centred on the point) plus a margin, so it is never cut off at an edge. */
+export const FIT_PADDING = { top: TrackLayout.truckSize / 2 + 22, right: TrackLayout.truckSize / 2 + 8, bottom: TrackLayout.truckSize / 2 + 22, left: TrackLayout.truckSize / 2 + 8 };
 
 /** A fix the camera can trust: numbers, not the 0,0 null island, and within 50 km of a known stop (if any). */
 function frameable(p: LatLng, anchors: LatLng[]): boolean {
@@ -246,7 +260,7 @@ export function shouldRefitMoving(input: {
 }
 
 /** A truck nearer than this to a pin is drawn pushed out to this distance, so it never hides the pin (or its label). */
-export const TRUCK_PIN_CLEAR_M = 40;
+export const TRUCK_PIN_CLEAR_M = 60;
 
 /**
  * Where to draw the truck icon: its fix, unless the fix is within TRUCK_PIN_CLEAR_M of a pin, then moved out to that
@@ -255,6 +269,7 @@ export const TRUCK_PIN_CLEAR_M = 40;
  */
 export function truckShownAt(truck: LatLng, pins: LatLng[], heading: number): LatLng {
   let at = truck;
+  if (!Number.isFinite(heading)) heading = 0;
   for (let pass = 0; pass < 4; pass++) {
     let near: LatLng | null = null;
     for (const p of pins) {
@@ -268,5 +283,5 @@ export function truckShownAt(truck: LatLng, pins: LatLng[], heading: number): La
       longitude: near.longitude + (TRUCK_PIN_CLEAR_M * Math.sin(rad)) / (111_195 * Math.cos((near.latitude * Math.PI) / 180)),
     };
   }
-  return at;
+  return Number.isFinite(at.latitude) && Number.isFinite(at.longitude) ? at : truck;
 }

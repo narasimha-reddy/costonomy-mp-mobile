@@ -24,6 +24,7 @@ export function PaySelectionBar({
   const text = count === 0 ? CHOOSE_INVOICES
     : `${barCountText(count)} · ${total == null ? '—' : formatMoney(total)}`;
   return (
+    <View testID="pay-bar">
     <MandiStickyBar>
       {waiting != null && <DoublePayWarning testID="pay-double-warning" text={doublePayText(waiting)} />}
       {over && (
@@ -44,6 +45,7 @@ export function PaySelectionBar({
         />
       </View>
     </MandiStickyBar>
+    </View>
   );
 }
 

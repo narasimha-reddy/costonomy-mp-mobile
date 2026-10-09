@@ -143,7 +143,7 @@ export default function CreditInvoiceScreen() {
               <MandiButton
                 label={`Pay ${formatMoney(invoice.outstanding)}`}
                 onPress={onlinePay
-                  ? () => go('pay', () => router.push({ pathname: '/restaurant/credit/pay', params: { invoiceIds: String(invoiceId) } }))
+                  ? () => go('pay', () => router.push(`/restaurant/credit/pay?invoiceIds=${invoiceId}`))
                   : () => setSheetOpen(true)}
                 disabled={offline}
                 testID="invoice-pay"

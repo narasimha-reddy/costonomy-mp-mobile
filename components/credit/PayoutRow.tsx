@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
 import { feeLine, methodAndReference, paymentSourceLabel, payoutSourceLine, payoutStatusLabel } from '@/lib/credit/payouts';
+import { paymentDetail } from '@/lib/credit/payments';
 import type { CreditPayout, StorePayment } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
@@ -57,7 +58,8 @@ export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: 
 /** One payment on a credit line: who, which invoice, how much, how it was paid, when. */
 export function PaymentRow({ payment }: { payment: StorePayment }) {
   const name = payment.restaurantName ?? payment.outletName ?? 'A restaurant';
-  const how = methodAndReference(payment.method, payment.reference);
+  // Online: the method only; the Razorpay payment id is internal and never shown to the supplier.
+  const how = payment.source === 'ONLINE' ? paymentDetail(payment.method, null, 'ONLINE') : methodAndReference(payment.method, payment.reference);
   const when = [paymentSourceLabel(payment.source), formatDay(payment.paidOn) ?? payment.paidOn].join(' · ');
   return (
     <View

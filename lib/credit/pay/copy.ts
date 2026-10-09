@@ -26,7 +26,7 @@ export const ENDED_TEXT = "This payment wasn't completed. Nothing was charged.";
 export const DECLINED_TEXT = "That payment didn't go through. Nothing was charged.";
 
 export const barCountText = (n: number): string => (n === 1 ? '1 invoice' : `${n} invoices`);
-export const limitText = (max: number): string => `Choose at most ${max} invoices at a time.`;
+export const limitText = (max: number): string => `Choose at most ${max} ${max === 1 ? 'invoice' : 'invoices'} at a time.`;
 export const supplierAllLabel = (name: string): string => `Select all invoices from ${name}`;
 export const methodSheetTitle = (amount: Money): string => `Pay ${formatMoney(amount)}`;
 export const walletBalanceText = (balance: Money | null): string => `Balance ${formatMoney(balance)}`;

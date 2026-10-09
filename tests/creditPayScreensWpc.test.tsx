@@ -118,7 +118,7 @@ describe('pay picker', () => {
     (fetchPayableInvoices as jest.Mock).mockResolvedValue({ ...DATA, maxInvoices: 1 });
     mockParams = { agreementId: '11' };
     renderUi(<CreditPayScreen />);
-    expect(await screen.findByTestId('pay-limit-note')).toHaveTextContent('Choose at most 1 invoices at a time.');
+    expect(await screen.findByTestId('pay-limit-note')).toHaveTextContent('Choose at most 1 invoice at a time.');
     expect(screen.getByTestId('pay-bar-button').props.accessibilityState?.disabled).toBe(true);
   });
 });

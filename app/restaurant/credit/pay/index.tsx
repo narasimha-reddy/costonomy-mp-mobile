@@ -13,7 +13,7 @@ import { ApiError } from '@/lib/api/errors';
 import { CHANGED_TOAST, FLAG_OFF_TEXT, PAY_DUES, walletShortText } from '@/lib/credit/pay/copy';
 import { payErrorMessage, selectionChangedIds } from '@/lib/credit/pay/errors';
 import {
-  barText, EMPTY, itemsOf, preselect, prune, toggle, toggleSupplier, waitingOf, type Selection,
+  barText, drop, EMPTY, itemsOf, preselect, prune, toggle, toggleSupplier, waitingOf, type Selection,
 } from '@/lib/credit/pay/selection';
 import type { CreditPayMethod, CreditPayQuote, PayItem } from '@/models/creditPay';
 
@@ -69,8 +69,11 @@ export default function CreditPayScreen() {
       pay.reset();
       setSheetOpen(true);
     } catch (caught) {
-      if (selectionChangedIds(caught) != null) toast.show(CHANGED_TOAST, 'info');
-      else toast.show(payErrorMessage(caught), 'error');
+      const changed = selectionChangedIds(caught);
+      if (changed != null) {
+        setSelection((current) => drop(current, changed));
+        toast.show(CHANGED_TOAST, 'info');
+      } else toast.show(payErrorMessage(caught), 'error');
       void query.refetch();
     } finally {
       setQuoting(false);
@@ -90,6 +93,7 @@ export default function CreditPayScreen() {
         break;
       case 'changed':
         setSheetOpen(false);
+        if (outcome.changedInvoiceIds != null) setSelection((current) => drop(current, outcome.changedInvoiceIds ?? []));
         toast.show(CHANGED_TOAST, 'info');
         void query.refetch();
         break;

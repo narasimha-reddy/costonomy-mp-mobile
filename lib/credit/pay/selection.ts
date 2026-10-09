@@ -45,6 +45,14 @@ export function prune(sel: Selection, data: PayableInvoices): Selection {
   return keep.size === sel.ids.size ? sel : { ids: keep };
 }
 
+/** Unticks the invoices the server said changed, even if the refetch still lists them. */
+export function drop(sel: Selection, invoiceIds: readonly number[]): Selection {
+  if (!invoiceIds.some((id) => sel.ids.has(id))) return sel;
+  const next = new Set(sel.ids);
+  for (const id of invoiceIds) next.delete(id);
+  return { ids: next };
+}
+
 export function preselect(data: PayableInvoices, p: { agreementId?: number; invoiceIds?: number[] }): Selection {
   const wanted = new Set(p.invoiceIds ?? []);
   const ids = new Set<number>();

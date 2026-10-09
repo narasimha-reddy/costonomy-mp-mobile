@@ -175,10 +175,7 @@ export default function CreditAgreementScreen() {
             showPay={(onlinePay || walletRepayEnabled) && mayRepay}
             online={onlinePay}
             onPress={onlinePay
-              ? () => go('pay', () => router.push({
-                pathname: '/restaurant/credit/pay',
-                params: { agreementId: String(agreementId) },
-              }))
+              ? () => go('pay', () => router.push(`/restaurant/credit/pay?agreementId=${agreementId}`))
               : () => setPayOpen(true)}
             onClaim={onlinePay || !mayRepay || !canReportPayment(data.reportableAmount) ? undefined : () => go('claim', () => router.push({
               pathname: '/restaurant/credit/claim',

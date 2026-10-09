@@ -1,3 +1,4 @@
+import { ACTIVE_PILL_CLEARANCE } from '@/components/delivery/ActiveOrderPill';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
@@ -275,8 +276,8 @@ describe('home active-order pill', () => {
     await waitFor(() => expect(pill()).toBeTruthy());
     // MandiScreen adds the inset itself, as a spacer under the scroller.
     const paddings = screen.UNSAFE_getAllByType(View).map((v) => StyleSheet.flatten(v.props.style)?.paddingBottom);
-    expect(paddings).toContain(96);
-    expect(paddings).not.toContain(96 + 34);
+    expect(paddings).toContain(ACTIVE_PILL_CLEARANCE);
+    expect(paddings).not.toContain(ACTIVE_PILL_CLEARANCE + 34);
   });
 
   it('orders tab shows the same pill and opens tracking', async () => {

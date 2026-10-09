@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MandiCard, MandiStatusChip, MandiText } from '@/components/common';
+import { DisputeStatusChip } from './DisputeStatusChip';
 import type { Dispute } from '@/models/trust';
-import { DisputeStatus, resolveStatus } from '@/models/status';
 import { refundCopy, type RefundViewer } from '@/lib/disputes/refundCopy';
 import { categoryLabel } from '@/lib/disputes/categories';
 import { serverNow } from '@/lib/server-clock';
@@ -28,7 +28,7 @@ export function DisputeListItem({
     <MandiCard onPress={onPress}>
       <View style={styles.row}>
         <MandiText variant="bodyEmphasis">{dispute.disputeNumber}</MandiText>
-        <MandiStatusChip {...resolveStatus(DisputeStatus, dispute.status)} size="sm" />
+        <DisputeStatusChip status={dispute.status} />
       </View>
       <MandiText variant="caption" color={Colors.textSecondary}>
         Order {dispute.orderNumber} · {categoryLabel(dispute.category)} ·{' '}

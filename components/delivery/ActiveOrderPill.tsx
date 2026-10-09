@@ -5,6 +5,12 @@ import { MandiText } from '@/components/common/MandiText';
 import { Colors, Elevation, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
 
 /**
+ * Room a scrolling screen leaves under its content so the floating pill never covers the last rows: the pill's
+ * height (two text lines and padding, more with a larger font), its offset from the bottom, and a gap.
+ */
+export const ACTIVE_PILL_CLEARANCE = 120;
+
+/**
  * The white pill that floats above the tab bar for the restaurant's most recent order in flight: who it is from, what
  * is happening now, and a way into tracking. It shows what the tracker header says, no more. The green ETA badge only
  * appears when the caller has a minutes figure, so a pill never promises a time nobody gave.

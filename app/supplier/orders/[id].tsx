@@ -531,7 +531,7 @@ export default function SupplierOrderScreen() {
             )}
 
             {/* Approved dispute refunds, as the server sends them. */}
-            {billingEligible && <DisputeRefundLines orderId={orderId} />}
+            {billingEligible && <DisputeRefundLines orderId={orderId} style={styles.refundRow} />}
 
             {order.finalPayableAmount != null && (
               <View style={styles.valueRow}>

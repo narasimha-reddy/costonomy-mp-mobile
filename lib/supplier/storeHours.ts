@@ -27,7 +27,27 @@ export function dayLabel(days: string[]): string {
 
 /** Whether the store has a real opening window (opening time different from closing time). */
 export function hoursAreSet(hours: OperatingHours | null | undefined): boolean {
-  return !!hours && hours.opensAt !== hours.closesAt;
+  return !!hours && hours.opensAt !== '' && hours.closesAt !== '' && hours.opensAt !== hours.closesAt;
+}
+
+/** The unset pair the server holds for a store that never chose hours. */
+export const UNSET_TIME = '00:00';
+
+/** The editor shows empty inputs for hours that are not set, rather than a 00:00 nobody typed. */
+export function hoursUnset(hours: OperatingHours): boolean {
+  return hours.opensAt === UNSET_TIME && hours.closesAt === UNSET_TIME;
+}
+
+/**
+ * What the store form saves. Both inputs blank means the user chose no hours, so the server's own unset pair goes
+ * back unchanged; only one blank is refused rather than guessed.
+ */
+export function normaliseHours(hours: OperatingHours): { hours: OperatingHours; problem: string | null } {
+  const opens = hours.opensAt.trim();
+  const closes = hours.closesAt.trim();
+  if (opens === '' && closes === '') return { hours: { ...hours, opensAt: UNSET_TIME, closesAt: UNSET_TIME }, problem: null };
+  if (opens === '' || closes === '') return { hours, problem: 'Enter both an opening and a closing time, or leave both empty.' };
+  return { hours, problem: null };
 }
 
 /**

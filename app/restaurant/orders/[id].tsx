@@ -406,8 +406,10 @@ export default function OrderDetailScreen() {
           </MandiCard>
 
           {/* Each figure is a server field: nothing is added here. */}
-          <BillSummary {...billSummaryFor(order, settled)} />
-          {billingEligible && <DisputeRefundLines orderId={orderId} />}
+          <BillSummary
+            {...billSummaryFor(order, settled)}
+            extra={billingEligible ? <DisputeRefundLines orderId={orderId} /> : undefined}
+          />
 
           {order.hasColdChainItems && (
             <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />

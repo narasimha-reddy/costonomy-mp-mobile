@@ -30,6 +30,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { normaliseHours } from '@/lib/supplier/storeHours';
 import { OperatingHoursFields } from '@/components/supplier/OperatingHoursFields';
 import { ApiError } from '@/lib/api/errors';
 import { track } from '@/analytics';
@@ -180,6 +181,7 @@ export default function StoreDetailScreen() {
     : contactNameValue.trim().length < 2 ? 'Enter a contact name for this store.'
     : !PHONE.test(contactPhoneValue.trim()) ? 'Enter a contact number for this store.'
     : hoursValue.days.length === 0 ? 'Choose at least one day you trade on.'
+    : normaliseHours(hoursValue).problem != null ? normaliseHours(hoursValue).problem
     : !ownValue && !partnerValue ? 'Choose at least one way to deliver.'
     : null;
 
@@ -194,7 +196,7 @@ export default function StoreDetailScreen() {
         pincode: pincodeValue.trim(),
         contactName: contactNameValue.trim(),
         contactPhone: contactPhoneValue.trim(),
-        operatingHours: hoursValue,
+        operatingHours: normaliseHours(hoursValue).hours,
         preparationMinutes: Number(prepValue) || 0,
         directOrdersEnabled: directOrdersValue,
         ...(pinValue && pinValue.latitude !== '' && pinValue.longitude !== ''

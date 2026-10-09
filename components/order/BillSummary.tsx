@@ -27,6 +27,8 @@ export interface BillSummaryProps {
   finalLine: { label: string; amount: Money };
   /** Drawn only when above zero. The backend sends none in v1. */
   savings?: Money | null;
+  /** More rows inside the same card, after the final line (the dispute refunds). */
+  extra?: React.ReactNode;
 }
 
 type BillOrder = Pick<
@@ -82,7 +84,7 @@ export function itemTaxLine(item: {
 }
 
 /** "Bill summary": one card, a row per server figure, the grand total, then what is left to pay or was paid. */
-export function BillSummary({ lines, grandTotal, refundLine, finalLine, savings }: BillSummaryProps) {
+export function BillSummary({ lines, grandTotal, refundLine, finalLine, savings, extra }: BillSummaryProps) {
   const saved = savings != null && Number(savings) > 0;
   return (
     <View style={styles.card} testID="bill-summary">
@@ -117,6 +119,7 @@ export function BillSummary({ lines, grandTotal, refundLine, finalLine, savings 
         <MandiText variant="bodyEmphasis" style={styles.label}>{finalLine.label}</MandiText>
         <MandiText variant="bodyEmphasis">{formatMoney(finalLine.amount)}</MandiText>
       </View>
+      {extra}
       {saved && (
         <View style={styles.saved}>
           <MandiText variant="captionEmphasis" color={Colors.successText}>

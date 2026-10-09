@@ -32,7 +32,7 @@ import { track } from '@/analytics';
 import { searchHints } from '@/lib/search/hints';
 import { paymentLine } from '@/lib/payments/paymentLine';
 import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
-import { ActiveOrderPill } from '@/components/delivery/ActiveOrderPill';
+import { ActiveOrderPill, ACTIVE_PILL_CLEARANCE } from '@/components/delivery/ActiveOrderPill';
 import { inFlightOrders, useLatestInFlight } from '@/hooks/useLatestInFlight';
 import { useCreditAttention } from '@/hooks/useCreditAttention';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -40,8 +40,6 @@ import { Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
 const SEARCH_HINTS = searchHints();
-/** Room under the content for the pill that floats over it. */
-const PILL_CLEARANCE = 96;
 
 /**
  * REST-HOME-01. Doc 05 §5.
@@ -62,7 +60,7 @@ export default function RestaurantHome() {
   return (
     <MandiScreen
       header={<RestaurantHeader screen={SCREEN} location />}
-      contentStyle={inFlight != null ? { paddingBottom: PILL_CLEARANCE } : undefined}
+      contentStyle={inFlight != null ? { paddingBottom: ACTIVE_PILL_CLEARANCE } : undefined}
       floating={inFlight != null ? (
         <ActiveOrderPill
           supplierName={inFlight.supplierName}

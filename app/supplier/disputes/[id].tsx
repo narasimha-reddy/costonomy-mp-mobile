@@ -14,10 +14,10 @@ import {
   MandiHeader,
   MandiScreen,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
   useToast,
 } from '@/components/common';
+import { DisputeStatusChip } from '@/components/dispute/DisputeStatusChip';
 import { DisputeThread } from '@/components/dispute/DisputeThread';
 import { categoryLabel } from '@/lib/disputes/categories';
 import { RefundStatusCard } from '@/components/dispute/RefundStatusCard';
@@ -117,11 +117,7 @@ export default function SupplierDisputeScreen() {
               <MandiText variant="bodyEmphasis">
                 {categoryLabel(dispute.data.category)}
               </MandiText>
-              <MandiStatusChip
-                label={dispute.data.status.replace(/_/g, ' ').toLowerCase()}
-                tone={dispute.data.status === 'RESOLVED' ? 'success' : 'pending'}
-                size="sm"
-              />
+              <DisputeStatusChip status={dispute.data.status} />
             </View>
             <MandiText variant="body">{dispute.data.description}</MandiText>
           </MandiCard>

@@ -340,7 +340,8 @@ export function GoogleTrackMap(props: MandiMapProps) {
     // The icon is drawn clear of the pins at the map's zoom; the decisions use where the truck really is. The line from
     // the truck starts where the icon is drawn (see moveTruck), so it reaches the truck even while it glides.
     const zoomNow = () => map.current?.getZoom?.() as number | undefined;
-    const shownFor = (zoom: number | undefined) => (scene.showTruck && at ? truckShownAt(at, spots, zoom, heading, pinSides.current) : null);
+    const shownFor = (zoom: number | undefined) =>
+      scene.showTruck && at ? truckShownAt(at, spots, zoom, heading, pinSides.current, truck.current?.at ?? null) : null;
     let shownZoom = zoomNow();
     const drawnBefore = truck.current?.at ?? null;
     const shown = shownFor(shownZoom);

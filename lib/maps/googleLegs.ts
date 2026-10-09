@@ -304,12 +304,15 @@ export type PinSides = Record<string, 'north' | 'south'>;
 /**
  * Where to draw the truck icon, in pixels at the map's zoom: its fix, unless the fix is in a pin's column (see
  * `pinColumnPx`) within TRUCK_PIN_CLEAR_PX of it, then straight north or south of the pin by that much, so the icon
- * covers neither the pin nor the chip (which goes on the other side, see `chipSide`). The side is the one the truck
- * is on (behind its heading when it is right on the pin) and is kept in `sides` while the truck stays close, so the
- * fixes jittering round the restaurant once it has reached do not swing the truck round the pin.
+ * covers neither the pin nor the chip (which goes on the other side, see `chipSide`). The side is the one the truck is
+ * drawn on now (`from`), so it never glides across the pin to the far side; else the side its fix is on; else behind its
+ * heading. It is kept in `sides` while the truck stays close, so the fixes jittering round the restaurant once it has
+ * reached do not swing the truck round the pin.
  * Display only: every decision keeps the real fix. Without a zoom the fix is returned as it is.
  */
-export function truckShownAt(truck: LatLng, pins: PinSpot[], zoom: number | undefined, heading: number, sides: PinSides = {}): LatLng {
+export function truckShownAt(
+  truck: LatLng, pins: PinSpot[], zoom: number | undefined, heading: number, sides: PinSides = {}, from: LatLng | null = null,
+): LatLng {
   if (zoom == null || !Number.isFinite(zoom)) return truck;
   if (!Number.isFinite(heading)) heading = 0;
   let at = truck;
@@ -323,7 +326,9 @@ export function truckShownAt(truck: LatLng, pins: PinSpot[], zoom: number | unde
         if (at === truck) delete sides[key]; // the truck itself left this pin: it may come back on either side
         continue;
       }
-      const side = sides[key] ?? (o.y > 0 ? 'north' : o.y < 0 ? 'south' : Math.cos((heading * Math.PI) / 180) >= 0 ? 'south' : 'north');
+      const drawn = from != null ? offsetPx(pin.at, from, zoom).y : 0;
+      const by = (y: number) => (y > 0 ? 'north' : 'south');
+      const side = sides[key] ?? (drawn !== 0 ? by(drawn) : o.y !== 0 ? by(o.y) : Math.cos((heading * Math.PI) / 180) >= 0 ? 'south' : 'north');
       sides[key] = side;
       const dLat = (TRUCK_PIN_CLEAR_PX * metersPerPixel(pin.at.latitude, zoom)) / M_PER_DEG;
       at = { latitude: pin.at.latitude + (side === 'north' ? dLat : -dLat), longitude: at.longitude };

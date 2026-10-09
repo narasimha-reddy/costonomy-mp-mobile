@@ -291,6 +291,12 @@ describe('truckShownAt (pixels at the map zoom)', () => {
     truckShownAt(at(16, 0, 200), [spot], 16, 0, sides);
     expect(offsetPx(pin, truckShownAt(at(16, 0, 6), [spot], 16, 0, sides), 16).y).toBeGreaterThan(0);
   });
+  it('a truck drawn south of the pin whose fix lands just north of it stays south: it never glides across the pin', () => {
+    // Live: arriving from the south, the reached fix was 4 px north of the pin and the truck slid through the pin to the north.
+    const shown = truckShownAt(at(16, 0, 4), [spot], 16, 0, {}, at(16, 4, -61)); // y is north: drawn 61 px south
+    expect(offsetPx(pin, shown, 16).y).toBeCloseTo(-TRUCK_PIN_CLEAR_PX, 3);
+    expect(offsetPx(pin, truckShownAt(at(16, 0, -4), [spot], 16, 180, {}, at(16, 0, 80)), 16).y).toBeCloseTo(TRUCK_PIN_CLEAR_PX, 3);
+  });
   it('without a zoom, or with an unreadable heading, never returns a position that is not a number', () => {
     expect(truckShownAt(pin, [spot], undefined, 0)).toBe(pin);
     const shown = truckShownAt(pin, [spot], 16, NaN);

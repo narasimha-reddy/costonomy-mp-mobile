@@ -759,6 +759,24 @@ describe('MandiMap (web)', () => {
       expect(sides.size).toBe(1);
     });
 
+    it('arriving from the south onto a reached fix just north of the pin, the truck never crosses the pin or its chip', async () => {
+      const north = (m: number) => String(outlet.latitude + m / 111_195);
+      const view = render(<MandiMap driver={{ ...fix, latitude: north(-150), longitude: String(outlet.longitude), recordedAt: at(0) }} destination={outlet} stale={false} mode="arriving" />);
+      await flush();
+      const m = mapInstances[0]!;
+      m.zoom = 16; // 150 m is 64 px south: clear of the pin
+      fire(m, 'idle');
+      view.rerender(<MandiMap driver={{ ...fix, latitude: north(5), longitude: String(outlet.longitude), recordedAt: at(5) }} destination={outlet} stale={false} mode="reached" />);
+      await flush();
+      const you = () => chips().find((c) => chipText(c) === 'You' && !c.setMap.mock.calls.some((x: any[]) => x[0] === null))!;
+      for (let t = 0; t < 5200; t += 200) {
+        act(() => { jest.advanceTimersByTime(200); });
+        const o = overlaps(truckOf(), you(), 16);
+        expect(o.pin).toBe(false);
+        expect(o.chip).toBe(false);
+      }
+    });
+
     it('when the camera zooms out after the truck was placed (arriving at 17, reached settles at 16) the truck is placed again', async () => {
       const view = render(<MandiMap driver={{ ...fix, latitude: String(outlet.latitude - 150 / 111_195), longitude: String(outlet.longitude), recordedAt: at(0) }} destination={outlet} stale={false} mode="arriving" />);
       await flush();

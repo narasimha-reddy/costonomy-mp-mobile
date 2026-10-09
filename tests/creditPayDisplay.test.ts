@@ -1,80 +1,149 @@
-import {
-  PAYOUT_EXPLANATION, PAID_EXPLANATION, payoutExplanation, payoutSourceLine, paymentSourceLabel,
-} from '@/lib/credit/payouts';
-import { paymentDetail, paymentTitle } from '@/lib/credit/payments';
+import React from 'react';
+import { cleanup, render, screen } from '@testing-library/react-native';
+import { PayoutRow, PaymentRow } from '@/components/credit/PayoutRow';
+import { PayoutSheet } from '@/components/credit/PayoutSheet';
+import { methodLabel, paymentDetail, paymentTitle } from '@/lib/credit/payments';
+import { PAYOUT_EXPLANATION, paymentSourceLabel } from '@/lib/credit/payouts';
 import { paymentBadge } from '@/lib/credit/supplierLine';
 import { destinationFor } from '@/lib/notifications/destination';
-import type { CreditPayout } from '@/models/credit';
+import type { CreditPayout, StorePayment } from '@/models/credit';
 import type { AppNotification } from '@/models/notification';
+import { renderedText } from './fixtures/renderedText';
 
-const payout = (o: Partial<CreditPayout> = {}): CreditPayout => ({
-  payoutId: 1, repaymentId: 1, agreementId: 1, outletId: 2, outletName: 'HSR', restaurantName: 'Spice Co',
-  grossAmount: '1000.0000', commissionRatePercent: '2.5000', commissionAmount: '25.0000', netAmount: '975.0000',
-  status: 'PENDING', settlementId: null, settlementNumber: null, settlementDate: null, appliedAt: null,
-  createdAt: '2026-10-01T05:00:00Z', invoices: [], source: 'WALLET', paymentMethod: null, ...o,
+jest.mock('@expo/vector-icons', () => {
+  const { Text } = jest.requireActual('react-native');
+  const R = jest.requireActual('react');
+  const Icon = ({ name }: { name: string }) => R.createElement(Text, null, `icon:${name}`);
+  return { Ionicons: Icon, MaterialCommunityIcons: Icon };
 });
+
+jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null, PROVIDER_GOOGLE: 'google' }));
+
+afterEach(cleanup);
+
+/** The new source and method fields are not on the model until WP-E lands; the casts are the contract. */
+const payout = (o: Record<string, unknown> = {}) => ({
+  payoutId: 1, repaymentId: 101, agreementId: 3, outletId: 7, outletName: 'Indiranagar', restaurantName: 'Spice Co',
+  grossAmount: '5000.0000', commissionRatePercent: '2.0000', commissionAmount: '100.0000', netAmount: '4900.0000',
+  status: 'PENDING', settlementId: null, settlementNumber: null, settlementDate: null, appliedAt: null,
+  createdAt: '2026-10-01T06:30:00Z', invoices: [{ invoiceId: 11, invoiceNumber: 'INV-11', amount: '5000.0000' }],
+  source: 'ONLINE', paymentMethod: 'UPI', ...o,
+}) as unknown as CreditPayout;
+
+const storePayment = (o: Record<string, unknown> = {}) => ({
+  id: 5, paidAt: '2026-09-28T06:30:00Z', paidOn: '2026-09-28', agreementId: 3, outletId: 7, outletName: 'Indiranagar',
+  restaurantName: 'Spice Co', invoiceId: 41, invoiceNumber: 'INV-41', amount: '2500.0000',
+  source: 'ONLINE', method: 'UPI', reference: 'pay_RazorpayInternal123', ...o,
+}) as unknown as StorePayment;
 
 const note = (o: Partial<AppNotification>): AppNotification => ({
-  id: 1, category: 'CREDIT', eventType: 'X', title: 't', body: null, targetType: null, audience: null,
-  targetId: 7, critical: false, read: false, createdAt: '2026-01-01T00:00:00Z', ...o,
+  id: 1, category: 'CREDIT', eventType: 'X', title: 't', body: null, targetType: null, audience: null, targetId: 7,
+  critical: false, read: false, createdAt: '2026-01-01T00:00:00Z', ...o,
 });
 
-describe('online payments in the supplier labels', () => {
-  it('names the source "Paid through Mandi"', () => {
-    expect(paymentSourceLabel('ONLINE')).toBe('Paid through Mandi');
-    expect(paymentBadge('ONLINE')).toBe('Paid through Mandi');
+describe('payout wording', () => {
+  it('names an online payment "Paid through Mandi"', () => {
+    expect(paymentSourceLabel('ONLINE' as never)).toBe('Paid through Mandi');
   });
-  it('keeps the wallet and other labels as they were', () => {
+
+  it('keeps the wallet wording unchanged', () => {
     expect(paymentSourceLabel('WALLET')).toBe('Mandi wallet');
-    expect(paymentBadge('WALLET')).toBe('Through Mandi');
   });
-});
 
-describe('payout source line and explanation', () => {
-  it('shows "Paid through Mandi · UPI" for an online payout', () => {
-    expect(payoutSourceLine(payout({ source: 'ONLINE', paymentMethod: 'UPI' }))).toBe('Paid through Mandi · UPI');
-    expect(payoutSourceLine(payout({ source: 'ONLINE', paymentMethod: 'CARD' }))).toBe('Paid through Mandi · Card');
+  it('a pending online payout explains itself by method, not as a wallet payment', () => {
+    render(React.createElement(PayoutSheet, { payout: payout(), visible: true, onClose: jest.fn(), onCopy: jest.fn() }));
+    const t = renderedText(screen.toJSON() as never);
+    expect(t).toContain('Paid through Mandi by UPI. We pay it to you in your next settlement.');
+    expect(t).not.toContain(PAYOUT_EXPLANATION);
+    expect(t).not.toMatch(/Mandi wallet/);
   });
-  it('drops the method when there is none, and shows nothing for a wallet payout', () => {
-    expect(payoutSourceLine(payout({ source: 'ONLINE', paymentMethod: null }))).toBe('Paid through Mandi');
-    expect(payoutSourceLine(payout({ source: 'WALLET' }))).toBeNull();
+
+  it('a card payout says "by card"', () => {
+    render(React.createElement(PayoutSheet, { payout: payout({ paymentMethod: 'CARD' }), visible: true, onClose: jest.fn(), onCopy: jest.fn() }));
+    expect(renderedText(screen.toJSON() as never)).toContain('Paid through Mandi by card. We pay it to you in your next settlement.');
   });
-  it('explains an online payout, by method', () => {
-    expect(payoutExplanation(payout({ source: 'ONLINE', paymentMethod: 'UPI' }), false))
-      .toBe('Paid through Mandi by UPI. We pay it to you in your next settlement.');
-    expect(payoutExplanation(payout({ source: 'ONLINE', paymentMethod: 'CARD' }), false))
-      .toBe('Paid through Mandi by card. We pay it to you in your next settlement.');
-    expect(payoutExplanation(payout({ source: 'ONLINE', paymentMethod: null }), false))
-      .toBe('Paid through Mandi. We pay it to you in your next settlement.');
+
+  it('a wallet payout keeps the wallet explanation', () => {
+    render(React.createElement(PayoutSheet, {
+      payout: payout({ source: 'WALLET', paymentMethod: null }), visible: true, onClose: jest.fn(), onCopy: jest.fn(),
+    }));
+    const t = renderedText(screen.toJSON() as never);
+    expect(t).toContain(PAYOUT_EXPLANATION);
+    expect(t).not.toContain('Paid through Mandi by');
   });
-  it('says it was paid out once it is', () => {
-    expect(payoutExplanation(payout({ source: 'ONLINE', paymentMethod: 'UPI' }), true))
-      .toBe('Paid through Mandi by UPI. We paid it to you in a settlement.');
+
+  it('the sheet and the row both show "Paid through Mandi · UPI" for an online payout', () => {
+    render(React.createElement(PayoutSheet, { payout: payout(), visible: true, onClose: jest.fn(), onCopy: jest.fn() }));
+    expect(renderedText(screen.toJSON() as never)).toContain('Paid through Mandi · UPI');
+    cleanup();
+    render(React.createElement(PayoutRow, { payout: payout(), onPress: jest.fn() }));
+    expect(renderedText(screen.toJSON() as never)).toContain('Paid through Mandi · UPI');
   });
-  it('keeps the wallet wording, and treats a missing source as wallet (older server)', () => {
-    expect(payoutExplanation(payout({ source: 'WALLET' }), false)).toBe(PAYOUT_EXPLANATION);
-    expect(payoutExplanation(payout({ source: 'WALLET' }), true)).toBe(PAID_EXPLANATION);
-    expect(payoutExplanation({ ...payout(), source: undefined } as unknown as CreditPayout, false)).toBe(PAYOUT_EXPLANATION);
+
+  it('a wallet payout row shows no "Paid through Mandi" label', () => {
+    render(React.createElement(PayoutRow, { payout: payout({ source: 'WALLET', paymentMethod: null }), onPress: jest.fn() }));
+    expect(renderedText(screen.toJSON() as never)).not.toContain('Paid through Mandi');
+  });
+
+  it('the figures on an online payout are still the server\'s three', () => {
+    render(React.createElement(PayoutRow, { payout: payout(), onPress: jest.fn() }));
+    const t = renderedText(screen.toJSON() as never);
+    expect(t).toContain('₹5,000.00');
+    expect(t).toContain('₹100.00');
+    expect(t).toContain('₹4,900.00');
   });
 });
 
 describe('restaurant payment rows', () => {
-  it('titles an online payment "Paid online"', () => {
+  it('title: "Paid online"', () => {
     expect(paymentTitle('ONLINE', 'Acme')).toBe('Paid online');
-    expect(paymentTitle('WALLET', 'Acme')).toBe('From wallet');
   });
-  it('shows only the method for an online payment, never the Razorpay id', () => {
-    expect(paymentDetail('UPI', 'pay_Abc123', 'ONLINE')).toBe('UPI');
-    expect(paymentDetail('CARD', 'pay_Abc123', 'ONLINE')).toBe('Card');
-    expect(paymentDetail(null, 'pay_Abc123', 'ONLINE')).toBeNull();
-    expect(paymentDetail('UPI', 'UTR9', 'SUPPLIER_RECORDED')).toBe('UPI · ref UTR9');
+
+  it('detail is the method alone, never the Razorpay id', () => {
+    expect(paymentDetail('UPI', 'pay_RazorpayInternal123', 'ONLINE')).toBe('UPI');
+    expect(paymentDetail('CARD', 'pay_RazorpayInternal123', 'ONLINE')).toBe('Card');
+    expect(paymentDetail(null, 'pay_RazorpayInternal123', 'ONLINE')).toBeNull();
+  });
+
+  it('other sources are unchanged', () => {
+    expect(paymentTitle('WALLET', 'Acme')).toBe('From wallet');
+    expect(paymentTitle('SUPPLIER_RECORDED', 'Acme')).toBe('Recorded by Acme');
+    expect(paymentDetail('UPI', 'UTR1', 'SUPPLIER_RECORDED')).toBe('UPI · ref UTR1');
+    expect(paymentDetail('WALLET', 'credit-repayment-13', 'WALLET')).toBeNull();
+    expect(methodLabel('CARD')).toBe('Card');
+  });
+});
+
+describe('supplier\'s payments', () => {
+  it('an online payment shows its source and method, and the supplier never sees a Razorpay id', () => {
+    render(React.createElement(PaymentRow, { payment: storePayment() }));
+    const t = renderedText(screen.toJSON() as never);
+    expect(t).toContain('Paid through Mandi');
+    expect(t).not.toContain('pay_RazorpayInternal123');
+  });
+
+  it('the badge on an online payment is "Paid through Mandi"', () => {
+    expect(paymentBadge('ONLINE')).toBe('Paid through Mandi');
+  });
+
+  it('other badges are unchanged', () => {
+    expect(paymentBadge('WALLET')).toBe('Through Mandi');
+    expect(paymentBadge('SUPPLIER_RECORDED')).toBe('You recorded');
+    expect(paymentBadge('SOMETHING_NEW')).toBeNull();
   });
 });
 
 describe('notification destination', () => {
-  it('opens the pay result for a restaurant and nothing for a supplier', () => {
-    expect(destinationFor(note({ targetType: 'CREDIT_PAYMENT_ATTEMPT', audience: 'OUTLET' })))
-      .toBe('/restaurant/credit/pay/7');
-    expect(destinationFor(note({ targetType: 'CREDIT_PAYMENT_ATTEMPT', audience: 'SUPPLIER_STORE' }))).toBeNull();
+  it('a restaurant is taken to the payment\'s result screen', () => {
+    expect(destinationFor(note({ targetType: 'CREDIT_PAYMENT_ATTEMPT', audience: 'OUTLET', targetId: 9 })))
+      .toBe('/restaurant/credit/pay/9');
+  });
+
+  it('a supplier has no such screen', () => {
+    expect(destinationFor(note({ targetType: 'CREDIT_PAYMENT_ATTEMPT', audience: 'SUPPLIER_STORE', targetId: 9 }))).toBeNull();
+  });
+
+  it('with no target id it goes nowhere', () => {
+    expect(destinationFor(note({ targetType: 'CREDIT_PAYMENT_ATTEMPT', audience: 'OUTLET', targetId: null }))).toBeNull();
   });
 });

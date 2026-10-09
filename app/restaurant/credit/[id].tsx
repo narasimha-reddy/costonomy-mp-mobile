@@ -33,6 +33,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { isOnlinePayOn } from '@/models/creditPay';
 import { CreditAgreementStatus, resolveStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatDay } from '@/utils/dateRange';
@@ -90,6 +91,8 @@ export default function CreditAgreementScreen() {
     enabled: outletId != null && accessToken != null,
   });
   const walletRepayEnabled = summary.data?.walletRepayEnabled === true;
+  // Online payment on: Pay opens the picker and "Paid direct" is gone (old claims still show below).
+  const onlinePay = isOnlinePayOn(summary.data);
 
   const split = useMemo(
     () => splitInvoices((invoices.data ?? []) as CreditInvoiceListItem[]),
@@ -169,9 +172,15 @@ export default function CreditAgreementScreen() {
           <CreditStickyPayBar
             due={data.due}
             disabled={offline}
-            showPay={walletRepayEnabled && mayRepay}
-            onPress={() => setPayOpen(true)}
-            onClaim={!mayRepay || !canReportPayment(data.reportableAmount) ? undefined : () => go('claim', () => router.push({
+            showPay={(onlinePay || walletRepayEnabled) && mayRepay}
+            online={onlinePay}
+            onPress={onlinePay
+              ? () => go('pay', () => router.push({
+                pathname: '/restaurant/credit/pay',
+                params: { agreementId: String(agreementId) },
+              }))
+              : () => setPayOpen(true)}
+            onClaim={onlinePay || !mayRepay || !canReportPayment(data.reportableAmount) ? undefined : () => go('claim', () => router.push({
               pathname: '/restaurant/credit/claim',
               params: { agreementId: String(agreementId) },
             }))}
@@ -421,7 +430,7 @@ export default function CreditAgreementScreen() {
               </MandiText>
             </View>
           )}
-          {mayRepay && data.due != null && (
+          {mayRepay && !onlinePay && data.due != null && (
             <PayFromWalletSheet
               visible={payOpen}
               onClose={() => setPayOpen(false)}

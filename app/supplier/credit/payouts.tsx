@@ -58,6 +58,7 @@ const SOURCE_CHIPS: { key: StorePaymentSource | 'ALL'; label: string }[] = [
   { key: 'SUPPLIER_RECORDED', label: 'Recorded by you' },
   { key: 'CLAIM_CONFIRMED', label: 'From their claim' },
   { key: 'WALLET', label: 'Mandi wallet' },
+  { key: 'ONLINE', label: 'Paid through Mandi' },
 ];
 
 type Section = { key: string; status: string | null; title: string; data: (CreditPayout | StorePayment)[] };

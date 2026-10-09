@@ -21,6 +21,7 @@ import { CreditPaymentRow } from '@/components/credit/CreditPaymentRow';
 import { InvoiceMoneyCard } from '@/components/credit/InvoiceMoneyCard';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { useCreditInvoice, useWalletRepayEnabled } from '@/hooks/useCreditInvoice';
+import { useOnlinePayOn } from '@/hooks/useOnlinePayOn';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -56,6 +57,7 @@ export default function CreditInvoiceScreen() {
   const invoiceId = Number(raw);
   const query = useCreditInvoice(invoiceId);
   const repayEnabled = useWalletRepayEnabled();
+  const onlinePay = useOnlinePayOn();
   const { offline } = useNetworkStatus();
   const { outlet } = useOutlet();
   const { canForOutlet } = usePermissions();
@@ -119,9 +121,10 @@ export default function CreditInvoiceScreen() {
   const settled = invoice.status === 'PAID' || invoice.status === 'WRITTEN_OFF'
     || invoice.dueState === 'PAID' || invoice.dueState === 'WRITTEN_OFF';
   const owes = Number(invoice.outstanding) > 0;
-  const canPay = mayRepay && !settled && owes && repayEnabled;
-  // Reporting a payment made elsewhere does not depend on wallet repayment being on.
-  const canClaim = mayRepay && !settled && owes && canReportPayment(invoice.reportableAmount);
+  const canPay = mayRepay && !settled && owes && (repayEnabled || onlinePay);
+  // Reporting a payment made elsewhere does not depend on wallet repayment being on, but it goes
+  // once online payment is: the money then goes through Mandi, not around it.
+  const canClaim = !onlinePay && mayRepay && !settled && owes && canReportPayment(invoice.reportableAmount);
   const orderLabel = invoice.orderNumber ?? (invoice.supplierOrderId != null ? String(invoice.supplierOrderId) : null);
   const issued = formatDay(invoice.issuedAt);
   const due = formatDay(invoice.dueDate);
@@ -139,7 +142,9 @@ export default function CreditInvoiceScreen() {
             {canPay && (
               <MandiButton
                 label={`Pay ${formatMoney(invoice.outstanding)}`}
-                onPress={() => setSheetOpen(true)}
+                onPress={onlinePay
+                  ? () => go('pay', () => router.push({ pathname: '/restaurant/credit/pay', params: { invoiceIds: String(invoiceId) } }))
+                  : () => setSheetOpen(true)}
                 disabled={offline}
                 testID="invoice-pay"
               />
@@ -232,7 +237,7 @@ export default function CreditInvoiceScreen() {
         )}
       </MandiScreen>
 
-      {canPay && (
+      {canPay && !onlinePay && (
         <PayFromWalletSheet
           visible={sheetOpen}
           onClose={() => setSheetOpen(false)}

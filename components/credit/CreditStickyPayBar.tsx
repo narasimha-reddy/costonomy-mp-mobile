@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MandiButton, MandiStickyBar } from '@/components/common';
+import { barCountText } from '@/lib/credit/pay/copy';
 import { formatMoney, type Money } from '@/utils/money';
 import { Spacing } from '@/theme';
 
@@ -17,6 +18,7 @@ export function CreditStickyPayBar({
   online = false,
   onPress,
   onClaim: claim,
+  selection,
 }: {
   due: Money | number;
   disabled?: boolean;
@@ -26,6 +28,8 @@ export function CreditStickyPayBar({
   online?: boolean;
   onPress?: () => void;
   onClaim?: () => void;
+  /** The invoices ticked on the page: the button then reads "Pay ₹X · N invoices" and is off with none. */
+  selection?: { count: number; total: string | null };
 }) {
   if (!(Number(due) > 0)) return null;
   const onClaim = online ? undefined : claim;
@@ -37,9 +41,11 @@ export function CreditStickyPayBar({
         {pay && (
           <View style={styles.cell}>
             <MandiButton
-              label={`Pay ${formatMoney(due)}`}
+              label={selection == null ? `Pay ${formatMoney(due)}`
+                : selection.count === 0 ? 'Pay'
+                  : `Pay ${selection.total == null ? '—' : formatMoney(selection.total)} · ${barCountText(selection.count)}`}
               onPress={onPress}
-              disabled={disabled}
+              disabled={disabled || (selection != null && selection.count === 0)}
               fullWidth
               testID="credit-pay-bar-button"
               accessibilityHint={disabled ? 'Not available while you are offline' : online ? 'Pays this supplier online' : 'Pays this supplier from your wallet'}

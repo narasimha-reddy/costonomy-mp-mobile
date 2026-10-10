@@ -182,7 +182,7 @@ describe('supplier credit screen', () => {
     expect(screen.queryByTestId('credit-i-paid-bar-button')).toBeNull();
 
     fireEvent.press(pay);
-    expect(pushed()).toContain('/restaurant/credit/pay?agreementId=3');
+    expect(pushed()).toContain('/restaurant/credit/pay?scopeAgreementId=3');
     expect(mockSheetProps).not.toHaveBeenCalledWith(expect.objectContaining({ visible: true }));
   });
 

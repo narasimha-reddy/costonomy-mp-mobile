@@ -97,3 +97,30 @@ export function waitingOf(sel: Selection, data: PayableInvoices): string | null 
   }
   return waiting.length === 0 ? null : sumAmounts(waiting);
 }
+
+export type PayScope = { kind: 'all' } | { kind: 'supplier'; agreementId: number } | { kind: 'invalid' };
+
+/**
+ * The `scopeAgreementId` route param: absent means every supplier, a positive whole number means that
+ * one supplier. Anything else is `invalid`, which shows nothing rather than quietly widening to everyone.
+ */
+export function parseScope(raw: string | undefined): PayScope {
+  if (raw === undefined) return { kind: 'all' };
+  if (!/^[1-9]\d{0,14}$/.test(raw)) return { kind: 'invalid' };
+  return { kind: 'supplier', agreementId: Number(raw) };
+}
+
+/** The same data with only one supplier's group; no group at all when it is not listed. */
+export function scopeTo(data: PayableInvoices, agreementId: number): PayableInvoices {
+  return { ...data, suppliers: data.suppliers.filter((s) => s.agreementId === agreementId) };
+}
+
+/** Every invoice of every supplier that can be paid here. */
+export function selectAllOf(data: PayableInvoices): Selection {
+  const ids = new Set<number>();
+  for (const supplier of data.suppliers) {
+    if (!supplier.payable) continue;
+    for (const invoice of supplier.invoices) ids.add(invoice.invoiceId);
+  }
+  return { ids };
+}

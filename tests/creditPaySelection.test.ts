@@ -1,5 +1,5 @@
 import {
-  barText, EMPTY, itemsOf, preselect, prune, supplierState, toggle, toggleSupplier,
+  barText, EMPTY, itemsOf, parseScope, preselect, prune, scopeTo, selectAllOf, supplierState, toggle, toggleSupplier,
 } from '@/lib/credit/pay/selection';
 import type { PayableInvoice, PayableInvoices, PayableSupplier } from '@/models/creditPay';
 
@@ -190,5 +190,43 @@ describe('barText', () => {
     const bar = barText(toggle(toggle(EMPTY, 11), 12), bad);
     expect(bar.count).toBe(2);
     expect(bar.total).toBeNull();
+  });
+});
+
+describe('parseScope', () => {
+  it('reads a positive whole number as one supplier', () => {
+    expect(parseScope('3')).toEqual({ kind: 'supplier', agreementId: 3 });
+  });
+  it('treats an absent param as all suppliers', () => {
+    expect(parseScope(undefined)).toEqual({ kind: 'all' });
+  });
+  it.each(['', 'abc', '0', '-2', '1.5', '3,4', '1e3', ' '])('rejects %p rather than showing everything', (raw) => {
+    expect(parseScope(raw)).toEqual({ kind: 'invalid' });
+  });
+});
+
+describe('scopeTo', () => {
+  it('keeps only that supplier, with the rest of the data unchanged', () => {
+    const scoped = scopeTo(DATA, 1);
+    expect(scoped.suppliers.map((s) => s.agreementId)).toEqual([1]);
+    expect(scoped.maxInvoices).toBe(DATA.maxInvoices);
+    expect(scoped.minOnlineAmount).toBe(DATA.minOnlineAmount);
+  });
+  it('leaves nothing for a supplier that is not listed', () => {
+    expect(scopeTo(DATA, 4242).suppliers).toEqual([]);
+  });
+  it('a scoped selection can never include another supplier\'s invoice', () => {
+    const scoped = scopeTo(DATA, 1);
+    expect(ids(preselect(scoped, { invoiceIds: [21, 11] }))).toEqual([11]);
+    expect(itemsOf(toggle(EMPTY, 21), scoped)).toEqual([]);
+  });
+});
+
+describe('selectAllOf', () => {
+  it('selects every invoice of the payable suppliers', () => {
+    expect(ids(selectAllOf(scopeTo(DATA, 2)))).toEqual([21, 22]);
+  });
+  it('selects nothing from a supplier that cannot be paid', () => {
+    expect(ids(selectAllOf(scopeTo(DATA, 3)))).toEqual([]);
   });
 });

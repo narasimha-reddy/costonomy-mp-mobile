@@ -20,13 +20,13 @@ import { Colors } from '@/theme';
 const VERIFY_TIMEOUT_MS = 20_000;
 
 /** The picker's invoices, as the server lists them. */
-export function usePayableInvoices() {
+export function usePayableInvoices(enabled = true) {
   const { accessToken } = useSession();
   const { outletId } = useOutlet();
   return useQuery({
     queryKey: creditPayableKey(outletId),
     queryFn: () => fetchPayableInvoices(accessToken as string, outletId as number),
-    enabled: outletId != null && accessToken != null,
+    enabled: enabled && outletId != null && accessToken != null,
   });
 }
 

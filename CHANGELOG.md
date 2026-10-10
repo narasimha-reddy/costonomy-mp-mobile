@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [int/credit-pay-mobile] - [Credit] Pay from one supplier's page
+#### Changed
+- A supplier's credit page: each open invoice has a checkbox (all ticked to start), a Select all, and the bar reads "Pay ₹X · N invoices" (off with none). Pay opens Pay dues scoped to that supplier (`scopeAgreementId`, with the ticked `invoiceIds`); other suppliers are not listed. Pay dues from the main credit screen still lists everyone.
+
 ### [feat/credit-pay-c] - [Credit] Pay credit dues with UPI, card or the wallet
 #### Added
 - Pay dues: a picker of open credit invoices across suppliers (server order and amounts, whole invoices only, up to the server's limit), a method sheet (UPI, card, wallet) from the server's quote, and a result screen (paid with receipt, partly or wholly returned, still confirming, not completed). Routes `/restaurant/credit/pay` and `/restaurant/credit/pay/[attemptId]`; `lib/credit/pay/` holds the pure selection, pay sequence, copy and error mapping.

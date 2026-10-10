@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
@@ -13,7 +13,8 @@ import { ApiError } from '@/lib/api/errors';
 import { CHANGED_TOAST, FLAG_OFF_TEXT, PAY_DUES, walletShortText } from '@/lib/credit/pay/copy';
 import { payErrorMessage, selectionChangedIds } from '@/lib/credit/pay/errors';
 import {
-  barText, drop, EMPTY, itemsOf, preselect, prune, toggle, toggleSupplier, waitingOf, type Selection,
+  barText, drop, EMPTY, itemsOf, parseScope, preselect, prune, scopeTo, toggle, toggleSupplier, waitingOf,
+  type Selection,
 } from '@/lib/credit/pay/selection';
 import type { CreditPayMethod, CreditPayQuote, PayItem } from '@/models/creditPay';
 
@@ -29,10 +30,19 @@ export default function CreditPayScreen() {
   const toast = useToast();
   const { outlet } = useOutlet();
   const { offline } = useNetworkStatus();
-  const params = useLocalSearchParams<{ agreementId?: string; invoiceIds?: string }>();
+  const params = useLocalSearchParams<{ agreementId?: string; scopeAgreementId?: string; invoiceIds?: string }>();
   const query = usePayableInvoices();
   const pay = useCreditPay();
-  const data = query.data;
+  // `scopeAgreementId` limits the whole screen to one supplier (opened from that supplier's page).
+  // A bad value shows nothing, never everyone. Without it, every supplier is listed.
+  const scope = parseScope(params.scopeAgreementId);
+  const scopedId = scope.kind === 'supplier' ? scope.agreementId : null;
+  const data = useMemo(() => {
+    if (query.data == null) return undefined;
+    if (scope.kind === 'all') return query.data;
+    return scopeTo(query.data, scope.kind === 'supplier' ? scope.agreementId : -1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.data, scope.kind, scopedId]);
 
   const [selection, setSelection] = useState<Selection>(EMPTY);
   const [quote, setQuote] = useState<CreditPayQuote | null>(null);
@@ -47,8 +57,10 @@ export default function CreditPayScreen() {
     if (data == null) return;
     if (!seeded.current) {
       seeded.current = true;
-      const agreementId = params.agreementId != null ? Number(params.agreementId) : undefined;
       const invoiceIds = params.invoiceIds?.split(',').map(Number).filter((n) => Number.isFinite(n));
+      // Scoped without named invoices: the whole supplier. Otherwise the older `agreementId` preselect.
+      const agreementId = scopedId != null && invoiceIds == null ? scopedId
+        : params.agreementId != null ? Number(params.agreementId) : undefined;
       setSelection(preselect(data, { agreementId, invoiceIds }));
     } else {
       setSelection((current) => prune(current, data));
@@ -109,11 +121,12 @@ export default function CreditPayScreen() {
     }
   }
 
+  const scopedSupplier = scopedId != null ? data?.suppliers[0] : undefined;
   const forbidden = query.error instanceof ApiError && query.error.code === 'FORBIDDEN';
 
   return (
     <MandiScreen
-      header={<MandiHeader title={PAY_DUES} subtitle={outlet?.name} back />}
+      header={<MandiHeader title={PAY_DUES} subtitle={scopedSupplier?.supplierName ?? outlet?.name} back />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
       footer={data != null && data.suppliers.length > 0 ? (
@@ -137,7 +150,11 @@ export default function CreditPayScreen() {
           onRetry={forbidden ? undefined : () => query.refetch()}
         />
       ) : data == null || data.suppliers.length === 0 ? (
-        <MandiEmptyState icon="checkmark-circle-outline" title="Nothing to pay" description="You have no open credit invoices." />
+        <MandiEmptyState
+          icon="checkmark-circle-outline"
+          title="Nothing to pay"
+          description={scope.kind === 'all' ? 'You have no open credit invoices.' : 'You have no open credit invoices with this supplier.'}
+        />
       ) : (
         <PayInvoicePicker
           data={data}

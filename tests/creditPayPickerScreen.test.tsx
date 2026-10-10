@@ -227,6 +227,72 @@ describe('selecting', () => {
   });
 });
 
+describe('scoped to one supplier (scopeAgreementId)', () => {
+  it('shows only that supplier\'s group and invoices, none of the others', async () => {
+    mockParams = { scopeAgreementId: '1' };
+    renderScreen();
+    await screen.findByTestId('pay-invoice-11');
+    expect(screen.getAllByTestId(/^pay-supplier-\d+$/).map((n) => n.props.testID)).toEqual(['pay-supplier-1']);
+    expect(invoiceIds()).toEqual(['pay-invoice-11', 'pay-invoice-12']);
+    expect(screen.queryByText('Zed Foods')).toBeNull();
+    expect(screen.queryByTestId('pay-invoice-21')).toBeNull();
+    expect(screen.queryByTestId('pay-supplier-3')).toBeNull();
+  });
+
+  it('names the supplier in the header and preselects all of its invoices when no ids are given', async () => {
+    mockParams = { scopeAgreementId: '1' };
+    renderScreen();
+    await screen.findByTestId('pay-invoice-11');
+    // Once in the header subtitle, once on the group.
+    expect(screen.getAllByText('Acme Foods')).toHaveLength(2);
+    expect(screen.queryByText('Indiranagar')).toBeNull();
+    expect(renderedText(screen.toJSON() as never)).toContain('Pay dues');
+    await waitFor(() => expect(screen.getByTestId('pay-bar-text')).toHaveTextContent(/2 invoices/));
+    expect(screen.getByTestId('pay-bar-text')).toHaveTextContent(/₹1,750\.50/);
+  });
+
+  it('preselects exactly the invoiceIds it was given, and ignores ids of other suppliers', async () => {
+    mockParams = { scopeAgreementId: '1', invoiceIds: '12,21' };
+    renderScreen();
+    await screen.findByTestId('pay-invoice-11');
+    await waitFor(() => expect(screen.getByTestId('pay-bar-text')).toHaveTextContent(/1 invoice\b/));
+    expect(screen.getByTestId('pay-bar-text')).toHaveTextContent(/₹250\.50/);
+    expect(screen.getByTestId('pay-invoice-11').props.accessibilityState?.checked).toBe(false);
+  });
+
+  it('sends only that supplier\'s invoices to the quote', async () => {
+    mockParams = { scopeAgreementId: '1' };
+    renderScreen();
+    await screen.findByTestId('pay-invoice-11');
+    await waitFor(() => expect(barDisabled()).toBe(false));
+    press('pay-bar-button');
+    await waitFor(() => expect(quoteM).toHaveBeenCalled());
+    expect(quoteM.mock.calls[0][2]).toEqual([
+      { invoiceId: 11, outstanding: '1500.0000' }, { invoiceId: 12, outstanding: '250.5000' },
+    ]);
+  });
+
+  it('an unknown or invalid scope never falls back to everyone', async () => {
+    mockParams = { scopeAgreementId: '4242' };
+    const first = renderScreen();
+    expect(await screen.findByText('Nothing to pay')).toBeTruthy();
+    expect(screen.queryByTestId('pay-supplier-1')).toBeNull();
+    first.unmount();
+    mockParams = { scopeAgreementId: 'abc' };
+    renderScreen();
+    expect(await screen.findByText('Nothing to pay')).toBeTruthy();
+    expect(screen.queryByTestId('pay-supplier-1')).toBeNull();
+    expect(screen.queryByTestId('pay-supplier-2')).toBeNull();
+  });
+
+  it('without the param every supplier is still listed (main Pay dues)', async () => {
+    mockParams = {};
+    renderScreen();
+    await screen.findByTestId('pay-invoice-21');
+    expect(screen.getAllByTestId(/^pay-supplier-\d+$/)).toHaveLength(3);
+  });
+});
+
 describe('the limit', () => {
   it('past maxInvoices the note shows and Pay is off, and tapping it asks for nothing', async () => {
     payableM.mockResolvedValue({ ...DATA, maxInvoices: 2 });

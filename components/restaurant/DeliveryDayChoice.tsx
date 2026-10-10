@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
 import {
   dayChoices, deliverByHoursFor, deliverByLabel,
@@ -21,7 +21,7 @@ export interface DeliveryWhen {
  * a slot: slots belong to each supplier and are booked when the order is
  * created, so the exact slot is chosen then, starting from this day. It is a
  * preference the supplier sees, not a promise. A party is planned weeks ahead,
- * so the days scroll to the furthest the server accepts.
+ * so the dates run to the furthest the server accepts, wrapping onto further lines.
  */
 export function DeliveryDayChoice({
   value,
@@ -31,31 +31,61 @@ export function DeliveryDayChoice({
   onChange: (when: DeliveryWhen) => void;
 }) {
   const days = dayChoices();
+  // Today and tomorrow are always on show; the other days wait behind "Pick a date", which opens itself when one of
+  // them is already chosen so the choice is never hidden.
+  const [showDates, setShowDates] = useState(false);
+  const farther = days.filter((day) => day.offset >= 2);
+  const fartherChosen = value.offset != null && value.offset >= 2;
+  const chosenFarther = fartherChosen ? days.find((day) => day.offset === value.offset)?.label ?? null : null;
+  const datesOpen = showDates || fartherChosen;
   const hours = value.offset == null ? [] : deliverByHoursFor(value.offset);
 
+  const pick = (offset: number) => {
+    const stillAhead = value.byHour != null && deliverByHoursFor(offset).includes(value.byHour);
+    onChange({ offset, byHour: stillAhead ? value.byHour : null });
+  };
+
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} testID="delivery-day-choice">
       <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
         Delivery
       </MandiText>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      <View style={styles.chips}>
+        {/* No day: sent out when ready. "Later today" is today with an optional hour to have it by. */}
         <Chip
-          label="Immediate"
+          label="As soon as possible"
           active={value.offset == null}
           onPress={() => onChange({ offset: null, byHour: null })}
         />
-        {days.map((day) => (
+        {days.filter((day) => day.offset < 2).map((day) => (
           <Chip
             key={day.offset}
-            label={day.label}
+            label={day.offset === 0 ? 'Later today' : day.label}
             active={value.offset === day.offset}
-            onPress={() => {
-              const stillAhead = value.byHour != null && deliverByHoursFor(day.offset).includes(value.byHour);
-              onChange({ offset: day.offset, byHour: stillAhead ? value.byHour : null });
-            }}
+            onPress={() => pick(day.offset)}
           />
         ))}
-      </ScrollView>
+        {/* Selected only when a farther day is chosen; open or closed is the toggle's own state. */}
+        <Chip
+          label={chosenFarther ?? 'Pick a date'}
+          spokenAs={chosenFarther == null ? undefined : `Pick a date, ${chosenFarther} chosen`}
+          active={fartherChosen}
+          expanded={datesOpen}
+          onPress={() => setShowDates((open) => !open)}
+        />
+      </View>
+      {datesOpen && (
+        <View style={styles.chips}>
+          {farther.map((day) => (
+            <Chip
+              key={day.offset}
+              label={day.label}
+              active={value.offset === day.offset}
+              onPress={() => pick(day.offset)}
+            />
+          ))}
+        </View>
+      )}
       {value.offset != null && (
         <View style={styles.wrapRow}>
           <Chip
@@ -77,13 +107,15 @@ export function DeliveryDayChoice({
   );
 }
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function Chip({ label, spokenAs, active, expanded, onPress }: {
+  label: string; spokenAs?: string; active: boolean; expanded?: boolean; onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={`Delivery: ${label}`}
+      accessibilityState={expanded == null ? { selected: active } : { selected: active, expanded }}
+      accessibilityLabel={`Delivery: ${spokenAs ?? label}`}
       style={[styles.chip, active && styles.chipActive]}
     >
       <MandiText variant="caption" color={active ? Colors.surface : Colors.textSecondary}>
@@ -94,10 +126,13 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: Spacing.xs },
-  chips: { flexDirection: 'row', gap: Spacing.sm },
+  // The bottom margin keeps wrapped chip rows off the supplier card that follows.
+  wrap: { gap: Spacing.xs, marginBottom: Spacing.md },
+  // Rows wrap rather than scroll: a scroller cut the last visible chip at the screen edge, and nothing said to swipe.
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   chip: {
+    flexShrink: 1,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: Radius.full,

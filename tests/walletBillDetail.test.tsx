@@ -83,8 +83,8 @@ describe('Transaction detail: bill', () => {
     setup();
     await screen.findByLabelText('Add bill');
     expect(screen.getByLabelText('Pay again')).toBeTruthy();
-    expect(screen.getByLabelText('View History')).toBeTruthy();
-    expect(screen.getByLabelText('Share Receipt')).toBeTruthy();
+    expect(screen.getByLabelText('View history')).toBeTruthy();
+    expect(screen.getByLabelText('Share receipt')).toBeTruthy();
     expect(screen.queryByLabelText('Wallet')).toBeNull();
   });
 

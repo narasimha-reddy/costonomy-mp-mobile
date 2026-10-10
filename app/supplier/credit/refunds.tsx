@@ -27,6 +27,7 @@ import { refundsDueKey } from '@/lib/queryKeys';
 import type { RefundDue, RefundDueStatus } from '@/models/credit';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 const CHIPS: { key: RefundDueStatus; label: string }[] = [
   { key: 'OPEN', label: 'To give back' },
@@ -94,7 +95,7 @@ export default function RefundsScreen() {
               onPress={() => setStatus(chip.key)}
               accessibilityRole="radio"
               accessibilityLabel={chip.label}
-              accessibilityState={{ selected: on }}
+              {...radioProps(on)}
               style={[styles.chip, on && styles.chipOn]}
             >
               <MandiText variant="captionEmphasis" color={on ? Colors.textInverse : Colors.textPrimary}>{chip.label}</MandiText>

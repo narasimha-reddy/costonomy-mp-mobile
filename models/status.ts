@@ -5,6 +5,7 @@ import type {
   SupplierOrderStatus as SupplierOrderStatusCode,
   DeliveryMode as DeliveryModeCode,
 } from './procurement';
+import type { SettlementStatus as SettlementStatusCode } from './settlement';
 import type {
   IntentFulfilment as IntentFulfilmentCode,
   IntentStatus as IntentStatusCode,
@@ -84,12 +85,41 @@ export function orderStatusFor(
   return resolveStatus(SupplierOrderStatus, status);
 }
 
+/**
+ * The status label on the buyer's own lists. A Costonomy delivery that is ready but has no partner yet is not
+ * "ready for pickup" to the buyer (nobody is collecting it); it reads as the tracking screen does, "arranging
+ * delivery". Everything else is the plain status.
+ */
+export function buyerOrderStatus(
+  status: string,
+  mode: DeliveryModeCode | null | undefined,
+): StatusDisplay {
+  if (status === 'READY_FOR_PICKUP' && mode === 'COSTONOMY_DELIVERY') {
+    return { label: 'Arranging delivery', tone: 'info' };
+  }
+  if (status === 'READY_FOR_PICKUP' && mode === 'SUPPLIER_DELIVERY') {
+    return { label: 'Packed, supplier delivering', tone: 'info' };
+  }
+  return resolveStatus(SupplierOrderStatus, status);
+}
+
 /** How the goods travel, named for the person reading it. D-091. */
 export const DeliveryMode = widen({
   PICKUP: { label: 'You collect', tone: 'neutral' },
   SUPPLIER_DELIVERY: { label: 'Supplier delivers', tone: 'info' },
-  COSTONOMY_DELIVERY: { label: 'We deliver', tone: 'info' },
+  COSTONOMY_DELIVERY: { label: 'Delivery partner', tone: 'info' },
 } satisfies Record<DeliveryModeCode, StatusDisplay>);
+
+/** A settlement's raw status, named for the supplier reading the payouts list. */
+export const SettlementStatus = widen({
+  PENDING: { label: 'Pending', tone: 'pending' },
+  // The payout is worked out and queued for release, which is what the supplier cares about.
+  CALCULATED: { label: 'Scheduled', tone: 'info' },
+  APPROVED: { label: 'Approved', tone: 'info' },
+  PROCESSING: { label: 'Processing', tone: 'pending' },
+  PAID: { label: 'Paid', tone: 'success' },
+  FAILED: { label: 'Failed', tone: 'danger' },
+} satisfies Record<SettlementStatusCode, StatusDisplay>);
 
 /** Procurement — doc 03 §4. */
 export const ProcurementStatus = widen({
@@ -153,7 +183,7 @@ export const CreditAgreementStatus: Record<string, StatusDisplay> = {
 export const DeliveryStatus: Record<string, StatusDisplay> = {
   DELIVERY_REQUESTED: { label: 'Finding a delivery partner', tone: 'pending' },
   QUOTE_RECEIVED: { label: 'Finding a delivery partner', tone: 'pending' },
-  PROVIDER_SELECTED: { label: 'Assigning a partner', tone: 'pending' },
+  PROVIDER_SELECTED: { label: 'Finding partner', tone: 'pending' },
   DRIVER_ASSIGNED: { label: 'Partner assigned', tone: 'live' },
   DRIVER_AT_PICKUP: { label: 'At the supplier', tone: 'live' },
   PICKED_UP: { label: 'Picked up', tone: 'live' },
@@ -286,6 +316,10 @@ export function restaurantIntentStatus(
     }
     if (fulfilment === 'PARTIALLY_FULFILLED') {
       return { label: 'Accepted in part', tone: 'warning' };
+    }
+    // "Supplier accepted" plus "All available" said one thing twice; this is both facts in one chip.
+    if (fulfilment === 'FULFILLED') {
+      return { label: 'Accepted in full', tone: 'ready' };
     }
   }
   return resolveStatus(IntentStatus, status);

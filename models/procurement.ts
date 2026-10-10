@@ -295,6 +295,14 @@ export interface SupplierOrder {
    */
   refundAmount?: Money | number | null;
   refundedAt?: string | null;
+  /**
+   * Credit orders only (API B3): when the supplier's invoice is due, and when it was
+   * settled. Null before the invoice is raised and for other methods; absent from an
+   * older API. Display only: the app never compares them.
+   */
+  creditDueDate?: string | null;
+  creditSettledAt?: string | null;
+  creditDueState?: string | null;
   /** How the goods travel, and what the carriage cost. D-091. */
   deliveryMode: DeliveryMode | null;
   deliveryFee: Money | null;
@@ -304,6 +312,9 @@ export interface SupplierOrder {
   isSubscriptionOrder?: boolean | null;
   subscriptionId?: number | null;
   hasColdChainItems?: boolean | null;
+  /** The restaurant's rating of this order, 1 to 5, once given. Null or absent until then (API flow-review 28). */
+  rating?: number | null;
+  ratingComment?: string | null;
   /** Set only on a cancelled order, and the reason it is not three statuses. */
   cancelledBy: CancelledBy | null;
   cancellationReason: string | null;
@@ -342,6 +353,8 @@ export interface IncomingOrder {
   totalAmount: Money;
   /** What the store committed to. Zero before they answer, below the total after a partial. */
   acceptedAmount: Money;
+  /** How the goods travel. Absent until the API's IncomingOrderResponse carries it; the Home inbox copes without it. */
+  deliveryMode?: DeliveryMode | null;
   paymentMethod: PaymentMethod | null;
   hasColdChainItems?: boolean | null;
   items: SupplierOrderItem[];

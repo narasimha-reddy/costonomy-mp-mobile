@@ -254,7 +254,7 @@ describe('Review bill screen', () => {
     setup(kostaInvoice({ draft: null }));
     expect(await screen.findByText('This bill cannot be reviewed yet. Try again in a moment.')).toBeTruthy();
     fetchInvoice.mockResolvedValue(kostaInvoice());
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     await loaded();
     expect(screen.getByTestId('line-3')).toBeTruthy();
   });

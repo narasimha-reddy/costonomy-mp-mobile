@@ -4,6 +4,7 @@ import { MandiBottomSheet, MandiButton, MandiFormField, MandiText } from '@/comp
 import { DECLINE_REASONS } from '@/lib/credit/requestContext';
 import { MAX_REASON, reasonCheck } from '@/lib/credit/supplierLine';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 /**
  * Declining a request: a quick reason fills the box (and can be edited); "Other" empties it. A
@@ -41,7 +42,7 @@ export function RequestDeclineSheet({
                 disabled={pending}
                 accessibilityRole="radio"
                 accessibilityLabel={option}
-                accessibilityState={{ selected: active, disabled: pending }}
+                {...radioProps(active, pending)}
                 style={[styles.chip, active && styles.chipActive]}
               >
                 <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>{option}</MandiText>
@@ -68,7 +69,7 @@ export function RequestDeclineSheet({
         )}
         <MandiButton
           testID={`${testID}-confirm`}
-          label="Decline Request"
+          label="Decline request"
           variant="destructive"
           loading={pending}
           disabled={!valid || pending || offline}

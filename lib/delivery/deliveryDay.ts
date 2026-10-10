@@ -58,9 +58,9 @@ export function preferredDateFor(offset: number | null, now: number = Date.now()
   return offset == null ? undefined : istDay(offset, now);
 }
 
-/** A `YYYY-MM-DD` day for people: "Immediate" when there is none. */
+/** A `YYYY-MM-DD` day for people: "As soon as possible" when there is none. */
 export function describeDeliveryDay(day: string | null | undefined): string {
-  if (day == null) return 'Immediate';
+  if (day == null) return 'As soon as possible';
   const [year, month, date] = day.split('-').map(Number);
   if (year == null || month == null || date == null) return day;
   return new Date(year, month - 1, date).toLocaleDateString(undefined, {

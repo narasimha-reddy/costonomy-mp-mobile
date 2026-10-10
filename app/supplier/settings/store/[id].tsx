@@ -30,6 +30,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { normaliseHours } from '@/lib/supplier/storeHours';
 import { OperatingHoursFields } from '@/components/supplier/OperatingHoursFields';
 import { ApiError } from '@/lib/api/errors';
 import { track } from '@/analytics';
@@ -180,6 +181,7 @@ export default function StoreDetailScreen() {
     : contactNameValue.trim().length < 2 ? 'Enter a contact name for this store.'
     : !PHONE.test(contactPhoneValue.trim()) ? 'Enter a contact number for this store.'
     : hoursValue.days.length === 0 ? 'Choose at least one day you trade on.'
+    : normaliseHours(hoursValue).problem != null ? normaliseHours(hoursValue).problem
     : !ownValue && !partnerValue ? 'Choose at least one way to deliver.'
     : null;
 
@@ -194,7 +196,7 @@ export default function StoreDetailScreen() {
         pincode: pincodeValue.trim(),
         contactName: contactNameValue.trim(),
         contactPhone: contactPhoneValue.trim(),
-        operatingHours: hoursValue,
+        operatingHours: normaliseHours(hoursValue).hours,
         preparationMinutes: Number(prepValue) || 0,
         directOrdersEnabled: directOrdersValue,
         ...(pinValue && pinValue.latitude !== '' && pinValue.longitude !== ''
@@ -271,7 +273,7 @@ export default function StoreDetailScreen() {
                 style={styles.flex}
               />
               <MandiButton
-                label="Save Changes"
+                label="Save changes"
                 size="lg"
                 disabled={!touched || problem != null}
                 loading={save.isPending}
@@ -357,6 +359,8 @@ export default function StoreDetailScreen() {
               onCapture={location.capture}
               onCoordinatesChange={setPin}
               subject="store"
+              address={[line1Value, line2Value, cityValue, stateValue, pincodeValue]
+                .map((part) => part.trim()).filter(Boolean).join(', ')}
             />
           </Section>
 
@@ -427,7 +431,7 @@ export default function StoreDetailScreen() {
           <Section title="How you deliver">
             <Toggle
               label="Costonomy delivery"
-              hint="We find and pay a courier, and quote the restaurant one fee."
+              hint="We find and pay a delivery partner, and quote the restaurant one fee."
               value={partnerValue}
               onValueChange={setPartner}
             />
@@ -469,7 +473,7 @@ export default function StoreDetailScreen() {
             ) : null}
             <View style={{ marginTop: Spacing.sm }}>
               <MandiButton
-                label="Manage Delivery Slots"
+                label="Manage delivery slots"
                 variant="secondary"
                 size="md"
                 icon="time-outline"

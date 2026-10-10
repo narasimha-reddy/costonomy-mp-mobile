@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { partyTitle } from '@/lib/supplier/partyTitle';
+import { newestFirst } from '@/lib/supplier/orderInbox';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -69,7 +71,8 @@ export default function SupplierOrdersScreen() {
   });
 
   const query = tab === 'new' ? pending : tab === 'active' ? active : history;
-  const orders = query.data ?? [];
+  // New orders are asked newest first; the server sends them oldest first.
+  const orders = tab === 'new' ? [...(query.data ?? [])].sort(newestFirst) : query.data ?? [];
 
   return (
     <MandiScreen
@@ -93,7 +96,7 @@ export default function SupplierOrdersScreen() {
         <View style={styles.manifestBannerLeft}>
           <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
           <View>
-            <MandiText variant="bodyEmphasis">Daily Subscriptions Manifest</MandiText>
+            <MandiText variant="bodyEmphasis">Daily subscriptions manifest</MandiText>
             <MandiText variant="caption" color={Colors.textSecondary}>
               Packing lists & scheduled slot dispatches
             </MandiText>
@@ -147,9 +150,8 @@ export default function SupplierOrdersScreen() {
                 for. After a partial acceptance those differ, and only the
                 first is theirs. */}
             <OrderCardBody
-              primary={order.outletName}
+              primary={partyTitle(order.restaurantName, order.outletName)}
               secondary={[
-                order.restaurantName,
                 order.outletLocality,
                 formatDistance(order.distanceKm),
               ]}

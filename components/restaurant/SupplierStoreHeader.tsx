@@ -47,7 +47,9 @@ export function SupplierStoreTitle({
   const router = useRouter();
   const [switching, setSwitching] = useState(false);
   const branches = header?.otherStores.length ?? 0;
-  const title = header?.storeName ?? fallbackTitle;
+  const storeName = header?.storeName ?? fallbackTitle;
+  const supplierLine = header?.supplierName ?? fallbackSubtitle ?? null;
+  const { title, subtitle } = splitStoreName(storeName, supplierLine);
 
   return (
     <View style={styles.bar}>
@@ -76,16 +78,36 @@ export function SupplierStoreTitle({
         style={styles.titleBlock}
       >
         <View style={styles.titleRow}>
-          <MandiText variant="bodyEmphasis" numberOfLines={1} style={styles.flexShrink}>
+          <MandiText variant="storeTitle" numberOfLines={1} style={styles.flexShrink}>
             {title}
           </MandiText>
+          {/* Only a store somebody has rated. "0.0" beside a name reads as a
+              bad supplier rather than an unrated one. */}
+          {header != null && header.ratingCount > 0 && header.averageRating != null && (
+            <View
+              style={styles.ratingBadge}
+              accessible
+              accessibilityLabel={
+                `Rated ${formatQuantity(header.averageRating)} from ${header.ratingCount} `
+                + `${header.ratingCount === 1 ? 'rating' : 'ratings'}`
+              }
+            >
+              <MandiText variant="captionEmphasis" color={Colors.textInverse}>
+                {formatQuantity(header.averageRating)}
+              </MandiText>
+              <Ionicons name="star" size={IconSize.xs} color={Colors.textInverse} />
+            </View>
+          )}
           {branches > 0 && (
             <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
           )}
         </View>
-        <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-          {header?.supplierName ?? fallbackSubtitle ?? ''}
-        </MandiText>
+        {/* Not the name again: a store that trades under the supplier's own name has nothing more to say here. */}
+        {subtitle != null && (
+          <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
+            {subtitle}
+          </MandiText>
+        )}
       </Pressable>
 
       {/* Messaging is offered here because this is where a kitchen is standing
@@ -113,7 +135,7 @@ export function SupplierStoreTitle({
 
         <View style={styles.branchList}>
           <BranchRow
-            name={title}
+            name={storeName}
             city={header?.city ?? null}
             distanceKm={header?.distanceKm ?? null}
             openNow={header?.openNow ?? true}
@@ -136,6 +158,24 @@ export function SupplierStoreTitle({
       </MandiBottomSheet>
     </View>
   );
+}
+
+/**
+ * The title and caption for a store: the name once. "Sri Balaji Traders — Domlur" under the supplier "Sri Balaji
+ * Traders" is the supplier as the title and the locality as the caption; a store with a name of its own keeps it
+ * as the title with the supplier beneath; a store named exactly like its supplier has no caption.
+ */
+export function splitStoreName(storeName: string, supplier: string | null): { title: string; subtitle: string | null } {
+  const name = storeName.trim();
+  const owner = supplier?.trim() ?? '';
+  if (owner === '') return { title: storeName, subtitle: null };
+  if (name.toLowerCase() === owner.toLowerCase()) return { title: storeName, subtitle: null };
+  if (name.toLowerCase().startsWith(owner.toLowerCase())) {
+    const rest = name.slice(owner.length);
+    const place = /^\s*[—–-]\s*(\S.*)$/.exec(rest);
+    if (place != null) return { title: owner, subtitle: place[1] ?? null };
+  }
+  return { title: storeName, subtitle: supplier };
 }
 
 /**
@@ -163,21 +203,15 @@ export function SupplierStoreFacts({
     <View style={styles.card}>
       <View style={styles.facts}>
         {header.distanceKm != null && (
-          <Fact icon="navigate-outline" text={`${formatQuantity(header.distanceKm)} km`} />
+          <Fact
+            icon="navigate-outline"
+            text={[`${formatQuantity(header.distanceKm)} km`, header.city].filter(Boolean).join(' · ')}
+          />
         )}
         {/* Absent rather than guessed: an ETA invented without coordinates is
             a number somebody plans a service around. */}
         {header.etaMinutes != null && (
-          <Fact icon="time-outline" text={`~${header.etaMinutes} min`} />
-        )}
-        {header.ratingCount > 0 && header.averageRating != null ? (
-          <Fact
-            icon="star"
-            tint={Colors.warning}
-            text={`${formatQuantity(header.averageRating)} (${header.ratingCount})`}
-          />
-        ) : (
-          <Fact icon="star-outline" text="Not rated yet" />
+          <Fact icon="time-outline" text={`Delivery in ~${header.etaMinutes} min`} />
         )}
         {!header.openNow && (
           <Fact
@@ -236,7 +270,7 @@ function CreditPanel({
               : 'You have no credit with this supplier.'}
           </MandiText>
         </View>
-        <MandiButton label="Request Credit" variant="secondary" size="sm" onPress={onRequestCredit} />
+        <MandiButton label="Request credit" variant="secondary" size="sm" onPress={onRequestCredit} />
       </View>
     );
   }
@@ -396,6 +430,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: Spacing.xs + 2,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.successGradientStart,
+  },
   card: {
     gap: Spacing.md,
     paddingHorizontal: Spacing.screenHorizontal,

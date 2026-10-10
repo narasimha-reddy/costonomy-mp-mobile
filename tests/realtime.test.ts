@@ -1,4 +1,4 @@
-import { socketUrl } from '@/contexts/RealtimeProvider';
+import { invalidationKeys, socketUrl } from '@/contexts/RealtimeProvider';
 
 const BASE = 'http://localhost:7070/costonomy-mp-api';
 
@@ -35,5 +35,41 @@ describe('socketUrl', () => {
   it('tolerates a base with a trailing slash and a path without a leading one', () => {
     expect(socketUrl('api/v1/realtime/socket', 'abc', 'http://localhost:7070/mp/'))
       .toBe('ws://localhost:7070/mp/api/v1/realtime/socket?ticket=abc');
+  });
+});
+
+describe('invalidationKeys', () => {
+  const ev = (aggregateType: string, aggregateId: number | null = 5) =>
+    ({ cursor: 1, channel: 'c', eventType: 'x', aggregateType, aggregateId, payload: null, occurredAt: '' });
+
+  it('a request event refreshes the outlet lists, which hold the requests', () => {
+    // The Home pill for an answered request reads ['outlet', id, 'intents'].
+    expect(invalidationKeys(ev('INTENT'))).toContainEqual(['outlet']);
+    expect(invalidationKeys(ev('INTENT'))).toContainEqual(['notifications']);
+  });
+
+  it('a delivery event refreshes the outlet orders list', () => {
+    expect(invalidationKeys(ev('DELIVERY'))).toContainEqual(['outlet']);
+  });
+
+  it('an order event still refreshes that order and the outlet lists', () => {
+    const keys = invalidationKeys(ev('SUPPLIER_ORDER', 9));
+    expect(keys).toContainEqual(['supplier-order', 9]);
+    expect(keys).toContainEqual(['outlet']);
+  });
+
+  it('a rating event refreshes the supplier order it belongs to (payload supplierOrderId)', () => {
+    const rating = { ...ev('RATING', 77), eventType: 'RatingSubmitted', payload: { supplierOrderId: 9, overall: 5 } };
+    expect(invalidationKeys(rating)).toContainEqual(['supplier-order', 9]);
+  });
+
+  it('a rating event without a usable order id refreshes every cached supplier order', () => {
+    const rating = { ...ev('RATING', 77), eventType: 'RatingSubmitted', payload: null };
+    expect(invalidationKeys(rating)).toContainEqual(['supplier-order']);
+  });
+
+  it('a check-in event (ReceivingCompleted) refreshes that supplier order', () => {
+    const checkedIn = { ...ev('SUPPLIER_ORDER', 12), eventType: 'ReceivingCompleted' };
+    expect(invalidationKeys(checkedIn)).toContainEqual(['supplier-order', 12]);
   });
 });

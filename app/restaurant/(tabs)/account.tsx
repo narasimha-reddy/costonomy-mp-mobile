@@ -86,13 +86,13 @@ export default function AccountScreen() {
         />
         <Entry
           icon="repeat-outline"
-          title="Daily Subscriptions"
+          title="Daily subscriptions"
           detail="Scheduled recurring milk, veggies & daily replenishment"
           onPress={() => router.push('/restaurant/subscriptions' as any)}
         />
       </View>
 
-      <MandiButton label="Sign Out" onPress={signOut} variant="secondary" />
+      <MandiButton label="Sign out" onPress={signOut} variant="secondary" />
     </MandiScreen>
   );
 }

@@ -27,6 +27,7 @@ import { scaledToAmount, toScaled } from '@/lib/wallet/amount';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
 import { Colors, IconSize, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'REST-CREDIT-02';
 
@@ -51,7 +52,7 @@ export default function CreditRequestScreen() {
    * Arriving from a supplier's own shelf, the supplier is already decided.
    *
    * <p>Asking somebody to search for the store whose page they just tapped
-   * "Request Credit" on is asking them to prove they meant it.
+   * "Request credit" on is asking them to prove they meant it.
    */
   const { storeId: preset } = useLocalSearchParams<{ storeId?: string }>();
   const presetId = preset != null && preset !== '' ? Number(preset) : null;
@@ -186,7 +187,7 @@ export default function CreditRequestScreen() {
         <MandiStickyBar>
           <MandiButton
             testID="send-request"
-            label="Send Request"
+            label="Send request"
             size="lg"
             disabled={!valid || offline}
             loading={submit.isPending}
@@ -358,7 +359,7 @@ export default function CreditRequestScreen() {
                 onPress={() => { setDays(option); setProblem(null); }}
                 accessibilityRole="radio"
                 accessibilityLabel={`${option} days`}
-                accessibilityState={{ selected: active }}
+                {...radioProps(active)}
                 style={[styles.chip, active && styles.chipActive]}
               >
                 <MandiText

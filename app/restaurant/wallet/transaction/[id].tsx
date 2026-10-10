@@ -19,7 +19,7 @@ import { DetailColors, WalletColors } from '@/theme';
  *
  * <p>The header takes the status's colour (green, amber, red, or the orange-brown of money
  * returned) and so does the system status bar. Under it the card says who the money went to
- * or came from, and "Transfer Details" lists our transaction id and the references. Share
+ * or came from, and "Transfer details" lists our transaction id and the references. Share
  * Receipt turns a plain version of the card into a picture and opens the share sheet.
  *
  * <p>"Add bill" is offered only with QUICKSCAN_PAY (the API refuses it otherwise); viewing a bill needs no more.
@@ -108,7 +108,7 @@ export default function TransactionDetailScreen() {
             icon="receipt-outline"
             title="Transaction not found"
             description="This transaction is not in your wallet history."
-            actionLabel="View History"
+            actionLabel="View history"
             onAction={() => router.push('/restaurant/wallet/history')}
           />
         ) : (

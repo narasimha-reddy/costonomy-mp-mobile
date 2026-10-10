@@ -123,7 +123,7 @@ describe('Request review: what they asked', () => {
   it('says so, with Retry, when the request cannot load', async () => {
     agreementM.mockRejectedValueOnce(new ApiError({ code: 'X', message: 'boom', status: 500 }));
     renderScreen();
-    fireEvent.press(await screen.findByText('Try Again'));
+    fireEvent.press(await screen.findByText('Try again'));
     expect(await screen.findByText('Weekly vegetables')).toBeTruthy();
   });
 

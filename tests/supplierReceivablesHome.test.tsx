@@ -136,7 +136,7 @@ describe('Receivables home: states', () => {
   it('says so, with Retry, when it cannot load, and Retry refetches', async () => {
     receivablesM.mockRejectedValueOnce(new Error('boom'));
     renderTab();
-    fireEvent.press(await screen.findByText('Try Again'));
+    fireEvent.press(await screen.findByText('Try again'));
     expect(await screen.findByTestId('receivables-hero')).toBeTruthy();
     expect(receivablesM).toHaveBeenCalledTimes(2);
   });
@@ -156,7 +156,7 @@ describe('Receivables home: states', () => {
     receivablesM.mockRejectedValue(new ApiError({ code: 'NOT_FOUND', message: 'nope', status: 404 }));
     renderTab();
     expect(await screen.findByText("You don't have access to credit for this store")).toBeTruthy();
-    expect(screen.queryByText('Try Again')).toBeNull();
+    expect(screen.queryByText('Try again')).toBeNull();
   });
 
   it('shows the offline banner', async () => {
@@ -178,7 +178,7 @@ describe('Receivables home: states', () => {
     restaurantsM.mockRejectedValueOnce(new Error('boom'));
     renderTab();
     expect(await screen.findByTestId('receivables-hero')).toBeTruthy();
-    fireEvent.press(await screen.findByText('Try Again'));
+    fireEvent.press(await screen.findByText('Try again'));
     expect(await screen.findByText('Outlet 1')).toBeTruthy();
   });
 });
@@ -251,7 +251,7 @@ describe('Receivables home: pending actions come from the server', () => {
     await waitFor(() => expect(lastRestaurantsParams().sort).toBe('owed'));
     fireEvent.press(screen.getByTestId('pending-OVERDUE_RESTAURANTS'));
     await waitFor(() => expect(lastRestaurantsParams().sort).toBe('overdue'));
-    expect(screen.getByTestId('sort-overdue').props.accessibilityState).toMatchObject({ selected: true });
+    expect(screen.getByTestId('sort-overdue').props.accessibilityState).toMatchObject({ checked: true });
   });
 
   it('at-limit chip brings the biggest lines forward', async () => {
@@ -397,7 +397,7 @@ describe('Receivables home: new requests still work', () => {
     renderTab();
     await screen.findByTestId('receivables-hero');
     expect(screen.queryByText(/^New requests/)).toBeNull();
-    expect(screen.queryByText('Approve As Asked')).toBeNull();
+    expect(screen.queryByText('Approve as asked')).toBeNull();
   });
 
   it('approves exactly what was asked, with no changes', async () => {
@@ -405,7 +405,7 @@ describe('Receivables home: new requests still work', () => {
     approveM.mockResolvedValue({});
     const { invalidate } = renderTab();
     await screen.findByText('Asker 31');
-    fireEvent.press(screen.getAllByText('Approve As Asked')[0] as never);
+    fireEvent.press(screen.getAllByText('Approve as asked')[0] as never);
     await waitFor(() => expect(approveM).toHaveBeenCalledWith('tok', 31, {}));
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['store', 5, 'credit', 'receivables'] }));
     expect(mockToast).toHaveBeenCalledWith('Credit approved', 'success');
@@ -416,7 +416,7 @@ describe('Receivables home: new requests still work', () => {
     approveM.mockRejectedValue(new ApiError({ code: 'X', message: 'Not allowed', status: 409 }));
     renderTab();
     await screen.findByText('Asker 31');
-    fireEvent.press(screen.getAllByText('Approve As Asked')[0] as never);
+    fireEvent.press(screen.getAllByText('Approve as asked')[0] as never);
     await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Not allowed', 'error'));
     fireEvent.press(screen.getAllByText('Review')[1] as never);
     expect(mockPush).toHaveBeenCalledWith('/supplier/credit/request/32');
@@ -455,7 +455,7 @@ describe('Receivables home: request cards', () => {
     ]);
     renderTab();
     expect(await screen.findByText('Offer sent, waiting for the restaurant (valid until 20th Oct 2026)')).toBeTruthy();
-    expect(screen.getAllByText('Approve As Asked')).toHaveLength(1);
+    expect(screen.getAllByText('Approve as asked')).toHaveLength(1);
     expect(screen.getAllByText('Review')).toHaveLength(1);
   });
 
@@ -464,7 +464,7 @@ describe('Receivables home: request cards', () => {
     agreementsM.mockResolvedValue([request(31), { ...request(32), status: 'EXPIRED' }]);
     renderTab();
     expect(await screen.findByText('Offer expired')).toBeTruthy();
-    expect(screen.getAllByText('Approve As Asked')).toHaveLength(1);
+    expect(screen.getAllByText('Approve as asked')).toHaveLength(1);
   });
 });
 

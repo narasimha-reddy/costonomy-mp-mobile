@@ -70,7 +70,7 @@ export function PriceChangeNotice({
       })}
 
       <MandiButton
-        label="Accept New Prices"
+        label="Accept new prices"
         onPress={onAccept}
         loading={accepting}
         size="md"

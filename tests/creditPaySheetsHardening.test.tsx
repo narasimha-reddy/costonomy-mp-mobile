@@ -391,7 +391,7 @@ describe('M03 / B5: nothing stranded under ₹1', () => {
     fireEvent.changeText(screen.getByTestId('other-amount'), '999.50');
     expect(screen.getByTestId('sliver-hint')).toHaveTextContent(/This would leave ₹0\.50 owed\. Pay the full ₹1,000\.00 instead\?/);
     press('pay-full-instead');
-    expect(screen.getByLabelText('Full due ₹1,000.00').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByLabelText('Full due ₹1,000.00').props.accessibilityState.checked).toBe(true);
     expect(screen.queryByTestId('sliver-hint')).toBeNull();
     press('pay-button');
     await waitFor(() => expect(repay).toHaveBeenCalled());

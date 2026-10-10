@@ -75,7 +75,7 @@ describe('UndoPaymentSheet', () => {
     expect(screen.getByTestId('undo-sheet-reason').props.value).toBe('Wrong restaurant');
     fireEvent.press(screen.getByTestId('undo-reason-Other'));
     expect(screen.getByTestId('undo-sheet-reason').props.value).toBe('');
-    expect(screen.getByTestId('undo-reason-Other').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('undo-reason-Other').props.accessibilityState.checked).toBe(true);
   });
 
   it('sends the receipt endpoint with the trimmed reason and reports the result', async () => {

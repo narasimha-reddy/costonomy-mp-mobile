@@ -16,6 +16,7 @@ jest.mock('@expo/vector-icons', () => {
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useIsFocused: () => true,
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
 jest.mock('@/contexts/OutletProvider', () => ({ useOptionalOutlet: () => ({ outlet: { latitude: '12.9', longitude: '77.6' } }) }));
@@ -63,8 +64,11 @@ describe('sandbox rider control (test only)', () => {
   it('shows the Test mode card to the supplier and the button calls the service', async () => {
     setup('supplier');
     expect(await screen.findByText('Test mode')).toBeTruthy();
-    expect(screen.getByText('Pidge sandbox has no real riders. Move the rider to the next step to see the flow.')).toBeTruthy();
-    fireEvent.press(screen.getByText('Assign a rider'));
+    expect(screen.getByText('Pidge sandbox has no real delivery partners. Move the delivery partner to the next step to see the flow.')).toBeTruthy();
+    expect(screen.getByText('The simulator also advances this delivery automatically')).toBeTruthy();
+    // The heading says it once; the body does not repeat it.
+    expect(screen.getAllByText(/Test mode/)).toHaveLength(1);
+    fireEvent.press(screen.getByText('Assign a delivery partner'));
     await waitFor(() => expect(advanceSandboxDelivery).toHaveBeenCalledWith('token', 9, expect.any(String)));
     // The delivery and order are fetched again so the screen follows the server.
     await waitFor(() => expect((fetchDelivery as jest.Mock).mock.calls.length).toBeGreaterThan(1));
@@ -72,15 +76,15 @@ describe('sandbox rider control (test only)', () => {
 
   it('never renders it for the buyer', async () => {
     setup('buyer');
-    await screen.findByText('Assigning a partner');
+    await screen.findByText('Assigning a delivery partner');
     expect(screen.queryByText('Test mode')).toBeNull();
-    expect(screen.queryByText('Assign a rider')).toBeNull();
+    expect(screen.queryByText('Assign a delivery partner')).toBeNull();
   });
 
   it('is absent when the API does not offer it', async () => {
     (fetchDelivery as jest.Mock).mockResolvedValue({ ...delivery, sandboxControls: false });
     setup('supplier');
-    await screen.findByText('Assigning a partner').catch(() => undefined);
+    await screen.findByText('Assigning a delivery partner').catch(() => undefined);
     await waitFor(() => expect(fetchDelivery).toHaveBeenCalled());
     expect(screen.queryByText('Test mode')).toBeNull();
   });
@@ -88,7 +92,7 @@ describe('sandbox rider control (test only)', () => {
   it('labels each step', () => {
     expect(['PROVIDER_SELECTED', 'DRIVER_ASSIGNED', 'DRIVER_AT_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_DESTINATION']
       .map((s) => sandboxNextStepLabel(s as never))).toEqual([
-      'Assign a rider', 'Rider reached your store', 'Rider picked up', 'Rider on the way', 'Rider arrived', 'Mark delivered',
+      'Assign a delivery partner', 'Delivery partner reached your store', 'Delivery partner picked up', 'Delivery partner on the way', 'Delivery partner arrived', 'Mark delivered',
     ]);
     expect(sandboxNextStepLabel('DELIVERED')).toBeNull();
   });

@@ -154,6 +154,24 @@ export const TextStyles = {
     fontSize: FontSize.sm,
     lineHeight: Math.round(FontSize.sm * LineHeight.normal),
   },
+  /** A supplier store's name on its menu header: 22/800. */
+  storeTitle: {
+    fontFamily: FontFamily.extrabold,
+    fontSize: FontSize.xl,
+    lineHeight: Math.round(FontSize.xl * LineHeight.tight),
+  },
+  /** The buyer tracking header's title. */
+  trackHeaderTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 19,
+    lineHeight: 24,
+  },
+  /** Text inside the ETA pill. */
+  pillText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.sm,
+    lineHeight: 18,
+  },
   /** Badges, chips, overline labels. */
   label: {
     fontFamily: FontFamily.semibold,

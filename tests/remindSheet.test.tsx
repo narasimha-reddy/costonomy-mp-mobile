@@ -117,7 +117,7 @@ describe('RemindSheet preview', () => {
     renderSheet();
     expect(await screen.findByTestId('remind-preview-error')).toBeTruthy();
     expect(send().props.accessibilityState?.disabled).toBe(true);
-    await act(async () => { fireEvent.press(screen.getByText('Try Again')); });
+    await act(async () => { fireEvent.press(screen.getByText('Try again')); });
     expect(await screen.findByTestId('remind-message')).toBeTruthy();
   });
 });

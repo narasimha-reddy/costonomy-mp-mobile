@@ -40,7 +40,7 @@ interface QuickActionTilesProps {
 }
 
 /**
- * The "Money Transfers" section of Home: one panel, one row of four equal
+ * The "Money transfers" section of Home: one panel, one row of four equal
  * columns, each a round icon over a centred label.
  *
  * <p>Data-driven — adding an action is one more entry in `actions`. Hidden
@@ -55,7 +55,7 @@ export function QuickActionTiles({ actions }: QuickActionTilesProps) {
 
   return (
     <View style={styles.section} testID="money-transfers">
-      <MandiSectionHeader title="Money Transfers" />
+      <MandiSectionHeader title="Money transfers" />
       <View style={styles.panel}>
         <View style={styles.row}>
           {shown.map((action) => (

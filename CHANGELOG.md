@@ -6,6 +6,90 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [fix/bug3-track] - Web tracking map: truck, line and camera agree (found with a live recorder)
+#### Fixed
+- Arriving: the truck glides 5 s to each fix while the line and camera used the new fix only, so the truck was off the map or at its bottom edge with the line ending ahead of it. The camera now frames where the truck is drawn as well as the fix, and the line starts at the drawn truck all through the glide.
+- Reached: the truck keeps a pixel clearance (36 px straight above or below the pin, at the map's zoom, re-placed when the zoom changes) instead of 60 m, which was 26 px at zoom 16 and covered the pin and its chip; it stays on the side it is drawn on (it never glides across the pin) and keeps it while the fixes jitter, and the chip goes on the other side.
+- The fit leaves room at the bottom for Google's logo and attribution row. The native map keeps its 60 m rule (`truckClearOfPinsM`).
+### [fix/bug2-ui] - Second on-screen audit fixes
+#### Fixed
+- Store editor says "Hours not set" instead of 00:00-00:00; the address picker shows "Map unavailable" with the address when Google refuses the key or does not load; chat "Go back" works with no history.
+- Approved dispute refunds show as a row on both order screens (amounts from the order's disputes, never computed); Credit notes and invoice answers appear on the card (Alert is silent on web).
+- Dispute list chip shows the real status; a collected pickup reads "Step 3 of 3 - Collected"; the slot is neutral once delivered; the cart delivery chips keep a gap above the supplier card.
+### [fix/bug2-track] - Tracking map fixes from the on-screen check
+#### Fixed
+- Web tracking map is framed again when its box changes size (taller when the order is close), so the truck is no longer left outside the drawn area while arriving.
+- The camera keeps the truck and the stop it heads for inside the view with padding for the truck icon, and refits sooner when one is at the edge.
+- The truck badge stays 60 m (was 40) from a pin, clear of the "You" dot; the arriving 300 m ring is outline only so it no longer washes the map.
+- Supplier Test mode card no longer says "Test mode" twice.
+
+### [fix/bug-copy] - On-screen audit copy and layout fixes
+#### Fixed
+- The restaurant Home request pill shows the order deadline in 12-hour time ("6:30 PM"), from the shared clock helper.
+- Cart delivery-day chips wrap instead of scrolling, so none is clipped at 360 px and large font scale.
+- Title Case labels and buttons are sentence case across both apps (GST documents, Credit notes, Mark all as read, and the rest); brand and product names keep their capitals.
+- Refund lines (bill summary, supplier order, credit notes) lay out as a wrapping label and a whole, right-aligned amount.
+- A fully accepted request shows one "Accepted in full" chip at checkout instead of "Supplier accepted" plus "All available".
+
+### [fix/bug-map] - Tracking map: pins never hidden, pin label font, clearer arriving copy
+#### Fixed
+- The truck icon is drawn pushed out to 40 m from a pin it is on top of, and pins now sit above the truck (with a soft halo), so the supplier and 'You' pins stay visible at pickup and arrival.
+- Web map pin labels used a serif font (the unquoted `Source Sans 3` family is invalid CSS); the family is quoted with a sans-serif fallback.
+- Arriving header reads 'Your order is arriving now' with the pill 'Please have someone ready to receive it'; the minutes ('Arriving in N mins') show under the pill when the payload has them.
+### [fix/bug-data] - Audit data bugs: placeholder names, GSTIN chip, unset hours, /chat scope, map fallback
+#### Fixed
+- A delivery partner name that is a placeholder ("Rider name") is never shown: the deliveries list and the partner card say "Delivery partner" instead.
+- Business settings shows "verified" only with a GSTIN on file and a VERIFIED status from the server; with no GSTIN it shows a neutral "Add GSTIN" chip and says to contact support.
+- A store whose opening and closing times are identical (00:00-00:00) reads "Hours not set"; the model has no 24-hour flag, so it is not guessed to mean always open.
+- /chat without an outlet or store in the link shows "Choose where to read messages from" with Go back, instead of a skeleton that never ends.
+- "Map unavailable" says why (maps are not set up in this version of the app), and the store address stays in view beneath it.
+
+### [fix/p28-map] - Web map created when its host exists, refits while the truck moves, audience pin labels
+#### Fixed
+- Google web map no longer falls back to the sketch when the first render had nothing to draw (map created once the host element exists, construction retried); the camera frames the truck and the next stop and refits while live; the restaurant pin reads 'Restaurant' on the supplier screen and 'You' for the buyer.
+
+### [fix/p26-guard-and-verify-findings follow-up] - Lint guard against use-before-define crashes
+#### Added
+- `costonomy/no-tdz` ESLint error (a `no-use-before-define` that ignores module-level styles read inside functions) over app, components, hooks, lib, contexts, after the web-only crash where the supplier order screen read a later-declared `const` in a react-query callback. See docs/NO_USE_BEFORE_DEFINE.md.
+#### Fixed
+- Latent: `MandiQuantityStepper` (clamp) and supplier new product (needsMeasure) read a later-declared const inside a callback; declarations moved up. Jest cannot catch this class (babel turns const into var), so the lint rule is the guard.
+### [fix/p21-supplier follow-up] - Review fixes on the supplier screens
+#### Fixed
+- Home inbox splits a Ready order by delivery mode ("Ready to send out" when the supplier delivers, "Waiting for rider", "Waiting for pickup", plain "Ready" when the list does not say) and adds an "Other" catch-all so no order is unreachable; the request screen keeps Accept off until the delivery options load (retry message if they fail) and puts the outlet on the subtitle; supplier tracking names restaurant and outlet; payout status CALCULATED reads "Scheduled"; the duplicated "restaurant pays" note is gone; the press guard restarts in a layout effect.
+#### Known tradeoff
+- The manual "Request Delivery Partner" button still appears after a client 60 s timer, not a server signal; a server flag (autoDispatchFailed / readyAt) would be the clean fix.
+### [feat/fix-p23-restaurant] - Restaurant after-order, Home, search and login fixes
+#### Changed
+- Placed hero shows the real caption, total, payment line, View order and Back to Home; Home pill prefers an answered request in its window, unless an out-for-delivery order is arriving (ETA 5 min or less), and skips an order still CONFIRMED/PREPARING/READY 12 h past its creation or scheduled delivery day (the order model has no status-changed time); Active Orders lists and counts every in-flight order (the Orders tab's Active list), with the buyer status ("Arranging delivery", "Packed, supplier delivering") and "ready to collect" for pickup orders only; recommended tiles show the outlet suffix as its own small line.
+- Order details hide Rate once rated (the rating screen writes the rating to the cache), say "On credit" once (no Payment method row for a plain credit order; refund and settling labels kept), use a document icon; rating returns to the order; stars read "{n} stars"; check-in confirms "All items received as billed" or lists each short or damaged line with its unit, and offers Raise a dispute (receiving opens none); Back to Home no longer stacks a second Home.
+- Deliveries: one filter row, one status chip, delivered time, "Arrival #n" only among several. Search says "N suppliers match" with View suppliers when Products is empty and has no web focus ring. Sign-in fields autofocus, the code submits on the sixth digit, and the phone screen has a back arrow. The search bar keeps a 2 px transparent border so focus does not shift it. Issue 21 (headers, steppers, radios) was done by another branch, not this one. Deferred: a Home "Check in N deliveries" row.
+
+### [fix/restyle-p22-checkout] - Request, cart and checkout fixes from the flow review (issues 4, 10, 13-16, 19, 22)
+#### Fixed
+- Checkout opens on Costonomy delivery (fee shown) when the restaurant asked for delivery, never silently on pickup; the header says "Pickup at {supplier}" for pickup; delivery mode, day/slot and payment method are kept per request (`lib/preferences`) and cleared once the order is placed.
+- Open Requests / Requests list show "Accepted" (offered total) once answered, "Requested" before; "Create Order" is now "Place order"; payment options read "Mandi Credit" / "Wallet" / "Card / UPI" (one shared label map, also used by the PAY USING bar) with "{amount} available"; the on-demand slot text is customer-friendly; the cart has one Send button and no always-disabled Create Order; checkout shows one status chip, one supplier card, no "Add more items" after the answer, and "You asked for N" beside the offered quantity; Withdraw offers "Keep request" and ends on "Request withdrawn" with "Back to Home".
+- Supplier menu header no longer repeats the name and labels the ETA; the menu's Continue is inert with an empty cart; the cart's date chips are As soon as possible / Later today / Tomorrow / Pick a date; the open-request screen says "{Store} usually replies in N min · m:ss left" and shows "Deliver to me · As soon as possible".
+- Checkout follow-up: after a price change the delivery fee is re-quoted before delivery is chosen again (no stale quote reference), a saved Wallet/Credit choice is used only when its balance still covers the order, only the saved day is restored (the picker chooses the slot) and pickup sends no slot or day, choices are kept only for orderable requests, "{Store} replies within N min", Pick a date shows the chosen date, a fully declined request card says Declined, and "Immediate" reads "As soon as possible".
+### [feat/restyle-p17-supplier-tracking] - The supplier's tracking screen matches the restaurant's
+#### Changed
+- `/supplier/tracking/:id` now uses the green header, ETA pill, map, partner card (with plate), placed hero and delivered receipt via `BuyerTrackingLayout audience="supplier"` and a new `supplierTrackingHeader`; the sandbox card, partner search, retry and switch-to-own controls are kept. Supplier tracking polling now also pauses when the screen is not focused.
+### [chore/restyle-e2e-tools] - Delivery e2e tooling runs against the merged stack
+#### Changed
+- `tools/delivery-e2e`: env overrides (`API`, `WEB`, `MYSQL_CMD`, `PIDGE_WEBHOOK_SECRET` from the environment first), provider detection (PIDGE vs MOCK, BLOCKED instead of FAIL), screenshots at 360/390/412, `android_shots.sh` (adb `-s` per emulator) and `driver.py --self-test` that refuses ports 7070/7071/3306.
+### [fix/restyle-p1b-payment-line] - An unpaid credit order no longer says "You paid"
+#### Fixed
+- The order screen's bar label comes from the new pure `paymentLine()` (credit says "On credit" until the server sends `creditSettledAt`, then "Paid on credit"); `SupplierOrder` gains the optional B3 fields `creditDueDate`, `creditSettledAt`, `creditDueState`.
+
+### [feat/restyle-p0-foundation] - Design tokens and map helpers for the buyer restyle
+#### Added
+- Additive tokens (`trackHeader`, `trackHeaderPill`, `onTrackHeader`, route, geofence, pickup pin and truck colours; `trackHeaderTitle` and `pillText` text styles; `TrackLayout`), `TruckIcon` (orange parcel, dark cab, muted and flip) and the pure `lib/delivery/mapGeometry` helpers. No screen uses them yet.
+- Restyled `DeliveryPartnerCard` (name, "Delivery partner", call only with a phone, an Assigning placeholder; the supplier plate layout is kept), new `OrderPlacedHero` and `ReceiptHero` (react-native-svg zigzag edge). Not wired into a screen yet.
+
+### [fix/native-delivery-map-fallback] - The delivery map is no longer blank on Android
+#### Fixed
+- Without a Google Maps key the native `MandiMap` showed a blank panel. It now draws the schematic map (moved to the shared `MandiMapSketch`, also the web build) unless `MAPS_CONFIGURED`, and keeps the real `MapView` when a key is set.
+- `app.config.js` writes `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` into the Android Google Maps config at build time (no key committed; unchanged when unset). See `docs/GOOGLE_MAPS.md`.
+
 ### [phase6/mobile-product-quantity] - A tap is not lost on the product screen (API D-137)
 #### Fixed
 - The product screen's supplier cards had their own copy of the quantity debounce, which cleared its timer on leaving the screen and dropped the tap. They now use the shared `useCartQuantity` (one write for a burst of taps, writes in order, a pending tap sent on leaving), as the pack and supplier screens do.
@@ -411,3 +495,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### Added
 - Supplier delivery partner dispatch controls, live tracking map/webview integration, and safe navigation handling.
 - Arrival Radar situational widgets for restaurant kitchens: real-time driver ETA, vehicle type badge, and delivery issue notification alerts.
+- Delivery status `PROVIDER_SELECTED` now reads "Finding partner" (was "Assigning a partner"); regression tests for the platform-delivery copy (T1a).
+- [Restyle] Deliveries filters are one scrolling row of pills (Active, Late, Needs check-in, All) with counts from the radar summary, via the new FilterPills component.
+
+### [feat/restyle-p2a-primitives] - DetailRowCard and StickyActionBar
+#### Added
+- `DetailRowCard` (icon rows, 56dp minimum, one-line title, two-line subtitle, non-shrinking trailing slot) and `StickyActionBar` (`pay` and `continue` variants over `MandiStickyBar`). No screen uses them yet.
+- [restyle] GreenTrackingHeader and EtaPill components for the buyer tracking header (not wired into a screen yet).
+- Restyle T3: pure `buyerTrackingHeader()` adapter over `orderTrackingView` (title, pill, map mode, partner area for 18 buyer tracking states) with tests.
+- Delivery map modes (pending, live, arriving, reached), TruckIcon marker, Android tile watchdog with sketch fallback, and optional pickup/drop coordinates on Delivery.
+- Restyle T10: white ActiveOrderPill (supplier, status, ETA badge only with minutes) on Home and Orders via shared useLatestInFlight; opens live tracking; replaces OrderInProgressBar.
+- Restyle T9: supplier menu: orange-outline ADD that becomes a filled stepper, 88dp picture on the right, rating badge only with ratings, FilterPills for aisles, Continue bar via StickyActionBar.
+- Restyle T8: checkout and cart bottom bars use StickyActionBar (PAY USING method column with scroll to the picker, server preview total, Place order); credit and wallet orders now open the tracking screen.
+- [Restyle] Order details (buyer): status card with Track, Support in the header, Bill Summary card with server-sent lines and the payment line, details card; BillSummary component.
+- Restyle T11: deliveries list cards show supplier, order number, status chip, "Arriving in N mins" or server-provided "N mins past slot", and a Track link.
+- Restyle T5: the buyer tracking screen now uses `BuyerTrackingLayout` (green header, ETA pill, map, partner card or placeholder, delivery and order rows, activity; the placed hero for a just-confirmed order). Polling pauses while the screen is not focused. Delivered and completed keep the old layout until T6; the supplier layout is unchanged.
+- Restyle T6: the buyer tracking screen shows the delivered receipt (ReceiptHero, "Delivered at {time}", supplier card, "Rate this order" only on a COMPLETED order with no rating, "Check in the delivery to rate it" on DELIVERED, partner "Delivered by", delivery and order rows, Report an issue); the old buyer layout is no longer used.
+- Restyle T13: restaurant Home restyled: outlet name with address header, search bar with a Quick Scan side button, 44dp category circles with a primary underline on the selected one, filter chips (All, Open now, Order directly) and a three-column RECOMMENDED FOR YOU grid with two-line supplier names. The pill, money tiles, requests and orders are unchanged.
+- [Restyle] Checkout header card, add-more chip and delivery rows on the request screen (T14).
+- [Costonomy] Restyle e2e fixes: dark status bar on white tracking headers, dashed sketch route as real segments, own-delivery 'Delivery fee' wording, no stray unit in item tax line, 'Arranging delivery' list label.
+- [Restyle] Home/Orders pill now shows an in-flight order of any delivery mode and an answered request awaiting the order; INTENT and DELIVERY realtime events refresh the outlet lists; sketch map shows labelled Supplier/You pins and the correct solid/dashed legs per stage (T16).
+- [Restyle] Web delivery map: the real Google map (Maps JavaScript API, EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY) with supplier and restaurant pins, truck marker and route legs; falls back to the schematic without a key, on gm_authFailure or after 6 s without tiles (T18).
+- [Restyle] Live tracking: a Costonomy partner on the road is refetched every 5 s (was 15 s) and the web map's truck glides over the gap between the last two fixes, 1 to 5 s (T20).
+- [Restyle] Supplier order screen: a 800 ms press guard on the stage bar (no more double-tap through Packing), "Finding a delivery partner…" with 2.5 s refetch instead of an early manual button, compact status card with Track (no embedded map or sandbox card), "Delivery partner" chip, delivery-fee note, restaurant rating, human settlement status labels (flow review 2, 3, 16, 23, 28).
+- [Restyle] Supplier Home orders as an action inbox (New orders to start / Packing / Waiting for rider / Out for delivery, newest first) and restaurant name before outlet on order, request and tracking rows (flow review 5, 7).
+- [Restyle] Supplier request screen: header no longer clips at 360-390 px and is titled restaurant plus outlet, the reply is priced once on load, no delivery method preselected (Accept waits), delivery charge sits under "I will deliver it" (flow review 7, 24).
+- [Restyle] Realtime events are batched and de-duplicated (one refetch per key), refresh the supplier lists, and a failed socket handshake backs off without stacking ticket requests; web map: English labels, quiet style, async loading, refit near the truck, resize repaint; accessibility labels; supplier desktop column 560 px; no duplicate Back to order bar; restaurant name in the supplier tracking party line (F-D).
+- [Restyle] Realtime review fixes: a token change no longer strands the ticket chain on the old token, the old socket cannot close the new one, GPS-fix events refresh only the delivery queries, INTENT refreshes only request lists; supplier tracking names restaurant and outlet; the supplier column keeps its width on /chat and /notifications; the web map leaves the camera alone for 30 s after the user drags it; a failed Maps library import no longer injects a second script.
+- [Checkout] A chosen wallet or credit that stops covering the real total is swapped or cleared, Place order waits for the server total and for a renewed delivery quote, a hand-picked delivery survives a price change, Try again on a failed quote, saved choices are validated.
+- [A11y] Every role=radio row now exposes accessibilityState checked (and disabled) via radioState() in lib/a11y.ts and never selected (invalid aria-selected on web, double announcement on TalkBack); a source guard test fails if one returns.
+- [Verify] Order bill uses the server final payable and shows the check-in refund as its own line; Deliveries hides live hints on finished orders and says delivery partner; check-in reason follows the problem; order date readable; no preview refetch after placing; supplier New orders newest first; one payment line; supplier name shown once on menu header and placed screen.
+- [Restaurant] Check-in: credit order sheet leads with Rate this order and no wallet button; Received follows Damaged/Missing; Orders cards show final payable; Deliveries entry on Orders tab; what-happens-next on placed; 12-hour delivery times, no Call on finished.
+- [Wording] Customer-visible wording says delivery partner, not rider, courier or driver; supplier order screen shows plain dates/reasons; rating event refreshes the supplier order; Try again now waits 60 s; View order on ordered supplier request.
+- [Maps] Web map tile watchdog runs only while the map is on screen (a hidden stacked screen's map no longer sends every map to the sketch), stops at tilesloaded/idle/painted tiles, and a timeout falls back for that map alone (only a refused key is session-wide); camera frames truck + supplier before pickup (restaurant within 800 m) and truck + restaurant the moment the order is collected, zoom 12..17, one point at 16, far-off fixes ignored (native too); pin labels are white chips above the pin that move below when the truck is on them; Marker kept over AdvancedMarkerElement (a mapId drops the quiet style), see docs/GOOGLE_MAPS.md (flow review 4).
+- [A11y/Copy] Flow review 4: every role=radio row spreads radioProps() (lib/a11y.ts) so the web gets a real aria-checked (react-native-web ignored accessibilityState.checked), guarded by a source test; supplier order screen in sentence case (Final payable, Generate invoice, Credit notes, Cancel order, Request delivery partner, Weigh items, tag Delivered not DELIVERED) and a line refund kept whole on one row; check-in quantity boxes named by field and line, reasons in sentence case; restaurant order names the supplier once with the locality as caption and a check icon when completed; Orders tab says "Deliveries · N active · M to check in".
+- [Maps] The delivery truck is now a top-down truck (orange cab, white cargo roof with the Costonomy C) that turns to face its direction of travel on every map: the provider's bearing, else the direction of the last move of 5 m or more (standing still keeps the heading), eased the short way round; native marker is flat and rotated, the web Google marker bakes the turn into a cached SVG per 5 degree bucket over the 1-5 s glide, the sketch faces along its drawn road; the side-view TruckIcon and the bearing mirror are gone; preview renderer in tools/truck-preview.

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
 import { MandiBottomSheet } from './MandiBottomSheet';
 import { Colors, ControlHeight, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 export interface FilterOption<T extends string> {
   key: T;
@@ -76,7 +77,7 @@ export function MandiFilterMenu<T extends string>({
                 setOpen(false);
               }}
               accessibilityRole="radio"
-              accessibilityState={{ selected: chosen }}
+              {...radioProps(chosen)}
               style={styles.option}
             >
               <MandiText variant="body" style={styles.optionLabel}>{option.label}</MandiText>

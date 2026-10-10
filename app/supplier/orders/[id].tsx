@@ -1,7 +1,7 @@
 import { SUPPLIER_CANCEL_TOAST, SUPPLIER_CANCELLED_LINE } from '@/lib/payments/statusLabel';
-import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { billingFailureMessage } from '@/lib/billing/messages';
+import React, { useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { billingFailureMessage, creditNotesNotice } from '@/lib/billing/messages';
 import { fetchTaxInvoice, fetchCreditNotes, generateTaxInvoice, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -51,21 +51,32 @@ import {
   weightAdjustmentCopy,
 } from '@/lib/orders/catchWeight';
 import { formatDistance, orderValue } from '@/utils/orders';
-import { formatMomentWithRecency } from '@/utils/dateRange';
-import { ColdChainBanner, PaymentMethodPill } from '@/components/order';
+import { formatDay, formatMomentWithRecency } from '@/utils/dateRange';
+import { rejectionReasonLabel } from '@/lib/supplier/rejectionReason';
+import { AmountRow, ColdChainBanner, DisputeRefundLines, PaymentMethodPill } from '@/components/order';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { TrackingCards } from '@/components/delivery/TrackingCards';
-import { SandboxControlCard } from '@/components/delivery/SandboxControlCard';
-import { useSandboxAdvance } from '@/hooks/useSandboxAdvance';
-import { TrackingTopArea } from '@/components/delivery/TrackingTopArea';
+import { usePressGuard } from '@/hooks/usePressGuard';
+import { useTimeoutFlag } from '@/hooks/useTimeoutFlag';
+import { FIND_TIMEOUT_MS, deliveryPollMs, partnerAwaitPhase } from '@/lib/delivery/partnerSearch';
+import { partyTitle } from '@/lib/supplier/partyTitle';
 import { useServerNow } from '@/hooks/useServerNow';
 import { canRetryPartner, wantsDeliveryPartner } from '@/lib/delivery/deliveryPartner';
 import { orderTrackingView } from '@/lib/delivery/orderTracking';
 import { track } from '@/analytics';
 import { skuSecondaryLine } from '@/utils/skuLabel';
-import { Colors, FontSize, Radius, Spacing, TrackingLayout } from '@/theme';
+import { Colors, FontSize, Radius, Spacing } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'SUP-ORD-01';
+/** A fee the server sent as nothing (`0`, `0.00`): not worth a line. A text check, not arithmetic. */
+const ZERO_MONEY = /^0*\.?0*$/;
+
+/** A line's doorstep rejection: the reason, then the refund (when the server sent one) as its own piece. */
+function doorstepLine(item: SupplierOrder['items'][number]): [string, string | null] {
+  const why = `Doorstep rejected: ${item.doorstepRejectedQty} ${item.unit} (${rejectionReasonLabel(item.doorstepRejectionReason)})`;
+  return [why, item.doorstepRefundAmount != null ? `Refund: -${formatMoney(item.doorstepRefundAmount)}` : null];
+}
 
 /**
  * Why a supplier is backing out. D-091 turned these from rejection reasons into
@@ -124,6 +135,8 @@ export default function SupplierOrderScreen() {
   const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
   const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  // Said on the card: Alert.alert does nothing on the web, which made a failed press look like a dead button.
+  const [billingNotice, setBillingNotice] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ['supplier-order', orderId],
@@ -207,21 +220,30 @@ export default function SupplierOrderScreen() {
     onError: (caught) => onRefusal(caught, "Couldn't cancel this order."),
   });
 
+  // A Costonomy-delivery order that is Ready gets its delivery from auto-dispatch a few seconds later: until the row
+  // exists the read 404s, so the screen keeps asking (fast) rather than offering a button for something in progress.
+  const awaitingDelivery = order?.status === 'READY_FOR_PICKUP' && wantsDeliveryPartner(order.deliveryMode);
+  // The poll interval needs 'has the search timed out', which itself needs this query's data: a ref breaks the loop.
+  // (Reading a `const` declared below from react-query's first call throws a ReferenceError on web.)
+  const findTimedOutRef = useRef(false);
   const delivery = useQuery({
     queryKey: ['supplier-order', orderId, 'delivery'],
     queryFn: () => fetchDelivery(accessToken as string, orderId),
     enabled: Number.isFinite(orderId) && accessToken != null && (order?.status === 'READY_FOR_PICKUP' || order?.status === 'OUT_FOR_DELIVERY' || order?.status === 'DELIVERED'),
     retry: false,
     // While a partner is being found the screen follows it, so the bar moves and a booking shows up without a tap.
-    refetchInterval: (query) => {
-      const found = query.state.data;
-      return found != null && found.mode !== 'SUPPLIER_OWN'
-        && (canRetryPartner(found.mode, found.status) || found.status === 'DELIVERY_REQUESTED'
-          || found.status === 'PROVIDER_SELECTED') ? 15000 : false;
-    },
+    refetchInterval: (query) => deliveryPollMs(query.state.data, awaitingDelivery, findTimedOutRef.current),
   });
-
-  const sandbox = useSandboxAdvance(orderId);
+  // Computed from the query's own data (not a state mirrored by an effect, which lags a render behind it). The poll
+  // interval above reads findTimedOut lazily, after this render has set it.
+  const deliveryExists = delivery.data != null;
+  const findTimedOut = useTimeoutFlag(awaitingDelivery && !deliveryExists, FIND_TIMEOUT_MS);
+  findTimedOutRef.current = findTimedOut;
+  const partnerPhase = partnerAwaitPhase({
+    orderStatus: order?.status, deliveryMode: order?.deliveryMode, hasDelivery: deliveryExists, timedOut: findTimedOut,
+  });
+  // One press at a time on the stage bar: the next stage's button lands where this one was.
+  const stageGuard = usePressGuard(order?.status);
 
   const requestPartner = useMutation({
     mutationFn: () =>
@@ -289,6 +311,10 @@ export default function SupplierOrderScreen() {
   const catchWeightItems = catchWeightLines(order);
   const hasCatchWeight = catchWeightItems.length > 0;
 
+  // The slot is a promise only until it has been kept: after delivery (or cancellation) it is history, not a warning.
+  const slotDone = order != null && ['DELIVERED', 'COMPLETED', 'SETTLED', 'CANCELLED'].includes(order.status);
+  const slotColour = slotDone ? Colors.textSecondary : Colors.primary;
+
   const billingEligible = order != null && [
     'DELIVERED', 'COMPLETED', 'SETTLED',
   ].includes(order.status);
@@ -296,11 +322,12 @@ export default function SupplierOrderScreen() {
   async function handleViewInvoice() {
     if (!accessToken || !orderId) return;
     setBillingLoading(true);
+    setBillingNotice(null);
     try {
       const inv = await fetchTaxInvoice(accessToken, orderId);
       setInvoice(inv);
     } catch (caught) {
-      Alert.alert('Invoice', billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
+      setBillingNotice(billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -309,11 +336,12 @@ export default function SupplierOrderScreen() {
   async function handleGenerateInvoice() {
     if (!accessToken || !orderId) return;
     setBillingLoading(true);
+    setBillingNotice(null);
     try {
       const inv = await generateTaxInvoice(accessToken, orderId);
       setInvoice(inv);
     } catch (caught) {
-      Alert.alert('Invoice', billingFailureMessage(caught, 'Could not generate tax invoice for this order.'));
+      setBillingNotice(billingFailureMessage(caught, 'Could not generate tax invoice for this order.'));
     } finally {
       setBillingLoading(false);
     }
@@ -322,15 +350,16 @@ export default function SupplierOrderScreen() {
   async function handleViewCreditNotes() {
     if (!accessToken || !orderId) return;
     setBillingLoading(true);
+    setBillingNotice(null);
     try {
       const notes = await fetchCreditNotes(accessToken, orderId);
       if (notes.length === 0) {
-        Alert.alert('Credit Notes', 'No credit notes have been issued for this order.');
+        setBillingNotice('No credit notes yet.');
       } else {
         setCreditNotes(notes);
       }
     } catch (caught) {
-      Alert.alert('Credit Notes', billingFailureMessage(caught, 'Could not load credit notes for this order.'));
+      setBillingNotice(creditNotesNotice(caught));
     } finally {
       setBillingLoading(false);
     }
@@ -393,17 +422,6 @@ export default function SupplierOrderScreen() {
         <>
           {view != null && (
             <View style={styles.tracker}>
-              <View style={styles.topClip}>
-                <TrackingTopArea
-                  view={view}
-                  delivery={deliveryData}
-                  destination={null}
-                  height={TrackingLayout.previewHeight}
-                  overlap={0}
-                  compact
-                  onPress={view.showTrack && view.showMap ? () => router.push(`/supplier/tracking/${order.id}`) : undefined}
-                />
-              </View>
               <TrackingCards
                 audience="supplier"
                 view={view}
@@ -415,7 +433,6 @@ export default function SupplierOrderScreen() {
                 retrying={retryPartner.isPending}
                 switching={switchToOwn.isPending}
               />
-              <SandboxControlCard delivery={deliveryData} onAdvance={sandbox.advance} pending={sandbox.pending} />
             </View>
           )}
 
@@ -433,11 +450,10 @@ export default function SupplierOrderScreen() {
                     reference took its place there. A supplier reads this before
                     anything else on the card. */}
                 <MandiText variant="bodyEmphasis" numberOfLines={2}>
-                  {order.outletName}
+                  {partyTitle(order.restaurantName, order.outletName)}
                 </MandiText>
                 <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-                  {[order.restaurantName, order.outletLocality, order.outletCity]
-                    .filter(Boolean).join(' · ')}
+                  {[order.outletLocality, order.outletCity].filter(Boolean).join(' · ')}
                 </MandiText>
                 {formatDistance(order.distanceKm) ? (
                   <MandiText variant="caption" color={Colors.textSecondary}>
@@ -454,6 +470,12 @@ export default function SupplierOrderScreen() {
               </MandiText>
               <PaymentMethodPill method={order.paymentMethod} />
             </View>
+            {/* The server's field, shown as sent: the total above already contains it. */}
+            {mode !== 'PICKUP' && order.deliveryFee != null && !ZERO_MONEY.test(order.deliveryFee) && (
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                Includes {formatMoney(order.deliveryFee)} delivery fee
+              </MandiText>
+            )}
 
             {/* How it travels, which is what the buttons below depend on. Shown
                 rather than inferred from which actions appear, because a
@@ -472,9 +494,9 @@ export default function SupplierOrderScreen() {
 
             {(order.scheduledDeliveryDate || order.deliverySlotName) && (
               <View style={styles.valueRow}>
-                <Ionicons name="time-outline" size={16} color={Colors.primary} />
-                <MandiText variant="captionEmphasis" color={Colors.primary}>
-                  Slot: {order.scheduledDeliveryDate ?? 'Today'} {order.deliverySlotName ? `(${order.deliverySlotName})` : ''}
+                <Ionicons name="time-outline" size={16} color={slotColour} />
+                <MandiText variant="captionEmphasis" color={slotColour}>
+                  Slot: {formatDay(order.scheduledDeliveryDate) ?? 'Today'} {order.deliverySlotName ? `(${order.deliverySlotName})` : ''}
                 </MandiText>
                 {order.isSubscriptionOrder && (
                   <MandiStatusChip tone="info" label="Subscription" size="sm" />
@@ -499,17 +521,21 @@ export default function SupplierOrderScreen() {
             })()}
 
             {order.doorstepRefundAmount != null && parseFloat(order.doorstepRefundAmount) > 0 && (
-              <View style={styles.valueRow}>
-                <Ionicons name="receipt-outline" size={16} color={Colors.danger} />
-                <MandiText variant="captionEmphasis" color={Colors.danger}>
-                  Doorstep Rejection Refund: -{formatMoney(order.doorstepRefundAmount)}
-                </MandiText>
-              </View>
+              <AmountRow
+                variant="captionEmphasis"
+                color={Colors.danger}
+                label="Doorstep rejection refund"
+                amount={`-${formatMoney(order.doorstepRefundAmount)}`}
+                style={styles.refundRow}
+              />
             )}
+
+            {/* Approved dispute refunds, as the server sends them. */}
+            {billingEligible && <DisputeRefundLines orderId={orderId} style={styles.refundRow} />}
 
             {order.finalPayableAmount != null && (
               <View style={styles.valueRow}>
-                <MandiText variant="caption" color={Colors.textSecondary}>Final Payable:</MandiText>
+                <MandiText variant="caption" color={Colors.textSecondary}>Final payable</MandiText>
                 <MandiText variant="bodyEmphasis">{formatMoney(order.finalPayableAmount)}</MandiText>
               </View>
             )}
@@ -527,26 +553,56 @@ export default function SupplierOrderScreen() {
             ) : null}
           </MandiCard>
 
+          {order.rating != null && (
+            <MandiCard>
+              <View style={styles.valueRow}>
+                <MandiText variant="bodyEmphasis">Restaurant rating</MandiText>
+                <View style={styles.stars} accessible accessibilityLabel={`Rated ${order.rating} out of 5`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Ionicons
+                      key={n}
+                      name={n <= (order.rating ?? 0) ? 'star' : 'star-outline'}
+                      size={18}
+                      color={Colors.warning}
+                    />
+                  ))}
+                </View>
+              </View>
+              {order.ratingComment != null && order.ratingComment.trim() !== '' && (
+                <MandiText variant="caption" color={Colors.textSecondary}>{order.ratingComment}</MandiText>
+              )}
+            </MandiCard>
+          )}
+
           {/* ── Statutory Billing Documents ────────────────────────── */}
           {billingEligible && (
             <MandiCard>
-              <MandiText variant="bodyEmphasis">📄 GST Documents</MandiText>
+              <View style={styles.valueRow}>
+                <Ionicons name="document-text-outline" size={18} color={Colors.textPrimary} />
+                <MandiText variant="bodyEmphasis">GST documents</MandiText>
+              </View>
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                 <MandiButton
-                  label={billingLoading ? 'Loading…' : (invoice ? 'View Invoice' : 'Generate Invoice')}
+                  label={billingLoading ? 'Loading…' : (invoice ? 'View invoice' : 'Generate invoice')}
                   size="sm"
                   variant="secondary"
                   onPress={invoice ? handleViewInvoice : handleGenerateInvoice}
                   disabled={billingLoading}
                 />
                 <MandiButton
-                  label={billingLoading ? 'Loading…' : 'Credit Notes'}
+                  label={billingLoading ? 'Loading…' : 'Credit notes'}
                   size="sm"
                   variant="secondary"
                   onPress={handleViewCreditNotes}
                   disabled={billingLoading}
                 />
               </View>
+
+              {billingNotice != null && (
+                <MandiText variant="caption" color={Colors.textSecondary} style={{ marginTop: 8 }} testID="billing-notice">
+                  {billingNotice}
+                </MandiText>
+              )}
 
               {invoice != null && (
                 <View style={{ marginTop: 12 }}>
@@ -570,9 +626,12 @@ export default function SupplierOrderScreen() {
 
               {creditNotes != null && creditNotes.length > 0 && creditNotes.map((cn) => (
                 <View key={cn.id} style={{ marginTop: 12 }}>
-                  <MandiText variant="captionEmphasis" color={Colors.danger}>
-                    {cn.creditNoteNumber} — Refund {formatMoney(cn.totalRefundAmount)}
-                  </MandiText>
+                  <AmountRow
+                    variant="captionEmphasis"
+                    color={Colors.danger}
+                    label={`${cn.creditNoteNumber} — Refund`}
+                    amount={formatMoney(cn.totalRefundAmount)}
+                  />
                   <MandiText variant="caption" color={Colors.textSecondary}>
                     Reason: {cn.reasonCode} • Issued {formatMomentWithRecency(cn.issuedAt)}
                   </MandiText>
@@ -591,7 +650,7 @@ export default function SupplierOrderScreen() {
             <MandiCard>
               <View style={styles.deliveryRow}>
                 <View style={styles.flex}>
-                  <MandiText variant="bodyEmphasis">⚖️ Catch-Weight Perishables</MandiText>
+                  <MandiText variant="bodyEmphasis">⚖️ Catch-weight perishables</MandiText>
                   <MandiText variant="caption" color={Colors.textSecondary}>
                     {catchWeightItems.every((i) => i.dispatchedWeight != null)
                       ? 'All perishable items weighed. Dispatched scale weights verified.'
@@ -599,7 +658,7 @@ export default function SupplierOrderScreen() {
                   </MandiText>
                 </View>
                 <MandiButton
-                  label={catchWeightItems.some((i) => i.dispatchedWeight != null) ? 'Re-weigh' : 'Weigh Items'}
+                  label={catchWeightItems.some((i) => i.dispatchedWeight != null) ? 'Re-weigh' : 'Weigh items'}
                   size="sm"
                   variant="secondary"
                   onPress={() => {
@@ -671,19 +730,22 @@ export default function SupplierOrderScreen() {
                     </View>
                   )}
 
-                  {item.doorstepRejectedQty != null && parseFloat(item.doorstepRejectedQty) > 0 && (
-                    <View style={styles.itemDoorstepRow}>
-                      <Ionicons name="close-circle-outline" size={14} color={Colors.danger} />
-                      <MandiText variant="caption" color={Colors.danger}>
-                        Doorstep rejected: {item.doorstepRejectedQty} {item.unit} ({item.doorstepRejectionReason ?? 'Damaged'})
-                      </MandiText>
-                      {item.doorstepRefundAmount != null && (
-                        <MandiText variant="caption" color={Colors.danger}>
-                          · Refund: -{formatMoney(item.doorstepRefundAmount)}
-                        </MandiText>
-                      )}
-                    </View>
-                  )}
+                  {item.doorstepRejectedQty != null && parseFloat(item.doorstepRejectedQty) > 0 && (() => {
+                    // The refund is its own one-line text beside the reason: inside one wrapping string the web broke
+                    // "-" away from "₹34.00". Read as one phrase by a screen reader.
+                    const [why, refund] = doorstepLine(item);
+                    return (
+                      <View style={styles.itemDoorstepRow} accessible accessibilityLabel={[why, refund].filter(Boolean).join(', ')}>
+                        <Ionicons name="close-circle-outline" size={14} color={Colors.danger} />
+                        <MandiText variant="caption" color={Colors.danger} style={styles.shrink}>{why}</MandiText>
+                        {refund != null && (
+                          <MandiText variant="caption" color={Colors.danger} numberOfLines={1} style={styles.noShrink}>
+                            {refund}
+                          </MandiText>
+                        )}
+                      </View>
+                    );
+                  })()}
                 </View>
               ))}
             </MandiCard>
@@ -692,7 +754,7 @@ export default function SupplierOrderScreen() {
           <MandiBottomSheet
             visible={weighingModalOpen}
             onClose={() => setWeighingModalOpen(false)}
-            title="Weigh Catch-Weight Items"
+            title="Weigh catch-weight items"
           >
             <MandiText variant="caption" color={Colors.textSecondary} style={{ marginBottom: Spacing.md }}>
               Enter the weight shown on the scale for each line. The buyer is billed the weighed amount, never more than was ordered; the price is fixed when you mark the order ready.
@@ -761,7 +823,7 @@ export default function SupplierOrderScreen() {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Cancel Order"
+            label="Cancel order"
             variant="destructive"
             size="md"
             loading={cancel.isPending}
@@ -777,11 +839,22 @@ export default function SupplierOrderScreen() {
       );
     }
 
-    if (order.status === 'READY_FOR_PICKUP' && delivery.data == null && wantsDeliveryPartner(order.deliveryMode)) {
+    if (partnerPhase === 'finding') {
+      return (
+        <MandiStickyBar>
+          <View style={styles.finding} accessibilityRole="progressbar" accessibilityLiveRegion="polite">
+            <ActivityIndicator color={Colors.primary} />
+            <MandiText variant="bodyEmphasis">Finding a delivery partner…</MandiText>
+          </View>
+        </MandiStickyBar>
+      );
+    }
+
+    if (partnerPhase === 'manual') {
       return (
         <MandiStickyBar>
           <MandiButton
-            label="Request Delivery Partner"
+            label="Request delivery partner"
             size="lg"
             icon="bicycle-outline"
             loading={requestPartner.isPending}
@@ -815,13 +888,13 @@ export default function SupplierOrderScreen() {
           size="md"
           loading={busy}
           disabled={blocked != null}
-          onPress={() => advance.mutate({ to: next.to })}
+          onPress={() => stageGuard.press(() => advance.mutate({ to: next.to }))}
         />
         {/* Only while the goods are still in the store. Doc 01 §13: once they
             have left, the path is return or dispute. */}
         {(order.status === 'CONFIRMED' || order.status === 'PREPARING') && (
           <MandiButton
-            label="Cannot Fulfil"
+            label="Cannot fulfil"
             variant="neutral"
             size="md"
             onPress={() => setCancelling(true)}
@@ -892,7 +965,7 @@ function CancelPanel({
               key={option.key}
               onPress={() => onReason(option.key)}
               accessibilityRole="radio"
-              accessibilityState={{ selected: active }}
+              {...radioProps(active)}
               style={[styles.reason, active && styles.reasonActive]}
             >
               <MandiText
@@ -918,7 +991,6 @@ function CancelPanel({
 
 const styles = StyleSheet.create({
   tracker: { gap: Spacing.listGap },
-  topClip: { borderRadius: Radius.lg, overflow: 'hidden' },
   deliveryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -943,6 +1015,11 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   where: { flex: 1, gap: 2 },
+  finding: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, minHeight: 48 },
+  stars: { flexDirection: 'row', gap: 2 },
+  shrink: { flexShrink: 1 },
+  noShrink: { flexShrink: 0 },
+  refundRow: { marginTop: Spacing.xs },
   valueRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -982,7 +1059,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: Colors.warningLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
     borderRadius: Radius.sm,
@@ -992,7 +1069,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: Colors.dangerLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
     borderRadius: Radius.sm,

@@ -15,7 +15,7 @@ export function detailHeader(status: WalletEntryStatus | string | null | undefin
     case 'IN_PROGRESS': return { color: DetailStatusColors.inProgress, title: 'Transaction in progress' };
     case 'FAILED': return { color: DetailStatusColors.failed, title: 'Transaction failed' };
     case 'RETURNED': return { color: DetailStatusColors.returned, title: 'Money returned' };
-    default: return { color: DetailStatusColors.success, title: 'Transaction Successful' };
+    default: return { color: DetailStatusColors.success, title: 'Transaction successful' };
   }
 }
 

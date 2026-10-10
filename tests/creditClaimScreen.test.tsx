@@ -199,10 +199,10 @@ describe('form', () => {
     await ready();
     const labels = ['Bank transfer', 'UPI', 'Cash', 'Cheque', 'Card'];
     for (const label of labels) expect(screen.getByLabelText(label)).toBeTruthy();
-    expect(screen.getByTestId('claim-method-BANK_TRANSFER').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('claim-method-BANK_TRANSFER').props.accessibilityState.checked).toBe(true);
     fireEvent.press(screen.getByTestId('claim-method-CHEQUE'));
-    expect(screen.getByTestId('claim-method-CHEQUE').props.accessibilityState.selected).toBe(true);
-    expect(screen.getByTestId('claim-method-BANK_TRANSFER').props.accessibilityState.selected).toBe(false);
+    expect(screen.getByTestId('claim-method-CHEQUE').props.accessibilityState.checked).toBe(true);
+    expect(screen.getByTestId('claim-method-BANK_TRANSFER').props.accessibilityState.checked).toBe(false);
   });
 
   it('needs a reference for every method except Cash', async () => {
@@ -407,7 +407,7 @@ describe('loading', () => {
     invoicesM.mockRejectedValueOnce(new Error('boom'));
     renderScreen();
     expect(await screen.findByTestId('claim-load-error')).toBeTruthy();
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     expect(await screen.findByTestId('claim-send')).toBeTruthy();
   });
 });

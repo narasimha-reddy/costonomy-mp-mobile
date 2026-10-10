@@ -53,6 +53,12 @@ export interface Delivery {
   trackable: boolean;
   trackingUrl: string | null;
   location: DeliveryLocation | null;
+  /** The supplier store's coordinates (API B1). Absent on older servers: the map then draws without a pickup pin. */
+  pickupLocation?: { latitude: Money; longitude: Money } | null;
+  /** The buyer outlet's coordinates (API B1). Absent: the map uses the outlet coordinates it is given. */
+  dropLocation?: { latitude: Money; longitude: Money } | null;
+  /** The supplier's phone, set only for the buyer side (API B4, optional). */
+  supplierContactPhone?: string | null;
   /** True when the newest fix is older than the freshness threshold (doc 06 §8). */
   locationStale: boolean;
   locationAgeSeconds: number | null;

@@ -165,7 +165,7 @@ describe('Credit statement screen', () => {
     renderScreen();
     expect(await screen.findByText('Could not load your statement.')).toBeTruthy();
     respond(STATEMENT);
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     expect(await screen.findByText('5 Jul to 3 Oct')).toBeTruthy();
   });
 

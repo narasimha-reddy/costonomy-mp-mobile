@@ -86,7 +86,7 @@ describe('History screen', () => {
     setup();
     expect(await screen.findByText('Sharma Dairy')).toBeTruthy();
     expect(screen.getByText('History')).toBeTruthy();
-    expect(screen.getByText('My Statements')).toBeTruthy();
+    expect(screen.getByText('My statements')).toBeTruthy();
     expect(screen.getByPlaceholderText('Search')).toBeTruthy();
     expect(screen.getByText('+ ₹48,876')).toBeTruthy();
     expect(screen.getByText('Card •••• 1007')).toBeTruthy();

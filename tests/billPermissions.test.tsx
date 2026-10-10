@@ -114,7 +114,7 @@ describe('Bill actions need QUICKSCAN_PAY', () => {
   it('details page: no Add bill without it, Add bill with it', async () => {
     (fetchWalletTransaction as jest.Mock).mockResolvedValue(detail());
     const view = mount(<DetailScreen />);
-    expect(await screen.findByLabelText('View History')).toBeTruthy();
+    expect(await screen.findByLabelText('View history')).toBeTruthy();
     expect(screen.queryByLabelText('Add bill')).toBeNull();
     view.unmount();
 

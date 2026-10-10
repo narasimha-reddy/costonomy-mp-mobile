@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
@@ -37,6 +37,7 @@ import { formatMoney, formatQuantity } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
 import { describeDeliveryDay } from '@/lib/delivery/deliveryDay';
+import { partyHeading } from '@/lib/supplier/partyTitle';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -61,6 +62,7 @@ export default function SupplierRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const intentId = Number(id);
   const toast = useToast();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { storeId } = useStore();
@@ -79,12 +81,9 @@ export default function SupplierRequestScreen() {
     enabled: storeId != null && accessToken != null,
   });
   const offers = deliveryOffersFor(deliveryPolicy.data);
-  // Their usual way unless they pick another: their own delivery first, else Costonomy's.
+  // No default: delivery is a promise to the restaurant, so the supplier picks how, and Accept waits for it.
   const deliveryOffer: DeliveryOffer | null =
-    deliveryChoice != null && offers.includes(deliveryChoice) ? deliveryChoice
-      : offers.includes('SELF') ? 'SELF'
-        : offers.includes('SELF_FREE') ? 'SELF_FREE'
-          : offers[0] ?? null;
+    deliveryChoice != null && offers.includes(deliveryChoice) ? deliveryChoice : null;
 
   const chargeValid = deliveryChargeValid(deliveryCharge);
 
@@ -126,9 +125,11 @@ export default function SupplierRequestScreen() {
       previewResponse(accessToken as string, intentId,
         (request?.items ?? []).map((item) => ({
           intentItemId: item.id,
-          offeredQuantity: String(offered[item.id] ?? 0),
+          offeredQuantity: String((JSON.parse(offeredKey) as Record<number, number>)[item.id] ?? 0),
         }))),
-    enabled: answerable && Object.keys(offered).length > 0 && accessToken != null,
+    // Not until the debounced key has caught up with the seeded quantities: while it still reads "{}" the query
+    // would fire once for that stale key and again when the key settled.
+    enabled: answerable && Object.keys(offered).length > 0 && offeredKey !== '{}' && accessToken != null,
     placeholderData: (previous) => previous,
   });
 
@@ -145,6 +146,13 @@ export default function SupplierRequestScreen() {
   }, [request, offered]);
 
   const everythingDeclined = request != null && totals.declined === totals.lines;
+  // The delivery card is on screen and nothing is picked yet.
+  // A delivery request cannot be answered before the store's delivery options are known: the reply would go out with no
+  // deliveryOffer. Declining everything needs no delivery answer, so it is never blocked here.
+  const policyUnavailable = request != null && request.deliveryPreference !== 'PICKUP' && !everythingDeclined
+    && (deliveryPolicy.isPending || deliveryPolicy.isError);
+  const needsDeliveryChoice = request != null && request.deliveryPreference !== 'PICKUP'
+    && deliveryPolicy.data != null && deliveryOffer == null && !everythingDeclined;
 
   const reply = useMutation({
     mutationFn: () =>
@@ -182,12 +190,16 @@ export default function SupplierRequestScreen() {
     },
   });
 
+  // The restaurant leads; the outlet rides on the subtitle so a long pair is not cut at 360 px.
+  const heading = partyHeading(request?.restaurantName, request?.outletName, 'Request');
+  const subtitle = [heading.outlet, request?.reference].filter(Boolean).join(' · ') || undefined;
+
   return (
     <MandiScreen
       header={
         <MandiHeader
-          title="Request"
-          subtitle={request?.reference ?? undefined}
+          title={heading.title}
+          subtitle={subtitle}
           back
           right={
             <MandiChatAction
@@ -215,7 +227,7 @@ export default function SupplierRequestScreen() {
             {/* Status leads, as it does on the restaurant's screen: it is what
                 the reader is here to find out, and having the two sides put it
                 on opposite edges made the same request look like two things. */}
-            <View style={styles.row}>
+            <View style={styles.headRow}>
               <MandiStatusChip {...supplierIntentStatus(request.status, request.fulfilment)} />
               <View style={styles.countColumn}>
                 <MandiText variant="bodyEmphasis">
@@ -339,6 +351,14 @@ export default function SupplierRequestScreen() {
               )}
             </MandiCard>
           )}
+          {request.supplierOrderId != null && (
+            <MandiButton
+              label="View order"
+              variant="secondary"
+              size="md"
+              onPress={() => router.push(`/supplier/orders/${request.supplierOrderId}` as never)}
+            />
+          )}
         </>
       )}
 
@@ -385,6 +405,19 @@ export default function SupplierRequestScreen() {
             </MandiText>
           </View>
         )}
+        {policyUnavailable && deliveryPolicy.isError && (
+          <View style={styles.choiceHint}>
+            <MandiText variant="caption" color={Colors.warning} accessibilityLiveRegion="polite">
+              Couldn&apos;t load your delivery options.
+            </MandiText>
+            <MandiButton label="Try again" variant="secondary" size="md" onPress={() => void deliveryPolicy.refetch()} />
+          </View>
+        )}
+        {needsDeliveryChoice && (
+          <MandiText variant="caption" color={Colors.warning} accessibilityLiveRegion="polite" style={styles.choiceHint}>
+            Choose how this will be delivered
+          </MandiText>
+        )}
         <MandiButton
           label={
             everythingDeclined
@@ -399,7 +432,7 @@ export default function SupplierRequestScreen() {
           size="lg"
           variant={everythingDeclined ? 'destructive' : 'primary'}
           loading={reply.isPending}
-          disabled={!everythingDeclined && deliveryOffer === 'SELF' && !chargeValid}
+          disabled={policyUnavailable || needsDeliveryChoice || (!everythingDeclined && deliveryOffer === 'SELF' && !chargeValid)}
           onPress={() => (everythingDeclined ? setConfirmDecline(true) : reply.mutate())}
         />
       </MandiStickyBar>
@@ -512,7 +545,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
-  countColumn: { alignItems: 'flex-end', gap: 2 },
+  // Stacked, not side by side: at 360 to 390 px a right-aligned column beside the chip clipped its own text.
+  headRow: { gap: Spacing.sm, alignItems: 'flex-start' },
+  countColumn: { alignItems: 'flex-start', gap: 2, alignSelf: 'stretch' },
   note: { marginTop: Spacing.md, fontStyle: 'italic' },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   hint: {
@@ -537,6 +572,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginBottom: Spacing.sm,
   },
+  choiceHint: { marginBottom: Spacing.sm },
   summary: {
     flexDirection: 'row',
     alignItems: 'center',

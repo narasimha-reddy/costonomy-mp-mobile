@@ -13,7 +13,7 @@ export function ArrowGlyph({
   );
 }
 
-/** The "Transfer Details" glyph: a rounded square with three bullet lines. */
+/** The "Transfer details" glyph: a rounded square with three bullet lines. */
 export function ListGlyph({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

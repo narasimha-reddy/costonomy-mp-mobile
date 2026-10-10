@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +15,8 @@ import {
   SupplierStoreFacts,
   SupplierStoreTitle,
 } from '@/components/restaurant/SupplierStoreHeader';
-import { CartBar } from '@/components/restaurant/CartBar';
+import { CART_BAR_HEIGHT, CartBar, MENU_BOTTOM_CLEARANCE } from '@/components/restaurant/CartBar';
+import { FilterPills } from '@/components/common/FilterPills';
 import {
   MandiEmptyState,
   MandiErrorState,
@@ -27,7 +28,7 @@ import {
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
 import { placeLabel } from '@/utils/placeName';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, Spacing } from '@/theme';
 
 /**
  * One supplier's shelf, as a restaurant shops it.
@@ -163,7 +164,12 @@ export default function SupplierCatalogScreen() {
    * shelf. The indices address children by position, which is why the tab rail
    * is always rendered even when there is only one aisle.
    */
-  const tabs = [{ id: null as number | null, name: 'All', count: rows.length }, ...categories];
+  // Pill keys are strings; 'all' leads because a kitchen that came to browse has
+  // not picked an aisle yet.
+  const pills = [
+    { key: 'all', label: 'All', count: rows.length },
+    ...categories.map((c) => ({ key: String(c.id), label: c.name, count: c.count })),
+  ];
   const nodes: React.ReactNode[] = [];
 
   nodes.push(
@@ -183,32 +189,11 @@ export default function SupplierCatalogScreen() {
        catalogue passing underneath it. */
     categories.length > 1 ? (
       <View key="tabs" style={styles.tabBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabRail}
-          contentContainerStyle={styles.tabs}
-        >
-          {tabs.map((tab) => {
-            const active = category === tab.id;
-            return (
-              <Pressable
-                key={tab.id ?? 'all'}
-                onPress={() => setCategory(tab.id)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                style={[styles.tab, active && styles.tabActive]}
-              >
-                <MandiText
-                  variant="caption"
-                  color={active ? Colors.surface : Colors.textSecondary}
-                >
-                  {tab.name} ({tab.count})
-                </MandiText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <FilterPills
+          items={pills}
+          selected={category == null ? 'all' : String(category)}
+          onSelect={(key) => setCategory(key === 'all' ? null : Number(key))}
+        />
       </View>
     ) : <View key="tabs" />,
   );
@@ -293,6 +278,8 @@ export default function SupplierCatalogScreen() {
         <CartBar
           count={cartCount}
           total={thisDraft?.agreedTotal}
+          disableWhenEmpty
+          cartElsewhere={drafts.some((draft) => draft.items.length > 0)}
           onPress={() => router.push('/restaurant/cart')}
         />
       }
@@ -311,7 +298,14 @@ export default function SupplierCatalogScreen() {
 /** Branch and distance, when there is a branch or a distance to give. */
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 0, paddingVertical: 0, gap: 0 },
+  // The bar's height plus room for anything floating over the list, so the last
+  // row's stepper is never under either.
+  content: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: CART_BAR_HEIGHT + MENU_BOTTOM_CLEARANCE,
+    gap: 0,
+  },
   gutter: { paddingHorizontal: Spacing.screenHorizontal },
   section: { gap: 0 },
   tabBar: {
@@ -320,24 +314,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
     paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.screenHorizontal,
     marginBottom: Spacing.md,
   },
-  // flexGrow 0, or the rail claims the column and the pills draw as ovals.
-  tabRail: { flexGrow: 0, flexShrink: 0 },
-  tabs: {
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.screenHorizontal,
-    alignItems: 'center',
-  },
-  tab: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
-  tabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   closed: {
     marginBottom: Spacing.sm,
     flexDirection: 'row',

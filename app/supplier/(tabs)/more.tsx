@@ -69,6 +69,12 @@ export default function SupplierMoreScreen() {
           subtitle={`${stores.length} ${stores.length === 1 ? 'store' : 'stores'}${store ? ` · ${store.name} selected` : ''}`}
           onPress={() => router.push('/supplier/settings/stores')}
         />
+        <Row
+          icon="people-outline"
+          title="Team"
+          subtitle="Who runs which store, and who sees credit and settlements"
+          onPress={() => router.push('/supplier/settings/team' as any)}
+        />
       </View>
 
       <View style={styles.section}>

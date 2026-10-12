@@ -18,20 +18,30 @@ import { Platform } from 'react-native';
 const DEFAULT_PORT = 7070;
 const CONTEXT_PATH = '/costonomy-mp-api';
 
-function defaultHost(): string {
+function defaultHost(port = DEFAULT_PORT): string {
   if (Platform.OS === 'android') {
     // The Android emulator's alias for the host machine.
-    return `http://10.0.2.2:${DEFAULT_PORT}`;
+    return `http://10.0.2.2:${port}`;
   }
   if (Platform.OS === 'ios') {
     // The iOS simulator shares the host's network stack, so localhost is the host.
-    return `http://localhost:${DEFAULT_PORT}`;
+    return `http://localhost:${port}`;
   }
-  return `http://localhost:${DEFAULT_PORT}`;
+  return `http://localhost:${port}`;
 }
 
 export const API_BASE_URL: string =
   process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') ?? `${defaultHost()}${CONTEXT_PATH}`;
+
+/**
+ * costonomy-common-api: sign-in, sessions and the business, outlet and team records the marketplace shares with
+ * Costonomy's other apps. Its local port is 4001; `EXPO_PUBLIC_COMMON_API_URL` points anywhere else.
+ */
+export const COMMON_API_BASE_URL: string =
+  process.env.EXPO_PUBLIC_COMMON_API_URL?.replace(/\/$/, '') ?? `${defaultHost(4001)}/costonomy-common-api`;
+
+/** This app's client in costonomy-common-api: phone + code sign-in, rotating refresh tokens. */
+export const COMMON_CLIENT_ID = 'mp-mobile';
 
 /** Shown on the sign-in screen in development, so a misconfigured host is obvious. */
 export const API_ENVIRONMENT_LABEL: string =

@@ -66,6 +66,14 @@ export default function AccountScreen() {
           detail={`${outlets.length} on this account${owner ? ' · add or edit' : ''}`}
           onPress={() => router.push('/restaurant/settings/outlets')}
         />
+        {seesRestaurant && (
+          <Entry
+            icon="people-outline"
+            title="Team"
+            detail="Who can order, receive and pay, and where"
+            onPress={() => router.push('/restaurant/settings/team' as any)}
+          />
+        )}
         <Entry
           icon="wallet-outline"
           title="Wallet"

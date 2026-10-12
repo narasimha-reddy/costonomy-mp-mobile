@@ -8,6 +8,11 @@ import { resetAttemptKeys } from '@/lib/credit/attemptKeys';
 import { deleteSecret, getSecret, setSecret } from '@/lib/session/storage';
 import { audienceOf, type Audience, type AuthMe, type AuthTokens } from '@/lib/session/types';
 
+/** costonomy-common-api's answers that mean the session is over (whatever the status): sign out, don't retry. */
+const DEAD_SESSION = new Set([
+  'REFRESH_TOKEN_REUSED', 'INVALID_REFRESH_TOKEN', 'ACCOUNT_SUSPENDED', 'SESSION_REVOKED', 'INVALID_CLIENT',
+]);
+
 const ACCESS_TOKEN_KEY = 'mp.accessToken';
 const REFRESH_TOKEN_KEY = 'mp.refreshToken';
 
@@ -75,9 +80,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         return tokens.accessToken;
       } catch (error) {
         // A rejected refresh token means the session is genuinely over —
-        // expired, revoked, or replayed (the backend revokes every session on a
-        // replay). Anything else leaves the stored token alone to try again.
-        if (error instanceof ApiError && error.isUnauthenticated) await clear();
+        // expired, revoked, or replayed (costonomy-common-api revokes every
+        // session on a replay). Anything else leaves the stored token alone to
+        // try again.
+        if (error instanceof ApiError && (error.isUnauthenticated || DEAD_SESSION.has(error.code))) await clear();
         return null;
       } finally {
         refreshing.current = null;

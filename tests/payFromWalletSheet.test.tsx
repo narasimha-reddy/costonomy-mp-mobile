@@ -92,7 +92,7 @@ describe('PayFromWalletSheet choices', () => {
     expect(screen.getByText('Full due ₹1,200.00')).toBeTruthy();
     expect(screen.getByText('Overdue only ₹500.00')).toBeTruthy();
     expect(screen.getByText('Other amount')).toBeTruthy();
-    expect(screen.getByLabelText('Overdue only ₹500.00').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByLabelText('Overdue only ₹500.00').props.accessibilityState.checked).toBe(true);
     expect(payButton().props.accessibilityLabel).toBe('Pay ₹500.00 from wallet');
     expect(await screen.findByText('Wallet balance ₹2,500.00')).toBeTruthy();
     expect(screen.getByText(/oldest invoices first/)).toBeTruthy();

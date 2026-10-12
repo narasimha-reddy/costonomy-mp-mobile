@@ -1,6 +1,7 @@
 import type { Delivery, DeliveryStatus } from '@/models/delivery';
 import type { DeliveryMode as OrderDeliveryMode, SupplierOrder, SupplierOrderStatus } from '@/models/procurement';
 import { canRetryPartner, clockTime, searchProgress } from '@/lib/delivery/deliveryPartner';
+import { partnerWording } from '@/lib/delivery/partnerWording';
 
 /**
  * What the order tracker shows, as one pure function of what the server said.
@@ -128,7 +129,7 @@ export function initials(name: string | null | undefined): string {
 
 /** The slice of an order the tracker reads. A full `SupplierOrder` satisfies it. */
 export type TrackingOrder = Pick<SupplierOrder, 'status' | 'deliveryMode'>
-  & Partial<Pick<SupplierOrder, 'orderNumber' | 'supplierName' | 'storeName' | 'outletName' | 'cancellationReason'>>;
+  & Partial<Pick<SupplierOrder, 'orderNumber' | 'supplierName' | 'storeName' | 'outletName' | 'restaurantName' | 'cancellationReason'>>;
 
 export type TrackingDelivery = Pick<Delivery, 'status' | 'mode'> & Partial<Omit<Delivery, 'status' | 'mode'>>;
 
@@ -228,12 +229,13 @@ export function orderTrackingView(input: {
   const kind = travelKind(order.deliveryMode, delivery?.mode);
 
   const supplier = order.supplierName ?? order.storeName ?? 'Your supplier';
-  const outlet = order.outletName ?? (buyer ? 'your outlet' : 'the restaurant');
+  // The supplier knows the restaurant by its name; the outlet locality ("Indiranagar") is only a fallback.
+  const outlet = (buyer ? order.outletName : order.restaurantName ?? order.outletName) ?? (buyer ? 'your outlet' : 'the restaurant');
   const partnerName = delivery?.driverName ?? (buyer ? 'Your partner' : 'The partner');
   const orderNumber = order.orderNumber ?? 'the order';
 
   const base: OrderTrackingView = {
-    party: buyer ? supplier : order.outletName ?? null,
+    party: buyer ? supplier : order.restaurantName ?? order.outletName ?? null,
     segments: [], segmentIndex: -1, segmentFill: 0, stepLine: null, nextLine: null, etaSmall: null, tag: null,
     delayed: false, lateMinutes: null, partnerChanged: false, banner: null, stage: 'bag', top: 'illustration',
     searching: false,
@@ -312,7 +314,7 @@ export function orderTrackingView(input: {
   } else if (failed) {
     copy = buyer
       ? { headline: 'Delivery didn\'t go through', subline: 'Your supplier and our team have been told.', tone: 'danger' }
-      : { headline: 'Delivery failed', subline: delivery?.failureReason ?? null, tone: 'danger' };
+      : { headline: 'Delivery failed', subline: delivery?.failureReason ? partnerWording(delivery.failureReason) : null, tone: 'danger' };
   } else if (partnerChanged) {
     search = 'indeterminate';
     copy = { headline: 'Finding a new delivery partner', subline: 'Usually takes 2 to 5 mins', tone: 'warning' };
@@ -329,7 +331,7 @@ export function orderTrackingView(input: {
       }
       : {
         headline: 'No partner found yet',
-        subline: delivery?.failureReason ?? 'We could not find a delivery partner.',
+        subline: (delivery?.failureReason ? partnerWording(delivery.failureReason) : null) ?? 'We could not find a delivery partner.',
         tone: 'warning',
       };
   } else if (dStatus != null && partnerPhase) {
@@ -371,7 +373,9 @@ export function orderTrackingView(input: {
   const rank = Math.max(0, Math.min(6, canonicalIndex));
   const segmentIndex = complete && kind !== 'pickup' ? segments.length - 1 : SEGMENT_OF_RANK[kind][rank] ?? 0;
   const atEnd = segmentIndex >= segments.length - 1;
-  const stepLine = `Step ${segmentIndex + 1} of ${segments.length} · ${segments[segmentIndex]}`;
+  // A finished collection has gone past Ready: the restaurant has the goods.
+  const stepName = complete && kind === 'pickup' ? 'Collected' : segments[segmentIndex];
+  const stepLine = `Step ${segmentIndex + 1} of ${segments.length} · ${stepName}`;
   const nextLine = complete && atEnd ? 'Complete' : atEnd ? null : `Next: ${segments[segmentIndex + 1]}`;
 
   let tag: TrackerTag | null = null;

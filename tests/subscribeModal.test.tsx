@@ -54,7 +54,7 @@ describe('the subscribe sheet (API D-132)', () => {
     (createSubscription as jest.Mock).mockResolvedValue(SUBSCRIPTION_WALLET);
     setup();
 
-    fireEvent.press(screen.getByText('Confirm Subscription'));
+    fireEvent.press(screen.getByText('Confirm subscription'));
 
     await waitFor(() => expect(createSubscription).toHaveBeenCalled());
     const body = (createSubscription as jest.Mock).mock.calls[0][2];
@@ -77,7 +77,7 @@ describe('the subscribe sheet (API D-132)', () => {
     setup();
 
     fireEvent.press(screen.getByLabelText('Pay on credit'));
-    fireEvent.press(screen.getByText('Confirm Subscription'));
+    fireEvent.press(screen.getByText('Confirm subscription'));
 
     await waitFor(() => expect(createSubscription).toHaveBeenCalled());
     expect((createSubscription as jest.Mock).mock.calls[0][2].paymentMethod).toBe('CREDIT');
@@ -87,7 +87,7 @@ describe('the subscribe sheet (API D-132)', () => {
     setup();
     fireEvent.changeText(screen.getByDisplayValue('1'), '');
 
-    fireEvent.press(screen.getByText('Confirm Subscription'));
+    fireEvent.press(screen.getByText('Confirm subscription'));
 
     expect(await screen.findByText('Enter a quantity above zero.')).toBeTruthy();
     expect(createSubscription).not.toHaveBeenCalled();
@@ -99,7 +99,7 @@ describe('the subscribe sheet (API D-132)', () => {
     }));
     setup();
 
-    fireEvent.press(screen.getByText('Confirm Subscription'));
+    fireEvent.press(screen.getByText('Confirm subscription'));
 
     expect(await screen.findByText("This supplier doesn't deliver. Choose pickup.")).toBeTruthy();
   });

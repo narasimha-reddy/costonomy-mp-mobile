@@ -112,6 +112,7 @@ export default function PayForOrderScreen() {
       otherKey.current = null;
       if (caught instanceof ApiError && caught.status === 409) {
         // The card payment got there first. Ask the server rather than guess.
+        // eslint-disable-next-line costonomy/no-tdz -- onError runs after a failed press, long after render has declared askServer
         void askServer(true);
         setOtherError('Your card payment already went through, so this order is paid.');
         return;
@@ -267,8 +268,8 @@ export default function PayForOrderScreen() {
             </MandiText>
           </View>
           <View style={styles.actions}>
-            <MandiButton label="Try Again" size="lg" onPress={() => void intent.refetch()} />
-            <MandiButton label="Go To Orders" variant="tertiary" size="lg"
+            <MandiButton label="Try again" size="lg" onPress={() => void intent.refetch()} />
+            <MandiButton label="Go to orders" variant="tertiary" size="lg"
               onPress={() => router.replace('/restaurant/(tabs)/orders')} />
           </View>
         </MandiCard>
@@ -306,21 +307,21 @@ export default function PayForOrderScreen() {
           <View style={styles.actions}>
             {shown === 'review' && payable && (
               <MandiButton
-                label={total != null ? `Pay ${formatMoney(total)}` : 'Pay Now'}
+                label={total != null ? `Pay ${formatMoney(total)}` : 'Pay now'}
                 size="lg"
                 onPress={() => void pay()}
               />
             )}
             {/* Only while the server still takes a payment for this order. */}
             {shown === 'failed' && payable && (
-              <MandiButton label="Try Again" size="lg" onPress={() => void pay()} />
+              <MandiButton label="Try again" size="lg" onPress={() => void pay()} />
             )}
             {/* Never while the charge is in flight: leaving mid-authorisation
                 is how somebody ends up paying for an order they think they
                 abandoned. */}
             {shown !== 'authorizing' && shown !== 'confirming' && (
               <MandiButton
-                label={shown === 'success' ? 'View Order' : 'Go To Orders'}
+                label={shown === 'success' ? 'View order' : 'Go to orders'}
                 variant={shown === 'review' || (shown === 'failed' && payable) ? 'tertiary' : 'primary'}
                 size="lg"
                 onPress={() =>

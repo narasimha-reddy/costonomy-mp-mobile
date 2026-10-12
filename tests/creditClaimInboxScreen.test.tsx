@@ -140,7 +140,7 @@ describe('the list', () => {
     listM.mockRejectedValueOnce(apiError('X', 500));
     renderScreen();
     expect(await screen.findByText(/Couldn't load/)).toBeTruthy();
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     await screen.findByTestId('claim-row-1');
     expect(listM).toHaveBeenCalledTimes(2);
   });

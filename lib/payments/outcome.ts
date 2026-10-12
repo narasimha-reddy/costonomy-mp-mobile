@@ -8,7 +8,7 @@
  * - `retry` — not funded, and still payable: a declined attempt, a closed window.
  *   The same Razorpay order takes another attempt, so trying again is safe.
  * - `ended` — not funded and not payable: the payment is over (expired, failed for
- *   good). Offering "Try Again" here opened a checkout the server would ignore,
+ *   good). Offering "Try again" here opened a checkout the server would ignore,
  *   and a customer could authorise money that no order would ever take.
  *
  * `status` alone is not enough: anything but FAILED used to count as success,

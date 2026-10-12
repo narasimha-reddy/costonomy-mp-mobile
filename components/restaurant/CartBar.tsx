@@ -1,82 +1,60 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { MandiButton, MandiStickyBar, MandiText } from '@/components/common';
-import { formatMoney, type Money } from '@/utils/money';
-import { Colors, Spacing } from '@/theme';
+import { StickyActionBar } from '@/components/common/StickyActionBar';
+import type { Money } from '@/utils/money';
+import { ControlHeight, Spacing } from '@/theme';
+
+/** The bar's own height, bar padding included, without the safe-area inset. */
+export const CART_BAR_HEIGHT = ControlHeight.lg + Spacing.md * 2;
+/** Room left under the last row beyond the bar, so nothing floating over the list covers it. */
+export const MENU_BOTTOM_CLEARANCE = 72;
 
 /**
  * What is in the cart, and the way to it.
  *
  * <p>Shared by the product comparison and a supplier's shelf, which are the two
  * places a kitchen adds things. Two copies drifted on the one line that matters
- * — whether prices are settled yet — and a footer that says something different
- * depending on which screen you added from is worse than no footer.
+ * and a footer that says something different depending on which screen you
+ * added from is worse than no footer.
  *
- * <p>The secondary variant when empty is deliberate: the cart is still reachable
- * with nothing in it, because "did I add that" is a real question, but it should
- * not compete with the shelf for attention.
- *
- * <p><b>Through {@code MandiStickyBar}</b>, which carries the surface, the top
- * border and the safe-area inset. Without it this was transparent text over
- * whatever happened to be scrolling behind it, and it sat on the home indicator.
+ * <p>The continue bar of {@code StickyActionBar}: "{n} items added" and
+ * "Continue ›". It is still pressable when empty, because "did I add that" is a
+ * real question. The bar carries no figure: a total was shown here before, but
+ * the server prices the cart at checkout and that is where it is read.
  */
 export function CartBar({
   count,
-  total,
   supplierCount,
+  disableWhenEmpty = false,
+  cartElsewhere = false,
   onPress,
 }: {
   count: number;
-  /**
-   * What the selection comes to, as the server has it.
-   *
-   * <p>Never summed here: totalling lines is arithmetic on money, and the
-   * basket already carries the figure computed the way the order will compute
-   * it (guardrail 3).
-   */
+  /** Accepted so existing callers keep compiling; the bar no longer shows a figure (see above). */
   total?: Money | null;
-  /** Only where the selection spans more than one — a shelf is one supplier. */
+  /** Only where the selection spans more than one: a shelf is one supplier. */
   supplierCount?: number;
+  /**
+   * An empty cart has nothing to continue to, so the bar says so and is inert. Opt-in, because the other screens that
+   * show this bar count one supplier and have not told it about the rest of the cart.
+   */
+  disableWhenEmpty?: boolean;
+  /** This screen's count is zero but the cart holds other suppliers' items: the way to it stays. */
+  cartElsewhere?: boolean;
   onPress: () => void;
 }) {
+  const inert = disableWhenEmpty && count === 0 && !cartElsewhere;
+  const label = count === 0
+    ? inert ? 'Add items to continue' : 'Nothing added yet'
+    : `${count} item${count === 1 ? '' : 's'} added`
+      + (supplierCount != null && supplierCount > 1 ? ` · ${supplierCount} suppliers` : '');
+
   return (
-    <MandiStickyBar>
-      <View style={styles.bar}>
-        <View style={styles.totals}>
-          {/* What has been picked and what it comes to — the two things
-              somebody filling a basket is tracking. It used to count suppliers
-              and then say prices were still to come, which answered neither:
-              on a single supplier's shelf the supplier count is always one, and
-              a figure was available all along. */}
-          <MandiText variant="caption" color={Colors.textSecondary}>
-            {count === 0
-              ? 'Nothing added yet'
-              : `${count} item${count === 1 ? '' : 's'} selected`
-                + (supplierCount != null && supplierCount > 1
-                  ? ` · ${supplierCount} suppliers`
-                  : '')}
-          </MandiText>
-          {count > 0 && total != null && (
-            <MandiText variant="priceSmall">{formatMoney(total)}</MandiText>
-          )}
-        </View>
-        <MandiButton
-          label="View Cart"
-          variant={count > 0 ? 'primary' : 'secondary'}
-          onPress={onPress}
-          fullWidth={false}
-        />
-      </View>
-    </MandiStickyBar>
+    <StickyActionBar
+      variant="continue"
+      left={{ eyebrow: '', label }}
+      ctaLabel="Continue ›"
+      disabled={inert}
+      onPress={onPress}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-  },
-  totals: { flex: 1, gap: 2 },
-});

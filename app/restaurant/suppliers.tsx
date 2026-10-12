@@ -143,7 +143,7 @@ export default function SuppliersScreen() {
       ) : (
         <View style={styles.list}>
           <MandiSectionHeader
-            title={category == null ? 'All Suppliers' : tabName}
+            title={category == null ? 'All suppliers' : tabName}
             count={rows.length}
             subtitle={filters.sort === 'rating' ? 'Highest rating first' : 'Nearest first'}
           />

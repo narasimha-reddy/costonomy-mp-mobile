@@ -5,9 +5,11 @@ from driver import *
 from cases import fund_costonomy_delivery, to_ready, LOC_NEAR_SUPPLIER, LOC_MID
 
 def show(name, oid):
-    print('%-26s order %-5d restaurant: http://localhost:7071/restaurant/orders/%d   supplier: http://localhost:7071/supplier/orders/%d'
-          % (name, oid, oid, oid))
+    print('%-26s order %-5d restaurant: %s/restaurant/orders/%d   supplier: %s/supplier/orders/%d'
+          % (name, oid, WEB, oid, WEB, oid))
 
+if delivery_provider() == 'MOCK':
+    sys.exit('BLOCKED: demo.py books Pidge deliveries; the stack runs %s' % delivery_provider())
 widen_hours()
 try:
     # 1. packing: confirmed and preparing, no delivery yet (illustration band)

@@ -8,7 +8,8 @@ const os = require('os');
 const path = require('path');
 
 const spec = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const WEB = spec.web || 'http://localhost:7071';
+const WEB = spec.web || process.env.WEB || 'http://localhost:7074';
+const WIDTHS = (spec.widths && spec.widths.length ? spec.widths : [360, 390, 412]);
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 9300 + Math.floor(Math.random() * 500);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -45,7 +46,7 @@ async function main() {
     const { targetId } = await send('Target.createTarget', { url: 'about:blank', browserContextId });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Page.enable', {}, sessionId);
-    await send('Emulation.setDeviceMetricsOverride', { width: 430, height: 932, deviceScaleFactor: 2, mobile: true }, sessionId);
+    await send('Emulation.setDeviceMetricsOverride', { width: WIDTHS[0], height: 932, deviceScaleFactor: 2, mobile: true }, sessionId);
     await send('Page.navigate', { url: WEB + '/welcome' }, sessionId);
     await sleep(2500);
     const t = spec.tokens[aud];
@@ -57,25 +58,30 @@ async function main() {
   fs.mkdirSync(spec.out, { recursive: true });
   for (const s of spec.shots) {
     const { sessionId } = await audience(s.aud);
-    await send('Page.navigate', { url: WEB + s.path }, sessionId);
     const expect = s.expect || []; const forbid = s.forbid || [];
-    const t0 = Date.now(); let text = '';
-    // Wait for every expected string, or time out and report what is there.
-    while (Date.now() - t0 < (s.waitMs || 20000)) {
+    // One shot per width (360/390/412 by default): the page is reloaded so it lays out at that width.
+    for (const w of WIDTHS) {
+      await send('Emulation.setDeviceMetricsOverride', { width: w, height: 932, deviceScaleFactor: 2, mobile: true }, sessionId);
+      await send('Page.navigate', { url: WEB + s.path }, sessionId);
+      const t0 = Date.now(); let text = '';
+      // Wait for every expected string, or time out and report what is there.
+      while (Date.now() - t0 < (s.waitMs || 20000)) {
+        text = (await evaluate(sessionId, 'document.body ? document.body.innerText : ""')) || '';
+        if (expect.every((e) => text.includes(e))) break;
+        await sleep(500);
+      }
+      await sleep(s.settleMs || 1200); // animation, map tiles
       text = (await evaluate(sessionId, 'document.body ? document.body.innerText : ""')) || '';
-      if (expect.every((e) => text.includes(e))) break;
-      await sleep(500);
+      const name = `${s.name}-w${w}`;
+      const png = path.join(spec.out, `${name}.png`);
+      const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+      fs.writeFileSync(png, Buffer.from(shot.data, 'base64'));
+      fs.writeFileSync(path.join(spec.out, `${name}.txt`), text);
+      const missing = expect.filter((e) => !text.includes(e));
+      const present = forbid.filter((f) => text.includes(f));
+      results.push({ name, aud: s.aud, path: s.path, width: w, png, missing, forbiddenPresent: present,
+        ok: missing.length === 0 && present.length === 0, text: text.replace(/\s+/g, ' ').slice(0, 700) });
     }
-    await sleep(s.settleMs || 1200); // animation, map tiles
-    text = (await evaluate(sessionId, 'document.body ? document.body.innerText : ""')) || '';
-    const png = path.join(spec.out, `${s.name}.png`);
-    const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
-    fs.writeFileSync(png, Buffer.from(shot.data, 'base64'));
-    fs.writeFileSync(path.join(spec.out, `${s.name}.txt`), text);
-    const missing = expect.filter((e) => !text.includes(e));
-    const present = forbid.filter((f) => text.includes(f));
-    results.push({ name: s.name, aud: s.aud, path: s.path, png, missing, forbiddenPresent: present,
-      ok: missing.length === 0 && present.length === 0, text: text.replace(/\s+/g, ' ').slice(0, 700) });
   }
   const tokens = {};
   for (const [aud, { sessionId }] of Object.entries(sessions)) {

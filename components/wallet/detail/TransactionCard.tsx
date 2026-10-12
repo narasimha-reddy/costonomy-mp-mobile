@@ -12,7 +12,7 @@ import { DetailColors, DetailLayout, DetailType, WalletColors } from '@/theme';
 
 /**
  * The white card of the Transaction details screen and of the receipt picture: who the
- * money went to or came from, the amount, and the collapsible "Transfer Details".
+ * money went to or came from, the amount, and the collapsible "Transfer details".
  *
  * <p>On the screen (`variant="screen"`) the section header is a button, copy icons show on
  * the ids that can be copied, and `footer` carries the action row. In the receipt picture
@@ -53,7 +53,7 @@ export function TransactionCard({
   const header = (
     <>
       <ListGlyph size={DetailLayout.sectionIcon} color={DetailColors.icon} />
-      <Text style={styles.sectionTitle}>Transfer Details</Text>
+      <Text style={styles.sectionTitle}>Transfer details</Text>
       <Animated.View style={{ transform: [{ rotate }] }}>
         <Ionicons name="chevron-up" size={DetailLayout.chevron} color={DetailColors.icon} />
       </Animated.View>
@@ -95,7 +95,7 @@ export function TransactionCard({
             onToggle?.();
           }}
           accessibilityRole="button"
-          accessibilityLabel="Transfer Details"
+          accessibilityLabel="Transfer details"
           accessibilityState={{ expanded }}
           style={styles.sectionHeader}
           testID="transfer-details-toggle"
@@ -108,7 +108,7 @@ export function TransactionCard({
 
       {expanded && (
         <View testID="transfer-details-body">
-          <Text style={styles.label}>Costonomy Transaction ID</Text>
+          <Text style={styles.label}>Costonomy transaction ID</Text>
           <View style={[styles.valueRow, screen && credit != null && styles.valueRowContained]} testID="detail-id-row">
             <Text style={styles.value} selectable>{entry.transactionId}</Text>
             {screen && (
@@ -123,7 +123,7 @@ export function TransactionCard({
           <Text style={[styles.label, styles.labelNext]}>{walletSideLabel(entry.direction)}</Text>
           <View style={styles.walletRow}>
             <Ionicons name="wallet-outline" size={DetailLayout.walletIcon} color={WalletColors.orange} />
-            <Text style={styles.walletName}>Costonomy Wallet</Text>
+            <Text style={styles.walletName}>Costonomy wallet</Text>
             <Text style={styles.amount} accessibilityLabel={spokenAmount(entry.amount)}>{amount}</Text>
           </View>
 

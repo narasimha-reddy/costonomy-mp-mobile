@@ -19,7 +19,7 @@ describe('delivery day', () => {
   });
 
   it('describes no day as immediate', () => {
-    expect(describeDeliveryDay(null)).toBe('Immediate');
+    expect(describeDeliveryDay(null)).toBe('As soon as possible');
     expect(describeDeliveryDay('2026-10-06')).toContain('6');
   });
 

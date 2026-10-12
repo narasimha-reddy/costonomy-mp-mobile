@@ -132,7 +132,7 @@ export default function CreditAgreementScreen() {
    * <p><b>Two conditions, not one.</b> `latestRequest.status === 'MODIFIED'` is
    * a permanent fact — the supplier really did approve something other than
    * what was asked for, and accepting does not un-modify it. On its own it kept
-   * the "Accept These Terms" card on screen forever, over a line that was
+   * the "Accept these terms" card on screen forever, over a line that was
    * already Active with the full limit available to spend.
    *
    * <p>Whether anything is still owed is `canFund`, which is the server's
@@ -206,7 +206,7 @@ export default function CreditAgreementScreen() {
                 Credit is not usable until you accept.
               </MandiText>
               <MandiButton
-                label="Accept These Terms"
+                label="Accept these terms"
                 size="md"
                 loading={accept.isPending}
                 onPress={() => accept.mutate()}

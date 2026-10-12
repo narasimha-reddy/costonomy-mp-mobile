@@ -32,6 +32,27 @@ export function accountsFor(received: number, damaged: number, missing: number, 
   return thousandths(received) + thousandths(damaged) + thousandths(missing) === thousandths(billed);
 }
 
+export interface Counts { received: number; damaged: number; missing: number }
+
+/**
+ * Received after a Damaged or Missing quantity was entered: what is left of the billed quantity, so the three add up
+ * without the buyer lowering Received by hand. A UI convenience only (the server still validates). A weighed
+ * catch-weight line is left alone: its received weight is what was read, not a remainder.
+ */
+export function rebalanceReceived(item: SupplierOrderItem, billed: number, counts: Counts): number {
+  if (item.isCatchWeight) return counts.received;
+  const left = thousandths(billed) - thousandths(counts.damaged) - thousandths(counts.missing);
+  return Math.max(0, left) / 1000;
+}
+
+/** What to do when the counts do not add up, with the number from the billed quantity. */
+export function unaccountedHint(counts: Counts, billed: number, unit: string): string {
+  const target = thousandths(billed) - thousandths(counts.damaged) - thousandths(counts.missing);
+  if (target < 0) return `Damaged and Missing add up to more than ${formatQuantity(String(billed))} ${unit}`;
+  const verb = thousandths(counts.received) > target ? 'Lower' : 'Raise';
+  return `${verb} Received to ${formatQuantity(String(target / 1000))} ${unit}`;
+}
+
 /** The line's caption when it was weighed: the quantity the counts must add up to, and why it is not the ordered one. */
 export function weighedCaption(item: SupplierOrderItem): string | null {
   return item.isCatchWeight && item.billableQuantity != null
@@ -44,6 +65,8 @@ export interface RefundOutcome {
   amount: string;
   /** Where it went, or what it is waiting for, or null when the server did not say enough to claim anything. */
   where: string | null;
+  /** Whether the refund lands in the wallet (card or wallet payment), so the wallet is worth opening. */
+  toWallet: boolean;
   /** The credit note, only when the server has issued one. */
   creditNoteNumber: string | null;
   /** Each refunded line and its amount, from the server. */
@@ -77,6 +100,7 @@ export function refundOutcome(receiving: Receiving, paymentMethod: string | null
   return {
     amount,
     where,
+    toWallet: paymentMethod === 'PREPAID' || paymentMethod === 'WALLET',
     creditNoteNumber: receiving.creditNoteNumber ?? null,
     lines: (receiving.items ?? [])
       .filter((line) => Number(line.refundAmount ?? 0) > 0)

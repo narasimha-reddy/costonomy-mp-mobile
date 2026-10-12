@@ -14,7 +14,7 @@ function setup(scanEnabled: boolean) {
   const onWallet = jest.fn();
   const actions: MoneyAction[] = [
     {
-      key: 'quickscan', label: 'Quick Scan', icon: 'qr-code-outline', visible: scanEnabled,
+      key: 'quickscan', label: 'Quick scan', icon: 'qr-code-outline', visible: scanEnabled,
       renderIcon: (size) => <ScanQrIcon size={size} variant="white" />,
       accessibilityLabel: 'Quick Scan. Pay a shop by scanning its QR.', onPress: onScan,
     },
@@ -27,8 +27,8 @@ function setup(scanEnabled: boolean) {
 describe('QuickActionTiles (Money Transfers)', () => {
   it('shows the heading, both actions in order, and two empty slots', () => {
     const h = setup(true);
-    expect(screen.getByText('Money Transfers')).toBeTruthy();
-    expect(screen.getByText('Quick Scan')).toBeTruthy();
+    expect(screen.getByText('Money transfers')).toBeTruthy();
+    expect(screen.getByText('Quick scan')).toBeTruthy();
     expect(screen.getByText('Wallet')).toBeTruthy();
     expect(screen.getAllByTestId('action-spacer')).toHaveLength(2);
 
@@ -54,7 +54,7 @@ describe('QuickActionTiles (Money Transfers)', () => {
 
   it('leaves Quick Scan out when disabled; Wallet takes the first slot', () => {
     setup(false);
-    expect(screen.queryByText('Quick Scan')).toBeNull();
+    expect(screen.queryByText('Quick scan')).toBeNull();
     expect(screen.queryByTestId('action-quickscan')).toBeNull();
     expect(screen.getAllByRole('button').map((b) => b.props.testID)).toEqual(['action-wallet']);
     expect(screen.getAllByTestId('action-spacer')).toHaveLength(3);

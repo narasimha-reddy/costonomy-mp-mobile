@@ -38,6 +38,11 @@ interface MandiFormFieldProps {
   /** e.g. "+91" on a phone field. */
   prefix?: string;
   onFocus?: TextInputProps['onFocus'];
+  /** Focus this field when the screen opens (sign-in screens, so the keyboard is already up). */
+  autoFocus?: boolean;
+  /** Let the OS offer the SMS code from a text message (iOS oneTimeCode, Android sms-otp). */
+  textContentType?: TextInputProps['textContentType'];
+  autoComplete?: TextInputProps['autoComplete'];
   style?: ViewStyle;
   testID?: string;
 }
@@ -62,6 +67,9 @@ export function MandiFormField({
   leadingIcon,
   prefix,
   onFocus,
+  autoFocus,
+  textContentType,
+  autoComplete,
   style,
   testID,
 }: MandiFormFieldProps) {
@@ -106,6 +114,9 @@ export function MandiFormField({
           secureTextEntry={secureTextEntry}
           maxLength={maxLength}
           returnKeyType={returnKeyType}
+          autoFocus={autoFocus}
+          textContentType={textContentType}
+          autoComplete={autoComplete}
           onSubmitEditing={onSubmitEditing}
           onFocus={(e) => { onFocus?.(e); screenScroll?.reveal(wrapper.current); }}
           accessibilityLabel={label}

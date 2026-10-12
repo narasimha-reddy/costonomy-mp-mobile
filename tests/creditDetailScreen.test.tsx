@@ -404,7 +404,7 @@ describe('negotiation states', () => {
     }));
     acceptM.mockResolvedValue(agreement());
     renderScreen();
-    fireEvent.press(await screen.findByText('Accept These Terms'));
+    fireEvent.press(await screen.findByText('Accept these terms'));
     await waitFor(() => expect(acceptM).toHaveBeenCalledWith('tok', 3, 4));
   });
 });
@@ -414,7 +414,7 @@ describe('load states', () => {
     agreementM.mockRejectedValueOnce(new Error('boom'));
     renderScreen();
     expect(await screen.findByText("Couldn't load this credit line.")).toBeTruthy();
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     await waitFor(() => expect(agreementM).toHaveBeenCalledTimes(2));
   });
 

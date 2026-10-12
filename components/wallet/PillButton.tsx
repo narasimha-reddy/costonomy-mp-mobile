@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from '@/components/common/MandiText';
 import { Colors, ControlHeight, IconSize, Radius, Spacing } from '@/theme';
 
-/** An outlined pill with an icon and a label — "My Statements", "Filters ⌄". */
+/** An outlined pill with an icon and a label — "My statements", "Filters ⌄". */
 export function PillButton({
   label, icon, trailingIcon, onPress, testID,
 }: {

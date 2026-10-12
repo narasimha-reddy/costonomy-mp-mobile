@@ -116,7 +116,7 @@ describe('S12 / B8: accepting terms names the version on screen', () => {
     agreementM.mockResolvedValue(MODIFIED);
     acceptM.mockResolvedValue(agreement());
     renderScreen();
-    fireEvent.press(await screen.findByText('Accept These Terms'));
+    fireEvent.press(await screen.findByText('Accept these terms'));
     await waitFor(() => expect(acceptM).toHaveBeenCalledWith('tok', 3, 4));
   });
 
@@ -124,7 +124,7 @@ describe('S12 / B8: accepting terms names the version on screen', () => {
     agreementM.mockResolvedValue(MODIFIED);
     acceptM.mockRejectedValue(new ApiError({ code: 'CREDIT_TERMS_CHANGED', message: 'server said', status: 409 }));
     renderScreen();
-    fireEvent.press(await screen.findByText('Accept These Terms'));
+    fireEvent.press(await screen.findByText('Accept these terms'));
     await waitFor(() => expect(mockToast).toHaveBeenCalledWith('The supplier changed the terms. Please review them again.', 'error'));
     await waitFor(() => expect(agreementM.mock.calls.length).toBeGreaterThanOrEqual(2));
     expect(mockToast).not.toHaveBeenCalledWith('server said', 'error');
@@ -136,9 +136,9 @@ describe('S12 / B8: accepting terms names the version on screen', () => {
     acceptM.mockRejectedValueOnce(new ApiError({ code: 'CREDIT_TERMS_CHANGED', message: 'x', status: 409 }))
       .mockResolvedValue(agreement());
     renderScreen();
-    fireEvent.press(await screen.findByText('Accept These Terms'));
+    fireEvent.press(await screen.findByText('Accept these terms'));
     await screen.findByText(/₹30,000\.00 over 30 days/);
-    fireEvent.press(screen.getByText('Accept These Terms'));
+    fireEvent.press(screen.getByText('Accept these terms'));
     await waitFor(() => expect(acceptM).toHaveBeenLastCalledWith('tok', 3, 5));
   });
 
@@ -146,7 +146,7 @@ describe('S12 / B8: accepting terms names the version on screen', () => {
     agreementM.mockResolvedValue(MODIFIED);
     acceptM.mockRejectedValue(new ApiError({ code: 'SOMETHING', message: 'nope', status: 422 }));
     renderScreen();
-    fireEvent.press(await screen.findByText('Accept These Terms'));
+    fireEvent.press(await screen.findByText('Accept these terms'));
     await waitFor(() => expect(mockToast).toHaveBeenCalledWith('nope', 'error'));
   });
 
@@ -154,7 +154,7 @@ describe('S12 / B8: accepting terms names the version on screen', () => {
     agreementM.mockResolvedValue({ ...MODIFIED, termsVersion: undefined });
     acceptM.mockResolvedValue(agreement());
     renderScreen();
-    fireEvent.press(await screen.findByText('Accept These Terms'));
+    fireEvent.press(await screen.findByText('Accept these terms'));
     await waitFor(() => expect(acceptM).toHaveBeenCalledWith('tok', 3, undefined));
   });
 });

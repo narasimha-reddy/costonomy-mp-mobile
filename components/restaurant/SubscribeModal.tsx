@@ -21,6 +21,7 @@ import {
 import type { SubscriptionFrequency } from '@/models/subscription';
 import { ApiError } from '@/lib/api/errors';
 import { Colors, Radius, Spacing } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 interface SubscribeModalProps {
   visible: boolean;
@@ -89,9 +90,9 @@ export function SubscribeModal({
   });
 
   const frequencies: { label: string; value: SubscriptionFrequency }[] = [
-    { label: 'Every Day', value: 'DAILY' },
+    { label: 'Every day', value: 'DAILY' },
     { label: 'Weekdays (Mon-Fri)', value: 'WEEKDAYS' },
-    { label: 'Alternate Days', value: 'ALTERNATE_DAYS' },
+    { label: 'Alternate days', value: 'ALTERNATE_DAYS' },
     { label: 'Weekly', value: 'WEEKLY' },
   ];
 
@@ -99,7 +100,7 @@ export function SubscribeModal({
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <MandiHeader title="Daily Subscription" back onBack={onClose} />
+          <MandiHeader title="Daily subscription" back onBack={onClose} />
           <ScrollView contentContainerStyle={styles.content}>
             <MandiCard>
               <MandiText variant="bodyEmphasis">{productName}</MandiText>
@@ -133,7 +134,7 @@ export function SubscribeModal({
                     key={f.value}
                     onPress={() => setFrequency(f.value)}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
+                    {...radioProps(active)}
                     accessibilityLabel={f.label}
                     style={[styles.freqPill, active && styles.freqPillActive]}
                   >
@@ -159,7 +160,7 @@ export function SubscribeModal({
                     key={m.value}
                     onPress={() => setDeliveryMode(m.value)}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
+                    {...radioProps(active)}
                     accessibilityLabel={m.label}
                     style={[styles.freqPill, active && styles.freqPillActive]}
                   >
@@ -187,7 +188,7 @@ export function SubscribeModal({
                     key={m.value}
                     onPress={disabled ? undefined : () => setPaymentMethod(m.value)}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: active, disabled }}
+                    {...radioProps(active, disabled)}
                     accessibilityLabel={disabled ? `${m.label}, not available with this supplier` : m.label}
                     style={[styles.freqPill, active && styles.freqPillActive, disabled && { opacity: 0.5 }]}
                   >
@@ -220,7 +221,7 @@ export function SubscribeModal({
                         key={s.id}
                         onPress={() => setPreferredSlotId(s.id)}
                         accessibilityRole="radio"
-                        accessibilityState={{ selected: active }}
+                        {...radioProps(active)}
                         accessibilityLabel={`${s.slotName}, ${s.startTime.substring(0, 5)} to ${s.endTime.substring(0, 5)}`}
                         style={[styles.slotOption, active && styles.slotOptionActive]}
                       >
@@ -250,7 +251,7 @@ export function SubscribeModal({
 
             <View style={styles.buttonRow}>
               <MandiButton
-                label="Confirm Subscription"
+                label="Confirm subscription"
                 size="lg"
                 loading={mutation.isPending}
                 onPress={() => {

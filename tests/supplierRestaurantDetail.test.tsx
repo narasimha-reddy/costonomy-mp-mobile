@@ -234,7 +234,7 @@ describe('banners by status', () => {
     renderScreen();
     expect(await screen.findByText('₹30,000.00')).toBeTruthy();
     expect(screen.getByText('Weekly vegetables')).toBeTruthy();
-    expect(screen.getByText('Approve As Asked')).toBeTruthy();
+    expect(screen.getByText('Approve as asked')).toBeTruthy();
     expect(screen.queryByTestId('line-hero')).toBeNull();
     expect(screen.queryByTestId('line-actions')).toBeNull();
   });
@@ -245,7 +245,7 @@ describe('banners by status', () => {
     expect(await screen.findByText('Rejected')).toBeTruthy();
     expect(screen.queryByTestId('line-hero')).toBeNull();
     expect(screen.queryByTestId('action-more')).toBeNull();
-    expect(screen.queryByText('Approve As Asked')).toBeNull();
+    expect(screen.queryByText('Approve as asked')).toBeNull();
   });
 });
 
@@ -513,14 +513,14 @@ describe('approve and decline a request', () => {
   it('Approve As Asked sends an empty body', async () => {
     agreementM.mockResolvedValue(requested());
     renderScreen();
-    fireEvent.press(await screen.findByText('Approve As Asked'));
+    fireEvent.press(await screen.findByText('Approve as asked'));
     await waitFor(() => expect(approveM).toHaveBeenCalledWith('tok', 3, {}));
   });
 
   it('Approve On My Terms uses the editor, starts from what they asked, and sends the modification', async () => {
     agreementM.mockResolvedValue(requested());
     renderScreen();
-    fireEvent.press(await screen.findByText('Approve On My Terms'));
+    fireEvent.press(await screen.findByText('Approve on my terms'));
     expect(screen.getByTestId('terms-limit').props.value).toBe('30000');
     expect(screen.getByTestId('terms-days').props.value).toBe('15');
     fireEvent.changeText(screen.getByTestId('terms-limit'), '20000');
@@ -546,7 +546,7 @@ describe('approve and decline a request', () => {
     agreementM.mockResolvedValue(requested());
     renderScreen();
     expect(await screen.findByText('₹30,000.00')).toBeTruthy();
-    expect(screen.queryByText('Approve As Asked')).toBeNull();
+    expect(screen.queryByText('Approve as asked')).toBeNull();
     expect(screen.queryByText('Decline')).toBeNull();
   });
 });
@@ -664,7 +664,7 @@ describe('states', () => {
   it('shows an error with Try Again that refetches', async () => {
     agreementM.mockRejectedValueOnce(new Error('boom'));
     renderScreen();
-    fireEvent.press(await screen.findByText('Try Again'));
+    fireEvent.press(await screen.findByText('Try again'));
     expect(await screen.findByTestId('line-hero')).toBeTruthy();
   });
 
@@ -672,7 +672,7 @@ describe('states', () => {
     agreementM.mockRejectedValue(apiError('NOT_FOUND', 404, 'nope'));
     renderScreen();
     expect(await screen.findByText('This credit line is not available to you')).toBeTruthy();
-    expect(screen.queryByText('Try Again')).toBeNull();
+    expect(screen.queryByText('Try again')).toBeNull();
   });
 
   it('shows the offline banner', async () => {

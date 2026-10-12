@@ -6,7 +6,7 @@ import type { Delivery } from '@/models/delivery';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
- * TEST ONLY (API D-188, D-189). The sandbox has no real riders, so the supplier side offers a way to move the rider along
+ * TEST ONLY (API D-188, D-196). The sandbox has no real riders, so the supplier side offers a way to move the rider along
  * and watch the flow. Shown only when the API says `sandboxControls`, never to a buyer (callers render it for the
  * supplier alone), and styled as a dashed info card so it cannot be mistaken for product UI.
  */
@@ -26,10 +26,13 @@ export function SandboxControlCard({
     <View style={styles.card} accessibilityLabel="Test mode">
       <MandiText variant="captionEmphasis" color={Colors.info}>Test mode</MandiText>
       <MandiText variant="caption" color={Colors.textSecondary}>
-        {movesItself
-          ? `Pidge sandbox has no real riders. The rider moves to the next step on its own every ${auto} s. Tap to skip ahead.`
-          : 'Pidge sandbox has no real riders. Move the rider to the next step to see the flow.'}
+        Pidge sandbox has no real delivery partners. Move the delivery partner to the next step to see the flow.
       </MandiText>
+      {movesItself ? (
+        <MandiText variant="caption" color={Colors.textSecondary}>
+          {`The simulator also advances this delivery automatically, every ${auto} s. Tap to skip ahead.`}
+        </MandiText>
+      ) : null}
       <MandiButton label={label} variant="secondary" size="md" onPress={() => onAdvance(delivery.id)} loading={pending} />
     </View>
   );

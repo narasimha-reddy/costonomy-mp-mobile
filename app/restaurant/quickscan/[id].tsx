@@ -86,12 +86,12 @@ export default function QuickScanResultScreen() {
 
           <View style={styles.actions}>
             <MandiButton
-              label="Scan Another"
+              label="Scan another"
               size="lg"
               onPress={() => router.replace('/restaurant/quickscan')}
             />
             <MandiButton
-              label="Open Wallet"
+              label="Open wallet"
               variant="tertiary"
               size="lg"
               onPress={() => router.replace('/restaurant/wallet')}

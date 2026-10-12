@@ -47,3 +47,12 @@ export function billingFailureMessage(caught: unknown, fallback: string): string
   if (caught.status === 404) return "Tax invoices aren't available for this order yet.";
   return caught.message || fallback;
 }
+
+/**
+ * What the Credit notes button says when the call fails. The routes answer 404 for everyone while tax invoices are
+ * switched off, and a store with nothing issued has the same answer for the person asking: no credit notes yet.
+ */
+export function creditNotesNotice(caught: unknown): string {
+  if (caught instanceof ApiError && caught.status === 404) return 'No credit notes yet.';
+  return billingFailureMessage(caught, 'Could not load credit notes for this order.');
+}

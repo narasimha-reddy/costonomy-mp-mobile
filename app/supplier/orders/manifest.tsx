@@ -65,9 +65,9 @@ export default function SupplierManifestScreen() {
 
   if (storeId == null) {
     return (
-      <MandiScreen header={<MandiHeader title="Daily Manifest" back />}>
+      <MandiScreen header={<MandiHeader title="Daily manifest" back />}>
         <MandiEmptyState
-          title="No Store Selected"
+          title="No store selected"
           description="Please choose a store to view subscription manifests."
         />
       </MandiScreen>
@@ -81,14 +81,14 @@ export default function SupplierManifestScreen() {
   // Group deliveries by slot
   const slotGroups: Record<string, ManifestDeliveryOrder[]> = {};
   deliveries.forEach((d) => {
-    const key = d.slotName || 'Standard / Any Time';
+    const key = d.slotName || 'Standard / any time';
     if (!slotGroups[key]) slotGroups[key] = [];
     slotGroups[key].push(d);
   });
 
   return (
     <MandiScreen
-      header={<MandiHeader title="Daily Manifest" subtitle="Subscription Dispatches" back />}
+      header={<MandiHeader title="Daily manifest" subtitle="Subscription dispatches" back />}
     >
       {/* Orders are created by the platform each evening for the next day (API D-132); there is nothing to trigger. */}
       <MandiText variant="caption" color={Colors.textSecondary}>
@@ -133,7 +133,7 @@ export default function SupplierManifestScreen() {
       ) : deliveries.length === 0 ? (
         <MandiEmptyState
           icon="calendar-outline"
-          title="No Scheduled Deliveries"
+          title="No scheduled deliveries"
           description={`There are no active subscriptions scheduled for ${formatDisplayDate(currentDate)}.`}
         />
       ) : (
@@ -211,10 +211,10 @@ export default function SupplierManifestScreen() {
                         }
                         label={
                           delivery.deliveryMode === 'PICKUP'
-                            ? 'Store Pickup'
+                            ? 'Store pickup'
                             : delivery.deliveryMode === 'COSTONOMY'
-                              ? 'Costonomy Delivery'
-                              : 'Supplier Delivery'
+                              ? 'Costonomy delivery'
+                              : 'Supplier delivery'
                         }
                       />
                     </View>

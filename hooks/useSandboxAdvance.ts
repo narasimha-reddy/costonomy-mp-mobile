@@ -20,7 +20,7 @@ export function useSandboxAdvance(orderId: number) {
       void queryClient.invalidateQueries({ queryKey: ['supplier-orders'] });
     },
     onError: (caught) => {
-      show(caught instanceof ApiError ? caught.message : 'Could not move the rider.', 'error');
+      show(caught instanceof ApiError ? caught.message : 'Could not move the delivery partner.', 'error');
       void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId] });
     },
   });

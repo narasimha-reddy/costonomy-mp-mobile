@@ -310,7 +310,7 @@ describe('states', () => {
     renderScreen();
     await screen.findByTestId('payouts-error');
     payoutsM.mockResolvedValue(page(LIST));
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     await screen.findByTestId('payout-row-1');
   });
 

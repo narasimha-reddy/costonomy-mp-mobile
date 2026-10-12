@@ -176,3 +176,8 @@ export function useSession(): SessionState {
   if (!context) throw new Error('useSession must be used inside a SessionProvider');
   return context;
 }
+
+/** The session if there is a provider above, else null: for chrome (the device frame) that also renders in isolation. */
+export function useOptionalSession(): SessionState | null {
+  return useContext(SessionContext);
+}

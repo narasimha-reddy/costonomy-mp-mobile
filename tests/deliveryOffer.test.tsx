@@ -52,13 +52,13 @@ describe('what a supplier can offer', () => {
     expect(deliveryAnswerFor(null, '40')).toEqual({});
   });
 
-  it('says riders are requested after Ready, and picks the chosen offer', () => {
+  it('says delivery partners are requested after Ready, and picks the chosen offer', () => {
     const onChange = jest.fn();
     render(<DeliveryOfferChoice policy={policy()} value="SELF" onChange={onChange} />);
     // One option for delivering yourself: the charge, with 0 meaning free, is typed in a box.
     expect(screen.getAllByText('I will deliver it')).toHaveLength(1);
 
-    expect(screen.getByText(/Riders are requested after you mark the order Ready for Pickup/)).toBeTruthy();
+    expect(screen.getByText(/Delivery partners are requested after you mark the order Ready for Pickup/)).toBeTruthy();
     fireEvent.press(screen.getByText('Use Costonomy delivery'));
     expect(onChange).toHaveBeenCalledWith('COSTONOMY');
   });

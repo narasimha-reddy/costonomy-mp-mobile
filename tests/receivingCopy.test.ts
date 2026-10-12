@@ -1,4 +1,4 @@
-import { accountsFor, billedQuantityOf, refundOutcome, thousandths, weighedCaption } from '@/lib/orders/receiving';
+import { accountsFor, billedQuantityOf, rebalanceReceived, refundOutcome, thousandths, unaccountedHint, weighedCaption } from '@/lib/orders/receiving';
 import type { SupplierOrderItem } from '@/models/procurement';
 import type { Receiving } from '@/models/trust';
 import {
@@ -72,5 +72,42 @@ describe('what the restaurant is told after a rejection (only what the server se
 
   it('is nothing at all when nothing was refunded', () => {
     expect(refundOutcome(asReceiving(RECEIVING_IN_FULL), 'PREPAID')).toBeNull();
+  });
+});
+
+describe('entering a problem lowers Received (check-in friction)', () => {
+  const plain = { isCatchWeight: false } as SupplierOrderItem;
+  it('one missing out of 3 leaves 2 received', () => {
+    expect(rebalanceReceived(plain, 3, { received: 3, damaged: 0, missing: 1 })).toBe(2);
+  });
+  it('damaged and missing both come off Received, to the thousandth', () => {
+    expect(rebalanceReceived(plain, 1, { received: 1, damaged: 0.1, missing: 0.2 })).toBe(0.7);
+  });
+  it('never goes below zero', () => {
+    expect(rebalanceReceived(plain, 3, { received: 3, damaged: 2, missing: 2 })).toBe(0);
+  });
+  it('leaves a catch-weight line alone', () => {
+    expect(rebalanceReceived({ isCatchWeight: true } as SupplierOrderItem, 9.6, { received: 9.6, damaged: 0, missing: 1 })).toBe(9.6);
+  });
+});
+
+describe('what to do when the counts still do not add up', () => {
+  it('says to lower Received, with the number worked out from the billed quantity', () => {
+    expect(unaccountedHint({ received: 3, damaged: 0, missing: 1 }, 3, 'KG')).toBe('Lower Received to 2 KG');
+  });
+  it('says to raise Received when short', () => {
+    expect(unaccountedHint({ received: 1, damaged: 0, missing: 1 }, 3, 'KG')).toBe('Raise Received to 2 KG');
+  });
+  it('says Damaged and Missing are too many when they alone exceed the quantity', () => {
+    expect(unaccountedHint({ received: 0, damaged: 2, missing: 2 }, 3, 'KG')).toBe('Damaged and Missing add up to more than 3 KG');
+  });
+});
+
+describe('where the refund went decides the sheet buttons', () => {
+  const applied = asReceiving(RECEIVING_APPLIED_NO_NOTE_YET);
+  it('goes to the wallet for PREPAID and WALLET orders, not for credit', () => {
+    expect(refundOutcome(applied, 'PREPAID')?.toWallet).toBe(true);
+    expect(refundOutcome(applied, 'WALLET')?.toWallet).toBe(true);
+    expect(refundOutcome(applied, 'CREDIT')?.toWallet).toBe(false);
   });
 });

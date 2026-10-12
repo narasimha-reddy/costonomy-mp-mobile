@@ -32,6 +32,37 @@ describe('stagesFor', () => {
   });
 });
 
+describe('platform delivery copy while a partner is found', () => {
+  it('never says the supplier delivers a COSTONOMY delivery while a partner is found', () => {
+    for (const audience of ['buyer', 'supplier'] as const) {
+      for (const status of ['DELIVERY_REQUESTED', 'QUOTE_RECEIVED', 'PROVIDER_SELECTED'] as DeliveryStatus[]) {
+        const view = orderTrackingView({
+          audience, order: order('COSTONOMY_DELIVERY'), delivery: delivery(status, {}, 'COSTONOMY'), nowMs: NOW,
+        });
+        if (audience === 'buyer') expect(view.headline).toBe('Finding a delivery partner');
+        expect(view.headline).not.toMatch(/themselves/);
+        expect(view.subline ?? '').not.toMatch(/themselves/);
+      }
+    }
+  });
+});
+
+describe('platform delivery never gets the supplier-own copy', () => {
+  it('never says the supplier delivers a COSTONOMY delivery in any status or audience', () => {
+    for (const audience of ['buyer', 'supplier'] as const) {
+      for (const orderStatus of ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY']) {
+        for (const status of ALL) {
+          const view = orderTrackingView({
+            audience, order: order('COSTONOMY_DELIVERY', orderStatus), delivery: delivery(status, {}, 'COSTONOMY'), nowMs: NOW,
+          });
+          expect(view.headline).not.toMatch(/themselves/);
+          expect(view.subline ?? '').not.toMatch(/themselves/);
+        }
+      }
+    }
+  });
+});
+
 describe('stageIndex', () => {
   it('takes the higher of order and delivery status', () => {
     expect(stageIndex('CONFIRMED', null)).toBe(0);
@@ -119,14 +150,14 @@ describe('orderTrackingView, every delivery status x mode x audience', () => {
     });
     expect(v.currentIndex).toBe(5);
     expect(v.problem).toBe('danger');
-    expect(v.subline).toBe(REASON);
+    expect(v.subline).toBe('Delivery partner app timed out at gate 4');
   });
 
   it('gives the supplier the reason and the buyer calm copy for a retryable failure', () => {
     const sup = orderTrackingView({ audience: 'supplier', order: order('COSTONOMY_DELIVERY'), delivery: delivery('QUOTE_FAILED'), nowMs: NOW });
     const buy = orderTrackingView({ audience: 'buyer', order: order('COSTONOMY_DELIVERY'), delivery: delivery('QUOTE_FAILED'), nowMs: NOW });
     expect(sup.headline).toBe('No partner found yet');
-    expect(sup.subline).toBe(REASON);
+    expect(sup.subline).toBe('Delivery partner app timed out at gate 4');
     expect(buy.headline).toBe('Still arranging delivery');
     expect(buy.tone).toBe('warning');
   });
@@ -363,5 +394,21 @@ describe('a supplier delivering it themselves (found by the delivery e2e run)', 
     expect(buyer.showPartner).toBe(false);
     expect(buyer.etaText).toBeNull();
     expect(own('supplier', 'OUT_FOR_DELIVERY', 'PICKED_UP').subline).toBe('Mark it delivered once it arrives.');
+  });
+});
+
+describe('party line', () => {
+  it('the supplier sees the restaurant name, not the outlet locality; the buyer sees the supplier', () => {
+    const o = { ...order('COSTONOMY_DELIVERY'), outletName: 'Indiranagar', restaurantName: 'Spice Garden' };
+    const sup = orderTrackingView({ audience: 'supplier', order: o, delivery: delivery('IN_TRANSIT'), nowMs: NOW });
+    expect(sup.party).toBe('Spice Garden');
+    expect(sup.subline ?? '').not.toContain('Indiranagar');
+    const buyer = orderTrackingView({ audience: 'buyer', order: o, delivery: delivery('IN_TRANSIT'), nowMs: NOW });
+    expect(buyer.party).toBe('Fresh Farms');
+  });
+
+  it('falls back to the outlet name when the order has no restaurant name', () => {
+    const o = { ...order('COSTONOMY_DELIVERY'), restaurantName: null };
+    expect(orderTrackingView({ audience: 'supplier', order: o, delivery: delivery('IN_TRANSIT'), nowMs: NOW }).party).toBe('Cafe Mocha');
   });
 });

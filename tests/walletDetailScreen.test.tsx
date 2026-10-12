@@ -94,17 +94,17 @@ describe('Transaction detail screen', () => {
   it('shows a successful payment: green header, label, name, masked id, amount, ids and wallet row', async () => {
     (fetchWalletTransaction as jest.Mock).mockResolvedValue(detail());
     setup();
-    expect(await screen.findByText('Transaction Successful')).toBeTruthy();
+    expect(await screen.findByText('Transaction successful')).toBeTruthy();
     expect(screen.getByTestId('detail-header').props.style).toEqual(
       expect.arrayContaining([expect.objectContaining({ backgroundColor: DetailStatusColors.success })]));
     expect(screen.getByText(/^\d\d:\d\d (am|pm) on \d\d Sep 2026$/)).toBeTruthy();
     expect(screen.getByText('Paid to')).toBeTruthy();
     expect(screen.getByText('sr••••@okhdfc')).toBeTruthy();
     expect(screen.getAllByText('₹250').length).toBe(2);
-    expect(screen.getByText('Costonomy Transaction ID')).toBeTruthy();
+    expect(screen.getByText('Costonomy transaction ID')).toBeTruthy();
     expect(screen.getAllByText('184').length).toBeGreaterThan(0);
     expect(screen.getByText('Debited from')).toBeTruthy();
-    expect(screen.getByText('Costonomy Wallet')).toBeTruthy();
+    expect(screen.getByText('Costonomy wallet')).toBeTruthy();
     expect(screen.getByText('Reference: QuickScan payment 41')).toBeTruthy();
     expect(screen.getByTestId('detail-avatar-out')).toBeTruthy();
     expect(screen.queryByText(/powered by/i)).toBeNull();
@@ -146,7 +146,7 @@ describe('Transaction detail screen', () => {
     (fetchWalletTransaction as jest.Mock).mockReturnValue(new Promise(() => {}));
     setup();
     expect(screen.getByTestId('detail-skeleton')).toBeTruthy();
-    expect(screen.queryByText('Transaction Successful')).toBeNull();
+    expect(screen.queryByText('Transaction successful')).toBeNull();
   });
 
   it('says "Transaction not found" for a 404', async () => {
@@ -161,7 +161,7 @@ describe('Transaction detail screen', () => {
       .mockRejectedValueOnce(new ApiError({ code: 'X', message: 'boom', status: 500 }))
       .mockResolvedValue(detail());
     setup();
-    fireEvent.press(await screen.findByLabelText('Try Again'));
+    fireEvent.press(await screen.findByLabelText('Try again'));
     expect(await screen.findByText('Sri Ram Tea Stall')).toBeTruthy();
   });
 
@@ -188,7 +188,7 @@ describe('Transaction detail screen', () => {
     setup();
     fireEvent.press(await screen.findByLabelText('Wallet'));
     expect(mockPush).toHaveBeenLastCalledWith('/restaurant/wallet');
-    fireEvent.press(screen.getByLabelText('View History'));
+    fireEvent.press(screen.getByLabelText('View history'));
     expect(mockPush).toHaveBeenLastCalledWith('/restaurant/wallet/history');
   });
 
@@ -207,7 +207,7 @@ describe('Transaction detail screen', () => {
     fireEvent.press(await screen.findByTestId('transfer-details-toggle'));
     expect(screen.queryByTestId('transfer-details-body')).toBeNull();
     // The actions stay while the section is closed.
-    expect(screen.getByLabelText('Share Receipt')).toBeTruthy();
+    expect(screen.getByLabelText('Share receipt')).toBeTruthy();
     fireEvent.press(screen.getByTestId('transfer-details-toggle'));
     expect(screen.getByTestId('transfer-details-body')).toBeTruthy();
   });
@@ -234,7 +234,7 @@ describe('Transaction detail screen', () => {
   it('says support is coming soon', async () => {
     (fetchWalletTransaction as jest.Mock).mockResolvedValue(detail());
     setup();
-    fireEvent.press(await screen.findByLabelText('Contact Support'));
+    fireEvent.press(await screen.findByLabelText('Contact support'));
     expect(await screen.findByText('Support is coming soon')).toBeTruthy();
   });
 
@@ -243,21 +243,21 @@ describe('Transaction detail screen', () => {
     (shareReceiptImage as jest.Mock).mockReturnValue(new Promise<void>((r) => { finish = r; }));
     (fetchWalletTransaction as jest.Mock).mockResolvedValue(detail());
     setup();
-    fireEvent.press(await screen.findByLabelText('Share Receipt'));
+    fireEvent.press(await screen.findByLabelText('Share receipt'));
     expect(shareReceiptImage).toHaveBeenCalledTimes(1);
     expect((shareReceiptImage as jest.Mock).mock.calls[0][1]).toBe('costonomy-receipt-184.png');
-    await waitFor(() => expect(screen.getByLabelText('Share Receipt').props.accessibilityState.disabled).toBe(true));
-    fireEvent.press(screen.getByLabelText('Share Receipt'));
+    await waitFor(() => expect(screen.getByLabelText('Share receipt').props.accessibilityState.disabled).toBe(true));
+    fireEvent.press(screen.getByLabelText('Share receipt'));
     expect(shareReceiptImage).toHaveBeenCalledTimes(1);
     await act(async () => { finish(); });
-    await waitFor(() => expect(screen.getByLabelText('Share Receipt').props.accessibilityState.disabled).toBe(false));
+    await waitFor(() => expect(screen.getByLabelText('Share receipt').props.accessibilityState.disabled).toBe(false));
   });
 
   it('toasts when the receipt cannot be made', async () => {
     (shareReceiptImage as jest.Mock).mockRejectedValue(new Error('no'));
     (fetchWalletTransaction as jest.Mock).mockResolvedValue(detail());
     setup();
-    fireEvent.press(await screen.findByLabelText('Share Receipt'));
+    fireEvent.press(await screen.findByLabelText('Share receipt'));
     expect(await screen.findByText('Could not create receipt')).toBeTruthy();
   });
 });
@@ -269,12 +269,12 @@ describe('ReceiptCard', () => {
         <ReceiptCard entry={detail()} />
       </SafeAreaProvider>,
     );
-    expect(screen.getByText('Transaction Successful')).toBeTruthy();
+    expect(screen.getByText('Transaction successful')).toBeTruthy();
     expect(screen.getByText('Paid to')).toBeTruthy();
     expect(screen.getByText('Sri Ram Tea Stall')).toBeTruthy();
-    expect(screen.getByText('Costonomy Transaction ID')).toBeTruthy();
+    expect(screen.getByText('Costonomy transaction ID')).toBeTruthy();
     expect(screen.getByText('Reference: QuickScan payment 41')).toBeTruthy();
-    for (const absent of ['Pay again', 'Wallet', 'View History', 'Share Receipt', 'Contact Support']) {
+    for (const absent of ['Pay again', 'Wallet', 'View history', 'Share receipt', 'Contact support']) {
       expect(screen.queryByText(absent)).toBeNull();
     }
     expect(screen.queryByLabelText('Copy transaction ID')).toBeNull();
@@ -326,7 +326,7 @@ describe('Credit repayment detail', () => {
     expect(screen.queryByLabelText('No bill needed')).toBeNull();
     expect(screen.queryByLabelText('Pay again')).toBeNull();
     expect(screen.queryByText(/bill/i)).toBeNull();
-    expect(screen.getByLabelText('Share Receipt')).toBeTruthy();
+    expect(screen.getByLabelText('Share receipt')).toBeTruthy();
   });
 
   it('keeps the 48 dp Copy reference button inside its own row, clear of the amount and the invoices block', async () => {

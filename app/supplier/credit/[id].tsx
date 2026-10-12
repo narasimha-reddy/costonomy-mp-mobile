@@ -473,7 +473,7 @@ export default function SupplierCreditAgreementScreen() {
           {data.status === 'APPROVED' && canModify && (
             <MandiButton
               testID="edit-terms"
-              label="Edit Terms"
+              label="Edit terms"
               variant="secondary"
               size="md"
               icon="create-outline"
@@ -750,7 +750,7 @@ export default function SupplierCreditAgreementScreen() {
                 intro="No new order can draw on it. What they already owe, and anything held for orders in progress, is unaffected."
                 reasonLabel="Reason"
                 placeholder="Overdue balance"
-                confirmLabel="Suspend This Line"
+                confirmLabel="Suspend this line"
                 destructive
                 pending={suspend.isPending}
                 error={errorOf(suspend, 'Could not suspend this line.')}
@@ -766,7 +766,7 @@ export default function SupplierCreditAgreementScreen() {
                 note={reinstateNote(data)}
                 reasonLabel="Reason"
                 placeholder="They paid what was overdue"
-                confirmLabel="Reinstate This Line"
+                confirmLabel="Reinstate this line"
                 pending={reinstate.isPending}
                 error={errorOf(reinstate, 'Could not reinstate this line.')}
                 offline={offline}
@@ -780,7 +780,7 @@ export default function SupplierCreditAgreementScreen() {
                 intro="No new order can use it and it cannot be reopened. They can ask you for credit again later."
                 reasonLabel="Reason"
                 placeholder="Relationship ended"
-                confirmLabel="Close This Line"
+                confirmLabel="Close this line"
                 destructive
                 pending={close.isPending}
                 error={closeError(close.error)}
@@ -795,7 +795,7 @@ export default function SupplierCreditAgreementScreen() {
                 intro="They can ask again later. Nothing else about your relationship changes."
                 reasonLabel="Reason"
                 placeholder="Not extending credit to new accounts yet"
-                confirmLabel="Decline This Request"
+                confirmLabel="Decline this request"
                 destructive
                 pending={decline.isPending}
                 error={errorOf(decline, 'Could not decline this request.')}
@@ -828,7 +828,7 @@ export default function SupplierCreditAgreementScreen() {
     return (
       <MandiStickyBar>
         <MandiButton
-          label="Approve As Asked"
+          label="Approve as asked"
           size="lg"
           disabled={offline}
           loading={approve.isPending}
@@ -841,7 +841,7 @@ export default function SupplierCreditAgreementScreen() {
         )}
         <View style={styles.actions}>
           <MandiButton
-            label="Approve On My Terms"
+            label="Approve on my terms"
             variant="secondary"
             size="md"
             onPress={() => openSheet('approveTerms')}

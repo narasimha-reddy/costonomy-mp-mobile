@@ -18,7 +18,7 @@ function entry(over: Partial<WalletTransactionDetail> = {}): WalletTransactionDe
 
 describe('detailHeader', () => {
   it.each([
-    ['COMPLETED', DetailStatusColors.success, 'Transaction Successful'],
+    ['COMPLETED', DetailStatusColors.success, 'Transaction successful'],
     ['IN_PROGRESS', DetailStatusColors.inProgress, 'Transaction in progress'],
     ['FAILED', DetailStatusColors.failed, 'Transaction failed'],
     ['RETURNED', DetailStatusColors.returned, 'Money returned'],
@@ -27,7 +27,7 @@ describe('detailHeader', () => {
   });
 
   it('uses the success header for an absent or unknown status', () => {
-    expect(detailHeader(undefined).title).toBe('Transaction Successful');
+    expect(detailHeader(undefined).title).toBe('Transaction successful');
     expect(detailHeader('SOMETHING_NEW').color).toBe(DetailStatusColors.success);
   });
 });

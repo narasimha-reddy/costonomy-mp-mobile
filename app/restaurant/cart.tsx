@@ -31,10 +31,10 @@ import {
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
-  MandiStickyBar,
   MandiText,
   useToast,
 } from '@/components/common';
+import { StickyActionBar } from '@/components/common/StickyActionBar';
 import type { HeldRequest, Intent } from '@/models/intent';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
@@ -363,6 +363,7 @@ export default function BasketScreen() {
           onChangeQuantity={changeQuantity}
           onRemove={removeLine}
           onChangeDeliveryPreference={(value) => preference.mutate({ intentId: draft.id, value })}
+          onlyRequest={drafts.length === 1}
           onSend={() => send.mutate({ acceptPriceChanges: false, intentId: draft.id })}
           onOrderDirectly={() =>
             orderDirectly.mutate({ intentId: draft.id, acceptPriceChanges: false })}
@@ -418,36 +419,24 @@ export default function BasketScreen() {
       contentStyle={styles.list}
       footer={
         empty || basket == null ? undefined : (
-          <MandiStickyBar>
-            <View style={styles.totalRow}>
-              <View style={styles.flex}>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  {basket.itemCount} item{basket.itemCount === 1 ? '' : 's'} ·{' '}
-                  {basket.supplierCount} supplier{basket.supplierCount === 1 ? '' : 's'}
-                </MandiText>
-                {!basket.pricedComplete && (
-                  <MandiText variant="caption" color={Colors.warning}>
-                    Some items have no price
-                  </MandiText>
-                )}
-              </View>
-              <MandiText variant="priceLarge">{formatMoney(basket.agreedTotal)}</MandiText>
-            </View>
-            {/* One button for the lot, which still creates a separate request
-                per supplier — each is its own conversation and becomes its own
-                order, so the label counts them rather than pretending it is one
-                thing. */}
-            <MandiButton
-              label={
-                basket.supplierCount === 1
-                  ? 'Send Request'
-                  : `Send ${basket.supplierCount} Requests`
-              }
-              size="lg"
-              loading={send.isPending && send.variables?.intentId == null}
-              onPress={() => send.mutate({ acceptPriceChanges: false })}
-            />
-          </MandiStickyBar>
+          /* One button for the lot, which still creates a separate request per supplier: each is its own
+             conversation and becomes its own order, so the label counts them rather than pretending it is one
+             thing. The figure is the server's agreedTotal. */
+          <StickyActionBar
+            variant="continue"
+            left={{
+              eyebrow: '',
+              label: `${basket.itemCount} item${basket.itemCount === 1 ? '' : 's'} · ${formatMoney(basket.agreedTotal)}`
+                + (basket.pricedComplete ? '' : ' · Some items have no price'),
+            }}
+            ctaLabel={
+              basket.supplierCount === 1
+                ? 'Send request'
+                : `Send ${basket.supplierCount} Requests`
+            }
+            loading={send.isPending && send.variables?.intentId == null}
+            onPress={() => send.mutate({ acceptPriceChanges: false })}
+          />
         )
       }
     >
@@ -518,12 +507,12 @@ function PriceChangeSheet({
       {/* The label says what agreeing does, which is not the same on both
           paths: one sends a request, the other starts an order. */}
       <MandiButton
-        label={direct ? 'Accept And Continue' : 'Accept And Send'}
+        label={direct ? 'Accept and continue' : 'Accept and send'}
         size="lg"
         loading={accepting}
         onPress={onAccept}
       />
-      <MandiButton label="Keep In Basket" variant="tertiary" size="md" onPress={onDismiss} />
+      <MandiButton label="Keep in basket" variant="tertiary" size="md" onPress={onDismiss} />
     </MandiBottomSheet>
   );
 }
@@ -565,7 +554,7 @@ function HowItWorksSheet({ visible, onClose }: { visible: boolean; onClose: () =
         <Step
           number={3}
           title="You create the order"
-          body="Once a supplier has accepted, you have a window to order against their answer. This is where you choose how the goods travel — collect them yourself, have the supplier deliver, or have us arrange a courier. A delivery fee is quoted before you commit to it."
+          body="Once a supplier has accepted, you have a window to order against their answer. This is where you choose how the goods travel — collect them yourself, have the supplier deliver, or have us arrange a delivery partner. A delivery fee is quoted before you commit to it."
         />
         <Step
           number={4}
@@ -625,13 +614,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    marginBottom: Spacing.sm,
   },
   sheetScroll: { maxHeight: 280 },
   heldBlock: { gap: Spacing.xs, marginTop: Spacing.md },

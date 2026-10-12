@@ -15,9 +15,10 @@ import {
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
 import { Colors, Radius, Spacing } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 const PAYMENT_METHODS = [
-  { label: 'Bank Transfer / NEFT', value: 'BANK_TRANSFER' },
+  { label: 'Bank transfer / NEFT', value: 'BANK_TRANSFER' },
   { label: 'UPI', value: 'UPI' },
   { label: 'Cheque', value: 'CHEQUE' },
   { label: 'Cash', value: 'CASH' },
@@ -108,7 +109,7 @@ export function RecordPaymentModal({
     >
       <View style={styles.container}>
         <View style={styles.summaryCard}>
-          <MandiText variant="caption" color={Colors.textSecondary}>Outstanding Balance</MandiText>
+          <MandiText variant="caption" color={Colors.textSecondary}>Outstanding balance</MandiText>
           <MandiText variant="display">{formatMoney(invoice.outstanding)}</MandiText>
           <MandiText variant="caption" color={Colors.textTertiary}>
             Invoice total: {formatMoney(invoice.amount)} · Due {invoice.dueDate ?? '—'}
@@ -137,7 +138,7 @@ export function RecordPaymentModal({
         />
 
         <View>
-          <MandiText variant="label">Payment Mode</MandiText>
+          <MandiText variant="label">Payment mode</MandiText>
           <View style={styles.methodsGrid}>
             {PAYMENT_METHODS.map((m) => {
               const active = m.value === method;
@@ -149,7 +150,7 @@ export function RecordPaymentModal({
                     setMethod(m.value);
                   }}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
+                  {...radioProps(active)}
                   accessibilityLabel={m.label}
                   style={[styles.methodChip, active && styles.methodChipActive]}
                 >
@@ -166,7 +167,7 @@ export function RecordPaymentModal({
         </View>
 
         <MandiFormField
-          label="Transaction / Cheque / UTR Ref"
+          label="Transaction / cheque / UTR ref"
           value={reference}
           onChangeText={setReference}
           placeholder="e.g. UTR / NEFT / Cheque No."
@@ -189,7 +190,7 @@ export function RecordPaymentModal({
             style={styles.flex}
           />
           <MandiButton
-            label="Confirm Payment"
+            label="Confirm payment"
             size="md"
             disabled={!isValidAmount}
             loading={mutation.isPending}

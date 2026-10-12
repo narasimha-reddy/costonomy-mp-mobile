@@ -19,6 +19,7 @@ jest.mock('@/lib/preferences', () => ({ getPreference: jest.fn(), setPreference:
 jest.mock('react-native-maps', () => ({ __esModule: true, default: 'MapView', Marker: 'Marker', PROVIDER_GOOGLE: 'google' }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useIsFocused: () => true,
 }));
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'token' }) }));
 jest.mock('@/contexts/RealtimeProvider', () => ({ useRealtime: () => ({ transport: 'poll' }) }));
@@ -41,5 +42,7 @@ it('renders the supplier tracking screen with no OutletProvider above it', async
       </QueryClientProvider>
     </SafeAreaProvider>,
   );
-  expect(await screen.findByText('New order to prepare')).toBeTruthy();
+  // The newly confirmed order draws the placed hero (it used to be the old hero's "New order to prepare").
+  expect(await screen.findByText('Order placed')).toBeTruthy();
+  expect(screen.getByText('Ready for you to start preparing')).toBeTruthy();
 });

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import {
   MandiButton,
   MandiCard,
+  FilterPills,
   MandiEmptyState,
   MandiErrorState,
   MandiHeader,
@@ -17,21 +18,23 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
+import { partnerWording } from '@/lib/delivery/partnerWording';
+import { clockTime, partnerDisplayName } from '@/lib/delivery/deliveryPartner';
 import { resolveStatus, DeliveryStatus as DeliveryStatusRegistry } from '@/models/status';
 import {
   fetchOutletDeliveries,
   fetchOutletDeliveryRadar,
 } from '@/services/delivery';
-import type { KitchenAction, OutletDeliveryRadarItem } from '@/models/delivery';
+import type { KitchenAction, OutletDeliveryRadarItem, RadarSummary } from '@/models/delivery';
 import { Colors, Radius, Spacing } from '@/theme';
 
 type DeliveryFilter = 'radar' | 'late' | 'check_in' | 'all';
 
 const FILTERS: { key: DeliveryFilter; label: string }[] = [
-  { key: 'radar', label: 'Active Radar' },
+  { key: 'radar', label: 'Active' },
   { key: 'late', label: 'Late' },
-  { key: 'check_in', label: 'Needs Check-in' },
-  { key: 'all', label: 'All History' },
+  { key: 'check_in', label: 'Needs check-in' },
+  { key: 'all', label: 'All' },
 ];
 
 export default function DeliveriesScreen() {
@@ -80,9 +83,9 @@ export default function DeliveriesScreen() {
       item.orderNumber,
       item.supplier?.supplierStoreName,
       item.supplier?.supplierOrgName,
-      item.driver?.name,
+      partnerDisplayName(item.driver?.name),
       item.driver?.vehicle,
-      item.actionReason,
+      item.actionReason ? partnerWording(item.actionReason) : null,
     ].filter(Boolean).join(' ').toLowerCase();
     return haystack.includes(search.trim().toLowerCase());
   });
@@ -104,47 +107,14 @@ export default function DeliveriesScreen() {
       <MandiSearchBar
         value={search}
         onChangeText={setSearch}
-        placeholder="Search order, supplier, or driver"
+        placeholder="Search order, supplier, or delivery partner"
       />
 
-      <View style={styles.filterRow}>
-        {FILTERS.map((entry) => {
-          const selected = entry.key === filter;
-          return (
-            <MandiChip
-              key={entry.key}
-              label={entry.label}
-              active={selected}
-              onPress={() => setFilter(entry.key)}
-            />
-          );
-        })}
-      </View>
-
-      {summary && !isHistory && (
-        <View style={styles.summaryBar}>
-          <SummaryBadge
-            count={summary.atDoorCount}
-            label="At Door"
-            tone={summary.atDoorCount > 0 ? 'warning' : 'neutral'}
-          />
-          <SummaryBadge
-            count={summary.approachingCount}
-            label="Approaching"
-            tone={summary.approachingCount > 0 ? 'primary' : 'neutral'}
-          />
-          <SummaryBadge
-            count={summary.delayedCount}
-            label="Delayed"
-            tone={summary.delayedCount > 0 ? 'danger' : 'neutral'}
-          />
-          <SummaryBadge
-            count={summary.pendingCheckInCount}
-            label="Check-in"
-            tone={summary.pendingCheckInCount > 0 ? 'info' : 'neutral'}
-          />
-        </View>
-      )}
+      <FilterPills
+        items={FILTERS.map((entry) => ({ key: entry.key, label: entry.label, count: filterCount(entry.key, summary) }))}
+        selected={filter}
+        onSelect={(key) => setFilter(key as DeliveryFilter)}
+      />
 
       {outletId == null ? (
         <MandiEmptyState
@@ -168,20 +138,17 @@ export default function DeliveriesScreen() {
                   ? 'All delivered orders are checked in'
                   : 'No active deliveries right now'
           }
-          description={
-            search.trim()
-              ? 'Try a different order number, supplier, or driver name.'
-              : filter === 'late'
-                ? 'All incoming deliveries are on schedule.'
-                : filter === 'check_in'
-                  ? 'There are no delivered orders awaiting dock verification.'
-                  : 'New deliveries will appear here as soon as suppliers pack your orders.'
-          }
         />
       ) : (
         visibleItems.map((item) => {
-          const late = item.scheduleStatus === 'RUNNING_LATE' || item.scheduleStatus === 'CRITICALLY_DELAYED' || (item.minutesOverdue != null && item.minutesOverdue > 0);
+          // The server decides lateness and how late; the app only displays it.
+          const late = item.scheduleStatus !== 'ON_SCHEDULE';
           const needsCheckIn = item.recommendedAction === 'CHECK_IN' && !item.isCheckedIn;
+          const delivered = item.status === 'DELIVERED' || item.arrivalStage === 'DELIVERED_UNCHECKED';
+          // Nobody to ring once it is over, one way or the other.
+          const over = delivered || item.status === 'CANCELLED' || item.status === 'DELIVERY_FAILED';
+          // The rank orders arrivals among several; on its own, or once delivered, it says nothing.
+          const showRank = item.arrivalRank > 0 && !isHistory && !delivered && visibleItems.length > 1;
 
           return (
             <MandiCard
@@ -190,24 +157,26 @@ export default function DeliveriesScreen() {
               onPress={() => router.push(`/restaurant/tracking/${item.supplierOrderId}`)}
             >
               <View style={styles.cardTop}>
-                <View style={styles.orderNumberRow}>
-                  <MandiText variant="bodyEmphasis">{item.orderNumber}</MandiText>
-                  {item.arrivalRank > 0 && !isHistory && (
-                    <View style={styles.rankBadge}>
-                      <MandiText variant="captionEmphasis" color={Colors.primary}>
-                        #{item.arrivalRank}
-                      </MandiText>
-                    </View>
-                  )}
-                </View>
+                <MandiText variant="bodyEmphasis" style={styles.flex} numberOfLines={1}>
+                  {item.supplier?.supplierStoreName ?? item.supplier?.supplierOrgName ?? 'Supplier'}
+                </MandiText>
                 <MandiStatusChip {...resolveStatus(DeliveryStatusRegistry, item.status)} size="sm" />
               </View>
 
               <View style={styles.metaRow}>
-                <MandiText variant="body" color={Colors.textPrimary}>
-                  {item.supplier?.supplierStoreName ?? item.supplier?.supplierOrgName ?? 'Supplier'}
-                </MandiText>
-                {item.arrivalStage && (
+                <View style={styles.orderNumberRow}>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    {`Order ${item.orderNumber}`}
+                  </MandiText>
+                  {showRank && (
+                    <View style={styles.rankBadge} accessible accessibilityLabel={`Arrival number ${item.arrivalRank}`}>
+                      <MandiText variant="captionEmphasis" color={Colors.primaryDark}>
+                        Arrival #{item.arrivalRank}
+                      </MandiText>
+                    </View>
+                  )}
+                </View>
+                {item.arrivalStage && !delivered && (
                   <MandiText variant="captionEmphasis" color={stageColor(item.arrivalStage)}>
                     {formatStage(item.arrivalStage)}
                   </MandiText>
@@ -219,11 +188,11 @@ export default function DeliveriesScreen() {
                   <View style={styles.driverMeta}>
                     <Ionicons name="person-outline" size={13} color={Colors.textSecondary} />
                     <MandiText variant="caption" color={Colors.textSecondary}>
-                      {item.driver.name}
+                      {partnerDisplayName(item.driver.name) ?? 'Delivery partner'}
                       {item.driver.vehicle ? ` · ${item.driver.vehicle}` : ''}
                     </MandiText>
                   </View>
-                  {item.driver.phone && (
+                  {item.driver.phone && !over && (
                     <MandiButton
                       label="Call"
                       icon="call-outline"
@@ -236,33 +205,39 @@ export default function DeliveriesScreen() {
                 </View>
               )}
 
-              <View style={styles.detailsRow}>
-                <View style={styles.detailBlock}>
-                  <MandiText variant="caption" color={Colors.textTertiary}>ETA</MandiText>
-                  <MandiText variant="bodyEmphasis" color={late ? Colors.warning : undefined}>
-                    {late
-                      ? `${item.minutesOverdue ?? 0}m overdue`
-                      : item.etaMinutes != null
-                        ? `${item.etaMinutes} min`
-                        : 'Pending'}
+              <View style={styles.hairline} />
+              <View style={styles.bottomRow}>
+                {delivered ? (
+                  <MandiText variant="body" color={Colors.textSecondary} style={styles.flex}>
+                    {item.deliveredAt ? `Delivered at ${formatClock(item.deliveredAt)}` : 'Waiting for your check-in'}
                   </MandiText>
-                </View>
-                <View style={styles.detailBlock}>
-                  <MandiText variant="caption" color={Colors.textTertiary}>Expected</MandiText>
-                  <MandiText variant="bodyEmphasis">
-                    {item.estimatedArrivalAt ? formatClock(item.estimatedArrivalAt) : '—'}
+                ) : late ? (
+                  <MandiText variant="bodyEmphasis" color={Colors.primaryDark} style={styles.flex}>
+                    {item.minutesOverdue != null ? `${item.minutesOverdue} mins past slot` : 'Past slot'}
                   </MandiText>
-                </View>
-                <View style={styles.detailBlock}>
-                  <MandiText variant="caption" color={Colors.textTertiary}>Freshness</MandiText>
-                  <MandiText variant="caption" color={item.locationStale ? Colors.warning : Colors.textSecondary}>
-                    {item.locationStale ? 'Stale GPS' : item.locationAgeSeconds != null ? `${item.locationAgeSeconds}s ago` : 'Live'}
+                ) : item.etaMinutes != null ? (
+                  <MandiText variant="bodyEmphasis" color={Colors.successText} style={styles.flex}>
+                    {`Arriving in ${item.etaMinutes} mins`}
                   </MandiText>
-                </View>
+                ) : (
+                  <MandiText variant="body" color={Colors.textSecondary} style={styles.flex}>
+                    {item.estimatedArrivalAt ? `Expected by ${formatClock(item.estimatedArrivalAt)}` : 'Slot to be confirmed'}
+                  </MandiText>
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Track order ${item.orderNumber}`}
+                  hitSlop={8}
+                  style={styles.trackBtn}
+                  onPress={() => router.push(`/restaurant/tracking/${item.supplierOrderId}`)}
+                >
+                  <MandiText variant="bodyEmphasis" color={Colors.primaryDark}>Track ›</MandiText>
+                </Pressable>
               </View>
 
-              {/* Recommended Kitchen Action */}
-              {item.recommendedAction && item.actionReason && (
+              {/* Recommended Kitchen Action: only for a delivery still moving, or one waiting for its check-in. A finished
+                  one has no "progressing normally" or "running late" to tell. */}
+              {item.recommendedAction && item.actionReason && (!delivered || needsCheckIn) && (
                 <View style={[styles.actionBanner, actionBannerStyle(item.recommendedAction)]}>
                   <View style={styles.actionTextWrap}>
                     <Ionicons
@@ -271,7 +246,7 @@ export default function DeliveriesScreen() {
                       color={actionColor(item.recommendedAction)}
                     />
                     <MandiText variant="captionEmphasis" color={actionColor(item.recommendedAction)}>
-                      {item.actionReason}
+                      {partnerWording(item.actionReason)}
                     </MandiText>
                   </View>
                   {needsCheckIn && (
@@ -292,52 +267,27 @@ export default function DeliveriesScreen() {
   );
 }
 
-function MandiChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <MandiCard compact outlined={!active} accentColor={active ? Colors.primary : undefined} style={styles.filterChip} onPress={onPress}>
-      <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>{label}</MandiText>
-    </MandiCard>
-  );
-}
-
-function SummaryBadge({ count, label, tone }: { count: number; label: string; tone: 'primary' | 'warning' | 'danger' | 'info' | 'neutral' }) {
-  const color =
-    tone === 'danger'
-      ? Colors.danger
-      : tone === 'warning'
-        ? Colors.warning
-        : tone === 'info'
-          ? Colors.info
-          : tone === 'primary'
-            ? Colors.primary
-            : Colors.textTertiary;
-
-  return (
-    <View style={styles.summaryBadge}>
-      <MandiText variant="captionEmphasis" color={color}>
-        {count}
-      </MandiText>
-      <MandiText variant="caption" color={Colors.textSecondary}>
-        {label}
-      </MandiText>
-    </View>
-  );
+// "All" is history and has no summary count.
+function filterCount(key: DeliveryFilter, summary: RadarSummary | undefined): number | null {
+  if (!summary) return null;
+  if (key === 'radar') return summary.totalActive;
+  if (key === 'late') return summary.delayedCount;
+  if (key === 'check_in') return summary.pendingCheckInCount;
+  return null;
 }
 
 function formatClock(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return clockTime(value) ?? '\u2014';
 }
 
 function formatStage(stage: string): string {
   switch (stage) {
-    case 'AT_KITCHEN_DOOR': return 'At Kitchen Door';
+    case 'AT_KITCHEN_DOOR': return 'At kitchen door';
     case 'APPROACHING': return 'Approaching';
-    case 'EN_ROUTE': return 'En Route';
-    case 'AT_SUPPLIER_PICKUP': return 'At Pickup';
-    case 'DRIVER_DISPATCHED': return 'Driver Dispatched';
-    case 'AWAITING_DRIVER': return 'Awaiting Driver';
+    case 'EN_ROUTE': return 'En route';
+    case 'AT_SUPPLIER_PICKUP': return 'At pickup';
+    case 'DRIVER_DISPATCHED': return 'Delivery partner dispatched';
+    case 'AWAITING_DRIVER': return 'Awaiting delivery partner';
     case 'DELIVERED_UNCHECKED': return 'Delivered (Unchecked)';
     default: return stage.replace(/_/g, ' ');
   }
@@ -386,27 +336,6 @@ function actionBannerStyle(action: KitchenAction) {
 }
 
 const styles = StyleSheet.create({
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  filterChip: { minWidth: 72, alignItems: 'center' },
-  summaryBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surfaceSunken,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  summaryBadge: {
-    alignItems: 'center',
-    gap: 1,
-  },
   cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -444,17 +373,24 @@ const styles = StyleSheet.create({
     gap: 4,
     flex: 1,
   },
-  detailsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
+  flex: { flex: 1 },
+  hairline: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.border,
     marginTop: Spacing.sm,
-    marginBottom: Spacing.sm,
   },
-  detailBlock: {
-    flex: 1,
-    gap: 2,
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    minHeight: 48,
+  },
+  trackBtn: {
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
   actionBanner: {
     flexDirection: 'row',

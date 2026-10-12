@@ -19,6 +19,7 @@ import { financialYears, validateStatement } from '@/lib/wallet/statement';
 import { saveBlobOnWeb } from '@/lib/wallet/saveFile';
 import type { StatementFormat, StatementRange, StatementRequest } from '@/models/wallet';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 type Mode = 'range' | 'financialYear';
 
@@ -92,10 +93,10 @@ export default function WalletStatementScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <MandiHeader title="My Statement" subtitle={outlet?.name} back />
+      <MandiHeader title="My statement" subtitle={outlet?.name} back />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <MandiText variant="sectionTitle">Statement Period</MandiText>
+        <MandiText variant="sectionTitle">Statement period</MandiText>
         <View style={styles.segments} accessibilityRole="tablist">
           {([['range', 'Range'], ['financialYear', 'Financial year']] as const).map(([key, label]) => (
             <Pressable
@@ -160,7 +161,7 @@ export default function WalletStatementScreen() {
           ))
         )}
 
-        <MandiText variant="sectionTitle" style={styles.gap}>File Type</MandiText>
+        <MandiText variant="sectionTitle" style={styles.gap}>File type</MandiText>
         {FORMATS.map((option) => (
           <Radio
             key={option.key}
@@ -182,7 +183,7 @@ export default function WalletStatementScreen() {
       <MandiStickyBar>
         <MandiButton
           testID="download-statement"
-          label="Download Statement"
+          label="Download statement"
           loading={download.isPending}
           disabled={touched && problem != null}
           onPress={submit}
@@ -206,7 +207,7 @@ function Radio({
       testID={testID}
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      {...radioProps(selected)}
       style={styles.radio}
     >
       <Ionicons

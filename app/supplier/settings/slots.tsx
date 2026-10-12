@@ -198,7 +198,7 @@ export default function SupplierSlotsScreen() {
 
   function handleDelete(slot: DeliverySlot) {
     Alert.alert(
-      'Delete Delivery Slot',
+      'Delete delivery slot',
       `Are you sure you want to delete "${slot.slotName}"? Restaurants won't be able to select it anymore.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -213,7 +213,7 @@ export default function SupplierSlotsScreen() {
 
   if (storeId == null) {
     return (
-      <MandiScreen header={<MandiHeader title="Delivery Slots" back />}>
+      <MandiScreen header={<MandiHeader title="Delivery slots" back />}>
         <MandiEmptyState
           title="No store selected"
           description="Please select a store to manage delivery slots."
@@ -226,7 +226,7 @@ export default function SupplierSlotsScreen() {
     <MandiScreen
       header={
         <MandiHeader
-          title="Delivery Slots"
+          title="Delivery slots"
           subtitle="Time windows & cutoffs"
           back
           right={
@@ -317,9 +317,9 @@ export default function SupplierSlotsScreen() {
         </View>
       ) : (
         <MandiEmptyState
-          title="No Delivery Slots"
+          title="No delivery slots"
           description="Create your first slot to let buyers choose convenient delivery times."
-          actionLabel="Create Delivery Slot"
+          actionLabel="Create delivery slot"
           onAction={openCreateModal}
         />
       )}
@@ -328,14 +328,14 @@ export default function SupplierSlotsScreen() {
       <MandiBottomSheet
         visible={isModalOpen}
         onClose={closeModal}
-        title={editingSlot ? 'Edit Delivery Slot' : 'New Delivery Slot'}
+        title={editingSlot ? 'Edit delivery slot' : 'New delivery slot'}
         closeLabel="Cancel"
         // The form has text boxes: lift the sheet above the keyboard instead of leaving them under it.
         avoidKeyboard
       >
         <View style={styles.form}>
           <MandiFormField
-            label="Slot Name"
+            label="Slot name"
             placeholder="e.g. Morning Slot, Afternoon Window"
             value={slotName}
             onChangeText={setSlotName}
@@ -372,7 +372,7 @@ export default function SupplierSlotsScreen() {
               required
             />
             <MandiFormField
-              label="Daily Capacity"
+              label="Daily capacity"
               placeholder="20"
               value={maxOrders}
               onChangeText={(text) => setMaxOrders(text.replace(/[^\d]/g, ''))}
@@ -385,7 +385,7 @@ export default function SupplierSlotsScreen() {
 
           <View style={styles.buttonRow}>
             <MandiButton
-              label={editingSlot ? 'Save Changes' : 'Create Slot'}
+              label={editingSlot ? 'Save changes' : 'Create slot'}
               onPress={handleSave}
               loading={createMutation.isPending || updateMutation.isPending}
               size="lg"

@@ -1,0 +1,516 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { loadWebMaps } from '@/lib/maps/googleWebLoader';
+import { markTilesFailed, markTilesLoaded, tilesFailed, TILE_TIMEOUT_MS } from '@/lib/maps/tileWatchdog';
+import { hostHasTiles, hostShown, watchHost } from '@/lib/maps/hostVisibility';
+import { toLatLng, turnLerp, type LatLng } from '@/lib/delivery/mapGeometry';
+import {
+  cameraFor, chipAnchor, chipIcon, chipSide, cssColor, distanceM, edgeOf, fitTargetFor, glideMs, insidePadded, legsFor, lerpPoint,
+  MAX_ZOOM, MIN_ZOOM, QUIET_MAP_STYLE, shouldRefit, shouldRefitMoving, truckLook, truckShownAt, withDrawnTruck,
+  type PinSides, type PinSpot,
+} from '@/lib/maps/googleLegs';
+import { headingBucket, truckIconUrl } from '@/lib/maps/truckSvg';
+import { useTruckHeading } from '@/hooks/useTruckHeading';
+import { MandiMapSketch, type MandiMapProps } from './MandiMapSketch';
+import { Colors, Radius, TrackLayout } from '@/theme';
+import { onMapsAuthFailure } from '@/lib/maps/authFailure';
+
+const GLIDE_STEP_MS = 40;
+/** A zoom change moves where the truck is drawn near a pin (the clearance is in pixels): it slides there this fast. */
+const RELAYOUT_GLIDE_MS = 300;
+/** A map that could not be constructed (the host not ready) is retried this often, this many times, before giving up. */
+const CREATE_RETRY_MS = 500;
+const CREATE_TRIES = 3;
+/** After the user moves the map themselves, the camera is theirs for this long (a mode change still refits). */
+const USER_MOVED_HOLD_MS = 30_000;
+/** Stacking: halos, the truck, then the pins (the truck never hides one), then the label chips (a chip moves aside rather than hide under the truck). */
+const HALO_Z = 5;
+const TRUCK_Z = 20;
+const PIN_Z = 25;
+const CHIP_Z = 30;
+
+type G = any; // the google.maps namespace is loaded at runtime; there is no typings package for it here
+
+/**
+ * Google's documented global hook for "this key was refused". It is installed once for the page and fans out to
+ * every mounted map, which then falls back to the schematic. A refused key draws a grey map with no error, so
+ * without this the restaurant would stare at a useless panel.
+ */
+const authListeners = new Set<() => void>();
+function installAuthHook(): void {
+  // The page has one hook shared with the address picker (lib/maps/authFailure); subscribing again is harmless.
+  onMapsAuthFailure(authHook);
+}
+function authHook(): void {
+  markTilesFailed('auth');
+  authListeners.forEach((l) => l());
+}
+
+const pt = (p: LatLng) => ({ lat: p.latitude, lng: p.longitude });
+
+/**
+ * The delivery map on the web: the real Google map (Maps JavaScript API) drawing the same facts as the native
+ * one, the supplier pin, the restaurant pin, the truck and the route legs (see `legsFor`). Any failure (no
+ * script, a refused key, no tiles in 6 s) swaps it for the schematic, which is always honest about the same data.
+ *
+ * <p>The 6 s tile clock runs only while the map's box is on screen with a size (a screen further down the navigation
+ * stack stays mounted but hidden and never draws tiles), restarts when it is shown again, and stops at `tilesloaded`,
+ * `idle` or tiles found painted in the box. A timeout falls back for this map only; only a refused key
+ * (`gm_authFailure`) sends every map of the session to the schematic.
+ *
+ * <p>The truck is a marker with the top-view truck (lib/maps/truckSvg.ts), turned to its heading (see `useTruckHeading`)
+ * and greyed when the fix is stale. A stale fix is drawn differently, never as current.
+ */
+export function GoogleTrackMap(props: MandiMapProps) {
+  const { driver, destination, stale, height = 220, bare = false, pickup = null, mode, accessibilityLabel, audience = 'buyer' } = props;
+  const [failed, setFailed] = useState(tilesFailed());
+  const heading = useTruckHeading(driver);
+  const [ready, setReady] = useState(false);
+  const host = useRef<unknown>(null);
+  // The host element exists only once the first render had something to draw; the map is created when it does.
+  const [hostEl, setHostEl] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
+  const hostRef = (el: unknown) => {
+    host.current = el;
+    setHostEl((cur: unknown) => (cur === el ? cur : el));
+  };
+  const map = useRef<G>(null);
+  /** The truck marker: `at` is where it is drawn this moment (mid-glide), `target` where it glides to, by `endsAt`. */
+  const truck = useRef<{ marker: G; look: string; at: LatLng; target: LatLng; endsAt: number; heading: number } | null>(null);
+  /** The solid leg from the truck: its first point follows the marker, so the line always reaches the truck. */
+  const truckLine = useRef<{ line: G; rest: LatLng[] } | null>(null);
+  const pinSides = useRef<PinSides>({});
+  const overlays = useRef<G[]>([]);
+  const lastFixAt = useRef<string | null>(null);
+  const glide = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fittedMode = useRef<string | null>(null);
+  const lastFit = useRef<{ at: number; dist: number; truck: LatLng | null }>({ at: 0, dist: 0, truck: null });
+  const userMovedAt = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tries = useRef(0);
+  const chips = useRef<{ marker: G; pin: LatLng; url: string; width: number; height: number; side: 'above' | 'below' }[]>([]);
+  /**
+   * After the camera settles (idle): draws the truck clear of the pins for the zoom it settled at (the clearance is in
+   * pixels, see `truckShownAt`) and puts each label chip on the side away from it (see `chipSide`).
+   */
+  const placeChips = useRef<() => void>(() => undefined);
+  /** Frames the current points again: the map's box changes size after a mode change (taller when the order is close). */
+  const refitNow = useRef<() => void>(() => undefined);
+
+  const clearTimer = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+
+  // Load the script and create the map once the host element exists (and again if building it threw).
+  useEffect(() => {
+    if (failed || hostEl == null) return undefined;
+    let alive = true;
+    let loaded = false;
+    const handles: G[] = [];
+    setReady(false);
+    const fail = () => {
+      if (!alive) return;
+      clearTimer();
+      setFailed(true);
+    };
+    const succeed = (painted: boolean) => {
+      if (!alive) return;
+      loaded = true;
+      clearTimer();
+      if (painted) markTilesLoaded();
+    };
+    // The tile clock: only while the box is on screen with a size; hidden stops it, shown again restarts it in full.
+    const arm = () => {
+      if (!alive || loaded || timer.current) return;
+      if (!hostShown(host.current)) return;
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        if (!alive || loaded) return;
+        if (hostHasTiles(host.current)) {
+          succeed(true);
+          return;
+        }
+        if (!hostShown(host.current)) return; // hidden meanwhile: the watcher re-arms it when shown
+        console.warn('[maps] this map drew no tiles in 6 s; showing the schematic for it');
+        fail();
+      }, TILE_TIMEOUT_MS);
+    };
+    const unwatch = watchHost(host.current, () => {
+      if (hostShown(host.current)) arm();
+      else clearTimer();
+    });
+    authListeners.add(fail);
+    installAuthHook();
+    arm();
+    loadWebMaps()
+      .then(() => {
+        if (!alive) return;
+        const g: G = (window as any).google.maps;
+        try {
+          map.current = new g.Map(host.current, {
+            center: { lat: 12.9716, lng: 77.5946 },
+            zoom: 14,
+            minZoom: MIN_ZOOM,
+            maxZoom: MAX_ZOOM,
+            disableDefaultUI: true,
+            // Cooperative: the page still scrolls on a touch drag; ctrl/two fingers move the map.
+            gestureHandling: 'cooperative',
+            clickableIcons: false,
+            styles: QUIET_MAP_STYLE,
+          });
+        } catch (e) {
+          // Not a verdict on Google: try again shortly; only a script error, a refused key or no tiles falls back.
+          map.current = null;
+          if (tries.current >= CREATE_TRIES) throw e;
+          tries.current += 1;
+          retry.current = setTimeout(() => alive && setAttempt((a) => a + 1), CREATE_RETRY_MS);
+          return;
+        }
+        tries.current = 0;
+        const m = map.current;
+        handles.push(
+          g.event.addListener(m, 'tilesloaded', () => succeed(true)),
+          // idle: the map settled after drawing; also when the chips need placing for a new zoom.
+          g.event.addListener(m, 'idle', () => {
+            succeed(false);
+            placeChips.current();
+          }),
+          g.event.addListener(m, 'dragstart', () => {
+            userMovedAt.current = Date.now();
+          }),
+        );
+        setReady(true);
+      })
+      .catch(fail);
+    return () => {
+      alive = false;
+      authListeners.delete(fail);
+      unwatch();
+      clearTimer();
+      handles.forEach((h) => h?.remove?.());
+      if (retry.current) clearTimeout(retry.current);
+      if (glide.current) clearTimeout(glide.current);
+      overlays.current.forEach((o) => o.setMap(null));
+      truck.current?.marker.setMap(null);
+      overlays.current = [];
+      chips.current = [];
+      truck.current = null;
+      truckLine.current = null;
+      map.current = null;
+    };
+  }, [failed, hostEl, attempt]);
+
+  // The container can paint before it has its final width (tiles over two thirds only): tell the map when it changes.
+  useEffect(() => {
+    if (!ready || !map.current) return undefined;
+    const g: G = (window as any).google.maps;
+    let lastSize = '';
+    const resize = (refit: boolean) => {
+      if (!map.current) return;
+      g.event.trigger(map.current, 'resize');
+      // The camera was fitted for the old box size: a truck framed near the bottom of a 200 px box falls outside a
+      // 280 px one until the map knows its new size, and the marker is not drawn there. Frame it again, but only
+      // when the box really changed size.
+      const el = host.current as { clientWidth?: number; clientHeight?: number } | null;
+      const size = `${el?.clientWidth ?? ''}x${el?.clientHeight ?? ''}`;
+      if (refit && size !== lastSize) refitNow.current();
+      lastSize = size;
+    };
+    const first = setTimeout(() => resize(false), 0);
+    const node = host.current as Element | null;
+    const Observer = (globalThis as any).ResizeObserver;
+    let ro: { observe: (n: Element) => void; disconnect: () => void } | null = null;
+    try {
+      if (Observer && node) {
+        ro = new Observer(() => resize(true));
+        ro?.observe(node);
+      }
+    } catch {
+      ro = null; // not a DOM node (tests, native): the mount-time resize still ran
+    }
+    return () => {
+      clearTimeout(first);
+      ro?.disconnect();
+    };
+  }, [ready]);
+
+  const driverKey = driver ? `${driver.latitude},${driver.longitude},${driver.bearing ?? ''}` : '';
+  const pickupKey = pickup ? `${pickup.latitude},${pickup.longitude}` : '';
+  const destKey = destination ? `${destination.latitude},${destination.longitude}` : '';
+
+  // Draw the scene whenever a fix, a point, the mode or staleness changes.
+  useEffect(() => {
+    if (!ready || !map.current) return;
+    const g: G = (window as any).google.maps;
+    overlays.current.forEach((o) => o.setMap(null));
+    overlays.current = [];
+
+    const at = driver ? toLatLng(driver) : null;
+    const scene = legsFor({ mode, truck: at, pickup, drop: destination });
+    truckLine.current = null;
+    const own = (o: G) => {
+      overlays.current.push(o);
+      return o;
+    };
+
+    scene.lines.forEach((leg) => {
+      const solid = leg.kind === 'solid';
+      const line = own(
+        new g.Polyline({
+          map: map.current,
+          path: leg.path.map(pt),
+          strokeColor: solid ? Colors.deliveryRoute : Colors.routePending,
+          strokeWeight: solid ? 4 : 2,
+          // Google has no dash option on a polyline: hide the line and repeat a short tick along it.
+          ...(solid
+            ? {}
+            : {
+                strokeOpacity: 0,
+                icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 2 }, offset: '0', repeat: '11px' }],
+              }),
+        }),
+      );
+      if (solid && at != null && leg.path[0] === at) truckLine.current = { line, rest: leg.path.slice(1) };
+    });
+    const ring = cssColor(Colors.geofenceFill);
+    const edge = cssColor(Colors.geofenceStroke);
+    scene.circles.forEach((c) =>
+      own(
+        new g.Circle({
+          map: map.current,
+          center: pt(c.center),
+          radius: c.radiusM,
+          fillColor: ring.color,
+          fillOpacity: c.filled ? ring.opacity : 0,
+          strokeColor: edge.color,
+          strokeOpacity: edge.opacity,
+          strokeWeight: 1,
+        }),
+      ),
+    );
+    chips.current = [];
+    const spots: PinSpot[] = [];
+    const pin = (p: LatLng, text: string, fill: string) => {
+      // A soft halo in the pin's colour, under the truck, so a pin the truck passes stays findable.
+      own(
+        new g.Marker({
+          map: map.current,
+          position: pt(p),
+          clickable: false,
+          zIndex: HALO_Z,
+          icon: { path: g.SymbolPath.CIRCLE, scale: 15, fillColor: fill, fillOpacity: 0.25, strokeWeight: 0 },
+        }),
+      );
+      own(
+        new g.Marker({
+          map: map.current,
+          position: pt(p),
+          title: text,
+          zIndex: PIN_Z,
+          icon: {
+            path: g.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: fill,
+            fillOpacity: 1,
+            strokeColor: Colors.surface,
+            strokeWeight: 2,
+          },
+        }),
+      );
+      // The label is a white chip of its own above the pin, so road names and the truck cannot swallow it.
+      const chip = chipIcon(text);
+      const anchor = chipAnchor('above', chip.width, chip.height);
+      const marker = own(
+        new g.Marker({
+          map: map.current,
+          position: pt(p),
+          clickable: false,
+          zIndex: CHIP_Z,
+          icon: { url: chip.url, scaledSize: new g.Size(chip.width, chip.height), anchor: new g.Point(anchor.x, anchor.y) },
+        }),
+      );
+      chips.current.push({ marker, pin: p, url: chip.url, width: chip.width, height: chip.height, side: 'above' });
+      spots.push({ at: p, chipWidth: chip.width });
+    };
+    if (pickup && (mode != null || !driver)) pin(pickup, 'Supplier', Colors.textPrimary);
+    if (destination) pin(destination, audience === 'supplier' ? 'Restaurant' : 'You', Colors.success);
+
+    // The icon is drawn clear of the pins at the map's zoom; the decisions use where the truck really is. The line from
+    // the truck starts where the icon is drawn (see moveTruck), so it reaches the truck even while it glides.
+    const zoomNow = () => map.current?.getZoom?.() as number | undefined;
+    const shownFor = (zoom: number | undefined) =>
+      scene.showTruck && at ? truckShownAt(at, spots, zoom, heading, pinSides.current, truck.current?.at ?? null) : null;
+    let shownZoom = zoomNow();
+    const drawnBefore = truck.current?.at ?? null;
+    const shown = shownFor(shownZoom);
+    moveTruck(g, shown);
+    placeChips.current = () => {
+      if (!map.current) return;
+      const zoom = zoomNow();
+      if (zoom !== shownZoom) {
+        shownZoom = zoom;
+        const next = shownFor(zoom);
+        if (next && truck.current && distanceM(next, truck.current.target) > 0.5) moveTruck(g, next, RELAYOUT_GLIDE_MS);
+      }
+      const drawnAt = truck.current?.target ?? null;
+      chips.current.forEach((c) => {
+        const side = chipSide(c.pin, c.width, drawnAt, zoom);
+        if (side === c.side) return;
+        c.side = side;
+        const a = chipAnchor(side, c.width, c.height);
+        c.marker.setIcon({ url: c.url, scaledSize: new g.Size(c.width, c.height), anchor: new g.Point(a.x, a.y) });
+      });
+    };
+    placeChips.current();
+
+    // Frame the truck and the NEXT stop (see `fitTargetFor`) on the first draw and whenever the mode or the set of framed
+    // stops changes (the order collected, the restaurant coming close). While live a new fix alone must not yank the
+    // camera: refit when the truck left the padded view, got twice as close to the next stop, moved over 10% of the view,
+    // or 20 s passed (never more than once per 8 s, never within 30 s of the user's drag).
+    const target = fitTargetFor(mode, at, pickup, destination);
+    const has = (p: LatLng | null) => p != null && target.includes(p);
+    const modeKey = `${String(mode ?? 'none')}|${has(at) ? 't' : ''}${has(pickup) ? 'p' : ''}${has(destination) ? 'd' : ''}`;
+    // With the truck framed, also frame where it is drawn now and where it glides to: the whole glide stays in view.
+    const pts = withDrawnTruck(target, at, [drawnBefore, shown]);
+    const next = mode === 'live' && pickup ? pickup : destination;
+    const distNow = at && next ? distanceM(at, next) : 0;
+    const fit = () => {
+      const cam = cameraFor(pts);
+      if (!cam) return;
+      if (cam.kind === 'center') {
+        map.current.setCenter(pt(cam.center));
+        map.current.setZoom(cam.zoom);
+      } else {
+        map.current.fitBounds(cam.bounds, cam.padding);
+      }
+      lastFit.current = { at: Date.now(), dist: distNow, truck: at };
+      userMovedAt.current = 0; // an explicit refit gives the camera back to the app
+    };
+    refitNow.current = () => {
+      const userHolds = userMovedAt.current > 0 && Date.now() - userMovedAt.current < USER_MOVED_HOLD_MS;
+      if (fittedMode.current === modeKey && !userHolds && map.current) fit();
+    };
+    if (fittedMode.current !== modeKey) {
+      if (pts.length > 0) {
+        fit();
+        fittedMode.current = modeKey;
+      }
+    } else if (at && scene.showTruck && has(at)) {
+      const raw = map.current.getBounds?.()?.toJSON?.();
+      // Every framed point (the truck and the stop it heads for), not only the truck, must stay inside the view.
+      const outside = raw != null && pts.some((p) => !insidePadded(raw, p));
+      const atEdge = raw != null && edgeOf(raw, pts);
+      const now = Date.now();
+      const userHolds = userMovedAt.current > 0 && now - userMovedAt.current < USER_MOVED_HOLD_MS;
+      const from = lastFit.current.truck;
+      const movedM = from ? distanceM(from, at) : 0;
+      const viewSpanM = raw ? distanceM({ latitude: raw.north, longitude: raw.west }, { latitude: raw.south, longitude: raw.east }) : 0;
+      if (
+        !userHolds &&
+        (shouldRefit({ now, lastFitAt: lastFit.current.at, outside, distNow, distAtFit: lastFit.current.dist, edge: atEdge }) ||
+          shouldRefitMoving({ now, lastFitAt: lastFit.current.at, movedM, viewSpanM }))
+      ) fit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, driverKey, pickupKey, destKey, mode, stale, audience]);
+
+  /**
+   * Draws the truck at `at`: a new marker, or a glide from where it is drawn now. A new fix glides over the gap between
+   * the fixes (see `glideMs`); a zoom change (`relayoutMs`) is not a new fix: it slides over what is left of the glide,
+   * or `relayoutMs` when that is longer.
+   */
+  function moveTruck(g: G, at: LatLng | null, relayoutMs?: number) {
+    if (!at) {
+      truck.current?.marker.setMap(null);
+      truck.current = null;
+      return;
+    }
+    const look = truckLook({ stale });
+    // Google's marker icon cannot rotate: the turn is baked into the image, one cached image per 5 degree bucket.
+    const lookKey = (h: number) => `${look.muted}|${headingBucket(h)}`;
+    const icon = (h: number) => ({
+      url: truckIconUrl({ muted: look.muted, heading: h }),
+      scaledSize: new g.Size(TrackLayout.truckSize, TrackLayout.truckSize),
+      anchor: new g.Point(TrackLayout.truckSize / 2, TrackLayout.truckSize / 2),
+    });
+    // The solid leg from the truck starts where the marker is drawn, not at the fix it is still gliding to.
+    const followLine = (here: LatLng) => {
+      const l = truckLine.current;
+      if (l) l.line.setPath([here, ...l.rest].map(pt));
+    };
+    const cur = truck.current;
+    if (!cur) {
+      const marker = new g.Marker({
+        map: map.current,
+        position: pt(at),
+        icon: icon(heading),
+        opacity: look.opacity,
+        title: stale ? 'Last known position' : 'Delivery partner',
+        zIndex: TRUCK_Z,
+      });
+      truck.current = { marker, look: lookKey(heading), at, target: at, endsAt: 0, heading };
+      lastFixAt.current = driver?.recordedAt ?? null;
+      followLine(at);
+      return;
+    }
+    cur.marker.setOpacity(look.opacity);
+    cur.target = at;
+    // Glide from where the marker is now to the new fix, taking as long as the fixes are apart (1 to 5 s), turning to
+    // the new heading the short way round over the same time (a new image only when the 5 degree bucket changes).
+    // A zoom change mid-glide keeps the time left of the glide, so the truck does not jump ahead of its pace.
+    let glideFor = Math.max(relayoutMs ?? 0, cur.endsAt - Date.now());
+    if (relayoutMs == null) {
+      glideFor = glideMs(lastFixAt.current, driver?.recordedAt);
+      lastFixAt.current = driver?.recordedAt ?? null;
+    }
+    glideFor = Math.max(1, glideFor);
+    cur.endsAt = Date.now() + glideFor;
+    if (glide.current) clearTimeout(glide.current);
+    const from = cur.at;
+    const fromHeading = cur.heading;
+    const started = Date.now();
+    const step = () => {
+      const t = Math.min(1, (Date.now() - started) / glideFor);
+      const here = lerpPoint(from, at, t);
+      cur.at = here;
+      cur.marker.setPosition(pt(here));
+      followLine(here);
+      cur.heading = t < 1 ? turnLerp(fromHeading, heading, t) : heading;
+      const key = lookKey(cur.heading);
+      if (cur.look !== key) {
+        cur.marker.setIcon(icon(cur.heading));
+        cur.look = key;
+      }
+      glide.current = t < 1 ? setTimeout(step, GLIDE_STEP_MS) : null;
+    };
+    step();
+  }
+
+  if (!driver && !destination) return null;
+  if (failed) return <MandiMapSketch {...props} />;
+
+  return (
+    <View
+      style={[styles.container, bare && styles.bare, { height }]}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={
+        accessibilityLabel ??
+        (driver ? (stale ? 'Last known partner position' : 'Partner position') : 'Waiting for the partner')
+      }
+    >
+      <View ref={hostRef as never} style={StyleSheet.absoluteFill} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    backgroundColor: Colors.surfaceSunken,
+  },
+  bare: { borderRadius: 0 },
+});

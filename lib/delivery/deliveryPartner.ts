@@ -78,3 +78,20 @@ export function searchProgress(
     finished: now.getTime() >= end,
   };
 }
+
+/** Words a provider or seed sometimes sends where a person's name belongs. */
+const PLACEHOLDER_NAMES = new Set([
+  'rider name', 'driver name', 'partner name', 'courier name', 'delivery partner name',
+  'name', 'n/a', 'na', 'null', 'undefined', 'unknown', '-',
+]);
+
+/**
+ * The partner's name for display, or null when there is none worth showing. A placeholder such as "Rider name" is
+ * treated as absent so a card never prints a label where a person's name belongs; callers fall back to "Delivery
+ * partner" or show nothing.
+ */
+export function partnerDisplayName(name: string | null | undefined): string | null {
+  const trimmed = (name ?? '').trim();
+  if (trimmed === '' || PLACEHOLDER_NAMES.has(trimmed.toLowerCase())) return null;
+  return trimmed;
+}

@@ -40,7 +40,7 @@ export function DetailActions({
             <Ionicons name="wallet-outline" size={17} color={WalletColors.orange} />
           </Action>
         )}
-        <Action label="View History" onPress={onHistory}>
+        <Action label="View history" onPress={onHistory}>
           <Ionicons name="time-outline" size={17.5} color={WalletColors.orange} />
         </Action>
         {bill === 'add' && (
@@ -53,7 +53,7 @@ export function DetailActions({
             <Ionicons name="document-text-outline" size={18} color={WalletColors.orange} />
           </Action>
         )}
-        <Action label="Share Receipt" onPress={onShare} disabled={sharing}>
+        <Action label="Share receipt" onPress={onShare} disabled={sharing}>
           <Ionicons name="share-social-outline" size={17.5} color={WalletColors.orange} />
         </Action>
       </View>

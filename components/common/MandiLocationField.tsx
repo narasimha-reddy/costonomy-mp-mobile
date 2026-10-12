@@ -36,6 +36,7 @@ export function MandiLocationField({
   onCapture,
   subject,
   onCoordinatesChange,
+  address,
 }: {
   state: 'idle' | 'asking' | 'ready' | 'denied' | 'unavailable';
   coordinates: Coordinates | null;
@@ -47,6 +48,8 @@ export function MandiLocationField({
    * version: capture once, no manual entry.
    */
   onCoordinatesChange?: (next: Coordinates | null) => void;
+  /** The place's address, kept in view if the map cannot be drawn. */
+  address?: string | null;
 }) {
   const editable = onCoordinatesChange != null;
   const [manual, setManual] = useState(false);
@@ -62,6 +65,7 @@ export function MandiLocationField({
             longitude: place.longitude,
           })}
           searchPlaceholder={`Search for this ${subject}`}
+          address={address}
         />
       ) : null}
 

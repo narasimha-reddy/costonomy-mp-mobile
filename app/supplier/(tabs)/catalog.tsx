@@ -167,7 +167,7 @@ export default function SupplierCatalogScreen() {
           <Ionicons name="flash" size={18} color="#D97706" />
         </View>
         <View style={styles.flex}>
-          <MandiText variant="bodyEmphasis">Morning Mandi Rate Sheet</MandiText>
+          <MandiText variant="bodyEmphasis">Morning Mandi rate sheet</MandiText>
           <MandiText variant="caption" color={Colors.textSecondary}>
             Reprice all catalog items in 60s
           </MandiText>
@@ -387,7 +387,7 @@ function SkuCard({
             fullWidth={false}
           />
           <MandiButton
-            label="Change Price"
+            label="Change price"
             variant="neutral"
             size="sm"
             icon="pricetag-outline"

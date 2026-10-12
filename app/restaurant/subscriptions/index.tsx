@@ -164,7 +164,7 @@ export default function SubscriptionsScreen() {
                 />
                 {item.nextDeliveryDate && (
                   <MandiButton
-                    label="Skip Next"
+                    label="Skip next"
                     size="sm"
                     variant="secondary"
                     loading={skipMutation.isPending}
@@ -187,15 +187,15 @@ export default function SubscriptionsScreen() {
 
   return (
     <MandiScreen
-      header={<MandiHeader title="Daily Subscriptions" back />}
+      header={<MandiHeader title="Daily subscriptions" back />}
       onRefresh={refetch}
       refreshing={isLoading}
     >
       <MandiConfirm
         visible={confirmCancelId != null}
-        title="Cancel Subscription?"
+        title="Cancel subscription?"
         message="Future daily deliveries will stop immediately."
-        confirmLabel="Cancel Subscription"
+        confirmLabel="Cancel subscription"
         cancelLabel="Keep"
         destructive
         onConfirm={() => {
@@ -210,9 +210,9 @@ export default function SubscriptionsScreen() {
         <MandiErrorState message="Could not load subscriptions" onRetry={refetch} />
       ) : list.length === 0 ? (
         <MandiEmptyState
-          title="No Active Subscriptions"
+          title="No active subscriptions"
           description="Subscribe to daily items like milk, vegetables, and bread for scheduled morning replenishment."
-          actionLabel="Explore Suppliers"
+          actionLabel="Explore suppliers"
           onAction={() => router.push('/restaurant/suppliers')}
         />
       ) : (

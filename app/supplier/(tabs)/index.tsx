@@ -8,6 +8,7 @@ import { RequestCarousel } from '@/components/supplier/RequestCarousel';
 import { fetchActiveOrders } from '@/services/supplier';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import {
+  MandiButton,
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
@@ -19,8 +20,12 @@ import {
 import { resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { formatDistance, orderValue } from '@/utils/orders';
 import { OrderCardBody } from '@/components/order';
-import type { IncomingOrder } from '@/models/procurement';
+import { orderInbox } from '@/lib/supplier/orderInbox';
+import { partyTitle } from '@/lib/supplier/partyTitle';
 import { Spacing } from '@/theme';
+
+/** Cards shown per section; the rest are behind "See all orders". */
+const SECTION_LIMIT = 5;
 
 /**
  * SUP-HOME-01. Doc 05 §24.
@@ -32,16 +37,11 @@ import { Spacing } from '@/theme';
  * work but no decision. A request is the opposite: a kitchen is blocked on an
  * answer only this store can give, and until it comes nothing else happens.
  *
- * <p><b>One orders section, not two.</b> It was split into "New orders" and "In
- * progress", which made sense while an order arrived needing acceptance inside
- * a sixty-second window. D-091 removed that: an order arrives confirmed and
- * paid for, so the split no longer separated two kinds of thing — and because
- * both lists were served from statuses that overlapped at {@code CONFIRMED},
- * the same order appeared twice.
- *
- * <p>What the split was worth is kept without it: orders nobody has started are
- * ordered first and outlined, so the one thing needing a supplier's hand still
- * reads as such.
+ * <p><b>Orders are an action inbox.</b> One section per stage that needs the
+ * store — new orders to start, packing, ready to send out, waiting for the rider or the pickup, out for delivery, plus an "Other" catch-all —
+ * newest first inside each, empty ones hidden. The home used to list the five
+ * oldest orders, so a new order was not on the screen at all. Each order is in
+ * exactly one section (the stage is its status), so none can appear twice.
  *
  * <p>Nothing here polls. Every state on this screen changes on this store's own
  * action or on a courier's event, and the request carousel refreshes itself.
@@ -57,18 +57,8 @@ export default function SupplierHome() {
     enabled: storeId != null && accessToken != null,
   });
 
-  /**
-   * Unstarted first, then by age.
-   *
-   * <p>The priority the two sections used to carry. An order nobody has begun
-   * is the one with a decision attached to it; one already being prepared is a
-   * job in hand.
-   */
-  const sorted = React.useMemo(() => {
-    const unstarted = (order: IncomingOrder) => (order.status === 'CONFIRMED' ? 0 : 1);
-    return [...(orders.data ?? [])].sort((a, b) =>
-      unstarted(a) - unstarted(b) || a.createdAt.localeCompare(b.createdAt));
-  }, [orders.data]);
+  const sections = React.useMemo(() => orderInbox(orders.data ?? []), [orders.data]);
+  const total = orders.data?.length ?? 0;
 
   return (
     <MandiScreen
@@ -78,59 +68,58 @@ export default function SupplierHome() {
     >
       <RequestCarousel />
 
-      <View style={styles.section}>
-        <MandiSectionHeader
-          title="Orders"
-          count={sorted.length}
-          subtitle={
-            sorted.some((order) => order.status === 'CONFIRMED')
-              ? 'Some are waiting for you to start'
-              : undefined
-          }
-          actionLabel={sorted.length ? 'See all' : undefined}
-          onAction={() => router.push('/supplier/(tabs)/orders')}
-        />
-        {orders.isPending ? (
-          <MandiSkeletonList count={2} />
-        ) : orders.error ? (
-          <MandiErrorState message="Couldn't load orders." onRetry={() => orders.refetch()} />
-        ) : sorted.length === 0 ? (
+      {orders.isPending ? (
+        <MandiSkeletonList count={2} />
+      ) : orders.error ? (
+        <MandiErrorState message="Couldn't load orders." onRetry={() => orders.refetch()} />
+      ) : total === 0 ? (
+        <View style={styles.section}>
+          <MandiSectionHeader title="Orders" />
           <MandiEmptyState
             compact
             icon="cube-outline"
             title="No orders yet"
             description="Orders appear here once a kitchen orders against a request you accepted."
           />
-        ) : (
-          sorted.slice(0, 5).map((order) => {
-            const started = order.status !== 'CONFIRMED';
-            return (
-              <MandiCard
-                key={order.id}
-                onPress={() => router.push(`/supplier/orders/${order.id}`)}
-                outlined={!started}
-                accentColor={toneColors(
-                  resolveStatus(SupplierOrderStatus, order.status).tone).fg}
-              >
-                <OrderCardBody
-                  primary={order.outletName}
-                  secondary={[
-                    order.restaurantName,
-                    order.outletLocality,
-                    formatDistance(order.distanceKm),
-                  ]}
-                  items={order.items}
-                  orderNumber={order.orderNumber}
-                  paymentMethod={order.paymentMethod}
-                  createdAt={order.createdAt}
-                  amount={orderValue(order)}
-                  status={resolveStatus(SupplierOrderStatus, order.status)}
-                />
-              </MandiCard>
-            );
-          })
-        )}
-      </View>
+        </View>
+      ) : (
+        <>
+          {sections.map((section) => (
+            <View key={section.key} style={styles.section}>
+              <MandiSectionHeader title={section.title} count={section.orders.length} />
+              {section.orders.slice(0, SECTION_LIMIT).map((order) => (
+                <MandiCard
+                  key={order.id}
+                  onPress={() => router.push(`/supplier/orders/${order.id}`)}
+                  outlined={order.status === 'CONFIRMED'}
+                  accentColor={toneColors(
+                    resolveStatus(SupplierOrderStatus, order.status).tone).fg}
+                >
+                  <OrderCardBody
+                    primary={partyTitle(order.restaurantName, order.outletName)}
+                    secondary={[
+                      order.outletLocality,
+                      formatDistance(order.distanceKm),
+                    ]}
+                    items={order.items}
+                    orderNumber={order.orderNumber}
+                    paymentMethod={order.paymentMethod}
+                    createdAt={order.createdAt}
+                    amount={orderValue(order)}
+                    status={resolveStatus(SupplierOrderStatus, order.status)}
+                  />
+                </MandiCard>
+              ))}
+            </View>
+          ))}
+          <MandiButton
+            label="See all orders"
+            variant="secondary"
+            size="md"
+            onPress={() => router.push('/supplier/(tabs)/orders')}
+          />
+        </>
+      )}
 
     </MandiScreen>
   );

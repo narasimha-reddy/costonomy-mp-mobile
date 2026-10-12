@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
+import { MapUnavailable } from './MapUnavailable';
 import { loadGoogleMaps } from '@/lib/maps/loader';
+import { mapsAuthFailed, onMapsAuthFailure } from '@/lib/maps/authFailure';
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -32,6 +33,7 @@ export function MandiMapPicker({
   onChange,
   height = 260,
   searchPlaceholder = 'Search for an address',
+  address,
 }: MandiMapPickerProps) {
   const mapNode = useRef<HTMLDivElement | null>(null);
   const searchHost = useRef<HTMLDivElement | null>(null);
@@ -41,6 +43,8 @@ export function MandiMapPicker({
 
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  // The key exists but Google refused it or the script never loaded: Google's own error panel is replaced by ours.
+  const [failed, setFailed] = useState(mapsAuthFailed());
 
   // The callback changes identity every render; a ref keeps the listeners we
   // attach once from capturing a stale one.
@@ -49,6 +53,7 @@ export function MandiMapPicker({
 
   useEffect(() => {
     if (!MAPS_CONFIGURED) return;
+    const stopWatching = onMapsAuthFailure(() => setFailed(true));
     let cancelled = false;
 
     loadGoogleMaps()
@@ -155,10 +160,12 @@ export function MandiMapPicker({
         setReady(true);
       })
       .catch((caught: Error) => {
-        if (!cancelled) setError(caught.message);
+        if (cancelled) return;
+        console.warn(`[maps] ${caught.message}`);
+        setFailed(true);
       });
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; stopWatching(); };
     // Mounted once. Later value changes move the marker below rather than
     // rebuilding the map, which would lose the zoom the person just set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,7 +181,10 @@ export function MandiMapPicker({
   }, [ready, value?.latitude, value?.longitude]);
 
   if (!MAPS_CONFIGURED) {
-    return <NotConfigured height={height} />;
+    return <NotConfigured height={height} address={address} />;
+  }
+  if (failed) {
+    return <MapUnavailable height={height} address={address} reason="failed" />;
   }
 
   return (
@@ -223,7 +233,7 @@ export function MandiMapPicker({
  * holding the phone gets the two things they can act on — that the map is
  * unavailable, and that they can still pin the place another way.
  */
-function NotConfigured({ height }: { height: number }) {
+function NotConfigured({ height, address }: { height: number; address?: string | null }) {
   useEffect(() => {
     // For whoever is running the app, not for whoever is using it.
     console.warn(
@@ -232,14 +242,7 @@ function NotConfigured({ height }: { height: number }) {
   }, []);
 
   return (
-    <View style={[styles.missing, { minHeight: height }]}>
-      <Ionicons name="map-outline" size={24} color={Colors.textTertiary} />
-      <MandiText variant="bodyEmphasis">Map unavailable</MandiText>
-      <MandiText variant="caption" color={Colors.textSecondary} center>
-        We cannot show the map now. You can still pin this place with the buttons
-        below, and everything else on this screen works as usual.
-      </MandiText>
-    </View>
+    <MapUnavailable height={height} address={address} />
   );
 }
 
@@ -248,14 +251,6 @@ const styles = StyleSheet.create({
   canvas: {
     borderRadius: Radius.lg,
     overflow: 'hidden',
-    backgroundColor: Colors.surfaceSunken,
-  },
-  missing: {
-    gap: Spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.xl,
-    borderRadius: Radius.lg,
     backgroundColor: Colors.surfaceSunken,
   },
 });

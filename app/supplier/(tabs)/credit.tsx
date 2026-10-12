@@ -44,6 +44,7 @@ import { formatMoney } from '@/utils/money';
 import { formatDistance } from '@/utils/orders';
 import { track } from '@/analytics';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'SUP-CREDIT-01';
 const PAGE_SIZE = 20;
@@ -396,7 +397,7 @@ function Chip({ label, selected, onPress, testID }: {
       testID={testID}
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      {...radioProps(selected)}
       accessibilityLabel={label}
       style={[styles.chip, selected && styles.chipSelected]}
     >
@@ -545,7 +546,7 @@ function RequestCard({ agreement, offline }: { agreement: CreditAgreement; offli
       {offer == null && (
       <View style={styles.actionsRow}>
         <MandiButton
-          label="Approve As Asked"
+          label="Approve as asked"
           size="md"
           loading={approve.isPending}
           disabled={offline}

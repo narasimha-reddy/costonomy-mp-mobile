@@ -5,11 +5,11 @@ import type { DeliveryStatus } from '@/models/delivery';
  * current status. Mirrors the API's table; the API decides whether the button is offered at all (`sandboxControls`).
  */
 const NEXT_STEP: Partial<Record<DeliveryStatus, string>> = {
-  PROVIDER_SELECTED: 'Assign a rider',
-  DRIVER_ASSIGNED: 'Rider reached your store',
-  DRIVER_AT_PICKUP: 'Rider picked up',
-  PICKED_UP: 'Rider on the way',
-  IN_TRANSIT: 'Rider arrived',
+  PROVIDER_SELECTED: 'Assign a delivery partner',
+  DRIVER_ASSIGNED: 'Delivery partner reached your store',
+  DRIVER_AT_PICKUP: 'Delivery partner picked up',
+  PICKED_UP: 'Delivery partner on the way',
+  IN_TRANSIT: 'Delivery partner arrived',
   ARRIVED_AT_DESTINATION: 'Mark delivered',
 };
 

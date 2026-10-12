@@ -63,7 +63,7 @@ describe('the supplier weigh sheet (API D-128)', () => {
     showOrder(ORDER_CONFIRMED_UNWEIGHED);
     setup();
 
-    fireEvent.press(await screen.findByText('Weigh Items'));
+    fireEvent.press(await screen.findByText('Weigh items'));
 
     const input = await screen.findByLabelText('Scale weight for Chicken, in KG');
     expect(input.props.value).toBe('');
@@ -74,14 +74,14 @@ describe('the supplier weigh sheet (API D-128)', () => {
     setup();
 
     await screen.findByText('Weighed less: the buyer pays ₹42.00 less');
-    expect(screen.queryByText('Weigh Items')).toBeNull();
+    expect(screen.queryByText('Weigh items')).toBeNull();
     expect(screen.queryByText('Re-weigh')).toBeNull();
   });
 
   it('refuses an empty field in the sheet with the server\'s sentence, and sends nothing', async () => {
     showOrder(ORDER_CONFIRMED_UNWEIGHED);
     setup();
-    fireEvent.press(await screen.findByText('Weigh Items'));
+    fireEvent.press(await screen.findByText('Weigh items'));
     await screen.findByLabelText('Scale weight for Chicken, in KG');
 
     fireEvent.press(screen.getByText('Save weights'));
@@ -96,7 +96,7 @@ describe('the supplier weigh sheet (API D-128)', () => {
       code: 'VALIDATION_ERROR', status: 400, message: REFUSAL_RANGE.error.message,
     }));
     setup();
-    fireEvent.press(await screen.findByText('Weigh Items'));
+    fireEvent.press(await screen.findByText('Weigh items'));
     fireEvent.changeText(await screen.findByLabelText('Scale weight for Chicken, in KG'), '12');
 
     fireEvent.press(screen.getByText('Save weights'));

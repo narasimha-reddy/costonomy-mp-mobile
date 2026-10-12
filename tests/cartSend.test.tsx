@@ -38,7 +38,7 @@ const mockDraft = {
 };
 jest.mock('@/hooks/useRequestBasket', () => ({
   useRequestBasket: () => ({
-    basket: { requests: [mockDraft] }, drafts: [mockDraft], loading: false, error: null, refetch: jest.fn(),
+    basket: { requests: [mockDraft], itemCount: 1, supplierCount: 1, agreedTotal: '1291.50', pricedComplete: true }, drafts: [mockDraft], loading: false, error: null, refetch: jest.fn(),
   }),
   useInvalidateBasket: () => () => Promise.resolve(),
 }));
@@ -68,13 +68,33 @@ beforeEach(() => {
 });
 
 describe('the cart', () => {
+  it('names the supplier once in the section header, not again in the subtitle', () => {
+    const was = { ...mockDraft };
+    Object.assign(mockDraft, { storeName: 'Sri Balaji Traders — Domlur', supplierName: 'Sri Balaji Traders' });
+    try {
+      setup();
+      expect(screen.getAllByText(/Sri Balaji Traders/)).toHaveLength(1);
+      expect(screen.getByText('1 item')).toBeTruthy();
+    } finally {
+      Object.assign(mockDraft, was);
+    }
+  });
+
+  it('has one Send Request button (the bar) and no permanently disabled Create Order', () => {
+    setup();
+    expect(screen.getAllByText('Send request')).toHaveLength(1);
+    expect(screen.queryByText('Create Order')).toBeNull();
+    // The reason it cannot be ordered directly stays, as a hint.
+    expect(screen.getByText(/can't order directly from this supplier/)).toBeTruthy();
+  });
+
   it('writes a tapped quantity before it sends, so the request goes out with what was tapped', async () => {
     setup();
 
     fireEvent.press(screen.getByLabelText(/Increase quantity/));
     fireEvent.press(screen.getByLabelText(/Increase quantity/));
     // No pause for the debounce: send straight away.
-    fireEvent.press(screen.getByText('Send Request'));
+    fireEvent.press(screen.getByText('Send request'));
 
     await waitFor(() => expect(sendBasket).toHaveBeenCalled());
     expect(updateIntentItem).toHaveBeenCalledTimes(1);
@@ -114,12 +134,12 @@ describe('the cart', () => {
   it('sends immediate by default, and the chosen day when the buyer picks one', async () => {
     setup();
 
-    fireEvent.press(screen.getByText('Send Request'));
+    fireEvent.press(screen.getByText('Send request'));
     await waitFor(() => expect(sendBasket).toHaveBeenCalledTimes(1));
     expect((sendBasket as jest.Mock).mock.calls[0][2].preferredDeliveryDate).toBeUndefined();
 
     fireEvent.press(screen.getByLabelText('Delivery: Tomorrow'));
-    fireEvent.press(screen.getByText('Send Request'));
+    fireEvent.press(screen.getByText('Send request'));
     await waitFor(() => expect(sendBasket).toHaveBeenCalledTimes(2));
     expect((sendBasket as jest.Mock).mock.calls[1][2].preferredDeliveryDate)
       .toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -155,7 +175,7 @@ describe('the cart', () => {
 
     fireEvent.press(screen.getByLabelText('Delivery: Tomorrow'));
     fireEvent.press(screen.getByLabelText('Delivery: By 6 am'));
-    fireEvent.press(screen.getByText('Send Request'));
+    fireEvent.press(screen.getByText('Send request'));
 
     await waitFor(() => expect(sendBasket).toHaveBeenCalled());
     const body = (sendBasket as jest.Mock).mock.calls[0][2];

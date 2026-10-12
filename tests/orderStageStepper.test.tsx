@@ -86,3 +86,18 @@ describe('OrderProgressHero', () => {
     expect(screen.getByLabelText('Track')).toBeTruthy();
   });
 });
+
+describe('OrderProgressHero tag (supplier order screen)', () => {
+  it('shows a completed order\'s tag in sentence case, not upper-cased', () => {
+    const completed = orderTrackingView({
+      audience: 'supplier',
+      order: { status: 'COMPLETED', deliveryMode: 'COSTONOMY_DELIVERY', restaurantName: 'Spice Garden' },
+      delivery: { status: 'DELIVERED', mode: 'COSTONOMY', driverName: 'Ravi', trackable: false },
+      nowMs: 0,
+    });
+    render(<OrderProgressHero view={completed} />);
+    const tag = screen.getByText('Delivered', { exact: true });
+    expect(screen.getByTestId('tag-delivered')).toBeTruthy();
+    expect(StyleSheet.flatten(tag.props.style).textTransform).not.toBe('uppercase');
+  });
+});

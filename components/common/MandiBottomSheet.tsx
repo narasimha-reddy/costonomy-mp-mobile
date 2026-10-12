@@ -2,7 +2,7 @@ import React from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from './MandiText';
-import { DEVICE_WIDTH } from './DeviceFrame';
+import { useFrameWidth } from './DeviceFrame';
 import { Colors, Radius, Spacing } from '@/theme';
 
 /**
@@ -49,6 +49,7 @@ export function MandiBottomSheet({
   testID?: string;
   children: React.ReactNode;
 }) {
+  const frameWidth = useFrameWidth();
   return (
     <Modal
       visible={visible}
@@ -75,7 +76,7 @@ export function MandiBottomSheet({
           testID={testID ? `${testID}-backdrop` : 'sheet-backdrop'}
         />
         <KeyboardAvoidingView
-          style={styles.column}
+          style={[styles.column, Platform.OS === 'web' && { maxWidth: frameWidth }]}
           pointerEvents="box-none"
           behavior={avoidKeyboard ? 'padding' : undefined}
           enabled={avoidKeyboard}
@@ -132,9 +133,8 @@ const styles = StyleSheet.create({
   },
   column: {
     width: '100%',
-    // The cap is web-only: on a device the frame is the screen, and a maxWidth
+    // The web-only cap (the frame's width) is applied inline: on a device the frame is the screen, and a maxWidth
     // would letterbox the sheet on anything wider than 390pt.
-    maxWidth: Platform.OS === 'web' ? DEVICE_WIDTH : undefined,
     maxHeight: '100%',
   },
   scrollBody: { flexGrow: 0, flexShrink: 1 },

@@ -94,7 +94,7 @@ export default function WelcomeScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Spacing.lg + insets.bottom }]}>
-        <MandiButton label="Get Started" size="lg" onPress={start} />
+        <MandiButton label="Get started" size="lg" onPress={start} />
         <Pressable
           onPress={start}
           accessibilityRole="button"

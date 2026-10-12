@@ -8,7 +8,7 @@ import { DetailColors, DetailLayout, DetailType } from '@/theme';
 const LOGO = require('../../../assets/images/costonomy-logo.png');
 
 /**
- * The picture "Share Receipt" sends: a white band with the Costonomy logo, the status
+ * The picture "Share receipt" sends: a white band with the Costonomy logo, the status
  * title and the time, over the grey page with the same card as the screen, minus the copy
  * icons, the action row, the support row and any footer. 360 dp wide so that a capture at
  * 1080 px is exactly 3x.

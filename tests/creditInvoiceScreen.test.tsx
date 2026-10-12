@@ -235,7 +235,7 @@ describe('credit invoice detail', () => {
   it('shows an error with retry', () => {
     mockInvoice = { isPending: false, error: new Error('boom') };
     mount();
-    fireEvent.press(screen.getByText('Try Again'));
+    fireEvent.press(screen.getByText('Try again'));
     expect(mockRefresh).toHaveBeenCalled();
   });
 

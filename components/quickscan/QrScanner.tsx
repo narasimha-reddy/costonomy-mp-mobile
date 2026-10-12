@@ -114,7 +114,7 @@ export function QrScanner({ onScan, onManualEntry, notice, children }: QrScanner
       </Text>
       {permission?.canAskAgain !== false && (
         <MandiButton
-          label="Allow Camera"
+          label="Allow camera"
           size="md"
           fullWidth={false}
           onPress={() => { void requestPermission(); }}

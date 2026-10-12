@@ -256,7 +256,7 @@ export default function RequestReviewScreen() {
               title="Approve at your usual terms"
               lines={usualTermsPreview(usual)}
               consequence="Your restaurant will be asked to accept these terms. Nothing can be drawn until they do."
-              confirmLabel="Send These Terms"
+              confirmLabel="Send these terms"
               pending={approve.isPending}
               error={approveError}
               offline={offline}

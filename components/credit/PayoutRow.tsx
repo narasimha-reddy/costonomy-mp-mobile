@@ -2,6 +2,8 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
 import { feeLine, methodAndReference, paymentSourceLabel, payoutSourceLine, payoutStatusLabel } from '@/lib/credit/payouts';
+import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
+import { transactionIdOf } from '@/lib/credit/transactionId';
 import { paymentDetail } from '@/lib/credit/payments';
 import type { CreditPayout, StorePayment } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
@@ -58,20 +60,23 @@ export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: 
 /** One payment on a credit line: who, which invoice, how much, how it was paid, when. */
 export function PaymentRow({ payment }: { payment: StorePayment }) {
   const name = payment.restaurantName ?? payment.outletName ?? 'A restaurant';
-  // Online: the method only; the Razorpay payment id is internal and never shown to the supplier.
-  const how = payment.source === 'ONLINE' ? paymentDetail(payment.method, null, 'ONLINE') : methodAndReference(payment.method, payment.reference);
+  // Paid through Mandi: the method, and the transaction id on its own line. Recorded by hand: method and "ref ...".
+  const txid = transactionIdOf(payment);
+  const how = payment.source === 'ONLINE' ? paymentDetail(payment.method, null, 'ONLINE')
+    : payment.source === 'WALLET' ? null : methodAndReference(payment.method, payment.reference);
   const when = [paymentSourceLabel(payment.source), formatDay(payment.paidOn) ?? payment.paidOn].join(' · ');
   return (
     <View
       testID={`payment-row-${payment.id}`}
       accessible
-      accessibilityLabel={`${name}. ${payment.invoiceNumber}. ${formatMoney(payment.amount)}${how != null ? `. ${how}` : ''}. ${when}`}
+      accessibilityLabel={`${name}. ${payment.invoiceNumber}. ${formatMoney(payment.amount)}${how != null ? `. ${how}` : ''}${txid != null ? `. Transaction ID ${txid}` : ''}. ${when}`}
       style={styles.row}
     >
       <View style={styles.main}>
         <MandiText variant="bodyEmphasis">{name}</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>{payment.invoiceNumber}</MandiText>
         {how != null && <MandiText variant="caption" color={Colors.textSecondary}>{how}</MandiText>}
+        <TransactionIdLine id={txid} testID={`payment-row-${payment.id}-txid`} />
         <MandiText variant="caption" color={Colors.textSecondary}>{when}</MandiText>
       </View>
       <MandiText variant="price" style={styles.net}>{formatMoney(payment.amount)}</MandiText>

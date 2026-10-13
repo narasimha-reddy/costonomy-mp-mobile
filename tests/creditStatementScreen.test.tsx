@@ -121,7 +121,7 @@ describe('Credit statement screen', () => {
     expect(screen.getByText('−₹500.00')).toBeTruthy();
     expect(screen.getByText('+₹1,200.00')).toBeTruthy();
     expect(screen.getByText(/Repayment/)).toBeTruthy();
-    expect(screen.getByText('INV-9 · Repayment · From wallet')).toBeTruthy();
+    expect(screen.getByText('INV-9 · Repayment · From wallet · Transaction ID 192')).toBeTruthy();
     expect(screen.getByText('Owed ₹900.00 after')).toBeTruthy();
   });
 

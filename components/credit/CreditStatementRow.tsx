@@ -27,7 +27,7 @@ export function CreditStatementRow({
       <View style={styles.left}>
         <MandiText variant="caption" muted>{day}</MandiText>
         <MandiText variant="bodyEmphasis" numberOfLines={2}>{line.label}</MandiText>
-        {detail !== '' && <MandiText variant="caption" muted numberOfLines={2}>{detail}</MandiText>}
+        {detail !== '' && <MandiText variant="caption" muted numberOfLines={2} selectable>{detail}</MandiText>}
       </View>
       <View style={styles.right}>
         <MandiText variant="price">{amount}</MandiText>

@@ -10,6 +10,7 @@ import { CreditNotesSection } from '@/components/credit/CreditNotesSection';
 import { InvoiceCreditActions } from '@/components/credit/InvoiceCreditActions';
 import { InvoiceMoneyCard } from '@/components/credit/InvoiceMoneyCard';
 import { ExtendDueSheet } from '@/components/credit/ExtendDueSheet';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { RecordPaymentSheet } from '@/components/credit/RecordPaymentSheet';
 import {
   MandiButton,
@@ -33,6 +34,8 @@ import { duplicateWarning, mayDecideClaims, waitingText } from '@/lib/credit/cla
 import { claimMethodLabel } from '@/lib/credit/claims';
 import { invoiceChip, invoiceStatusText } from '@/lib/credit/creditNotes';
 import { isSettled } from '@/lib/credit/invoices';
+import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
+import { transactionIdOf } from '@/lib/credit/transactionId';
 import { paymentDetail } from '@/lib/credit/payments';
 import { paymentBadge } from '@/lib/credit/supplierLine';
 import { supplierInvoiceKey } from '@/lib/queryKeys';
@@ -127,7 +130,7 @@ export default function SupplierInvoiceScreen() {
   const chip = invoiceChip(invoice);
   const open = !isSettled(invoice);
   const owes = Number(invoice.outstanding) > 0;
-  const mayRecord = canCollect && open && owes;
+  const mayRecord = MANUAL_SETTLEMENT_ENABLED && canCollect && open && owes;
   const mayExtend = canModify && open;
   const claims = invoice.claims ?? [];
   const waiting = claims.filter((c) => c.status === 'SUBMITTED');
@@ -224,12 +227,13 @@ export default function SupplierInvoiceScreen() {
                 key={p.id}
                 style={styles.payment}
                 accessible
-                accessibilityLabel={[formatMoney(p.amount), badge, detail, day].filter(Boolean).join(', ')}
+                accessibilityLabel={[formatMoney(p.amount), badge, detail, transactionIdOf(p) != null ? `Transaction ID ${transactionIdOf(p)}` : null, day].filter(Boolean).join(', ')}
                 testID={`invoice-payment-${p.id}`}
               >
                 <View style={styles.flex}>
                   <MandiText variant="bodyEmphasis">{badge ?? 'Payment'}</MandiText>
                   {detail != null && <MandiText variant="caption" color={Colors.textSecondary}>{detail}</MandiText>}
+                  <TransactionIdLine id={transactionIdOf(p)} testID={`invoice-payment-${p.id}-txid`} />
                   <MandiText variant="caption" color={Colors.textTertiary}>{day}</MandiText>
                 </View>
                 <MandiText variant="bodyEmphasis">{formatMoney(p.amount)}</MandiText>

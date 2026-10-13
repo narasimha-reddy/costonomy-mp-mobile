@@ -1,3 +1,4 @@
+import { transactionIdOf } from '@/lib/credit/transactionId';
 import { ApiError } from '@/lib/api/errors';
 import { istMonthKey, monthTitle } from '@/lib/wallet/history';
 import { formatMoney } from '@/utils/money';
@@ -70,12 +71,14 @@ export function statementDetail(line: CreditStatementLine): string {
   if (line.creditNoteNumber) parts.push(line.creditNoteNumber);
   if (isRepayment(line)) {
     parts.push('Repayment');
+    const tx = transactionIdOf(line);
     if (line.source === 'WALLET') {
       parts.push('From wallet');
     } else {
       if (line.method) parts.push(methodLabel(line.method));
-      if (line.reference) parts.push(`ref ${line.reference}`);
+      if (tx == null && line.reference) parts.push(`ref ${line.reference}`);
     }
+    if (tx != null) parts.push(`Transaction ID ${tx}`);
   }
   if (line.type === 'PAYMENT_REVERSED') parts.push('Payment cancelled, owed again');
   // "UPI · ref 123" reads as one phrase; the rest are separate facts.

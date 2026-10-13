@@ -6,6 +6,8 @@ import { CreditClaimsSection } from '@/components/credit/CreditClaimsSection';
 import { waitingClaimsTotal } from '@/lib/credit/claims';
 
 // Online payment is off here; tests/creditPaidDirectHidden.test.tsx covers it on.
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+jest.mock('@/lib/credit/manualSettlement', () => ({ MANUAL_SETTLEMENT_ENABLED: true }));
 jest.mock('@/hooks/useOnlinePayOn', () => ({ useOnlinePayOn: () => false }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');

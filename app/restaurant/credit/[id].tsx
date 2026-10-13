@@ -20,6 +20,7 @@ import { SelectableInvoiceRow } from '@/components/credit/pay/SelectableInvoiceR
 import { CreditStickyPayBar } from '@/components/credit/CreditStickyPayBar';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
 import { usePayableInvoices } from '@/hooks/useCreditPay';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { canReportPayment, reportedLine } from '@/lib/credit/claims';
 import { earliestGraceDeadline, splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import {
@@ -218,7 +219,7 @@ export default function CreditAgreementScreen() {
                   : `/restaurant/credit/pay?scopeAgreementId=${agreementId}`);
               })
               : () => setPayOpen(true)}
-            onClaim={onlinePay || !mayRepay || !canReportPayment(data.reportableAmount) ? undefined : () => go('claim', () => router.push({
+            onClaim={!MANUAL_SETTLEMENT_ENABLED || onlinePay || !mayRepay || !canReportPayment(data.reportableAmount) ? undefined : () => go('claim', () => router.push({
               pathname: '/restaurant/credit/claim',
               params: { agreementId: String(agreementId) },
             }))}

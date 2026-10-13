@@ -7,6 +7,10 @@ import { ApiError } from '@/lib/api/errors';
 import { fetchPayments, fetchPayouts } from '@/services/credit';
 import { FontFamily } from '@/theme';
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+// Switchable per test: `mockManual = false` runs the "manual settlement switched off" block at the end.
+let mockManual = true;
+jest.mock('@/lib/credit/manualSettlement', () => ({ get MANUAL_SETTLEMENT_ENABLED() { return mockManual; } }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   const Icon = ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text>;
@@ -406,5 +410,30 @@ describe('Recorded by you', () => {
     await openTab();
     expect(screen.queryByTestId('payouts-hero')).toBeNull();
     expect(screen.queryByTestId('payout-status-ALL')).toBeNull();
+  });
+});
+
+describe('manual settlement switched off', () => {
+  beforeEach(() => { mockManual = false; });
+  afterEach(() => { mockManual = true; });
+
+  it('shows only the Mandi collections: no tab bar, hero, pending and paid out still there', async () => {
+    renderScreen();
+    await screen.findByTestId('payout-row-1');
+    expect(screen.queryByTestId('tab-mandi')).toBeNull();
+    expect(screen.queryByTestId('tab-recorded')).toBeNull();
+    expect(screen.queryByText('Recorded by you')).toBeNull();
+    expect(screen.getByTestId('payouts-hero')).toBeTruthy();
+    expect(screen.getByTestId('payout-group-PENDING')).toBeTruthy();
+    expect(screen.getByTestId('payout-group-APPLIED')).toBeTruthy();
+    expect(screen.getByTestId('payout-status-PENDING')).toBeTruthy();
+  });
+
+  it('never asks for the recorded payments', async () => {
+    renderScreen();
+    await screen.findByTestId('payout-row-1');
+    expect(paymentsM).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('source-ALL')).toBeNull();
+    expect(screen.queryByTestId('collections-csv')).toBeNull();
   });
 });

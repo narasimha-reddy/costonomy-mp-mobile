@@ -9,6 +9,10 @@ import {
   previewPayment, recordSupplierPayment,
 } from '@/services/credit';
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+// Switchable per test: `mockManual = false` runs the "manual settlement switched off" block at the end.
+let mockManual = true;
+jest.mock('@/lib/credit/manualSettlement', () => ({ get MANUAL_SETTLEMENT_ENABLED() { return mockManual; } }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   const Icon = ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text>;
@@ -902,5 +906,42 @@ describe('offer wording (EXPIRED, offerExpiresOn)', () => {
     renderScreen();
     await screen.findByText(/not accepted yet/);
     expect(screen.queryByText(/Offer valid until/)).toBeNull();
+  });
+});
+
+describe('manual settlement switched off', () => {
+  beforeEach(() => { mockManual = false; });
+  afterEach(() => { mockManual = true; });
+
+  it('has no Record action, no "Coming soon", and lays out Remind, Statement, More', async () => {
+    renderScreen();
+    await screen.findByTestId('line-hero');
+    expect(screen.queryByTestId('action-record')).toBeNull();
+    expect(screen.queryByText('Coming soon')).toBeNull();
+    const ids = screen.getAllByTestId(/^action-(remind|statement|more|record)$/).map((n) => n.props.testID);
+    expect(ids).toEqual(['action-remind', 'action-statement', 'action-more']);
+    expect(screen.getByTestId('action-remind').props.accessibilityState).not.toMatchObject({ disabled: true });
+  });
+
+  it('Remind still opens its sheet', async () => {
+    renderScreen();
+    fireEvent.press(await screen.findByTestId('action-remind'));
+    expect(await screen.findByTestId('remind-sheet')).toBeTruthy();
+  });
+
+  it('has no tick boxes and no "Record for N selected", and never mounts the record sheet', async () => {
+    renderScreen();
+    await screen.findByTestId('line-hero');
+    await screen.findByTestId('detail-open-1').catch(() => null);
+    expect(screen.queryByTestId('pick-invoice-1')).toBeNull();
+    expect(screen.queryByTestId('record-for-selected')).toBeNull();
+    expect(screen.queryByTestId('record-sheet')).toBeNull();
+  });
+
+  it('still shows a payment that was recorded manually in the past', async () => {
+    paymentsM.mockResolvedValue(pageOf([payment(1, 'SUPPLIER_RECORDED')]));
+    renderScreen();
+    await screen.findByTestId('line-hero');
+    expect(await screen.findByText(/REF1/)).toBeTruthy();
   });
 });

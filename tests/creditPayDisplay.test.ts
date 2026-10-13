@@ -117,11 +117,12 @@ describe('restaurant payment rows', () => {
 });
 
 describe('supplier\'s payments', () => {
-  it('an online payment shows its source and method, and the supplier never sees a Razorpay id', () => {
+  it('an online payment shows its source, method and Transaction ID (the Razorpay payment id)', () => {
     render(React.createElement(PaymentRow, { payment: storePayment() }));
     const t = renderedText(screen.toJSON() as never);
     expect(t).toContain('Paid through Mandi');
-    expect(t).not.toContain('pay_RazorpayInternal123');
+    expect(t).toContain('Transaction ID');
+    expect(t).toContain('pay_RazorpayInternal123');
   });
 
   it('the badge on an online payment is "Paid through Mandi"', () => {

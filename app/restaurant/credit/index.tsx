@@ -27,6 +27,7 @@ import {
   MandiSkeletonList,
   MandiText,
 } from '@/components/common';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { canReportPayment } from '@/lib/credit/claims';
 import { PAY_DUES } from '@/lib/credit/pay/copy';
 import { isOnlinePayOn } from '@/models/creditPay';
@@ -78,7 +79,7 @@ export default function CreditOverviewScreen() {
     else setMultiOpen(true);
   };
 
-  const showClaim = !onlinePay && mayRepay && summary != null && Number(summary.due) > 0 && groups.dues.length > 0
+  const showClaim = MANUAL_SETTLEMENT_ENABLED && !onlinePay && mayRepay && summary != null && Number(summary.due) > 0 && groups.dues.length > 0
     && canReportPayment(summary.reportableAmount);
   const claimFor = (id: number) =>
     go(`claim-${id}`, () => router.push({ pathname: '/restaurant/credit/claim', params: { agreementId: String(id) } }));

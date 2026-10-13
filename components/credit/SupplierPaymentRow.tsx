@@ -1,6 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiStatusChip, MandiText } from '@/components/common';
+import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
+import { transactionIdOf } from '@/lib/credit/transactionId';
 import { paymentDetail } from '@/lib/credit/payments';
 import { cancelledOnText, mayUndo, undoUntilText } from '@/lib/credit/reversal';
 import { paymentBadge } from '@/lib/credit/supplierLine';
@@ -34,7 +36,7 @@ export function SupplierPaymentRow({
   const day = formatDay(payment.paidOn) ?? payment.paidOn;
   const amount = formatMoney(payment.amount);
   const label = [
-    payment.invoiceNumber, amount, cancelled ? (cancelledOn ?? 'Cancelled') : null, badge, detail, day,
+    payment.invoiceNumber, amount, cancelled ? (cancelledOn ?? 'Cancelled') : null, badge, detail, transactionIdOf(payment) != null ? `Transaction ID ${transactionIdOf(payment)}` : null, day,
     canUndo ? until : null,
   ].filter(Boolean).join(', ');
   return (
@@ -57,6 +59,7 @@ export function SupplierPaymentRow({
           </View>
         )}
         {detail != null && <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={2}>{detail}</MandiText>}
+        <TransactionIdLine id={transactionIdOf(payment)} testID={`agreement-payment-${payment.id}-txid`} />
         <MandiText variant="caption" color={Colors.textTertiary}>{day}</MandiText>
         {cancelled && cancelledOn != null && (
           <MandiText variant="caption" color={Colors.textTertiary} testID={`payment-cancelled-on-${payment.id}`}>

@@ -42,6 +42,7 @@ import {
 import { PERIOD_PRESETS } from '@/lib/credit/statementFilters';
 import { payoutsKey, storePaymentsKey } from '@/lib/queryKeys';
 import { splitBalance } from '@/lib/wallet/display';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { monthTitle } from '@/lib/wallet/history';
 import { formatMoney } from '@/utils/money';
 import { Colors, IconSize, Radius, Spacing, WalletColors } from '@/theme';
@@ -78,7 +79,9 @@ export default function PayoutsScreen() {
   const { offline } = useNetworkStatus();
   const params = useLocalSearchParams();
 
-  const [tab, setTab] = useState<Tab>('mandi');
+  // Without manual settlement there is only the Mandi list: no tab bar, no "recorded" query.
+  const [pickedTab, setTab] = useState<Tab>('mandi');
+  const tab: Tab = MANUAL_SETTLEMENT_ENABLED ? pickedTab : 'mandi';
   const [status, setStatus] = useState<PayoutStatusFilter>('ALL');
   const [source, setSource] = useState<StorePaymentSource | 'ALL'>('ALL');
   const [openId, setOpenId] = useState<number | null>(null);
@@ -268,6 +271,7 @@ export default function PayoutsScreen() {
       <MandiHeader title="Collections and payouts" back right={<StoreSelector />} />
       <MandiOfflineBanner visible={offline} />
 
+      {MANUAL_SETTLEMENT_ENABLED && (
       <View style={styles.tabs} accessibilityRole="tablist">
         {([['mandi', 'Collected through Mandi'], ['recorded', 'Recorded by you']] as const).map(([key, label]) => (
           <Pressable
@@ -284,6 +288,7 @@ export default function PayoutsScreen() {
           </Pressable>
         ))}
       </View>
+      )}
 
       <View style={styles.filterRow}>
         <View style={styles.chips}>

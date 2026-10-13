@@ -5,6 +5,8 @@ import PayoutsScreen from '@/app/supplier/credit/payouts';
 import { fetchPayments, fetchPayouts } from '@/services/credit';
 import { CsvExportError, fetchCollectionsCsv, shareCsv } from '@/services/creditExport';
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+jest.mock('@/lib/credit/manualSettlement', () => ({ MANUAL_SETTLEMENT_ENABLED: true }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   const Icon = ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text>;

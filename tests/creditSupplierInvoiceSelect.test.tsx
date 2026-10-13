@@ -12,6 +12,8 @@ import type { PayableInvoice, PayableInvoices, PayableSupplier } from '@/models/
  * and the Pay bar carries the ticked invoices into Pay dues scoped to this supplier.
  */
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+jest.mock('@/lib/credit/manualSettlement', () => ({ MANUAL_SETTLEMENT_ENABLED: true }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   const Icon = ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text>;

@@ -27,6 +27,7 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSingleNavigation } from '@/hooks/useSingleNavigation';
 import { useWithdrawClaim } from '@/hooks/useWithdrawClaim';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { canReportPayment, waitingClaimsTotal } from '@/lib/credit/claims';
 import { invoiceChip, invoiceStatusText } from '@/lib/credit/creditNotes';
 import { ApiError } from '@/lib/api/errors';
@@ -124,7 +125,7 @@ export default function CreditInvoiceScreen() {
   const canPay = mayRepay && !settled && owes && (repayEnabled || onlinePay);
   // Reporting a payment made elsewhere does not depend on wallet repayment being on, but it goes
   // once online payment is: the money then goes through Mandi, not around it.
-  const canClaim = !onlinePay && mayRepay && !settled && owes && canReportPayment(invoice.reportableAmount);
+  const canClaim = MANUAL_SETTLEMENT_ENABLED && !onlinePay && mayRepay && !settled && owes && canReportPayment(invoice.reportableAmount);
   const orderLabel = invoice.orderNumber ?? (invoice.supplierOrderId != null ? String(invoice.supplierOrderId) : null);
   const issued = formatDay(invoice.issuedAt);
   const due = formatDay(invoice.dueDate);

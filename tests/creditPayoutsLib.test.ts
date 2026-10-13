@@ -69,11 +69,11 @@ describe('filters', () => {
 describe('words', () => {
   it('explains a pending payout plainly', () => {
     expect(PAYOUT_EXPLANATION).toBe(
-      'This is money your restaurant paid from their Mandi wallet. We pay it to you in your next settlement.');
+      'Your restaurant paid this through Mandi. We pay it to you in your next settlement.');
   });
   it('names where a payment came from', () => {
     expect(paymentSourceLabel('SUPPLIER_RECORDED')).toBe('Recorded by you');
     expect(paymentSourceLabel('CLAIM_CONFIRMED')).toBe('Confirmed from their claim');
-    expect(paymentSourceLabel('WALLET')).toBe('Mandi wallet');
+    expect(paymentSourceLabel('WALLET')).toBe('Paid through Mandi');
   });
 });

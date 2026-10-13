@@ -25,7 +25,9 @@ export interface CreditPayAttempt { attemptId: number; outletId: number; status:
   paidWith: string | null; paymentDetail: string | null; invoiceCount: number; amount: Money; feeAmount: Money; totalCharged: Money;
   currency: string; razorpayOrderId: string | null; razorpayPaymentId: string | null; keyId: string | null; reopened: boolean;
   refundAmount: Money; refundState: CreditPayRefundState; createdAt: string; paidAt: string | null; expiresAt: string | null;
-  walletBalanceAfter: Money | null; suppliers: AttemptSupplier[]; invoices: AttemptInvoice[]; }
+  walletBalanceAfter: Money | null; suppliers: AttemptSupplier[]; invoices: AttemptInvoice[];
+  /** The wallet ledger entry of a settled WALLET payment (the id the wallet screen shows); absent or null otherwise. */
+  walletEntryId?: number | null; }
 /** Reads the summary's flag defensively: an older server has no field, which means off. */
 export function isOnlinePayOn(summary: { onlinePayEnabled?: boolean } | null | undefined): boolean {
   return summary?.onlinePayEnabled === true;

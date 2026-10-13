@@ -46,8 +46,8 @@ describe('payout wording', () => {
     expect(paymentSourceLabel('ONLINE' as never)).toBe('Paid through Mandi');
   });
 
-  it('keeps the wallet wording unchanged', () => {
-    expect(paymentSourceLabel('WALLET')).toBe('Mandi wallet');
+  it('never names a wallet to the supplier', () => {
+    expect(paymentSourceLabel('WALLET')).toBe('Paid through Mandi');
   });
 
   it('a pending online payout explains itself by method, not as a wallet payment', () => {
@@ -82,9 +82,11 @@ describe('payout wording', () => {
     expect(renderedText(screen.toJSON() as never)).toContain('Paid through Mandi · UPI');
   });
 
-  it('a wallet payout row shows no "Paid through Mandi" label', () => {
+  it('a wallet-funded payout row says Paid through Mandi and never names a wallet', () => {
     render(React.createElement(PayoutRow, { payout: payout({ source: 'WALLET', paymentMethod: null }), onPress: jest.fn() }));
-    expect(renderedText(screen.toJSON() as never)).not.toContain('Paid through Mandi');
+    const t = renderedText(screen.toJSON() as never);
+    expect(t).toContain('Paid through Mandi');
+    expect(t).not.toMatch(/wallet/i);
   });
 
   it('the figures on an online payout are still the server\'s three', () => {

@@ -58,8 +58,8 @@ const SOURCE_CHIPS: { key: StorePaymentSource | 'ALL'; label: string }[] = [
   { key: 'ALL', label: 'All' },
   { key: 'SUPPLIER_RECORDED', label: 'Recorded by you' },
   { key: 'CLAIM_CONFIRMED', label: 'From their claim' },
-  { key: 'WALLET', label: 'Mandi wallet' },
-  { key: 'ONLINE', label: 'Paid through Mandi' },
+  { key: 'WALLET', label: 'Through Mandi · other' },
+  { key: 'ONLINE', label: 'Through Mandi · UPI or card' },
 ];
 
 type Section = { key: string; status: string | null; title: string; data: (CreditPayout | StorePayment)[] };
@@ -215,7 +215,7 @@ export default function PayoutsScreen() {
       )}
       <MandiText variant="caption" color={Colors.textSecondary} style={styles.note}>
         {tab === 'mandi'
-          ? 'Money restaurants paid from their Mandi wallet. We pay it to you in your settlements.'
+          ? 'Money restaurants paid through Mandi. We pay it to you in your settlements.'
           : 'Payments on your credit lines.'}
       </MandiText>
     </>
@@ -233,7 +233,7 @@ export default function PayoutsScreen() {
     ) : (
       <MandiEmptyState
         icon="cash-outline"
-        title="No payouts yet. When a restaurant pays you from their Mandi wallet it shows here."
+        title="No payouts yet. When a restaurant pays you through Mandi it shows here."
       />
     );
   } else {

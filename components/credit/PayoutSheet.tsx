@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiBottomSheet, MandiText } from '@/components/common';
 import { payoutExplanation, payoutSourceLine, payoutStatusLabel } from '@/lib/credit/payouts';
+import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
+import { payoutTransactionId } from '@/lib/credit/transactionId';
 import type { CreditPayout } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatGstRate, formatMoney } from '@/utils/money';
@@ -42,6 +44,7 @@ export function PayoutSheet({
           {sourceLine != null && (
             <MandiText variant="caption" color={Colors.textSecondary} testID="sheet-source">{sourceLine}</MandiText>
           )}
+          <TransactionIdLine id={payoutTransactionId(payout)} testID="sheet-txid" />
         </View>
 
         <View style={styles.facts}>

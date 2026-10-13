@@ -29,7 +29,7 @@ export function PayReceipt({ attempt }: { attempt: CreditPayAttempt }) {
           </View>
         ))}
         <MandiText variant="caption" color={Colors.textSecondary}>{receiptFooter(attempt)}</MandiText>
-        <TransactionIdLine id={attempt.razorpayPaymentId} testID="receipt-txid" />
+        <TransactionIdLine id={attempt.razorpayPaymentId ?? (attempt.walletEntryId != null ? String(attempt.walletEntryId) : null)} testID="receipt-txid" />
       </View>
     </MandiCard>
   );

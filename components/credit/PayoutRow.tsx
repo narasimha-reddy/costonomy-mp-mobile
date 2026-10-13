@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
 import { feeLine, methodAndReference, paymentSourceLabel, payoutSourceLine, payoutStatusLabel } from '@/lib/credit/payouts';
 import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
-import { transactionIdOf } from '@/lib/credit/transactionId';
+import { payoutTransactionId, transactionIdOf } from '@/lib/credit/transactionId';
 import { paymentDetail } from '@/lib/credit/payments';
 import type { CreditPayout, StorePayment } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
@@ -44,6 +44,7 @@ export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: 
         {sourceLine != null && (
           <MandiText variant="caption" color={Colors.textSecondary} testID={`payout-source-${payout.payoutId}`}>{sourceLine}</MandiText>
         )}
+        <TransactionIdLine id={payoutTransactionId(payout)} testID={`payout-row-${payout.payoutId}-txid`} />
         {created != null && <MandiText variant="caption" color={Colors.textSecondary}>{created}</MandiText>}
         {settled != null && <MandiText variant="caption" color={Colors.success}>{settled}</MandiText>}
       </View>

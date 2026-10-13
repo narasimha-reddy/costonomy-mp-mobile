@@ -180,6 +180,8 @@ export interface CreditInvoicePayment {
   reference: string | null;
   paidAt: string;
   walletEntryId: number | null;
+  /** The one id both sides can quote: ONLINE the Razorpay payment id, WALLET the wallet entry id. Absent on older servers. */
+  transactionId?: string | null;
 }
 
 /** GET /api/v1/credit/invoices/{id}. */
@@ -372,6 +374,8 @@ export interface CreditPayout {
   source: 'WALLET' | 'ONLINE';
   /** UPI, CARD ... for an online payout; null for the wallet. */
   paymentMethod: string | null;
+  /** The id the restaurant paid under: the Razorpay payment id, or the wallet entry id. Absent on older servers. */
+  transactionId?: string | null;
 }
 
 export interface CreditPayoutList {
@@ -401,6 +405,8 @@ export interface StorePayment {
   source: StorePaymentSource;
   method: string | null;
   reference: string | null;
+  /** ONLINE the Razorpay payment id, WALLET the id the restaurant sees; null for hand-recorded payments. Absent on older servers. */
+  transactionId?: string | null;
   /** The receipt it was recorded in; undo goes through it. Null for other sources. */
   receiptId?: number | null;
   /** The server's verdict: the supplier may undo it today. Absent means no. */

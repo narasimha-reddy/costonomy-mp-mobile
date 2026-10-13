@@ -65,7 +65,7 @@ export function methodLabel(method: string): string {
  * The small line under a row's label: the invoice number, and for a repayment the word
  * "Repayment" and how it was paid ("From wallet", "UPI · ref 123", "Bank transfer").
  */
-export function statementDetail(line: CreditStatementLine): string {
+export function statementDetail(line: CreditStatementLine, audience: 'restaurant' | 'supplier' = 'restaurant'): string {
   const parts: string[] = [];
   if (line.invoiceNumber) parts.push(line.invoiceNumber);
   if (line.creditNoteNumber) parts.push(line.creditNoteNumber);
@@ -73,7 +73,8 @@ export function statementDetail(line: CreditStatementLine): string {
     parts.push('Repayment');
     const tx = transactionIdOf(line);
     if (line.source === 'WALLET') {
-      parts.push('From wallet');
+      // The supplier is never told a wallet was involved: it was paid through Mandi.
+      parts.push(audience === 'supplier' ? 'Paid through Mandi' : 'From wallet');
     } else {
       if (line.method) parts.push(methodLabel(line.method));
       if (tx == null && line.reference) parts.push(`ref ${line.reference}`);

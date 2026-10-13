@@ -180,7 +180,7 @@ describe('Collected through Mandi', () => {
     expect(sheet.getByTestId('sheet-fee')).toHaveTextContent(/₹100\.00/);
     expect(sheet.getByTestId('sheet-net')).toHaveTextContent(/₹4,900\.00/);
     expect(sheet.getByText(
-      'This is money your restaurant paid from their Mandi wallet. We pay it to you in your next settlement.')).toBeTruthy();
+      'Your restaurant paid this through Mandi. We pay it to you in your next settlement.')).toBeTruthy();
     expect(sheet.getByText('In your next settlement')).toBeTruthy();
     expect(sheet.queryByTestId('copy-settlement')).toBeNull();
   });
@@ -306,7 +306,7 @@ describe('states', () => {
   it('says plainly there are no payouts yet', async () => {
     payoutsM.mockResolvedValue(page([], { summary: { pendingNet: '0.0000', appliedNetThisMonth: '0.0000' } }));
     renderScreen();
-    expect(await screen.findByText('No payouts yet. When a restaurant pays you from their Mandi wallet it shows here.')).toBeTruthy();
+    expect(await screen.findByText('No payouts yet. When a restaurant pays you through Mandi it shows here.')).toBeTruthy();
   });
 
   it('shows an error with a retry', async () => {

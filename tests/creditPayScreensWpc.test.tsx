@@ -141,6 +141,18 @@ describe('pay result', () => {
     expect(mockReplace).toHaveBeenCalledWith('/restaurant/credit');
   });
 
+  it('a PAID wallet payment shows its wallet entry id as the Transaction ID', async () => {
+    show(attempt({ method: 'WALLET', paidWith: 'WALLET', razorpayPaymentId: null, walletEntryId: 192 }));
+    expect(await screen.findByTestId('pay-receipt')).toBeTruthy();
+    expect(screen.getByTestId('receipt-txid-value')).toHaveTextContent('192');
+  });
+
+  it('a PAID wallet payment from an older server (no entry id) shows no Transaction ID', async () => {
+    show(attempt({ method: 'WALLET', paidWith: 'WALLET', razorpayPaymentId: null }));
+    expect(await screen.findByTestId('pay-receipt')).toBeTruthy();
+    expect(screen.queryByText('Transaction ID')).toBeNull();
+  });
+
   it('REFUNDED has its own state', async () => {
     show(attempt({ status: 'REFUNDED', refundAmount: '12480.00', refundState: 'PENDING' }));
     expect(await screen.findByTestId('pay-result-refunded')).toBeTruthy();

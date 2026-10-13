@@ -296,6 +296,7 @@ export default function CreditStatementScreen() {
           )}
           renderItem={({ item, index, section }) => (
             <CreditStatementRow
+              audience="supplier"
               line={item}
               last={index === section.data.length - 1}
             />

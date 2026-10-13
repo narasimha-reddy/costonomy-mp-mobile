@@ -106,7 +106,8 @@ describe('paid', () => {
     expect(t).toContain('Paid by UPI');
     // 05:00 UTC is 10:30 in India.
     expect(t).toMatch(/10:30/);
-    expect(t).toContain('Payment ID pay_ABC123');
+    expect(t).toContain('Transaction ID');
+    expect(t).toContain('pay_ABC123');
   });
 
   it('a wallet payment says Wallet and has no payment id line', async () => {
@@ -114,7 +115,7 @@ describe('paid', () => {
     renderScreen();
     await screen.findByTestId('pay-receipt');
     expect(text()).toContain('Paid by Wallet');
-    expect(text()).not.toContain('Payment ID');
+    expect(text()).not.toContain('Transaction ID');
   });
 
   it('a card payment says Card', async () => {

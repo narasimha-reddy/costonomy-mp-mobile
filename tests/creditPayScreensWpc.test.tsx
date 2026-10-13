@@ -135,7 +135,8 @@ describe('pay result', () => {
     expect(await screen.findByTestId('pay-result-paid')).toBeTruthy();
     expect(screen.getByTestId('pay-refund-banner')).toBeTruthy();
     expect(screen.getByTestId('pay-receipt')).toBeTruthy();
-    expect(screen.getByText('Payment ID pay_ABC')).toBeTruthy();
+    expect(screen.getByText('Transaction ID')).toBeTruthy();
+    expect(screen.getByTestId('receipt-txid-value')).toHaveTextContent('pay_ABC');
     fireEvent.press(screen.getByTestId('pay-result-done'));
     expect(mockReplace).toHaveBeenCalledWith('/restaurant/credit');
   });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MandiCard, MandiText } from '@/components/common';
+import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
 import { receiptFooter } from '@/lib/credit/pay/copy';
 import type { CreditPayAttempt } from '@/models/creditPay';
 import { formatMoney } from '@/utils/money';
@@ -28,9 +29,7 @@ export function PayReceipt({ attempt }: { attempt: CreditPayAttempt }) {
           </View>
         ))}
         <MandiText variant="caption" color={Colors.textSecondary}>{receiptFooter(attempt)}</MandiText>
-        {attempt.razorpayPaymentId != null && (
-          <MandiText variant="caption" color={Colors.textSecondary}>{`Payment ID ${attempt.razorpayPaymentId}`}</MandiText>
-        )}
+        <TransactionIdLine id={attempt.razorpayPaymentId} testID="receipt-txid" />
       </View>
     </MandiCard>
   );

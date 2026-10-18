@@ -20,7 +20,7 @@ import {
 import { useSession } from '@/contexts/SessionProvider';
 import { ApiError } from '@/lib/api/errors';
 import {
-  marketplaceGrant,
+  roleGrant,
   useAssignableRoles,
   useChangeRole,
   useInvitations,
@@ -45,7 +45,7 @@ interface Props {
   side: Side;
   orgId: number | null;
   places: TeamPlace[];
-  /** Whether the viewer may invite, change and remove (OUTLET_USER_MANAGE / SUPPLIER_USER_MANAGE). */
+  /** Whether the viewer may invite, change and remove (common's team.edit). */
   canManage: boolean;
 }
 
@@ -89,7 +89,7 @@ export function TeamScreen({ side, orgId, places, canManage }: Props) {
         <>
           <MandiSectionHeader title="People" count={list.length} />
           {list.map((m) => {
-            const grant = marketplaceGrant(m, side);
+            const grant = roleGrant(m);
             return (
               <MandiCard key={m.membershipId} onPress={canManage ? () => setSelected(m) : undefined}>
                 <View style={styles.titleRow}>
@@ -100,7 +100,7 @@ export function TeamScreen({ side, orgId, places, canManage }: Props) {
                   {m.status === 'SUSPENDED' && <MandiStatusChip label="Suspended" tone="warning" size="sm" />}
                 </View>
                 <MandiText variant="caption" color={Colors.textSecondary}>
-                  {grant ? `${grant.roleName} · ${where(grant.scopeType === 'ORG' ? null : grant.scopeId)}` : 'No marketplace role'}
+                  {grant ? `${grant.roleName} · ${where(grant.scopeType === 'ORG' ? null : grant.scopeId)}` : 'No role yet'}
                 </MandiText>
                 {m.phone != null && m.name && (
                   <MandiText variant="caption" color={Colors.textTertiary}>{m.phone}</MandiText>
@@ -137,7 +137,10 @@ function InvitationCard({ invitation, orgId, side, where, canManage }: {
 }) {
   const revoke = useRevokeInvitation(orgId);
   const toast = useToast();
-  const grant = marketplaceGrant(invitation, side);
+  const grant = roleGrant(invitation);
+  // An invitation's grants carry only the role id; the name comes from the business's roles.
+  const roles = useAssignableRoles(orgId);
+  const roleName = grant?.roleName ?? roles.data.find((r) => r.id === grant?.roleId)?.name;
   return (
     <MandiCard>
       <View style={styles.titleRow}>
@@ -147,7 +150,7 @@ function InvitationCard({ invitation, orgId, side, where, canManage }: {
         <MandiStatusChip label="Invited" tone="pending" size="sm" />
       </View>
       <MandiText variant="caption" color={Colors.textSecondary}>
-        {grant ? `${grant.roleName} · ${where(grant.scopeType === 'ORG' ? null : grant.scopeId)}` : invitation.target}
+        {grant && roleName ? `${roleName} · ${where(grant.scopeType === 'ORG' ? null : grant.scopeId)}` : invitation.target}
       </MandiText>
       {canManage && (
         <MandiButton label="Cancel invitation" variant="tertiary" size="sm" loading={revoke.isPending}
@@ -162,7 +165,7 @@ function RoleAndPlace({ side, orgId, places, placeLabel, role, setRole, place, s
   side: Side; orgId: number | null; places: TeamPlace[]; placeLabel: string;
   role: Role | null; setRole: (r: Role) => void; place: string; setPlace: (p: string) => void;
 }) {
-  const roles = useAssignableRoles(orgId, side);
+  const roles = useAssignableRoles(orgId);
   return (
     <View style={styles.section}>
       <MandiText variant="label">Role</MandiText>
@@ -228,12 +231,12 @@ function MemberSheet({ side, orgId, member, places, placeLabel, isSelf, onClose 
   side: Side; orgId: number | null; member: Member; places: TeamPlace[]; placeLabel: string; isSelf: boolean;
   onClose: () => void;
 }) {
-  const change = useChangeRole(orgId, side);
+  const change = useChangeRole(orgId);
   const remove = useRemoveMember(orgId);
   const toast = useToast();
-  const current = marketplaceGrant(member, side);
-  const roles = useAssignableRoles(orgId, side);
-  const owner = current?.roleCode?.endsWith('_OWNER') === true;
+  const current = roleGrant(member);
+  const roles = useAssignableRoles(orgId);
+  const owner = current?.template === 'OWNER';
   const [role, setRole] = useState<Role | null>(null);
   const [place, setPlace] = useState(current && current.scopeType === 'OUTLET' ? String(current.scopeId) : WHOLE_BUSINESS);
   const [confirmRemove, setConfirmRemove] = useState(false);

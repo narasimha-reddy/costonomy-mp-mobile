@@ -26,7 +26,7 @@ if len(sys.argv) != 3 or (sys.argv[2] not in STAGES and sys.argv[2] != 'cancel-r
 if delivery_provider() == 'MOCK':
     sys.exit('BLOCKED: the stack runs %s, not PIDGE; stage.py posts signed Pidge webhooks' % delivery_provider())
 if not pidge_secret():
-    sys.exit('BLOCKED: PIDGE_WEBHOOK_SECRET is not set (environment first, then application-local.properties)')
+    sys.exit('BLOCKED: PIDGE_WEBHOOK_SECRET is not set (environment first, then the API's .env.local)')
 oid, name = int(sys.argv[1]), sys.argv[2]
 row = db("select id, coalesce(provider_delivery_id,''), status from delivery where supplier_order_id=%d order by id desc limit 1" % oid)
 if not row or not row[0][1]:

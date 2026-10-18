@@ -47,7 +47,7 @@ export default function CreditOverviewScreen() {
   const { canForOutlet } = usePermissions();
   const go = useSingleNavigation();
   // Paying and reporting a payment both need CREDIT_REPAY; the server refuses them otherwise.
-  const mayRepay = canForOutlet('CREDIT_REPAY', outlet);
+  const mayRepay = canForOutlet('credit.repay', outlet);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickFor, setPickFor] = useState<'pay' | 'claim'>('pay');
   const [multiOpen, setMultiOpen] = useState(false);

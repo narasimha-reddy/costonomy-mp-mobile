@@ -44,17 +44,17 @@ describe('who may do what', () => {
   const can = (granted: string[]) => (p: string) => granted.includes(p);
   it('issues credit notes with CREDIT_COLLECT or CREDIT_MODIFY, and only on an open invoice that is owed', () => {
     const open = { status: 'ISSUED', outstanding: '100.0000' };
-    expect(mayIssueCreditNote(open, can(['CREDIT_COLLECT']), store)).toBe(true);
-    expect(mayIssueCreditNote(open, can(['CREDIT_MODIFY']), store)).toBe(true);
-    expect(mayIssueCreditNote(open, can(['CREDIT_VIEW']), store)).toBe(false);
-    expect(mayIssueCreditNote({ ...open, status: 'PAID' }, can(['CREDIT_COLLECT']), store)).toBe(false);
-    expect(mayIssueCreditNote({ ...open, status: 'WRITTEN_OFF' }, can(['CREDIT_COLLECT']), store)).toBe(false);
-    expect(mayIssueCreditNote({ ...open, outstanding: '0.0000' }, can(['CREDIT_COLLECT']), store)).toBe(false);
+    expect(mayIssueCreditNote(open, can(['credit.collect']), store)).toBe(true);
+    expect(mayIssueCreditNote(open, can(['credit.edit']), store)).toBe(true);
+    expect(mayIssueCreditNote(open, can(['credit.view']), store)).toBe(false);
+    expect(mayIssueCreditNote({ ...open, status: 'PAID' }, can(['credit.collect']), store)).toBe(false);
+    expect(mayIssueCreditNote({ ...open, status: 'WRITTEN_OFF' }, can(['credit.collect']), store)).toBe(false);
+    expect(mayIssueCreditNote({ ...open, outstanding: '0.0000' }, can(['credit.collect']), store)).toBe(false);
   });
   it('writes off with CREDIT_WRITE_OFF alone (collect and modify are not enough)', () => {
-    expect(mayWriteOff(can(['CREDIT_WRITE_OFF']), store)).toBe(true);
-    expect(mayWriteOff(can(['CREDIT_COLLECT', 'CREDIT_MODIFY']), store)).toBe(false);
-    expect(mayWriteOff(can(['CREDIT_WRITE_OFF']), null)).toBe(false);
+    expect(mayWriteOff(can(['credit.write_off']), store)).toBe(true);
+    expect(mayWriteOff(can(['credit.collect', 'credit.edit']), store)).toBe(false);
+    expect(mayWriteOff(can(['credit.write_off']), null)).toBe(false);
   });
 });
 

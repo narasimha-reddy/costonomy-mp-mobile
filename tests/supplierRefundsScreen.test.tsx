@@ -22,7 +22,7 @@ jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToke
 jest.mock('@/contexts/StoreProvider', () => ({
   useStore: () => ({ storeId: 5, store: { id: 5, supplierOrganizationId: 1, name: 'Main' }, stores: [], select: jest.fn() }),
 }));
-let mockGranted: string[] = ['CREDIT_COLLECT'];
+let mockGranted: string[] = ['credit.collect'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
@@ -50,7 +50,7 @@ const row = (id: number, over: Record<string, unknown> = {}) => ({
 });
 
 const clients: QueryClient[] = [];
-afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockGranted = ['CREDIT_COLLECT']; mockOffline = false; });
+afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockGranted = ['credit.collect']; mockOffline = false; });
 beforeEach(() => {
   jest.clearAllMocks();
   listM.mockImplementation(async (_t: string, _s: number, status?: string) =>
@@ -88,7 +88,7 @@ describe('Refunds to give back', () => {
   });
 
   it('hides Mark as refunded without CREDIT_COLLECT or CREDIT_MODIFY', async () => {
-    mockGranted = ['CREDIT_VIEW'];
+    mockGranted = ['credit.view'];
     renderScreen();
     await screen.findByTestId('refund-row-1');
     expect(screen.queryByTestId('refund-mark-1')).toBeNull();

@@ -20,14 +20,14 @@ dependencies.
 * API on `http://localhost:7070/costonomy-mp-api` built from the credit stack, with the pay-from-wallet switch ON
   (`costonomy.mp.credit.wallet-repay.enabled=true`). The suite refuses to run against a non-local host (`API=` may
   point at another local port).
-* Local MySQL `costonomy_mp` on 127.0.0.1:3306 and the `mysql` client at `~/.local/opt/mysql/bin/mysql`
-  (or `MYSQL_BIN`). The DB user and password are read at run time from the API repo's gitignored
-  `src/main/resources/application-local.properties` (found via `API_REPO`, the sibling directory, or
-  `~/Documents/costonomyprojects/costonomy-mp-api`) and handed to `mysql` through `MYSQL_PWD` only; they are never
-  printed or written.
+* The database the API uses and the `mysql` client at `~/.local/opt/mysql/bin/mysql` (or `MYSQL_BIN`). Host,
+  database, user and password are read at run time from the API repo's git-ignored `.env.local` (found via
+  `API_REPO`, the sibling directory, or `~/Documents/costonomy-mp/costonomy-mp-api`) and the password is handed to
+  `mysql` through `MYSQL_PWD` only; they are never printed or written.
+* costonomy-common-api on `http://localhost:8082` (`COMMON=` overrides it): sign-in is common's (`tools/mp-local.js`).
 * Seed data: restaurant `+919876500004` (outlet 1), other tenant `+919876500007` (outlet 2), suppliers
   `+919876511001/2/3` (stores 1/2/3, each the SUP_OWNER of its organisation), `supplier_credit_policy.credit_enabled=1`
-  for stores 1 to 3. Login is OTP `123456`; the helper waits out `OTP_RESEND_TOO_SOON` and caches tokens (and the
+  for stores 1 to 3. Sign-in is code `123456` at common-api; the helper waits out the code cooldown and caches tokens (and the
   refresh token) in `tools/credit-e2e/.sessions.json` (gitignored, mode 600).
 
 ## Scenarios

@@ -89,7 +89,7 @@ export default function CreditClaimScreen() {
   const { offline } = useNetworkStatus();
   const { canForOutlet } = usePermissions();
   // Reporting a payment needs CREDIT_REPAY; the server refuses it otherwise.
-  const mayRepay = canForOutlet('CREDIT_REPAY', outlet);
+  const mayRepay = canForOutlet('credit.repay', outlet);
   const params = useLocalSearchParams<{ agreementId?: string | string[]; invoiceId?: string | string[] }>();
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const agreementId = Number(first(params.agreementId));

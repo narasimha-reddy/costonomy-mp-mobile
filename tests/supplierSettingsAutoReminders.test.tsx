@@ -23,7 +23,7 @@ jest.mock('expo-router', () => ({
 jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToken: 'tok' }) }));
 jest.mock('@/contexts/StoreProvider', () => ({ useStore: () => ({ supplier: { id: 1 }, storeId: 5 }) }));
 jest.mock('@/hooks/useDeviceLocation', () => ({ useDeviceLocation: () => ({ coordinates: null, status: 'idle', capture: jest.fn() }) }));
-let mockGranted: string[] = ['CREDIT_MODIFY'];
+let mockGranted: string[] = ['credit.edit'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
@@ -55,7 +55,7 @@ function renderScreen() {
 }
 const sw = () => screen.findByLabelText(/^Automatic reminders\./);
 
-afterEach(() => { cleanup(); mockGranted = ['CREDIT_MODIFY']; });
+afterEach(() => { cleanup(); mockGranted = ['credit.edit']; });
 beforeEach(() => {
   jest.clearAllMocks();
   (fetchStore as jest.Mock).mockResolvedValue(store);
@@ -81,7 +81,7 @@ describe('Automatic reminders setting', () => {
   });
 
   it('is not offered to people without CREDIT_MODIFY', async () => {
-    mockGranted = ['CREDIT_VIEW'];
+    mockGranted = ['credit.view'];
     renderScreen();
     await screen.findByText('Credit you offer');
     expect(screen.queryByLabelText(/^Automatic reminders\./)).toBeNull();

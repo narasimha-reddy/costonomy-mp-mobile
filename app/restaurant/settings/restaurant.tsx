@@ -45,11 +45,11 @@ export default function RestaurantSettingsScreen() {
   const { canForRestaurant } = usePermissions();
 
   const restaurantId = outlet?.restaurantId ?? null;
-  const editable = canForRestaurant('RESTAURANT_EDIT', restaurantId);
+  const editable = canForRestaurant('business.edit', restaurantId);
   // Viewing and editing are separate grants, and a store manager has neither:
   // the server answers 404 rather than 403 so ids cannot be enumerated, which
   // would reach this screen as "something went wrong" — true but useless.
-  const visible = canForRestaurant('RESTAURANT_VIEW', restaurantId);
+  const visible = canForRestaurant('business.view', restaurantId);
 
   const query = useQuery({
     queryKey: ['restaurant', restaurantId],

@@ -65,7 +65,7 @@ export default function RestaurantDisputeScreen() {
     enabled: Number.isFinite(disputeId) && accessToken != null,
   });
 
-  const canAsk = canForOutlet('DISPUTE_CREATE', outlet)
+  const canAsk = canForOutlet('disputes.create', outlet)
     && dispute.data != null
     && dispute.data.refundRequest == null
     && dispute.data.status !== 'RESOLVED'

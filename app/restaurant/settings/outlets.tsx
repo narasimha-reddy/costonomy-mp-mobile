@@ -37,7 +37,7 @@ export default function OutletsScreen() {
   const { canForRestaurant, canForOutlet } = usePermissions();
 
   const restaurantId = outlet?.restaurantId ?? null;
-  const canAdd = canForRestaurant('RESTAURANT_EDIT', restaurantId);
+  const canAdd = canForRestaurant('business.edit', restaurantId);
 
   return (
     <MandiScreen
@@ -66,7 +66,7 @@ export default function OutletsScreen() {
           <OutletCard
             key={item.id}
             outlet={item}
-            editable={canForOutlet('OUTLET_EDIT', item)}
+            editable={canForOutlet('outlets.edit', item)}
             onPress={() => router.push(`/restaurant/settings/outlet/${item.id}`)}
           />
         ))

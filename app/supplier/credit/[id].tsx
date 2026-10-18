@@ -108,7 +108,7 @@ export default function SupplierCreditAgreementScreen() {
   const { storeId, store } = useStore();
   const { offline } = useNetworkStatus();
   const { canForStore } = usePermissions();
-  const canModify = store != null && canForStore('CREDIT_MODIFY', store);
+  const canModify = store != null && canForStore('credit.edit', store);
   const canCollect = mayDecideClaims(canForStore, store);
   const decide = useDecideClaim();
 

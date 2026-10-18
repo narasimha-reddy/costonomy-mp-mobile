@@ -75,7 +75,7 @@ export function mayDecideClaims(
   store: { id: number; supplierOrganizationId: number } | null | undefined,
 ): boolean {
   return store != null
-    && (canForStore('CREDIT_COLLECT', store) || canForStore('CREDIT_MODIFY', store));
+    && (canForStore('credit.collect', store) || canForStore('credit.edit', store));
 }
 
 /** The group heading for claims the server flags `stale` (waiting 7 days or more). */

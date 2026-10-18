@@ -83,7 +83,7 @@ export default function BillReviewScreen() {
   const save = useSaveInvoiceReview(id);
   const { outlet } = useOutlet();
   const { canForOutlet } = usePermissions();
-  const mayChangeBill = canForOutlet('QUICKSCAN_PAY', outlet);
+  const mayChangeBill = canForOutlet('wallet.pay', outlet);
   const invoice = query.data;
 
   const [state, dispatch] = useReducer(screenReducer, null);

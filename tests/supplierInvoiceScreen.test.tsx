@@ -27,7 +27,7 @@ jest.mock('@/contexts/StoreProvider', () => ({
   useStore: () => ({ storeId: 5, store: { id: 5, supplierOrganizationId: 1, name: 'Main' }, stores: [], select: jest.fn() }),
 }));
 jest.mock('@/lib/server-clock', () => ({ serverNow: () => Date.parse('2026-10-06T06:00:00Z') }));
-let mockGranted: string[] = ['CREDIT_MODIFY'];
+let mockGranted: string[] = ['credit.edit'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
@@ -83,7 +83,7 @@ const deferred = <T,>() => {
 };
 
 const clients: QueryClient[] = [];
-afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockOffline = false; mockGranted = ['CREDIT_MODIFY']; });
+afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockOffline = false; mockGranted = ['credit.edit']; });
 
 function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -167,7 +167,7 @@ describe('the invoice', () => {
 
 describe('permissions', () => {
   it('CREDIT_COLLECT can record but not extend', async () => {
-    mockGranted = ['CREDIT_COLLECT'];
+    mockGranted = ['credit.collect'];
     renderScreen();
     expect(await screen.findByTestId('invoice-record')).toBeTruthy();
     expect(screen.queryByTestId('invoice-extend')).toBeNull();

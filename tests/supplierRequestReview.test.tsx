@@ -88,7 +88,7 @@ function renderScreen() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockGranted = ['CREDIT_MODIFY', 'CREDIT_REQUEST_VIEW'];
+  mockGranted = ['credit.edit', 'credit_requests.view'];
   agreementM.mockResolvedValue(agreement());
   contextM.mockResolvedValue(context());
   policyM.mockResolvedValue(policy());
@@ -214,7 +214,7 @@ describe('Request review: the context card', () => {
   });
 
   it('does not ask for the context without CREDIT_REQUEST_VIEW', async () => {
-    mockGranted = ['CREDIT_MODIFY'];
+    mockGranted = ['credit.edit'];
     renderScreen();
     await screen.findByText('Weekly vegetables');
     expect(contextM).not.toHaveBeenCalled();
@@ -224,7 +224,7 @@ describe('Request review: the context card', () => {
 
 describe('Request review: permissions', () => {
   it('shows no actions without CREDIT_MODIFY', async () => {
-    mockGranted = ['CREDIT_REQUEST_VIEW'];
+    mockGranted = ['credit_requests.view'];
     renderScreen();
     await screen.findByText('Weekly vegetables');
     expect(screen.queryByTestId('request-actions')).toBeNull();

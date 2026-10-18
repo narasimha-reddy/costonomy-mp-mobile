@@ -119,7 +119,7 @@ export default function QuickScanPayScreen() {
   });
 
   const amountOk = isAmount(amount);
-  const mayPay = canForOutlet('QUICKSCAN_PAY', outlet);
+  const mayPay = canForOutlet('wallet.pay', outlet);
   const canSubmit = amountOk && method === 'WALLET' && mayPay && !pay.isPending;
 
   return (

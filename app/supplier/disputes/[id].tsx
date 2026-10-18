@@ -70,7 +70,7 @@ export default function SupplierDisputeScreen() {
 
   const refund = dispute.data?.refundRequest ?? null;
   const actionable = refund != null && refundCopy(refund, 'supplier', serverNow()).actionable;
-  const mayDecide = canForStore('DISPUTE_REFUND_DECIDE', store);
+  const mayDecide = canForStore('disputes.refund', store);
 
   const decide = useMutation({
     mutationFn: (decision: Decision) =>

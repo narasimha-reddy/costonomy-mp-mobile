@@ -29,7 +29,7 @@ jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToke
 jest.mock('@/contexts/StoreProvider', () => ({
   useStore: () => ({ storeId: 5, store: { id: 5, supplierOrganizationId: 1, name: 'Main' }, stores: [], select: jest.fn() }),
 }));
-let mockGranted: string[] = ['CREDIT_MODIFY'];
+let mockGranted: string[] = ['credit.edit'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
@@ -116,7 +116,7 @@ const pageOf = (items: unknown[], over: Record<string, unknown> = {}) =>
   ({ items, page: 0, size: 20, total: items.length, hasNext: false, ...over });
 
 const clients: QueryClient[] = [];
-afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockOffline = false; mockGranted = ['CREDIT_MODIFY']; });
+afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockOffline = false; mockGranted = ['credit.edit']; });
 
 function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -183,7 +183,7 @@ describe('Undo a recorded payment (M26)', () => {
   });
 
   it('does not offer Undo without CREDIT_COLLECT or CREDIT_MODIFY', async () => {
-    mockGranted = ['CREDIT_VIEW'];
+    mockGranted = ['credit.view'];
     paymentsM.mockResolvedValue(pageOf([recorded(31)]));
     renderScreen();
     await screen.findByTestId('agreement-payment-31');
@@ -191,7 +191,7 @@ describe('Undo a recorded payment (M26)', () => {
   });
 
   it('CREDIT_COLLECT alone is enough', async () => {
-    mockGranted = ['CREDIT_COLLECT'];
+    mockGranted = ['credit.collect'];
     paymentsM.mockResolvedValue(pageOf([recorded(31)]));
     renderScreen();
     expect(await screen.findByTestId('undo-payment-31')).toBeTruthy();
@@ -260,7 +260,7 @@ describe('Remind (M26)', () => {
   });
 
   it('hides Remind for people who cannot collect', async () => {
-    mockGranted = ['CREDIT_VIEW'];
+    mockGranted = ['credit.view'];
     renderScreen();
     await screen.findByTestId('line-actions');
     expect(screen.queryByTestId('action-remind')).toBeNull();

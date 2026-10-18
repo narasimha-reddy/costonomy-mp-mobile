@@ -22,7 +22,7 @@ NEXT = {  # current delivery status -> (stage to report, where the rider is, lab
 if delivery_provider() == 'MOCK':
     sys.exit('BLOCKED: the stack runs %s, not PIDGE; the rider simulator only posts signed Pidge webhooks' % delivery_provider())
 if not pidge_secret():
-    sys.exit('BLOCKED: PIDGE_WEBHOOK_SECRET is not set (environment first, then application-local.properties)')
+    sys.exit('BLOCKED: PIDGE_WEBHOOK_SECRET is not set (environment first, then the API's .env.local)')
 started = sys.argv[2] if len(sys.argv) > 2 else db1("select date_format(utc_timestamp(6), '%Y-%m-%d %H:%i:%s.%f')")
 seen = {}
 print('rider simulator on: deliveries booked from now on move one stage every %ds. Ctrl-C to stop.' % PACE, flush=True)

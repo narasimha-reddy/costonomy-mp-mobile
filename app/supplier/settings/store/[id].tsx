@@ -72,7 +72,7 @@ export default function StoreDetailScreen() {
   const { canForStore } = usePermissions();
   // Hiding is a courtesy; the server checks CREDIT_MODIFY again.
   const canModifyCredit = supplier != null
-    && canForStore('CREDIT_MODIFY', { id: storeId, supplierOrganizationId: supplier.id });
+    && canForStore('credit.edit', { id: storeId, supplierOrganizationId: supplier.id });
 
   const store = useQuery({
     queryKey: ['supplier-store', storeId],

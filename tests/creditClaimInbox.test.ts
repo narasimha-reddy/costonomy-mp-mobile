@@ -78,11 +78,11 @@ describe('rejectReasonText', () => {
 describe('mayDecideClaims', () => {
   const store = { id: 5, supplierOrganizationId: 1 };
   it('allows CREDIT_COLLECT or CREDIT_MODIFY', () => {
-    expect(mayDecideClaims((p) => p === 'CREDIT_COLLECT', store)).toBe(true);
-    expect(mayDecideClaims((p) => p === 'CREDIT_MODIFY', store)).toBe(true);
+    expect(mayDecideClaims((p) => p === 'credit.collect', store)).toBe(true);
+    expect(mayDecideClaims((p) => p === 'credit.edit', store)).toBe(true);
   });
   it('refuses without either', () => {
-    expect(mayDecideClaims((p) => p === 'CREDIT_VIEW', store)).toBe(false);
+    expect(mayDecideClaims((p) => p === 'credit.view', store)).toBe(false);
     expect(mayDecideClaims(() => true, null)).toBe(false);
   });
 });

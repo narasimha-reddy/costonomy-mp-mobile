@@ -29,7 +29,7 @@ jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToke
 jest.mock('@/contexts/StoreProvider', () => ({
   useStore: () => ({ storeId: 5, store: { id: 5, supplierOrganizationId: 1, name: 'Main' }, stores: [], select: jest.fn() }),
 }));
-let mockGranted: string[] = ['CREDIT_MODIFY'];
+let mockGranted: string[] = ['credit.edit'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
@@ -113,7 +113,7 @@ const deferred = <T,>() => {
 };
 
 const clients: QueryClient[] = [];
-afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockOffline = false; mockGranted = ['CREDIT_MODIFY']; });
+afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockOffline = false; mockGranted = ['credit.edit']; });
 
 function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -338,7 +338,7 @@ describe('payments to confirm', () => {
   });
 
   it('lets CREDIT_COLLECT alone confirm', async () => {
-    mockGranted = ['CREDIT_COLLECT'];
+    mockGranted = ['credit.collect'];
     claimsM.mockResolvedValue([claim(1)]);
     renderScreen();
     expect(await screen.findByTestId('detail-claim-1-confirm')).toBeTruthy();
@@ -645,7 +645,7 @@ describe('permissions: view-only', () => {
   });
 
   it('a user with only CREDIT_COLLECT can confirm claims but not edit terms', async () => {
-    mockGranted = ['CREDIT_COLLECT'];
+    mockGranted = ['credit.collect'];
     renderScreen();
     await screen.findByTestId('line-hero');
     expect(screen.queryByTestId('action-more')).toBeNull();
@@ -753,7 +753,7 @@ describe('record a payment (M19)', () => {
   });
 
   it('CREDIT_COLLECT alone can record', async () => {
-    mockGranted = ['CREDIT_COLLECT'];
+    mockGranted = ['credit.collect'];
     renderScreen();
     expect(await screen.findByTestId('action-record')).toBeTruthy();
     expect(screen.getByTestId('pick-invoice-1')).toBeTruthy();
@@ -840,7 +840,7 @@ describe('close line (M25)', () => {
   const type = (id: string, text: string) => fireEvent.changeText(screen.getByTestId(id), text);
 
   it('is a More entry only for CREDIT_MODIFY', async () => {
-    mockGranted = ['CREDIT_COLLECT'];
+    mockGranted = ['credit.collect'];
     renderScreen();
     await screen.findByTestId('line-hero');
     expect(screen.queryByTestId('action-more')).toBeNull();

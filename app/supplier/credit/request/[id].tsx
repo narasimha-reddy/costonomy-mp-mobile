@@ -47,8 +47,8 @@ export default function RequestReviewScreen() {
   const { storeId, store } = useStore();
   const { offline } = useNetworkStatus();
   const { canForStore } = usePermissions();
-  const canModify = store != null && canForStore('CREDIT_MODIFY', store);
-  const canViewContext = store != null && canForStore('CREDIT_REQUEST_VIEW', store);
+  const canModify = store != null && canForStore('credit.edit', store);
+  const canViewContext = store != null && canForStore('credit_requests.view', store);
   const [sheet, setSheet] = useState<Sheet>(null);
   const busy = useRef(false);
   const enabled = Number.isFinite(agreementId) && accessToken != null && storeId != null;

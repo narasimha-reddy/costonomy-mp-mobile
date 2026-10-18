@@ -43,7 +43,7 @@ jest.mock('@/contexts/OutletProvider', () => ({
 }));
 let mockMay = true;
 jest.mock('@/hooks/usePermissions', () => ({
-  usePermissions: () => ({ canForOutlet: (p: string) => mockMay && p === 'QUICKSCAN_PAY' }),
+  usePermissions: () => ({ canForOutlet: (p: string) => mockMay && p === 'wallet.pay' }),
 }));
 jest.mock('@/services/quickscan', () => ({ fetchQuickScanConfig: jest.fn().mockResolvedValue({ enabled: false }) }));
 jest.mock('@/services/wallet', () => ({

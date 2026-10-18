@@ -77,7 +77,7 @@ export default function SupplierInvoiceScreen() {
   const { offline } = useNetworkStatus();
   const { canForStore } = usePermissions();
   const canCollect = mayDecideClaims(canForStore, store);
-  const canModify = store != null && canForStore('CREDIT_MODIFY', store);
+  const canModify = store != null && canForStore('credit.edit', store);
   const decide = useDecideClaim();
 
   const query = useQuery({

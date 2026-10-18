@@ -46,7 +46,7 @@ export default function NewOutletScreen() {
   const location = useDeviceLocation();
 
   const restaurantId = outlet?.restaurantId ?? null;
-  const allowed = canForRestaurant('RESTAURANT_EDIT', restaurantId);
+  const allowed = canForRestaurant('business.edit', restaurantId);
 
   const [edits, setEdits] = useState<Partial<OutletDraft>>({});
   const draft: OutletDraft = {

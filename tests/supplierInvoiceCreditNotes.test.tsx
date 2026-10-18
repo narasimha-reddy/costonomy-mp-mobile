@@ -24,7 +24,7 @@ jest.mock('@/contexts/StoreProvider', () => ({
   useStore: () => ({ storeId: 5, store: { id: 5, supplierOrganizationId: 1, name: 'Main' }, stores: [], select: jest.fn() }),
 }));
 jest.mock('@/lib/server-clock', () => ({ serverNow: () => Date.parse('2026-10-06T06:00:00Z') }));
-let mockGranted: string[] = ['CREDIT_COLLECT'];
+let mockGranted: string[] = ['credit.collect'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
@@ -63,7 +63,7 @@ const fullyCredited = () => detail({
 });
 
 const clients: QueryClient[] = [];
-afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockGranted = ['CREDIT_COLLECT']; resetAttemptKeys(); });
+afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockGranted = ['credit.collect']; resetAttemptKeys(); });
 beforeEach(() => {
   jest.clearAllMocks();
   invoiceM.mockResolvedValue(detail());
@@ -144,14 +144,14 @@ describe('supplier invoice: Issue credit note action', () => {
   });
 
   it('shows for CREDIT_MODIFY too', async () => {
-    mockGranted = ['CREDIT_MODIFY'];
+    mockGranted = ['credit.edit'];
     renderScreen();
     await ready();
     expect(screen.getByTestId('invoice-credit-note')).toBeTruthy();
   });
 
   it('is hidden without either permission', async () => {
-    mockGranted = ['CREDIT_VIEW'];
+    mockGranted = ['credit.view'];
     renderScreen();
     await ready();
     expect(screen.queryByTestId('invoice-credit-note')).toBeNull();
@@ -179,14 +179,14 @@ describe('supplier invoice: Issue credit note action', () => {
 
 describe('supplier invoice: Write off action', () => {
   it('is hidden for people without CREDIT_WRITE_OFF, even with collect and modify', async () => {
-    mockGranted = ['CREDIT_COLLECT', 'CREDIT_MODIFY'];
+    mockGranted = ['credit.collect', 'credit.edit'];
     renderScreen();
     await ready();
     expect(screen.queryByTestId('invoice-write-off')).toBeNull();
   });
 
   it('shows for CREDIT_WRITE_OFF alone on an open invoice, and opens its sheet', async () => {
-    mockGranted = ['CREDIT_WRITE_OFF'];
+    mockGranted = ['credit.write_off'];
     renderScreen();
     await ready();
     press('invoice-write-off');
@@ -195,7 +195,7 @@ describe('supplier invoice: Write off action', () => {
   });
 
   it.each(['PAID', 'WRITTEN_OFF'])('is hidden on a %s invoice', async (status) => {
-    mockGranted = ['CREDIT_WRITE_OFF'];
+    mockGranted = ['credit.write_off'];
     invoiceM.mockResolvedValue(detail({ status, dueState: status, outstanding: '0.0000' }));
     renderScreen();
     await ready();

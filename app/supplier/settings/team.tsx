@@ -8,7 +8,7 @@ export default function SupplierTeamScreen() {
   const { stores, store } = useStore();
   const { canForStore } = usePermissions();
   const supplierId = store?.supplierOrganizationId ?? null;
-  const canManage = stores.some((s) => canForStore('SUPPLIER_USER_MANAGE', s));
+  const canManage = stores.some((s) => canForStore('team.edit', s));
 
   return (
     <TeamScreen

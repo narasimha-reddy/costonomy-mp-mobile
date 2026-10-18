@@ -5,7 +5,7 @@ screenshots the buyer and supplier tracking screens at each state. LOCAL only.
 
 - `driver.py`: stdlib helpers (API calls with idempotency keys, cached sessions, mysql CLI, signed Pidge webhooks,
   Pidge sandbox stages, screenshots through `shots.js`). Secrets are never printed: the Pidge webhook secret comes from `PIDGE_WEBHOOK_SECRET` first, then from
-  `costonomy-mp-api/src/main/resources/application-local.properties` (optional file).
+  `costonomy-mp-api/.env.local` (optional file).
 - `shots.js`: Node 22, no npm install. Spawns headless Chrome, one browser context per audience, each shot at widths 360, 390 and 412 (`SHOT_WIDTHS`, files `...-w360.png`), seeds the
   session tokens into localStorage (`mp.accessToken`, `mp.refreshToken`), waits for the expected texts, saves
   `out/shots/<case>-<audience>-<step>.png` plus the page innerText as `.txt`, and hands back the rotated tokens.
@@ -19,7 +19,7 @@ Setup it changes and puts back (also on failure): the supplier store's operating
 the store closes at night), and the outlet's coordinates for the no-partner cases (restored in `finally`).
 
 Notes:
-- OTP is requested once per number; after that `/auth/refresh` is used. `.sessions.json` is mode 600 and git-ignored.
+- Sign-in is costonomy-common-api's (`COMMON`, default `http://localhost:8082`): a code is requested once per number, after that common's `/v1/auth/refresh` is used. `.sessions.json` is mode 600 and git-ignored.
 - Card cases (2, 11c) and WALLET funding need Razorpay: `tools/razorpay-e2e` needs `npm install` and the wallet can
   only be topped up through Razorpay unless `providers.payment=MOCK`. Those steps are recorded as BLOCKED.
 - `E2E_CLOCK=utc` makes the no-partner time shifts use `utc_timestamp(6)` instead of `now(6)`. Use it once the retry
@@ -36,7 +36,7 @@ Environment (all optional; defaults shown):
 | `API` | `http://localhost:7080/costonomy-mp-api` | API base |
 | `WEB` | `http://localhost:7074` | Expo web |
 | `MYSQL_CMD` | `docker exec -i merged-mysql mysql -uroot -proot costonomy_mp` | full command prefix; `-N -B -e <sql>` is appended |
-| `PIDGE_WEBHOOK_SECRET` | from `application-local.properties` | signs the simulated Pidge webhooks; never printed |
+| `PIDGE_WEBHOOK_SECRET` | from the API's `.env.local` | signs the simulated Pidge webhooks; never printed |
 | `SHOT_WIDTHS` | `360,390,412` | web screenshot widths |
 | `DELIVERY_PROVIDER` | detected | force `PIDGE` or `MOCK`; otherwise read from `API_LOG` (file), the `delivery_provider` table and the latest delivery |
 | `E2E_CLOCK`, `KEEP_HOURS`, `CHROME_PATH` | as before | |

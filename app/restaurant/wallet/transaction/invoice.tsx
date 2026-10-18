@@ -40,7 +40,7 @@ export default function InvoiceViewerScreen() {
   const query = useWalletInvoice(id);
   const { outlet } = useOutlet();
   const { canForOutlet } = usePermissions();
-  const mayChangeBill = canForOutlet('QUICKSCAN_PAY', outlet);
+  const mayChangeBill = canForOutlet('wallet.pay', outlet);
   const remove = useDeleteWalletInvoice(id);
   const invoice = query.data;
 

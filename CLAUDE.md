@@ -62,8 +62,9 @@ a live gallery of every primitive — check it before building a new component.
 
 ### Checking a screen against a real backend
 
-Run the API on the `local` profile (port 7070) and `npm run web` (port 7071). The local profile fixes the
-OTP at `123456` (`costonomy.mp.otp.mock-code`), so any number signs in — but the
+Run the stack with costonomy-api's `local/run.sh dev` (MP on 7070 with `MP_API_REPO` set, costonomy-common-api on
+8082, which owns sign-in) and `npm run web` (port 7071); `npm run start:test` / `start:prod` point the app at the
+servers instead (`.env.example`). Common's dev profile fixes the code at `123456`, so any number signs in — but the
 **resend cooldown and attempt limits are real**, which is deliberate: those paths
 are part of the screen. Expect a genuine 429 if you re-request a code for the same
 number inside a minute.

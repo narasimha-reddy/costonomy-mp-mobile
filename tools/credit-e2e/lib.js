@@ -1,31 +1,22 @@
 /* global __dirname */
-// Shared helpers for the Credit end-to-end suite. LOCAL stack only:
-// API localhost:7070, MySQL 127.0.0.1 (costonomy_mp). See README.md.
+// Shared helpers for the Credit end-to-end suite. LOCAL stack only: API localhost:7070, sign-in at the local
+// costonomy-common-api (localhost:8082), and the database the API's .env.local names. See README.md.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const local = require('../mp-local');
 
 const API_ROOT = process.env.API || 'http://localhost:7070/costonomy-mp-api';
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(API_ROOT + '/')) {
   throw new Error('Refusing to run: API must be a local host, got ' + API_ROOT);
 }
 const API = API_ROOT + '/api/v1';
-// The API repo: API_REPO, else beside this repo, else the usual place under ~/Documents/costonomyprojects.
-const API_REPO = [process.env.API_REPO, path.resolve(__dirname, '../../../costonomy-mp-api'),
-  path.join(process.env.HOME || '', 'Documents/costonomyprojects/costonomy-mp-api')]
-  .filter(Boolean)
-  .find((d) => fs.existsSync(`${d}/src/main/resources/application-local.properties`))
-  || path.resolve(__dirname, '../../../costonomy-mp-api');
 const CACHE = path.join(__dirname, '.sessions.json');
 
-// The database password comes from the API's gitignored local config, at run
-// time, and goes to the mysql client through the environment only. It is never
-// printed, logged or written anywhere.
-const PROPS = (() => {
-  try { return fs.readFileSync(`${API_REPO}/src/main/resources/application-local.properties`, 'utf8'); } catch { return ''; }
-})();
-const prop = (k) => (PROPS.split('\n').find((l) => l.startsWith(k + '=')) || '').slice(k.length + 1).trim();
+// The database comes from the API's git-ignored .env.local, at run time, and the password goes to the mysql client
+// through the environment only. It is never printed, logged or written anywhere.
+const DB = local.database();
 
 const LOCAL_MYSQL = `${process.env.HOME}/.local/opt/mysql/bin/mysql`;
 const MYSQL = process.env.MYSQL_BIN || (fs.existsSync(LOCAL_MYSQL) ? LOCAL_MYSQL : 'mysql');
@@ -33,11 +24,9 @@ const MYSQL = process.env.MYSQL_BIN || (fs.existsSync(LOCAL_MYSQL) ? LOCAL_MYSQL
 /** Run SQL, return the raw trimmed tab-separated output (no header). */
 function dbRaw(sql) {
   return execFileSync(MYSQL,
-    ['-h', process.env.MYSQL_HOST || '127.0.0.1', '-P', process.env.MYSQL_PORT || '3306',
-      `-u${prop('spring.datasource.username') || 'costonomy'}`,
-      process.env.MYSQL_DATABASE || 'costonomy_mp', '-N', '-B', '-e', sql],
+    ['-h', DB.host, '-P', DB.port, `-u${DB.user}`, DB.name, '-N', '-B', '-e', sql],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, MYSQL_PWD: prop('spring.datasource.password') } }).trim();
+      env: { ...process.env, MYSQL_PWD: DB.password } }).trim();
 }
 /** Rows as arrays of strings ('NULL' stays the string NULL). */
 function db(sql) {
@@ -88,23 +77,10 @@ async function login(phone) {
     return c.accessToken;
   }
   if (c && c.refreshToken) {
-    const r = await api('/auth/refresh', { body: { refreshToken: c.refreshToken } });
-    if (r.status === 200) return keep(r.data);
+    const renewed = await local.refresh(c.refreshToken);
+    if (renewed) return keep(renewed);
   }
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const req = await api('/auth/otp/request', { body: { phone, purpose: 'LOGIN' } });
-    if (req.status === 429 || req.error?.code === 'OTP_RESEND_TOO_SOON') {
-      const wait = (req.error?.details?.retryAfterSeconds ?? 60) + 1;
-      console.log(`    (waiting ${wait}s for ${phone}'s OTP cooldown)`);
-      await sleep(wait * 1000);
-      continue;
-    }
-    if (req.status >= 400) throw new Error(`otp request failed for ${phone}: ${req.status} ${req.error?.code}`);
-    const v = await api('/auth/otp/verify', { body: { phone, otp: '123456', purpose: 'LOGIN' } });
-    if (v.status !== 200) throw new Error(`login failed for ${phone}: ${v.status} ${v.error?.code}`);
-    return keep(v.data);
-  }
-  throw new Error('login: gave up waiting for the OTP cooldown for ' + phone);
+  return keep(await local.signIn(phone));
 }
 
 const PHONES = {

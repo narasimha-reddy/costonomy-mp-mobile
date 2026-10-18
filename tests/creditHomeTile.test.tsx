@@ -12,7 +12,7 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@/analytics', () => ({ track: jest.fn() }));
 
-let mockPermissions: string[] = ['CREDIT_VIEW'];
+let mockPermissions: string[] = ['credit.view'];
 let mockQuickScan = true;
 let mockAttention = { overdue: false, dueSoon: false };
 jest.mock('@/contexts/SessionProvider', () => ({
@@ -55,7 +55,7 @@ const order = () => screen.getAllByRole('button').map((b) => b.props.testID)
 
 beforeEach(() => {
   mockPush.mockClear();
-  mockPermissions = ['CREDIT_VIEW'];
+  mockPermissions = ['credit.view'];
   mockQuickScan = true;
   mockAttention = { overdue: false, dueSoon: false };
 });

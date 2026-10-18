@@ -30,33 +30,33 @@ const OUTLET = { id: 5, restaurantId: 1 };
 describe('usePermissions', () => {
   it('honours a grant on the outlet itself', () => {
     const { canForOutlet } = permissions([
-      grant({ scopeType: 'OUTLET', scopeId: 5, permissions: ['OUTLET_EDIT'] }),
+      grant({ scopeType: 'OUTLET', scopeId: 5, permissions: ['outlets.edit'] }),
     ]);
-    expect(canForOutlet('OUTLET_EDIT', OUTLET)).toBe(true);
+    expect(canForOutlet('outlets.edit', OUTLET)).toBe(true);
   });
 
   // The case that makes this hook necessary: an owner holds one RESTAURANT
   // membership and no OUTLET rows, and must still be able to edit their outlets.
   it('honours a restaurant grant on an outlet beneath it', () => {
     const { canForOutlet } = permissions([
-      grant({ scopeType: 'RESTAURANT', scopeId: 1, permissions: ['OUTLET_EDIT'] }),
+      grant({ scopeType: 'RESTAURANT', scopeId: 1, permissions: ['outlets.edit'] }),
     ]);
-    expect(canForOutlet('OUTLET_EDIT', OUTLET)).toBe(true);
+    expect(canForOutlet('outlets.edit', OUTLET)).toBe(true);
   });
 
   it('does not let a grant on one outlet answer for another', () => {
     const { canForOutlet } = permissions([
-      grant({ scopeType: 'OUTLET', scopeId: 9, permissions: ['OUTLET_EDIT'] }),
+      grant({ scopeType: 'OUTLET', scopeId: 9, permissions: ['outlets.edit'] }),
     ]);
-    expect(canForOutlet('OUTLET_EDIT', OUTLET)).toBe(false);
+    expect(canForOutlet('outlets.edit', OUTLET)).toBe(false);
   });
 
   it('does not let another restaurant answer for this one', () => {
     const { canForOutlet, canForRestaurant } = permissions([
-      grant({ scopeType: 'RESTAURANT', scopeId: 2, permissions: ['OUTLET_EDIT', 'RESTAURANT_EDIT'] }),
+      grant({ scopeType: 'RESTAURANT', scopeId: 2, permissions: ['outlets.edit', 'business.edit'] }),
     ]);
-    expect(canForOutlet('OUTLET_EDIT', OUTLET)).toBe(false);
-    expect(canForRestaurant('RESTAURANT_EDIT', 1)).toBe(false);
+    expect(canForOutlet('outlets.edit', OUTLET)).toBe(false);
+    expect(canForRestaurant('business.edit', 1)).toBe(false);
   });
 
   // A grant beneath the restaurant does not reach up to it.
@@ -66,36 +66,36 @@ describe('usePermissions', () => {
         scopeType: 'OUTLET',
         scopeId: 5,
         parentScopeId: 1,
-        permissions: ['RESTAURANT_EDIT'],
+        permissions: ['business.edit'],
       }),
     ]);
-    expect(canForRestaurant('RESTAURANT_EDIT', 1)).toBe(false);
+    expect(canForRestaurant('business.edit', 1)).toBe(false);
   });
 
   it('refuses a permission the grant does not carry', () => {
     const { canForOutlet } = permissions([
-      grant({ scopeType: 'RESTAURANT', scopeId: 1, permissions: ['OUTLET_VIEW'] }),
+      grant({ scopeType: 'RESTAURANT', scopeId: 1, permissions: ['outlets.view'] }),
     ]);
-    expect(canForOutlet('OUTLET_EDIT', OUTLET)).toBe(false);
+    expect(canForOutlet('outlets.edit', OUTLET)).toBe(false);
   });
 
   it('lets a platform grant answer at any scope', () => {
     const { canForOutlet, canForRestaurant } = permissions([
-      grant({ scopeType: 'PLATFORM', scopeId: null, permissions: ['OUTLET_EDIT'] }),
+      grant({ scopeType: 'PLATFORM', scopeId: null, permissions: ['outlets.edit'] }),
     ]);
-    expect(canForOutlet('OUTLET_EDIT', OUTLET)).toBe(true);
-    expect(canForRestaurant('OUTLET_EDIT', 1)).toBe(true);
+    expect(canForOutlet('outlets.edit', OUTLET)).toBe(true);
+    expect(canForRestaurant('outlets.edit', 1)).toBe(true);
   });
 
   it('is false with no grants and with nothing to check against', () => {
     const { canForOutlet, canForRestaurant } = permissions([]);
-    expect(canForOutlet('OUTLET_EDIT', OUTLET)).toBe(false);
-    expect(canForRestaurant('RESTAURANT_EDIT', 1)).toBe(false);
+    expect(canForOutlet('outlets.edit', OUTLET)).toBe(false);
+    expect(canForRestaurant('business.edit', 1)).toBe(false);
 
     const held = permissions([
-      grant({ scopeType: 'RESTAURANT', scopeId: 1, permissions: ['OUTLET_EDIT'] }),
+      grant({ scopeType: 'RESTAURANT', scopeId: 1, permissions: ['outlets.edit'] }),
     ]);
-    expect(held.canForOutlet('OUTLET_EDIT', null)).toBe(false);
-    expect(held.canForRestaurant('OUTLET_EDIT', null)).toBe(false);
+    expect(held.canForOutlet('outlets.edit', null)).toBe(false);
+    expect(held.canForRestaurant('outlets.edit', null)).toBe(false);
   });
 });

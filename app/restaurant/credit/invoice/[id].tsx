@@ -61,7 +61,7 @@ export default function CreditInvoiceScreen() {
   const { canForOutlet } = usePermissions();
   const go = useSingleNavigation();
   // Paying and reporting a payment both need CREDIT_REPAY; the server refuses them otherwise.
-  const mayRepay = canForOutlet('CREDIT_REPAY', outlet);
+  const mayRepay = canForOutlet('credit.repay', outlet);
   const [sheetOpen, setSheetOpen] = useState(false);
   const withdrawal = useWithdrawClaim(Number(query.data?.agreementId));
 

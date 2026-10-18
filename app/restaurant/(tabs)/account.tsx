@@ -34,11 +34,11 @@ export default function AccountScreen() {
   const { outlets, outlet } = useOutlet();
   const { canForRestaurant } = usePermissions();
 
-  const owner = canForRestaurant('RESTAURANT_EDIT', outlet?.restaurantId);
+  const owner = canForRestaurant('business.edit', outlet?.restaurantId);
   // Not the same question. A store manager holds neither, and the restaurant is
   // not merely uneditable to them — the server answers 404, because a denial that
   // said 403 would confirm the restaurant exists (doc 09 §3).
-  const seesRestaurant = canForRestaurant('RESTAURANT_VIEW', outlet?.restaurantId);
+  const seesRestaurant = canForRestaurant('business.view', outlet?.restaurantId);
 
   return (
     <MandiScreen header={<RestaurantHeader screen="REST-ACCOUNT-01" subtitle="Account" />}>

@@ -133,8 +133,8 @@ export default function WalletScreen() {
     setConfirming(true);
   };
 
-  const mayWithdraw = canForOutlet('WALLET_WITHDRAW', outlet);
-  const mayAddBill = canForOutlet('QUICKSCAN_PAY', outlet);
+  const mayWithdraw = canForOutlet('wallet.withdraw', outlet);
+  const mayAddBill = canForOutlet('wallet.pay', outlet);
 
   return (
     <MandiScreen

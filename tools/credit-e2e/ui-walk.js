@@ -149,22 +149,10 @@ async function saveTokens(phone) {
   const p = t ? JSON.parse(t) : null;
   if (p && p.a && p.r) saved[phone] = { accessToken: p.a, refreshToken: p.r };
 }
-/** The browser gets a session of its own (OTP 123456), so the app's refresh-token rotation cannot clash with the suite's cached tokens. */
+/** The browser gets a session of its own (code 123456), so the app's refresh-token rotation cannot clash with the suite's cached tokens. */
 async function freshLogin(phone) {
-  for (let i = 0; i < 6; i++) {
-    const req = await lib.api('/auth/otp/request', { body: { phone, purpose: 'LOGIN' } });
-    if (req.status === 429 || (req.error && req.error.code === 'OTP_RESEND_TOO_SOON')) {
-      const s = ((req.error && req.error.details && req.error.details.retryAfterSeconds) || 60) + 1;
-      console.log(`   (waiting ${s}s for the OTP cooldown of ${phone})`);
-      await sleep(s * 1000);
-      continue;
-    }
-    if (req.status >= 400) throw new Error(`otp request failed for ${phone}: ${req.status}`);
-    const v = await lib.api('/auth/otp/verify', { body: { phone, otp: '123456', purpose: 'LOGIN' } });
-    if (v.status !== 200) throw new Error(`login failed for ${phone}: ${v.status}`);
-    return { accessToken: v.data.accessToken, refreshToken: v.data.refreshToken };
-  }
-  throw new Error('login: the OTP cooldown never cleared');
+  const t = await require('../mp-local').signIn(phone);
+  return { accessToken: t.accessToken, refreshToken: t.refreshToken };
 }
 let curPhone = null;
 async function signIn(phone) {

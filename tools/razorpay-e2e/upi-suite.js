@@ -38,9 +38,7 @@ const HARNESS = 'http://127.0.0.1:8765/pay';
 // The signing secret is read the way lib.js reads it and only ever used to sign;
 // it is never printed. Signing stands in for the handler's proof where a case
 // has to hand our confirm call a payment made outside the app's own screen.
-const API_REPO = process.env.API_REPO || path.resolve(__dirname, '../../../costonomy-mp-api');
-const SECRET = (fs.readFileSync(`${API_REPO}/src/main/resources/application-local.properties`, 'utf8')
-  .split('\n').find((l) => l.startsWith('costonomy.mp.razorpay.key-secret=')) || '').split('=').slice(1).join('=').trim();
+const SECRET = require('../mp-local').apiSettings().RAZORPAY_KEY_SECRET || '';
 const sign = (orderId, paymentId) => crypto.createHmac('sha256', SECRET).update(`${orderId}|${paymentId}`).digest('hex');
 
 // ── recording ─────────────────────────────────────────────────────────

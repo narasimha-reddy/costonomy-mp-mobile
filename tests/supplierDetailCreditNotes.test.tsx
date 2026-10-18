@@ -25,7 +25,7 @@ jest.mock('@/contexts/SessionProvider', () => ({ useSession: () => ({ accessToke
 jest.mock('@/contexts/StoreProvider', () => ({
   useStore: () => ({ storeId: 5, store: { id: 5, supplierOrganizationId: 1, name: 'Main' }, stores: [], select: jest.fn() }),
 }));
-let mockGranted: string[] = ['CREDIT_MODIFY'];
+let mockGranted: string[] = ['credit.edit'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
@@ -60,7 +60,7 @@ const cn = (id: number, over: Record<string, unknown> = {}) => ({
 });
 
 const clients: QueryClient[] = [];
-afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockGranted = ['CREDIT_MODIFY']; resetAttemptKeys(); });
+afterEach(() => { cleanup(); clients.splice(0).forEach((c) => c.clear()); mockGranted = ['credit.edit']; resetAttemptKeys(); });
 beforeEach(() => {
   jest.clearAllMocks();
   agreementM.mockResolvedValue(agreement());
@@ -82,7 +82,7 @@ const press = (id: string) => fireEvent.press(screen.getByTestId(id));
 
 describe('supplier restaurant detail: write off everything owed', () => {
   it('is not in the More menu for people without CREDIT_WRITE_OFF', async () => {
-    mockGranted = ['CREDIT_MODIFY', 'CREDIT_COLLECT'];
+    mockGranted = ['credit.edit', 'credit.collect'];
     renderScreen();
     await screen.findByTestId('line-actions');
     press('action-more');
@@ -90,7 +90,7 @@ describe('supplier restaurant detail: write off everything owed', () => {
   });
 
   it('is in More for CREDIT_WRITE_OFF, opens the sheet with the line due and writes off the line', async () => {
-    mockGranted = ['CREDIT_WRITE_OFF'];
+    mockGranted = ['credit.write_off'];
     renderScreen();
     await screen.findByTestId('line-actions');
     press('action-more');
@@ -101,7 +101,7 @@ describe('supplier restaurant detail: write off everything owed', () => {
   });
 
   it('is not offered when the line owes nothing', async () => {
-    mockGranted = ['CREDIT_WRITE_OFF'];
+    mockGranted = ['credit.write_off'];
     agreementM.mockResolvedValue(agreement({ due: '0.0000', utilized: '0.0000' }));
     renderScreen();
     await screen.findByTestId('line-actions');

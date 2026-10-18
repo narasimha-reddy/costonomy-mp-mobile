@@ -76,7 +76,7 @@ export default function WalletHistoryScreen() {
   const { accessToken } = useSession();
   const { outlet } = useOutlet();
   const { canForOutlet } = usePermissions();
-  const mayAddBill = canForOutlet('QUICKSCAN_PAY', outlet);
+  const mayAddBill = canForOutlet('wallet.pay', outlet);
   const params = useLocalSearchParams();
 
   const filters = useMemo(

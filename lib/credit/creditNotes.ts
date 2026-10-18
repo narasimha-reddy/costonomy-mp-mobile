@@ -44,7 +44,7 @@ export function reasonWords(code: string | null | undefined): string {
 
 /** Hiding is a courtesy: the server checks again (and answers 404 to anyone without the permission). */
 export function mayWriteOff(canForStore: CanForStore, store: StoreRef | null | undefined): boolean {
-  return store != null && canForStore('CREDIT_WRITE_OFF', store);
+  return store != null && canForStore('credit.write_off', store);
 }
 
 /** A credit note needs CREDIT_COLLECT or CREDIT_MODIFY, and an invoice that is open and owed. */

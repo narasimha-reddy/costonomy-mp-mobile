@@ -28,7 +28,7 @@ jest.mock('@/analytics', () => ({ track: jest.fn() }));
 jest.mock('@/contexts/SessionProvider', () => ({
   useSession: () => ({
     accessToken: 'token',
-    me: { memberships: [{ scopeType: 'RESTAURANT', scopeId: 5, permissions: ['CREDIT_VIEW'] }] },
+    me: { memberships: [{ scopeType: 'RESTAURANT', scopeId: 5, permissions: ['credit.view'] }] },
   }),
 }));
 jest.mock('@/contexts/OutletProvider', () => {

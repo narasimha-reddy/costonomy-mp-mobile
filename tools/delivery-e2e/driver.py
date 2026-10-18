@@ -4,8 +4,10 @@ import hmac, hashlib, json, os, subprocess, sys, time, uuid, urllib.request, url
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
-API_PROPS = os.path.join(ROOT, 'costonomy-mp-api/src/main/resources/application-local.properties')
+API_ENV = os.path.join(os.environ.get('API_REPO') or os.path.join(ROOT, 'costonomy-mp-api'), '.env.local')
 BASE = os.environ.get('API', 'http://localhost:7080/costonomy-mp-api')
+# Sign-in is costonomy-common-api's (phone + code as the mp-mobile client; its dev profile's code is 123456).
+COMMON = os.environ.get('COMMON', 'http://localhost:8082') + '/costonomy-common-api'
 WEB = os.environ.get('WEB', 'http://localhost:7074')
 API = BASE + '/api/v1'
 OUT = os.path.join(HERE, 'out')
@@ -27,15 +29,17 @@ MYSQL_CMD = os.environ.get('MYSQL_CMD', DEFAULT_MYSQL_CMD)
 
 _props = None
 def _load_props():
-    """application-local.properties is optional; read lazily and only for what the environment does not give."""
+    """The API's .env.local is optional; read lazily and only for what the environment does not give."""
     global _props
     if _props is None:
         _props = {}
         try:
-            for _l in open(API_PROPS):
+            for _l in open(API_ENV):
+                _l = _l.strip()
+                if _l.startswith('export '): _l = _l[7:]
                 if '=' in _l and not _l.startswith('#'):
                     k, v = _l.split('=', 1)
-                    _props[k.strip()] = v.strip()
+                    _props[k.strip()] = v.strip().strip('"').strip("'")
         except OSError:
             pass
     return _props
@@ -43,8 +47,8 @@ def props(k, default=''):
     return _load_props().get(k, default)
 
 def pidge_secret():
-    """PIDGE_WEBHOOK_SECRET from the environment first, then the properties file. Never printed."""
-    return os.environ.get('PIDGE_WEBHOOK_SECRET') or props('costonomy.mp.pidge.webhook-secret')
+    """PIDGE_WEBHOOK_SECRET from the environment first, then the API's .env.local. Never printed."""
+    return os.environ.get('PIDGE_WEBHOOK_SECRET') or props('PIDGE_WEBHOOK_SECRET')
 
 def _docker_env():
     env = dict(os.environ)
@@ -61,12 +65,12 @@ def db(sql):
     import shlex
     cmd = shlex.split(MYSQL_CMD) + ['-N', '-B', '-e', sql]
     env = _docker_env()
-    if cmd[0].endswith('mysql'):  # a plain client: password from the properties file via the environment
-        env['MYSQL_PWD'] = props('spring.datasource.password', 'appuser')
+    if cmd[0].endswith('mysql'):  # a plain client: password from the API's .env.local via the environment
+        env['MYSQL_PWD'] = os.environ.get('MYSQL_PASSWORD') or props('MYSQL_PASSWORD')
     r = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if r.returncode != 0:
         err = r.stderr
-        for secret in (props('spring.datasource.password', ''), 'root'):
+        for secret in (os.environ.get('MYSQL_PASSWORD') or props('MYSQL_PASSWORD'), 'root'):
             if secret: err = err.replace(secret, '***')
         raise RuntimeError('db error: ' + err[:300])
     return [l.split('\t') for l in r.stdout.splitlines()]
@@ -170,20 +174,35 @@ def _save(c):
     with os.fdopen(fd, 'w') as f: json.dump(c, f)
 def adopt(phone, tokens):
     c = _load(); c[phone] = tokens; _save(c)
+def common(path, body):
+    """POST to costonomy-common-api: (status, json). Its answers are the bare object, or {"error": {...}}."""
+    req = urllib.request.Request(COMMON + path, data=json.dumps(body).encode(), method='POST',
+                                 headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as err:
+        try:
+            return err.code, json.load(err)
+        except ValueError:
+            return err.code, {}
 def session(phone):
-    """access token; refresh preferred, OTP login at most once per number."""
+    """access token; refresh preferred (common rotates it), code sign-in at most once per number."""
     c = _load()
     if phone in c:
-        code, d, e = api('POST', '/auth/refresh', body={'refreshToken': c[phone]['refreshToken']}, idem=False)
+        code, d = common('/v1/auth/refresh', {'refreshToken': c[phone]['refreshToken'], 'clientId': 'mp-mobile'})
         if code == 200:
             c[phone] = d; _save(c); return d['accessToken']
+    otp = {'channel': 'SMS', 'target': phone, 'purpose': 'LOGIN', 'clientId': 'mp-mobile'}
     while True:
-        code, d, e = api('POST', '/auth/otp/request', body={'phone': phone, 'purpose': 'LOGIN'}, idem=False)
-        if code == 429 or (e and e.get('code') == 'OTP_RESEND_TOO_SOON'):
-            time.sleep(((e or {}).get('details') or {}).get('retryAfterSeconds', 60) + 1); continue
+        code, sent = common('/v1/auth/otp/send', otp)
+        if code == 429:
+            time.sleep(((sent.get('error') or {}).get('details') or {}).get('retryAfterSeconds', 60) + 1); continue
         break
-    code, d, e = api('POST', '/auth/otp/verify', body={'phone': phone, 'otp': props('costonomy.mp.otp.mock-code', '123456'), 'purpose': 'LOGIN'}, idem=False)
-    if code != 200: raise RuntimeError('login failed %s %s' % (phone, e))
+    if code != 200: raise RuntimeError('code request failed %s %s' % (phone, sent.get('error')))
+    code, d = common('/v1/auth/otp/verify', {'challengeId': sent['challengeId'], 'code': os.environ.get('OTP', '123456'),
+                                             'clientId': 'mp-mobile'})
+    if code != 200: raise RuntimeError('sign-in failed %s %s' % (phone, d.get('error')))
     c = _load(); c[phone] = d; _save(c); return d['accessToken']
 
 def until(fn, timeout=60, every=2):

@@ -12,16 +12,14 @@ payments and ₹10 refunds in the Razorpay account it runs against.
 ## Before you run it
 
 1. The local stack is up and seeded (`docs/ONBOARDING.md` in both repos): API on
-   7070, `npm run web` on 7071, MySQL, Redis.
-2. The API is on Razorpay test mode. In
-   `costonomy-mp-api/src/main/resources/application-local.properties`:
+   7070 with costonomy-common-api on 8082 (sign-in), `npm run web` on 7071.
+2. The API is on Razorpay test mode. In `costonomy-mp-api/.env.local`:
 
-   ```properties
-   costonomy.mp.providers.payment=RAZORPAY
-   costonomy.mp.razorpay.key-id=rzp_test_...
-   costonomy.mp.razorpay.key-secret=...
-   costonomy.mp.razorpay.webhook-secret=...
-   costonomy.mp.otp.mock-code=123456
+   ```bash
+   PAYMENT_PROVIDER=RAZORPAY
+   RAZORPAY_KEY_ID=rzp_test_...
+   RAZORPAY_KEY_SECRET=...
+   RAZORPAY_WEBHOOK_SECRET=...
    ```
 
    The suite reads the keys and the database password from that same file, so

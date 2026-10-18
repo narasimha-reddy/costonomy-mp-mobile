@@ -139,7 +139,7 @@ function QuickActions({ outletId }: { outletId: number | null }) {
   const { outlet } = useOutlet();
   const { canForOutlet } = usePermissions();
   const attention = useCreditAttention();
-  const mayViewCredit = canForOutlet('CREDIT_VIEW', outlet);
+  const mayViewCredit = canForOutlet('credit.view', outlet);
 
   const config = useQuery({
     queryKey: ['outlet', outletId, 'quickscan-config'],

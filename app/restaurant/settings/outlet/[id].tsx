@@ -64,7 +64,7 @@ export default function OutletSettingsScreen() {
   });
 
   const outlet = query.data;
-  const editable = canForOutlet('OUTLET_EDIT', outlet ?? null);
+  const editable = canForOutlet('outlets.edit', outlet ?? null);
 
   const [edits, setEdits] = useState<Partial<OutletDraft>>({});
   const [status, setStatus] = useState<string | null>(null);

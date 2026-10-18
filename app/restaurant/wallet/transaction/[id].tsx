@@ -33,7 +33,7 @@ export default function TransactionDetailScreen() {
   const query = useWalletTransaction(id);
   const { outlet } = useOutlet();
   const { canForOutlet } = usePermissions();
-  const mayChangeBill = canForOutlet('QUICKSCAN_PAY', outlet);
+  const mayChangeBill = canForOutlet('wallet.pay', outlet);
   const { waive, undo } = useBillWaiver(id);
 
   const waiveBill = useCallback(async () => {

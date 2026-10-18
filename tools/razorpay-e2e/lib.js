@@ -1,26 +1,24 @@
 /* global __dirname, Buffer */
-// Shared helpers for the Razorpay test-mode suite. LOCAL stack only:
-// API localhost:7070, web localhost:7071, MySQL 127.0.0.1, Razorpay TEST keys.
+// Shared helpers for the Razorpay test-mode suite. LOCAL stack only: API localhost:7070, web localhost:7071,
+// sign-in at the local costonomy-common-api, the database and Razorpay TEST keys from the API's .env.local.
 // See README.md.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const puppeteer = require('puppeteer-core');
+const local = require('../mp-local');
 
-// The API repo is expected beside this one; override with API_REPO.
-const API_REPO = process.env.API_REPO || path.resolve(__dirname, '../../../costonomy-mp-api');
 const API = (process.env.API || 'http://localhost:7070/costonomy-mp-api') + '/api/v1';
 const WEB = process.env.WEB || 'http://localhost:7071';
 const CACHE = path.join(__dirname, '.sessions.json');
-// Keys and the database password come from the API's gitignored local config —
-// the same file the API reads — so nothing secret is duplicated here.
-const PROPS = fs.readFileSync(`${API_REPO}/src/main/resources/application-local.properties`, 'utf8');
-const prop = (k) => (PROPS.split('\n').find((l) => l.startsWith(k + '=')) || '').slice(k.length + 1).trim();
-
-const KEY_ID = prop('costonomy.mp.razorpay.key-id');
-const KEY_SECRET = prop('costonomy.mp.razorpay.key-secret');
-const WEBHOOK_SECRET = prop('costonomy.mp.razorpay.webhook-secret');
+// Keys and the database password come from the API's git-ignored .env.local — the same file the local API reads —
+// so nothing secret is duplicated here.
+const SETTINGS = local.apiSettings();
+const DB = local.database();
+const KEY_ID = SETTINGS.RAZORPAY_KEY_ID || '';
+const KEY_SECRET = SETTINGS.RAZORPAY_KEY_SECRET || '';
+const WEBHOOK_SECRET = SETTINGS.RAZORPAY_WEBHOOK_SECRET || '';
 if (!KEY_ID.startsWith('rzp_test_')) throw new Error('Refusing to run: not a Razorpay TEST key');
 
 const BUYER = '+919876500004';   // Spice Garden, outlet 1
@@ -47,23 +45,11 @@ function saveCache(c) { fs.writeFileSync(CACHE, JSON.stringify(c), { mode: 0o600
 async function session(phone) {
   const cache = loadCache();
   if (cache[phone]) {
-    const r = await api('/auth/refresh', { body: { refreshToken: cache[phone].refreshToken } });
-    if (r.status === 200) { cache[phone] = r.data; saveCache(cache); return r.data; }
+    const renewed = await local.refresh(cache[phone].refreshToken);
+    if (renewed) { cache[phone] = renewed; saveCache(cache); return renewed; }
   }
-  for (;;) {
-    const req = await api('/auth/otp/request', { body: { phone, purpose: 'LOGIN' } });
-    if (req.status === 429 || req.error?.code === 'OTP_RESEND_TOO_SOON') {
-      const wait = (req.error?.details?.retryAfterSeconds ?? 60) + 1;
-      console.log(`    (waiting ${wait}s for ${phone}'s OTP cooldown)`);
-      await sleep(wait * 1000);
-      continue;
-    }
-    break;
-  }
-  const v = await api('/auth/otp/verify', { body: { phone, otp: '123456', purpose: 'LOGIN' } });
-  if (v.status !== 200) throw new Error('login failed ' + JSON.stringify(v.error));
-  cache[phone] = v.data; saveCache(cache);
-  return v.data;
+  cache[phone] = await local.signIn(phone); saveCache(cache);
+  return cache[phone];
 }
 
 const LOCAL_MYSQL = `${process.env.HOME}/.local/opt/mysql/bin/mysql`;
@@ -71,13 +57,11 @@ const MYSQL = process.env.MYSQL_BIN || (fs.existsSync(LOCAL_MYSQL) ? LOCAL_MYSQL
 
 function db(sql) {
   return execFileSync(MYSQL,
-    ['-h', process.env.MYSQL_HOST || '127.0.0.1', '-P', process.env.MYSQL_PORT || '3306',
-      `-u${prop('spring.datasource.username') || 'root'}`,
-      process.env.MYSQL_DATABASE || 'costonomy_mp', '-N', '-e', sql],
+    ['-h', DB.host, '-P', DB.port, `-u${DB.user}`, DB.name, '-N', '-e', sql],
     // The password in the environment, not the command line: a failed command's
     // error message repeats its arguments, and those reached report.json.
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-      env: { ...process.env, MYSQL_PWD: prop('spring.datasource.password') } }).trim();
+      env: { ...process.env, MYSQL_PWD: DB.password } }).trim();
 }
 
 /** Read-only calls to Razorpay's TEST API, for asserting what Razorpay itself recorded. */

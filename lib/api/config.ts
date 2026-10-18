@@ -10,9 +10,9 @@ import { Platform } from 'react-native';
  * escape hatch. On a physical phone neither works and the machine's LAN address
  * has to be supplied — hence the override.
  *
- * Set `EXPO_PUBLIC_API_URL` to point anywhere else; it is read at build time by
- * Expo and is the only thing that needs changing to run against a deployed
- * backend.
+ * Set `EXPO_PUBLIC_API_URL` in .env.local to point anywhere else (see .env.example); it is read at build time by
+ * Expo. `npm run start:test` / `start:prod` set `EXPO_PUBLIC_API_URL_OVERRIDE` for one run instead: the Expo dev
+ * server lets .env files overwrite the shell's values for names they define, so the scripts use names no .env file has.
  */
 /** The API's local port. Matches `server.port` in the API's application.properties. */
 const DEFAULT_PORT = 7070;
@@ -30,22 +30,25 @@ function defaultHost(port = DEFAULT_PORT): string {
   return `http://localhost:${port}`;
 }
 
+const API_URL = process.env.EXPO_PUBLIC_API_URL_OVERRIDE ?? process.env.EXPO_PUBLIC_API_URL;
+
 export const API_BASE_URL: string =
-  process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') ?? `${defaultHost()}${CONTEXT_PATH}`;
+  API_URL?.replace(/\/$/, '') ?? `${defaultHost()}${CONTEXT_PATH}`;
 
 /**
  * costonomy-common-api: sign-in, sessions and the business, outlet and team records the marketplace shares with
- * Costonomy's other apps. Its local port is 4001; `EXPO_PUBLIC_COMMON_API_URL` points anywhere else.
+ * Costonomy's other apps. Locally it is the Docker stack's, on 8082; `EXPO_PUBLIC_COMMON_API_URL` points anywhere else.
  */
 export const COMMON_API_BASE_URL: string =
-  process.env.EXPO_PUBLIC_COMMON_API_URL?.replace(/\/$/, '') ?? `${defaultHost(4001)}/costonomy-common-api`;
+  (process.env.EXPO_PUBLIC_COMMON_API_URL_OVERRIDE ?? process.env.EXPO_PUBLIC_COMMON_API_URL)?.replace(/\/$/, '')
+  ?? `${defaultHost(8082)}/costonomy-common-api`;
 
 /** This app's client in costonomy-common-api: phone + code sign-in, rotating refresh tokens. */
 export const COMMON_CLIENT_ID = 'mp-mobile';
 
 /** Shown on the sign-in screen in development, so a misconfigured host is obvious. */
 export const API_ENVIRONMENT_LABEL: string =
-  process.env.EXPO_PUBLIC_API_URL ? 'custom' : `${Platform.OS} default`;
+  API_URL ? 'custom' : `${Platform.OS} default`;
 
 export const APP_VERSION: string =
   Constants.expoConfig?.version ?? '0.1.0';

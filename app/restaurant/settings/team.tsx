@@ -8,8 +8,8 @@ export default function RestaurantTeamScreen() {
   const { outlets, outlet } = useOutlet();
   const { canForRestaurant, canForOutlet } = usePermissions();
   const restaurantId = outlet?.restaurantId ?? null;
-  const canManage = canForRestaurant('OUTLET_USER_MANAGE', restaurantId)
-    || outlets.some((o) => canForOutlet('OUTLET_USER_MANAGE', o));
+  const canManage = canForRestaurant('team.edit', restaurantId)
+    || outlets.some((o) => canForOutlet('team.edit', o));
 
   return (
     <TeamScreen

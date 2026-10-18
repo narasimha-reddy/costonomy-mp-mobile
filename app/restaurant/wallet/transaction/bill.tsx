@@ -39,7 +39,7 @@ export default function AddBillScreen() {
   const upload = useUploadWalletInvoice(id);
   const { outlet } = useOutlet();
   const { canForOutlet } = usePermissions();
-  const mayChangeBill = canForOutlet('QUICKSCAN_PAY', outlet);
+  const mayChangeBill = canForOutlet('wallet.pay', outlet);
 
   const [pages, setPages] = useState<BillPage[]>([]);
   const [phase, setPhase] = useState<Phase>('idle');

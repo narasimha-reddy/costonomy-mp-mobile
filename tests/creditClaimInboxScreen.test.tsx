@@ -26,7 +26,7 @@ jest.mock('@/contexts/StoreProvider', () => ({
   useStore: () => ({ storeId: 5, store: { id: 5, supplierOrganizationId: 1, name: 'Main' }, stores: [], select: jest.fn() }),
 }));
 jest.mock('@/components/supplier/StoreSelector', () => ({ StoreSelector: () => null }));
-let mockGranted: string[] = ['CREDIT_MODIFY'];
+let mockGranted: string[] = ['credit.edit'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
@@ -94,7 +94,7 @@ async function openSheet(id = 1) {
 beforeEach(() => {
   jest.clearAllMocks();
   resetAttemptKeys();
-  mockGranted = ['CREDIT_MODIFY'];
+  mockGranted = ['credit.edit'];
   mockOffline = false;
   listM.mockResolvedValue(LIST);
   confirmM.mockResolvedValue({ ...claim(1), status: 'CONFIRMED' });
@@ -298,13 +298,13 @@ describe('rejecting', () => {
 
 describe('permission', () => {
   it('CREDIT_COLLECT alone may act', async () => {
-    mockGranted = ['CREDIT_COLLECT'];
+    mockGranted = ['credit.collect'];
     await openSheet();
     expect(screen.getByTestId('claim-confirm')).toBeTruthy();
   });
 
   it('without either permission the sheet is view-only with an explanation', async () => {
-    mockGranted = ['CREDIT_VIEW'];
+    mockGranted = ['credit.view'];
     await openSheet();
     expect(screen.queryByTestId('claim-confirm')).toBeNull();
     expect(screen.queryByTestId('claim-reject-start')).toBeNull();

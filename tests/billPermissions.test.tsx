@@ -61,8 +61,8 @@ jest.mock('@/components/wallet/bill/ZoomableImage', () => {
 });
 
 const NO_PERMISSION = "You don't have permission to add or change bills";
-const VIEW_ONLY = ['ORDER_VIEW'];
-const CAN_CHANGE = ['ORDER_VIEW', 'QUICKSCAN_PAY'];
+const VIEW_ONLY = ['orders.view'];
+const CAN_CHANGE = ['orders.view', 'wallet.pay'];
 
 const metrics = { frame: { x: 0, y: 0, width: 360, height: 805 }, insets: { top: 24, left: 0, right: 0, bottom: 0 } };
 

@@ -22,6 +22,7 @@ import { AgreementCreditNotes } from '@/components/credit/AgreementCreditNotes';
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
 import { ClaimReviewSheet } from '@/components/credit/ClaimReviewSheet';
 import { LineReasonSheet } from '@/components/credit/LineReasonSheet';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { RecordPaymentSheet } from '@/components/credit/RecordPaymentSheet';
 import { ReminderHistory } from '@/components/credit/ReminderHistory';
 import { RemindSheet } from '@/components/credit/RemindSheet';
@@ -315,7 +316,9 @@ export default function SupplierCreditAgreementScreen() {
   const openInvoices = split.open;
   // Ticks only count while the invoice is still open: a refetch that settles one drops it.
   const chosen = openInvoices.filter((i) => picked.includes(i.id));
-  const mayRecord = canCollect && data != null && (data.status === 'ACTIVE' || data.status === 'SUSPENDED');
+  // mayCollect: may act on a live line (Remind). mayRecord adds the manual-settlement switch.
+  const mayCollect = canCollect && data != null && (data.status === 'ACTIVE' || data.status === 'SUSPENDED');
+  const mayRecord = MANUAL_SETTLEMENT_ENABLED && mayCollect;
   function openRecord(ids: number[]) {
     setRecordTargets(ids);
     setRecordSession((n) => n + 1);
@@ -447,7 +450,7 @@ export default function SupplierCreditAgreementScreen() {
               canCollect={canCollect}
               offline={offline}
               onRecord={mayRecord ? () => openRecord([]) : undefined}
-              onRemind={mayRecord ? () => setRemindOpen(true) : undefined}
+              onRemind={mayCollect ? () => setRemindOpen(true) : undefined}
               onStatement={() => router.push({
                 pathname: '/supplier/credit/statement', params: { agreementId: String(agreementId) },
               } as never)}
@@ -685,7 +688,7 @@ export default function SupplierCreditAgreementScreen() {
             />
           )}
 
-          {mayRecord && (
+          {mayCollect && (
             <RemindSheet
               visible={remindOpen}
               onClose={() => setRemindOpen(false)}

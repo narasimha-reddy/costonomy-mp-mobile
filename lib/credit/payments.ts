@@ -20,6 +20,7 @@ export function paymentTitle(source: CreditPaymentSource | string, supplierName:
   const supplier = supplierName ?? 'the supplier';
   switch (source) {
     case 'WALLET': return 'From wallet';
+    case 'ONLINE': return 'Paid online';
     case 'SUPPLIER_RECORDED': return `Recorded by ${supplier}`;
     case 'CLAIM_CONFIRMED': return `Paid direct · confirmed by ${supplier}`;
     default: return 'Payment';
@@ -29,8 +30,8 @@ export function paymentTitle(source: CreditPaymentSource | string, supplierName:
 /**
  * The second line of a payment row: method and reference, when there are any.
  *
- * <p>A wallet payment has none: "From wallet" says it all, and its method ("WALLET") and
- * reference ("credit-repayment-13") are internal.
+ * <p>A wallet payment has none: "From wallet" says it all; its method ("WALLET") is internal and
+ * its reference ("credit-repayment-13") is shown as the Transaction ID by the row. An online payment shows its method only.
  */
 export function paymentDetail(
   method: string | null | undefined,
@@ -38,6 +39,8 @@ export function paymentDetail(
   source?: CreditPaymentSource | string,
 ): string | null {
   if (source === 'WALLET') return null;
+  // Online: the method only. The Razorpay payment id is shown on its own line as the Transaction ID (transactionId.ts).
+  if (source === 'ONLINE') return methodLabel(method);
   const parts: string[] = [];
   const label = methodLabel(method);
   if (label != null) parts.push(label);

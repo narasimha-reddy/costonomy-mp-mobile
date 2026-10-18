@@ -8,6 +8,9 @@ import {
 } from '@/services/credit';
 import { Colors } from '@/theme';
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+let mockManual = true;
+jest.mock('@/lib/credit/manualSettlement', () => ({ get MANUAL_SETTLEMENT_ENABLED() { return mockManual; } }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
@@ -422,5 +425,26 @@ describe('load states', () => {
     agreementM.mockReturnValue(new Promise(() => undefined));
     renderScreen();
     expect(screen.queryByTestId('credit-owed')).toBeNull();
+  });
+});
+
+describe('manual settlement switched off', () => {
+  beforeEach(() => { mockManual = false; });
+  afterEach(() => { mockManual = true; });
+
+  it('has no Paid direct bar button, and no bar at all when Pay is not offered either', async () => {
+    summaryM.mockResolvedValue({ walletRepayEnabled: false });
+    renderScreen();
+    await screen.findByTestId('credit-owed');
+    await waitFor(() => expect(summaryM).toHaveBeenCalled());
+    expect(screen.queryByTestId('credit-i-paid-bar-button')).toBeNull();
+    expect(screen.queryByTestId('credit-pay-bar-button')).toBeNull();
+  });
+
+  it('keeps Pay when it is offered', async () => {
+    summaryM.mockResolvedValue({ walletRepayEnabled: true });
+    renderScreen();
+    expect(await screen.findByTestId('credit-pay-bar-button')).toBeTruthy();
+    expect(screen.queryByTestId('credit-i-paid-bar-button')).toBeNull();
   });
 });

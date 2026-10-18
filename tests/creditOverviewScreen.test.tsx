@@ -8,6 +8,10 @@ import { fetchCreditSummary } from '@/services/credit';
 import { Colors } from '@/theme';
 import { renderedText } from './fixtures/renderedText';
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+// Switchable per test: `mockManual = false` runs the "manual settlement switched off" block at the end.
+let mockManual = true;
+jest.mock('@/lib/credit/manualSettlement', () => ({ get MANUAL_SETTLEMENT_ENABLED() { return mockManual; } }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   return {
@@ -492,5 +496,18 @@ describe('Credit overview action row wording and icons', () => {
     renderScreen();
     await screen.findByTestId('credit-actions');
     expect(renderedText(screen.toJSON())).not.toMatch(/I paid|I Paid|paid outside/i);
+  });
+});
+
+describe('manual settlement switched off', () => {
+  beforeEach(() => { mockManual = false; });
+  afterEach(() => { mockManual = true; });
+
+  it('has no Paid direct, even when something is reportable', async () => {
+    fetchSummary.mockResolvedValue({ ...OWING, reportableAmount: 250 });
+    renderScreen();
+    await screen.findByTestId('pay-from-wallet');
+    expect(screen.queryByTestId('i-paid')).toBeNull();
+    expect(screen.queryByText('Paid direct')).toBeNull();
   });
 });

@@ -2,14 +2,13 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiBottomSheet, MandiText } from '@/components/common';
-import { PAYOUT_EXPLANATION, payoutStatusLabel } from '@/lib/credit/payouts';
+import { payoutExplanation, payoutSourceLine, payoutStatusLabel } from '@/lib/credit/payouts';
+import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
+import { payoutTransactionId } from '@/lib/credit/transactionId';
 import type { CreditPayout } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatGstRate, formatMoney } from '@/utils/money';
 import { Colors, IconSize, Spacing } from '@/theme';
-
-const PAID_EXPLANATION =
-  'This is money your restaurant paid from their Mandi wallet. We paid it to you in a settlement.';
 
 /**
  * What one payout covers: the invoices, the three figures the server sent (paid, Mandi
@@ -27,6 +26,7 @@ export function PayoutSheet({
   const name = payout.restaurantName ?? payout.outletName ?? 'A restaurant';
   const paidOut = payout.status === 'APPLIED';
   const number = payout.settlementNumber;
+  const sourceLine = payoutSourceLine(payout);
   const rate = payout.commissionRatePercent == null ? '' : ` (${formatGstRate(payout.commissionRatePercent)})`;
 
   return (
@@ -41,6 +41,10 @@ export function PayoutSheet({
         <View>
           <MandiText variant="bodyEmphasis">{name}</MandiText>
           <MandiText variant="caption" color={Colors.textSecondary}>{payoutStatusLabel(payout.status)}</MandiText>
+          {sourceLine != null && (
+            <MandiText variant="caption" color={Colors.textSecondary} testID="sheet-source">{sourceLine}</MandiText>
+          )}
+          <TransactionIdLine id={payoutTransactionId(payout)} testID="sheet-txid" />
         </View>
 
         <View style={styles.facts}>
@@ -92,7 +96,7 @@ export function PayoutSheet({
         )}
 
         <MandiText variant="caption" color={Colors.textSecondary}>
-          {paidOut ? PAID_EXPLANATION : PAYOUT_EXPLANATION}
+          {payoutExplanation(payout, paidOut)}
         </MandiText>
       </View>
     </MandiBottomSheet>

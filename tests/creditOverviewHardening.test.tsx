@@ -6,6 +6,8 @@ import CreditOverviewScreen from '@/app/restaurant/credit/index';
 import { NetworkError } from '@/lib/api/errors';
 import { fetchCreditSummary, repayFromWallet } from '@/services/credit';
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+jest.mock('@/lib/credit/manualSettlement', () => ({ MANUAL_SETTLEMENT_ENABLED: true }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   return {

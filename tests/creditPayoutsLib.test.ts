@@ -8,7 +8,7 @@ const item = (id: number, o: Partial<CreditPayout> = {}): CreditPayout => ({
   payoutId: id, repaymentId: id, agreementId: 1, outletId: 2, outletName: 'HSR', restaurantName: 'Spice Co',
   grossAmount: '1000.0000', commissionRatePercent: '2.5000', commissionAmount: '25.0000', netAmount: '975.0000',
   status: 'PENDING', settlementId: null, settlementNumber: null, settlementDate: null, appliedAt: null,
-  createdAt: '2026-10-01T05:00:00Z', invoices: [], ...o,
+  createdAt: '2026-10-01T05:00:00Z', invoices: [], source: 'WALLET', paymentMethod: null, ...o,
 });
 
 describe('groupPayouts', () => {
@@ -69,11 +69,11 @@ describe('filters', () => {
 describe('words', () => {
   it('explains a pending payout plainly', () => {
     expect(PAYOUT_EXPLANATION).toBe(
-      'This is money your restaurant paid from their Mandi wallet. We pay it to you in your next settlement.');
+      'Your restaurant paid this through Mandi. We pay it to you in your next settlement.');
   });
   it('names where a payment came from', () => {
     expect(paymentSourceLabel('SUPPLIER_RECORDED')).toBe('Recorded by you');
     expect(paymentSourceLabel('CLAIM_CONFIRMED')).toBe('Confirmed from their claim');
-    expect(paymentSourceLabel('WALLET')).toBe('Mandi wallet');
+    expect(paymentSourceLabel('WALLET')).toBe('Paid through Mandi');
   });
 });

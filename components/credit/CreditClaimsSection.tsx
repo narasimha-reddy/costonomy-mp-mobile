@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import {
   MandiButton,
   MandiCard,
@@ -110,7 +111,7 @@ export function CreditClaimsSection({
                   onPress={() => setConfirming(claim)}
                 />
               )}
-              {claim.status === 'REJECTED' && (
+              {MANUAL_SETTLEMENT_ENABLED && claim.status === 'REJECTED' && (
                 <MandiButton
                   testID={`claim-again-${claim.id}`}
                   label="Tell them again"

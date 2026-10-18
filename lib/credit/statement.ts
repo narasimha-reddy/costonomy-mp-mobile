@@ -1,3 +1,4 @@
+import { transactionIdOf } from '@/lib/credit/transactionId';
 import { ApiError } from '@/lib/api/errors';
 import { istMonthKey, monthTitle } from '@/lib/wallet/history';
 import { formatMoney } from '@/utils/money';
@@ -64,18 +65,21 @@ export function methodLabel(method: string): string {
  * The small line under a row's label: the invoice number, and for a repayment the word
  * "Repayment" and how it was paid ("From wallet", "UPI · ref 123", "Bank transfer").
  */
-export function statementDetail(line: CreditStatementLine): string {
+export function statementDetail(line: CreditStatementLine, audience: 'restaurant' | 'supplier' = 'restaurant'): string {
   const parts: string[] = [];
   if (line.invoiceNumber) parts.push(line.invoiceNumber);
   if (line.creditNoteNumber) parts.push(line.creditNoteNumber);
   if (isRepayment(line)) {
     parts.push('Repayment');
+    const tx = transactionIdOf(line);
     if (line.source === 'WALLET') {
-      parts.push('From wallet');
+      // The supplier is never told a wallet was involved: it was paid through Mandi.
+      parts.push(audience === 'supplier' ? 'Paid through Mandi' : 'From wallet');
     } else {
       if (line.method) parts.push(methodLabel(line.method));
-      if (line.reference) parts.push(`ref ${line.reference}`);
+      if (tx == null && line.reference) parts.push(`ref ${line.reference}`);
     }
+    if (tx != null) parts.push(`Transaction ID ${tx}`);
   }
   if (line.type === 'PAYMENT_REVERSED') parts.push('Payment cancelled, owed again');
   // "UPI · ref 123" reads as one phrase; the rest are separate facts.

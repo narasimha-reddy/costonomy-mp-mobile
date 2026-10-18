@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -16,8 +16,11 @@ import {
 } from '@/services/credit';
 import { CreditPosition } from '@/components/credit/CreditPosition';
 import { CreditInvoiceRow } from '@/components/credit/CreditInvoiceRow';
+import { SelectableInvoiceRow } from '@/components/credit/pay/SelectableInvoiceRow';
 import { CreditStickyPayBar } from '@/components/credit/CreditStickyPayBar';
 import { PayFromWalletSheet } from '@/components/credit/PayFromWalletSheet';
+import { usePayableInvoices } from '@/hooks/useCreditPay';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { canReportPayment, reportedLine } from '@/lib/credit/claims';
 import { earliestGraceDeadline, splitInvoices, type CreditInvoiceListItem } from '@/lib/credit/invoices';
 import {
@@ -33,6 +36,11 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { supplierAllLabel } from '@/lib/credit/pay/copy';
+import {
+  barText, EMPTY, itemsOf, prune, scopeTo, selectAllOf, supplierState, toggle, toggleSupplier, type Selection,
+} from '@/lib/credit/pay/selection';
+import { isOnlinePayOn } from '@/models/creditPay';
 import { CreditAgreementStatus, resolveStatus } from '@/models/status';
 import { ApiError } from '@/lib/api/errors';
 import { formatDay } from '@/utils/dateRange';
@@ -90,6 +98,36 @@ export default function CreditAgreementScreen() {
     enabled: outletId != null && accessToken != null,
   });
   const walletRepayEnabled = summary.data?.walletRepayEnabled === true;
+  // Online payment on: Pay opens the picker and "Paid direct" is gone (old claims still show below).
+  const onlinePay = isOnlinePayOn(summary.data);
+
+  // What can be ticked: this supplier's invoices as the pay list offers them (never another supplier's).
+  const payableQuery = usePayableInvoices(onlinePay && mayRepay);
+  const scoped = useMemo(
+    () => (payableQuery.data != null ? scopeTo(payableQuery.data, agreementId) : null),
+    [payableQuery.data, agreementId],
+  );
+  const supplierPay = scoped?.suppliers[0];
+  const selectable = scoped != null && supplierPay != null && supplierPay.payable
+    && supplierPay.invoices.length > 0 ? scoped : null;
+  const [selection, setSelection] = useState<Selection>(EMPTY);
+  const seeded = useRef(false);
+  // First data: everything open is ticked (matches "Pay all"). Later refetches only drop what is gone.
+  useEffect(() => {
+    if (selectable == null) return;
+    if (!seeded.current) {
+      seeded.current = true;
+      setSelection(selectAllOf(selectable));
+    } else {
+      setSelection((current) => prune(current, selectable));
+    }
+  }, [selectable]);
+  const selectableIds = useMemo(
+    () => new Set((selectable?.suppliers[0]?.invoices ?? []).map((i) => i.invoiceId)),
+    [selectable],
+  );
+  const bar = selectable != null ? barText(selection, selectable) : null;
+  const allState = selectable != null && supplierPay != null ? supplierState(selection, supplierPay) : 'none';
 
   const split = useMemo(
     () => splitInvoices((invoices.data ?? []) as CreditInvoiceListItem[]),
@@ -169,9 +207,19 @@ export default function CreditAgreementScreen() {
           <CreditStickyPayBar
             due={data.due}
             disabled={offline}
-            showPay={walletRepayEnabled && mayRepay}
-            onPress={() => setPayOpen(true)}
-            onClaim={!mayRepay || !canReportPayment(data.reportableAmount) ? undefined : () => go('claim', () => router.push({
+            showPay={(onlinePay || walletRepayEnabled) && mayRepay}
+            online={onlinePay}
+            selection={onlinePay && bar != null ? bar : undefined}
+            onPress={onlinePay
+              ? () => go('pay', () => {
+                // Pay dues scoped to this supplier; with the ticked invoices when the page offered them.
+                const picked = selectable != null ? itemsOf(selection, selectable).map((i) => i.invoiceId) : null;
+                router.push(picked != null
+                  ? `/restaurant/credit/pay?scopeAgreementId=${agreementId}&invoiceIds=${picked.join(',')}`
+                  : `/restaurant/credit/pay?scopeAgreementId=${agreementId}`);
+              })
+              : () => setPayOpen(true)}
+            onClaim={!MANUAL_SETTLEMENT_ENABLED || onlinePay || !mayRepay || !canReportPayment(data.reportableAmount) ? undefined : () => go('claim', () => router.push({
               pathname: '/restaurant/credit/claim',
               params: { agreementId: String(agreementId) },
             }))}
@@ -365,13 +413,37 @@ export default function CreditAgreementScreen() {
                   }
                   return (
                     <>
-                      {list.slice(0, shown).map((invoice) => (
-                        <CreditInvoiceRow
-                          key={invoice.id}
-                          invoice={invoice}
-                          onPress={() => go(`invoice-${invoice.id}`, () => router.push(`/restaurant/credit/invoice/${invoice.id}` as never))}
-                        />
-                      ))}
+                      {tab === 'open' && selectable != null && supplierPay != null && (
+                        <Pressable
+                          testID="credit-select-all"
+                          onPress={() => setSelection((s) => toggleSupplier(s, supplierPay))}
+                          accessibilityRole="checkbox"
+                          accessibilityLabel={supplierAllLabel(supplierPay.supplierName)}
+                          accessibilityState={{ checked: allState === 'all' ? true : allState === 'some' ? 'mixed' : false }}
+                          style={styles.selectAll}
+                        >
+                          <Ionicons
+                            name={allState === 'all' ? 'checkbox' : allState === 'some' ? 'remove-circle-outline' : 'square-outline'}
+                            size={IconSize.lg}
+                            color={allState === 'none' ? Colors.textTertiary : Colors.primary}
+                          />
+                          <MandiText variant="bodyEmphasis">Select all</MandiText>
+                        </Pressable>
+                      )}
+                      {list.slice(0, shown).map((invoice) => {
+                        const open = () => go(`invoice-${invoice.id}`, () => router.push(`/restaurant/credit/invoice/${invoice.id}` as never));
+                        return tab === 'open' && selectableIds.has(invoice.id) ? (
+                          <SelectableInvoiceRow
+                            key={invoice.id}
+                            invoice={invoice}
+                            selected={selection.ids.has(invoice.id)}
+                            onToggle={() => setSelection((s) => toggle(s, invoice.id))}
+                            onPress={open}
+                          />
+                        ) : (
+                          <CreditInvoiceRow key={invoice.id} invoice={invoice} onPress={open} />
+                        );
+                      })}
                       {list.length > shown && (
                         <MandiButton
                           label="Show more"
@@ -421,7 +493,7 @@ export default function CreditAgreementScreen() {
               </MandiText>
             </View>
           )}
-          {mayRepay && data.due != null && (
+          {mayRepay && !onlinePay && data.due != null && (
             <PayFromWalletSheet
               visible={payOpen}
               onClose={() => setPayOpen(false)}
@@ -486,6 +558,12 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   segmentOn: { backgroundColor: Colors.primary },
+  selectAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    minHeight: TouchTarget.min,
+  },
   statementRow: {
     flexDirection: 'row',
     alignItems: 'center',

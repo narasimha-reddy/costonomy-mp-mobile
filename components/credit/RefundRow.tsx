@@ -47,7 +47,7 @@ export function RefundRow({
       )}
       {open && wallet && (
         <MandiText variant="caption" color={Colors.textSecondary}>
-          They paid from their Mandi wallet. Our team will settle this.
+          They paid through Mandi. Our team will settle this.
         </MandiText>
       )}
       {open && !wallet && canMark && (

@@ -3,10 +3,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiBottomSheet, MandiText } from '@/components/common';
 import { RoundAction } from '@/components/wallet/RoundAction';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { Colors, IconSize, Spacing, TouchTarget } from '@/theme';
 
 /**
  * The round actions under a restaurant's hero: Record, Remind, Statement, More.
+ * Record is hidden while MANUAL_SETTLEMENT_ENABLED is off (lib/credit/manualSettlement.ts).
  *
  * <p>Extension points. Record and Remind are props, not wired here: while a handler is
  * absent the button shows disabled with "Coming soon" under it, so the next pull
@@ -26,7 +28,7 @@ export function SupplierLineActions({
 }) {
   return (
     <View style={styles.row} testID="line-actions">
-      {canCollect && (
+      {MANUAL_SETTLEMENT_ENABLED && canCollect && (
         <Slot comingSoon={onRecord == null} testID="action-record">
           <RoundAction
             testID="action-record"

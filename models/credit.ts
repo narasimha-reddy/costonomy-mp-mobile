@@ -17,7 +17,7 @@ export type CreditInvoiceStatus =
 export type CreditDueState =
   | 'PAID' | 'WRITTEN_OFF' | 'OVERDUE' | 'IN_GRACE' | 'DUE_TODAY' | 'DUE_SOON' | 'DUE_LATER';
 
-export type CreditPaymentSource = 'SUPPLIER_RECORDED' | 'WALLET' | 'CLAIM_CONFIRMED';
+export type CreditPaymentSource = 'SUPPLIER_RECORDED' | 'WALLET' | 'CLAIM_CONFIRMED' | 'ONLINE';
 
 export interface CreditRequest {
   id: number;
@@ -117,6 +117,8 @@ export interface CreditSummary {
   overdue: Money;
   /** Whether repaying from the wallet is switched on. Absent means off. */
   walletRepayEnabled?: boolean;
+  /** Whether paying dues online (UPI, card) is on; when it is, "Paid direct" is hidden. Absent means off. */
+  onlinePayEnabled?: boolean;
   /**
    * What can still be reported with "Paid direct": still owed minus reports already
    * waiting for the supplier. Absent on older payloads.
@@ -178,6 +180,8 @@ export interface CreditInvoicePayment {
   reference: string | null;
   paidAt: string;
   walletEntryId: number | null;
+  /** The one id both sides can quote: ONLINE the Razorpay payment id, WALLET the wallet entry id. Absent on older servers. */
+  transactionId?: string | null;
 }
 
 /** GET /api/v1/credit/invoices/{id}. */
@@ -366,6 +370,12 @@ export interface CreditPayout {
   appliedAt: string | null;
   createdAt: string;
   invoices: CreditPayoutInvoice[];
+  /** How the restaurant paid: from its wallet, or online through Mandi. */
+  source: 'WALLET' | 'ONLINE';
+  /** UPI, CARD ... for an online payout; null for the wallet. */
+  paymentMethod: string | null;
+  /** The id the restaurant paid under: the Razorpay payment id, or the wallet entry id. Absent on older servers. */
+  transactionId?: string | null;
 }
 
 export interface CreditPayoutList {
@@ -378,7 +388,7 @@ export interface CreditPayoutList {
   hasNext: boolean;
 }
 
-export type StorePaymentSource = 'SUPPLIER_RECORDED' | 'WALLET' | 'CLAIM_CONFIRMED';
+export type StorePaymentSource = 'SUPPLIER_RECORDED' | 'WALLET' | 'CLAIM_CONFIRMED' | 'ONLINE';
 
 /** One payment on any of the store's credit lines. */
 export interface StorePayment {
@@ -395,6 +405,8 @@ export interface StorePayment {
   source: StorePaymentSource;
   method: string | null;
   reference: string | null;
+  /** ONLINE the Razorpay payment id, WALLET the id the restaurant sees; null for hand-recorded payments. Absent on older servers. */
+  transactionId?: string | null;
   /** The receipt it was recorded in; undo goes through it. Null for other sources. */
   receiptId?: number | null;
   /** The server's verdict: the supplier may undo it today. Absent means no. */

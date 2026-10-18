@@ -8,6 +8,10 @@ import {
   confirmClaim, extendInvoiceDue, fetchCreditInvoice, previewPayment, recordSupplierPayment, rejectClaim,
 } from '@/services/credit';
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+// Switchable per test: `mockManual = false` runs the "manual settlement switched off" block at the end.
+let mockManual = true;
+jest.mock('@/lib/credit/manualSettlement', () => ({ get MANUAL_SETTLEMENT_ENABLED() { return mockManual; } }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   const Icon = ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text>;
@@ -365,5 +369,36 @@ describe('extend due date', () => {
     }
     expect(screen.getByLabelText('Previous day').props.accessibilityRole).toBe('button');
     expect(screen.getByLabelText('7 days after the current due date')).toBeTruthy();
+  });
+});
+
+describe('manual settlement switched off', () => {
+  beforeEach(() => { mockManual = false; });
+  afterEach(() => { mockManual = true; });
+
+  it('has no Record payment button but keeps Extend due date', async () => {
+    renderScreen();
+    expect(await screen.findByTestId('invoice-extend')).toBeTruthy();
+    expect(screen.queryByTestId('invoice-record')).toBeNull();
+    expect(screen.queryByText('Record payment for this invoice')).toBeNull();
+    expect(screen.queryByTestId('record-sheet')).toBeNull();
+  });
+});
+
+describe('Transaction ID on the payments of a supplier invoice', () => {
+  it('shows the Razorpay id of an online payment as selectable text, and none for a manual one', async () => {
+    invoiceM.mockResolvedValue(detail({
+      payments: [
+        { id: 31, amount: '1000.0000', source: 'ONLINE', method: 'CARD', reference: 'pay_TestCard123', paidAt: '2026-10-05T06:00:00Z', walletEntryId: null },
+        { id: 32, amount: '500.0000', source: 'SUPPLIER_RECORDED', method: 'UPI', reference: 'UTR55', paidAt: '2026-10-04T06:00:00Z', walletEntryId: null },
+      ],
+    }));
+    renderScreen();
+    await ready();
+    const online = await screen.findByTestId('invoice-payment-31-txid-value');
+    expect(online).toHaveTextContent('pay_TestCard123');
+    expect(online.props.selectable).toBe(true);
+    expect(screen.queryByTestId('invoice-payment-32-txid-value')).toBeNull();
+    expect(screen.getByText('UPI · ref UTR55')).toBeTruthy();
   });
 });

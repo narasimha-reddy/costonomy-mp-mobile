@@ -2,6 +2,8 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MandiText } from '@/components/common';
+import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
+import { transactionIdOf } from '@/lib/credit/transactionId';
 import { paymentDetail, paymentTitle } from '@/lib/credit/payments';
 import type { CreditInvoicePayment } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
@@ -31,6 +33,7 @@ export function CreditPaymentRow({
       <View style={styles.text}>
         <MandiText variant="bodyEmphasis">{title}</MandiText>
         {detail != null && <MandiText variant="caption" color={Colors.textSecondary}>{detail}</MandiText>}
+        <TransactionIdLine id={transactionIdOf(payment)} testID={`payment-${payment.id}-txid`} />
         <MandiText variant="caption" color={Colors.textTertiary}>{day}</MandiText>
       </View>
       <MandiText variant="bodyEmphasis">{amount}</MandiText>
@@ -38,7 +41,8 @@ export function CreditPaymentRow({
     </>
   );
 
-  const label = [title, detail, day, amount].filter(Boolean).join(', ');
+  const txid = transactionIdOf(payment);
+  const label = [title, detail, txid != null ? `Transaction ID ${txid}` : null, day, amount].filter(Boolean).join(', ');
   if (open == null) {
     return (
       <View style={styles.row} accessible accessibilityLabel={label} testID={`payment-${payment.id}`}>

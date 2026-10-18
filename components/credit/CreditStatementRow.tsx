@@ -12,13 +12,15 @@ import { Colors, Spacing, TouchTarget } from '@/theme';
  * minus sign and the word "Repayment", never by colour.
  */
 export function CreditStatementRow({
-  line, last = false, onPress,
+  line, last = false, onPress, audience = 'restaurant',
 }: {
   line: CreditStatementLine;
+  /** The supplier's statement never names a wallet. */
+  audience?: 'restaurant' | 'supplier';
   last?: boolean;
   onPress?: () => void;
 }) {
-  const detail = statementDetail(line);
+  const detail = statementDetail(line, audience);
   const amount = signedAmount(line.amount);
   const owed = `Owed ${formatMoney(line.owedAfter)} after`;
   const day = lineDay(line.at);
@@ -27,7 +29,7 @@ export function CreditStatementRow({
       <View style={styles.left}>
         <MandiText variant="caption" muted>{day}</MandiText>
         <MandiText variant="bodyEmphasis" numberOfLines={2}>{line.label}</MandiText>
-        {detail !== '' && <MandiText variant="caption" muted numberOfLines={2}>{detail}</MandiText>}
+        {detail !== '' && <MandiText variant="caption" muted numberOfLines={2} selectable>{detail}</MandiText>}
       </View>
       <View style={styles.right}>
         <MandiText variant="price">{amount}</MandiText>

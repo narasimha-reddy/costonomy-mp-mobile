@@ -27,7 +27,10 @@ import {
   MandiSkeletonList,
   MandiText,
 } from '@/components/common';
+import { MANUAL_SETTLEMENT_ENABLED } from '@/lib/credit/manualSettlement';
 import { canReportPayment } from '@/lib/credit/claims';
+import { PAY_DUES } from '@/lib/credit/pay/copy';
+import { isOnlinePayOn } from '@/models/creditPay';
 import { agreementName, allSuspended, groupAgreements } from '@/lib/credit/overview';
 import type { CreditAgreement } from '@/models/credit';
 import { Colors, IconSize, Radius, Spacing } from '@/theme';
@@ -64,7 +67,11 @@ export default function CreditOverviewScreen() {
   const request = () => go('request', () => router.push('/restaurant/credit/request'));
 
   const groups = summary ? groupAgreements(summary.agreements) : { dues: [], lines: [] };
-  const showPay = mayRepay && summary?.walletRepayEnabled === true && Number(summary.due) > 0 && groups.dues.length > 0;
+  // Online pay on: "Pay dues" opens the invoice picker and "Paid direct" is not offered (old claims still show elsewhere).
+  const onlinePay = isOnlinePayOn(summary as { onlinePayEnabled?: boolean } | undefined);
+  const showPayDues = onlinePay && mayRepay && summary != null && Number(summary.due) > 0;
+  const payDues = () => go('pay-dues', () => router.push('/restaurant/credit/pay'));
+  const showPay = !onlinePay && mayRepay && summary?.walletRepayEnabled === true && Number(summary.due) > 0 && groups.dues.length > 0;
 
   const onPay = () => {
     setPickFor('pay');
@@ -72,7 +79,7 @@ export default function CreditOverviewScreen() {
     else setMultiOpen(true);
   };
 
-  const showClaim = mayRepay && summary != null && Number(summary.due) > 0 && groups.dues.length > 0
+  const showClaim = MANUAL_SETTLEMENT_ENABLED && !onlinePay && mayRepay && summary != null && Number(summary.due) > 0 && groups.dues.length > 0
     && canReportPayment(summary.reportableAmount);
   const claimFor = (id: number) =>
     go(`claim-${id}`, () => router.push({ pathname: '/restaurant/credit/claim', params: { agreementId: String(id) } }));
@@ -129,6 +136,17 @@ export default function CreditOverviewScreen() {
                 onPress={onClaim}
               />
             )}
+            {showPayDues && (
+              <RoundAction
+                testID="pay-dues"
+                icon="cash-outline"
+                label={PAY_DUES}
+                accessibilityHint="Pay your credit invoices with UPI, card or your Mandi wallet"
+                primary
+                disabled={offline}
+                onPress={payDues}
+              />
+            )}
             {showPay && (
               <RoundAction
                 testID="pay-from-wallet"
@@ -146,7 +164,7 @@ export default function CreditOverviewScreen() {
               label="Get credit"
               glyphTone="strong"
               accessibilityHint="Ask another supplier for credit"
-              primary={!showPay && !showClaim}
+              primary={!showPay && !showClaim && !showPayDues}
               onPress={request}
             />
           </View>

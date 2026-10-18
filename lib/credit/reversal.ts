@@ -46,7 +46,7 @@ export function reversalErrorText(caught: unknown): string {
   if (!(caught instanceof ApiError)) return RETRY_TEXT;
   switch (caught.code) {
     case 'CREDIT_REVERSAL_NOT_ALLOWED':
-      return "This payment can't be undone here. It may be from the wallet, on a written-off invoice, or part of a bigger payment.";
+      return "This payment can't be undone here. It may have been paid through Mandi, be on a written-off invoice, or part of a bigger payment.";
     case 'CREDIT_REVERSAL_WINDOW_CLOSED': {
       const until = dayMonth(detailText(caught, 'reversibleUntil'));
       return until == null

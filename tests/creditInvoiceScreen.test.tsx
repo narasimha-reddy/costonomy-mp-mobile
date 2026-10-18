@@ -7,6 +7,12 @@ import { ApiError } from '@/lib/api/errors';
 import { Colors } from '@/theme';
 import { renderedText } from './fixtures/renderedText';
 
+// Online payment is off here; tests/creditPaidDirectHidden.test.tsx covers it on.
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+// Switchable per test: `mockManual = false` runs the "manual settlement switched off" block at the end.
+let mockManual = true;
+jest.mock('@/lib/credit/manualSettlement', () => ({ get MANUAL_SETTLEMENT_ENABLED() { return mockManual; } }));
+jest.mock('@/hooks/useOnlinePayOn', () => ({ useOnlinePayOn: () => false }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   return { Ionicons: ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text> };
@@ -135,7 +141,7 @@ describe('credit invoice detail', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('a wallet payment shows only From wallet, the amount and the date: no method label, no internal reference', () => {
+  it('a wallet payment shows From wallet, the date, the amount and its Transaction ID (the wallet entry): no method label, no internal reference', () => {
     show({
       payments: [
         { id: 1, amount: '100.0000', source: 'WALLET', method: 'WALLET', reference: 'credit-repayment-13', paidAt: '2026-09-02', walletEntryId: 192 },
@@ -145,7 +151,9 @@ describe('credit invoice detail', () => {
     expect(screen.queryByText(/WALLET/)).toBeNull();
     expect(screen.queryByText(/credit-repayment/)).toBeNull();
     expect(screen.queryByText(/ref /)).toBeNull();
-    expect(screen.getByTestId('payment-1').props.accessibilityLabel).toBe('From wallet, 2nd Sep 2026, ₹100.00. Opens the wallet transaction');
+    expect(screen.getByText('Transaction ID')).toBeTruthy();
+    expect(screen.getByTestId('payment-1-txid-value')).toHaveTextContent('192');
+    expect(screen.getByTestId('payment-1').props.accessibilityLabel).toBe('From wallet, Transaction ID 192, 2nd Sep 2026, ₹100.00. Opens the wallet transaction');
     fireEvent.press(screen.getByTestId('payment-1'));
     expect(mockPush).toHaveBeenCalledWith('/restaurant/wallet/transaction/192');
   });
@@ -326,5 +334,28 @@ describe('your reports', () => {
     expect(screen.getByTestId('claim-status-1')).toHaveTextContent(/Withdrawn/);
     expect(screen.queryByTestId('claim-withdraw-1')).toBeNull();
     expect(screen.queryByTestId('claim-again-1')).toBeNull();
+  });
+});
+
+describe('manual settlement switched off', () => {
+  beforeEach(() => { mockManual = false; });
+  afterEach(() => { mockManual = true; });
+
+  it('has no Paid direct but keeps Pay', () => {
+    show({ reportableAmount: 40 });
+    expect(screen.queryByTestId('invoice-i-paid')).toBeNull();
+    expect(screen.queryByText('Paid direct')).toBeNull();
+    expect(screen.getByTestId('invoice-pay')).toBeTruthy();
+  });
+
+  it('keeps showing an earlier report but offers no "Tell them again"', () => {
+    show({ claims: [{
+      id: 2, invoiceId: 55, invoiceNumber: 'INV-55', agreementId: 3, outletId: 7, outletName: 'O',
+      restaurantName: 'R', amount: '400.0000', method: 'UPI', reference: 'UTR77', paidOn: '2026-09-20',
+      note: null, status: 'REJECTED', decisionNote: 'no', confirmedAmount: null, creditPaymentId: null,
+      createdAt: '2026-09-20T10:00:00Z', decidedAt: '2026-09-21T10:00:00Z',
+    }] });
+    expect(screen.getByTestId('claim-2')).toBeTruthy();
+    expect(screen.queryByTestId('claim-again-2')).toBeNull();
   });
 });

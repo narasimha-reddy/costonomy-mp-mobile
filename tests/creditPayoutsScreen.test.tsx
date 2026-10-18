@@ -7,6 +7,10 @@ import { ApiError } from '@/lib/api/errors';
 import { fetchPayments, fetchPayouts } from '@/services/credit';
 import { FontFamily } from '@/theme';
 
+// These suites exercise the manual-settlement flows (Record, claims, Recorded by you): run them with the switch on.
+// Switchable per test: `mockManual = false` runs the "manual settlement switched off" block at the end.
+let mockManual = true;
+jest.mock('@/lib/credit/manualSettlement', () => ({ get MANUAL_SETTLEMENT_ENABLED() { return mockManual; } }));
 jest.mock('@expo/vector-icons', () => {
   const { Text } = jest.requireActual('react-native');
   const Icon = ({ name }: { name: string }) => <Text>{`icon:${name}`}</Text>;
@@ -176,7 +180,7 @@ describe('Collected through Mandi', () => {
     expect(sheet.getByTestId('sheet-fee')).toHaveTextContent(/₹100\.00/);
     expect(sheet.getByTestId('sheet-net')).toHaveTextContent(/₹4,900\.00/);
     expect(sheet.getByText(
-      'This is money your restaurant paid from their Mandi wallet. We pay it to you in your next settlement.')).toBeTruthy();
+      'Your restaurant paid this through Mandi. We pay it to you in your next settlement.')).toBeTruthy();
     expect(sheet.getByText('In your next settlement')).toBeTruthy();
     expect(sheet.queryByTestId('copy-settlement')).toBeNull();
   });
@@ -302,7 +306,7 @@ describe('states', () => {
   it('says plainly there are no payouts yet', async () => {
     payoutsM.mockResolvedValue(page([], { summary: { pendingNet: '0.0000', appliedNetThisMonth: '0.0000' } }));
     renderScreen();
-    expect(await screen.findByText('No payouts yet. When a restaurant pays you from their Mandi wallet it shows here.')).toBeTruthy();
+    expect(await screen.findByText('No payouts yet. When a restaurant pays you through Mandi it shows here.')).toBeTruthy();
   });
 
   it('shows an error with a retry', async () => {
@@ -406,5 +410,30 @@ describe('Recorded by you', () => {
     await openTab();
     expect(screen.queryByTestId('payouts-hero')).toBeNull();
     expect(screen.queryByTestId('payout-status-ALL')).toBeNull();
+  });
+});
+
+describe('manual settlement switched off', () => {
+  beforeEach(() => { mockManual = false; });
+  afterEach(() => { mockManual = true; });
+
+  it('shows only the Mandi collections: no tab bar, hero, pending and paid out still there', async () => {
+    renderScreen();
+    await screen.findByTestId('payout-row-1');
+    expect(screen.queryByTestId('tab-mandi')).toBeNull();
+    expect(screen.queryByTestId('tab-recorded')).toBeNull();
+    expect(screen.queryByText('Recorded by you')).toBeNull();
+    expect(screen.getByTestId('payouts-hero')).toBeTruthy();
+    expect(screen.getByTestId('payout-group-PENDING')).toBeTruthy();
+    expect(screen.getByTestId('payout-group-APPLIED')).toBeTruthy();
+    expect(screen.getByTestId('payout-status-PENDING')).toBeTruthy();
+  });
+
+  it('never asks for the recorded payments', async () => {
+    renderScreen();
+    await screen.findByTestId('payout-row-1');
+    expect(paymentsM).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('source-ALL')).toBeNull();
+    expect(screen.queryByTestId('collections-csv')).toBeNull();
   });
 });

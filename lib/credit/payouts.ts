@@ -1,5 +1,6 @@
 import type { CreditPayout, PayoutStatus, StorePaymentSource } from '@/models/credit';
 import { claimMethodLabel } from '@/lib/credit/claims';
+import { methodLabel } from '@/lib/credit/payments';
 import { istDay, presetRange } from '@/lib/credit/statement';
 import {
   PERIOD_PRESETS, monthsRange, rangeTooWide, type PeriodPreset,
@@ -8,7 +9,30 @@ import { formatGstRate, formatMoney } from '@/utils/money';
 
 /** What the supplier reads under a payout that is not yet in a settlement. */
 export const PAYOUT_EXPLANATION =
-  'This is money your restaurant paid from their Mandi wallet. We pay it to you in your next settlement.';
+  'Your restaurant paid this through Mandi. We pay it to you in your next settlement.';
+
+/** The same line once the settlement has paid it out. */
+export const PAID_EXPLANATION =
+  'Your restaurant paid this through Mandi. We paid it to you in a settlement.';
+
+/** "Paid through Mandi · UPI" for an online payout; plain "Paid through Mandi" for the rest. The supplier never sees a wallet named. */
+export function payoutSourceLine(payout: Pick<CreditPayout, 'source' | 'paymentMethod'>): string | null {
+  if (payout.source !== 'ONLINE') return paymentSourceLabel('ONLINE');
+  const method = methodLabel(payout.paymentMethod);
+  return method == null ? paymentSourceLabel('ONLINE') : `${paymentSourceLabel('ONLINE')} · ${method}`;
+}
+
+/**
+ * What the supplier reads under a payout. Either way it was paid through Mandi; an online one
+ * says how (UPI, card).
+ */
+export function payoutExplanation(payout: Pick<CreditPayout, 'source' | 'paymentMethod'>, paidOut: boolean): string {
+  if (payout.source !== 'ONLINE') return paidOut ? PAID_EXPLANATION : PAYOUT_EXPLANATION;
+  const method = methodLabel(payout.paymentMethod);
+  // "by UPI", "by card": the card is lower case in a sentence, UPI is an acronym.
+  const by = method == null ? '' : ` by ${method === 'Card' ? 'card' : method}`;
+  return `${paymentSourceLabel('ONLINE')}${by}. ${paidOut ? 'We paid it to you in a settlement.' : 'We pay it to you in your next settlement.'}`;
+}
 
 export const PAGE_SIZE = 20;
 
@@ -39,7 +63,8 @@ export function paymentSourceLabel(source: StorePaymentSource): string {
   switch (source) {
     case 'SUPPLIER_RECORDED': return 'Recorded by you';
     case 'CLAIM_CONFIRMED': return 'Confirmed from their claim';
-    case 'WALLET': return 'Mandi wallet';
+    case 'WALLET': return 'Paid through Mandi';
+    case 'ONLINE': return 'Paid through Mandi';
     default: return String(source);
   }
 }

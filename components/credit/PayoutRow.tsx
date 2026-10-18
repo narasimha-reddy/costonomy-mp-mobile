@@ -1,7 +1,10 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiText } from '@/components/common';
-import { feeLine, methodAndReference, paymentSourceLabel, payoutStatusLabel } from '@/lib/credit/payouts';
+import { feeLine, methodAndReference, paymentSourceLabel, payoutSourceLine, payoutStatusLabel } from '@/lib/credit/payouts';
+import { TransactionIdLine } from '@/components/credit/TransactionIdLine';
+import { payoutTransactionId, transactionIdOf } from '@/lib/credit/transactionId';
+import { paymentDetail } from '@/lib/credit/payments';
 import type { CreditPayout, StorePayment } from '@/models/credit';
 import { formatDay } from '@/utils/dateRange';
 import { formatMoney } from '@/utils/money';
@@ -10,7 +13,7 @@ import { Colors, Radius, Spacing } from '@/theme';
 const ROW_MIN = 48;
 
 /**
- * One wallet repayment Mandi collected. Gross, fee and net are the server's three figures
+ * One repayment Mandi collected (from the wallet or online). Gross, fee and net are the server's three figures
  * and the net, what the supplier gets, is the bold one. Long names and large amounts wrap.
  */
 export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: () => void }) {
@@ -18,6 +21,7 @@ export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: 
   const outlet = payout.outletName != null && payout.outletName !== name ? payout.outletName : null;
   const gross = `Paid ${formatMoney(payout.grossAmount)}`;
   const fee = feeLine(payout);
+  const sourceLine = payoutSourceLine(payout);
   const created = formatDay(payout.createdAt);
   const settled = payout.status === 'APPLIED' && payout.settlementNumber != null
     ? [`Settlement ${payout.settlementNumber}`, formatDay(payout.settlementDate)].filter(Boolean).join(' · ')
@@ -37,6 +41,10 @@ export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: 
         {outlet != null && <MandiText variant="caption" color={Colors.textSecondary}>{outlet}</MandiText>}
         <MandiText variant="caption" color={Colors.textSecondary}>{gross}</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>{fee}</MandiText>
+        {sourceLine != null && (
+          <MandiText variant="caption" color={Colors.textSecondary} testID={`payout-source-${payout.payoutId}`}>{sourceLine}</MandiText>
+        )}
+        <TransactionIdLine id={payoutTransactionId(payout)} testID={`payout-row-${payout.payoutId}-txid`} />
         {created != null && <MandiText variant="caption" color={Colors.textSecondary}>{created}</MandiText>}
         {settled != null && <MandiText variant="caption" color={Colors.success}>{settled}</MandiText>}
       </View>
@@ -53,19 +61,23 @@ export function PayoutRow({ payout, onPress }: { payout: CreditPayout; onPress: 
 /** One payment on a credit line: who, which invoice, how much, how it was paid, when. */
 export function PaymentRow({ payment }: { payment: StorePayment }) {
   const name = payment.restaurantName ?? payment.outletName ?? 'A restaurant';
-  const how = methodAndReference(payment.method, payment.reference);
+  // Paid through Mandi: the method, and the transaction id on its own line. Recorded by hand: method and "ref ...".
+  const txid = transactionIdOf(payment);
+  const how = payment.source === 'ONLINE' ? paymentDetail(payment.method, null, 'ONLINE')
+    : payment.source === 'WALLET' ? null : methodAndReference(payment.method, payment.reference);
   const when = [paymentSourceLabel(payment.source), formatDay(payment.paidOn) ?? payment.paidOn].join(' · ');
   return (
     <View
       testID={`payment-row-${payment.id}`}
       accessible
-      accessibilityLabel={`${name}. ${payment.invoiceNumber}. ${formatMoney(payment.amount)}${how != null ? `. ${how}` : ''}. ${when}`}
+      accessibilityLabel={`${name}. ${payment.invoiceNumber}. ${formatMoney(payment.amount)}${how != null ? `. ${how}` : ''}${txid != null ? `. Transaction ID ${txid}` : ''}. ${when}`}
       style={styles.row}
     >
       <View style={styles.main}>
         <MandiText variant="bodyEmphasis">{name}</MandiText>
         <MandiText variant="caption" color={Colors.textSecondary}>{payment.invoiceNumber}</MandiText>
         {how != null && <MandiText variant="caption" color={Colors.textSecondary}>{how}</MandiText>}
+        <TransactionIdLine id={txid} testID={`payment-row-${payment.id}-txid`} />
         <MandiText variant="caption" color={Colors.textSecondary}>{when}</MandiText>
       </View>
       <MandiText variant="price" style={styles.net}>{formatMoney(payment.amount)}</MandiText>

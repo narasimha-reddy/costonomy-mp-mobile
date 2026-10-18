@@ -5,12 +5,12 @@
   "private": true,
   "scripts": {
     "start": "expo start",
-    "start:local": "expo start --clear",
-    "start:test": "EXPO_PUBLIC_API_URL_OVERRIDE=https://testapi.costonomy.com/costonomy-mp-api EXPO_PUBLIC_COMMON_API_URL_OVERRIDE=https://testapi.costonomy.com/costonomy-common-api expo start --clear",
-    "start:prod": "EXPO_PUBLIC_API_URL_OVERRIDE=https://api.costonomy.com/costonomy-mp-api EXPO_PUBLIC_COMMON_API_URL_OVERRIDE=https://api.costonomy.com/costonomy-common-api expo start --clear",
+    "start:local": "bash scripts/preflight.sh local && expo start --clear",
+    "start:test": "bash scripts/preflight.sh test && EXPO_PUBLIC_API_URL_OVERRIDE=https://testapi.costonomy.com/costonomy-mp-api EXPO_PUBLIC_COMMON_API_URL_OVERRIDE=https://testapi.costonomy.com/costonomy-common-api expo start --clear",
+    "start:prod": "bash scripts/preflight.sh prod && EXPO_PUBLIC_API_URL_OVERRIDE=https://api.costonomy.com/costonomy-mp-api EXPO_PUBLIC_COMMON_API_URL_OVERRIDE=https://api.costonomy.com/costonomy-common-api expo start --clear",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web --port 7071",
+    "web": "bash scripts/preflight.sh local && expo start --web --port 7071",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "jest"

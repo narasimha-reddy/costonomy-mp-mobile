@@ -1,12 +1,16 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { StorefrontSku } from '@/models/discovery';
 import { ProductThumb } from './ProductThumb';
-import { MandiQuantityStepper, MandiButton, MandiText } from '@/components/common';
+import { MandiText } from '@/components/common';
 import { formatGstRate, formatMoney, formatQuantity, type Money } from '@/utils/money';
 import { skuSecondaryLine } from '@/utils/skuLabel';
-import { Colors, Radius, Spacing } from '@/theme';
+import { Colors, ControlHeight, Radius, Spacing, hitSlopFor } from '@/theme';
+
+/** The picture, right of the text. The Add control overlaps its bottom edge by {@link ADD_OVERLAP}. */
+const THUMB = 88;
+const ADD_OVERLAP = 12;
 
 /**
  * One buyable pack, in a list.
@@ -40,6 +44,7 @@ export function SkuRow({
   lineTotal,
   /** Hides the supplier line, for a list that is already one supplier's shelf. */
   hideSupplier,
+  onSelectBrandSku,
 }: {
   sku: StorefrontSku;
   onPress?: () => void;
@@ -64,15 +69,22 @@ export function SkuRow({
    */
   lineTotal?: Money | null;
   hideSupplier?: boolean;
+  onSelectBrandSku?: (supplierSkuId: number) => void;
 }) {
   const unavailable = sku.availability !== 'AVAILABLE';
+  const hasBrandOptions = sku.brandOptions != null && sku.brandOptions.length > 1;
 
   const body = (
     <>
-      <ProductThumb uri={sku.imageUrl} size={48} radius={Radius.sm} />
-
       <View style={styles.body}>
-        <MandiText variant="bodyEmphasis" numberOfLines={2}>{sku.skuName}</MandiText>
+        <View style={styles.titleRow}>
+          <MandiText variant="bodyEmphasis" numberOfLines={2} style={styles.flexShrink}>{sku.skuName}</MandiText>
+          {sku.grade ? (
+            <View style={styles.gradeBadge}>
+              <MandiText variant="caption" style={styles.gradeBadgeText}>{sku.grade}</MandiText>
+            </View>
+          ) : null}
+        </View>
 
         {/* The same pack line as the request and order screens, from the same
             helper — "12 PACK (500 ML) · Mother Dairy". It used to be brand then
@@ -96,19 +108,23 @@ export function SkuRow({
           })}
         </MandiText>
 
-        {/* What one pack costs, in the pack line's own register. It was set in
-            the price face, which made a per-unit figure shout louder than the
-            total beside the counter — the opposite of which number is being
-            decided on.
-
-            <b>Excluding GST, and saying so.</b> The rate is stated as something
-            still to be added rather than already in — which is what the figure
-            is, and what makes it reconcile with the total above the counter:
-            that one includes the tax this one is about to attract. */}
+        {/* What one pack costs, in the pack line's own register. Strikethrough MRP and discount badge when available. */}
         <View style={styles.unitPrice}>
+          {sku.mrp != null && Number(sku.mrp) > Number(sku.sellingPrice) && (
+            <MandiText variant="caption" style={styles.mrpStrikethrough}>
+              {formatMoney(sku.mrp)}
+            </MandiText>
+          )}
           <MandiText variant="caption" color={Colors.textPrimary}>
             {formatMoney(sku.sellingPrice)}
           </MandiText>
+          {sku.discountPercent != null && sku.discountPercent > 0 && (
+            <View style={styles.discountBadge}>
+              <MandiText variant="caption" style={styles.discountBadgeText}>
+                {sku.discountPercent}% OFF
+              </MandiText>
+            </View>
+          )}
           {sku.gstRate != null && Number(sku.gstRate) > 0 && (
             <MandiText variant="caption" color={Colors.textTertiary}>
               + {formatGstRate(sku.gstRate)} GST
@@ -116,6 +132,13 @@ export function SkuRow({
           )}
         </View>
 
+
+        {/* What this line comes to, once there is a line. Only then: a total of
+            nothing is not a fact about this pack, and the unit price above
+            already says what one costs. */}
+        {onChangePacks != null && lineTotal != null && (packs ?? 0) > 0 && (
+          <MandiText variant="priceSmall">{formatMoney(lineTotal)}</MandiText>
+        )}
 
         {!hideSupplier && (
           <MandiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
@@ -128,12 +151,12 @@ export function SkuRow({
             single supplier's shelf the screen already says both, once, at the top. */}
         {!hideSupplier && (
           <View style={styles.signals}>
-            {sku.averageRating != null && (
+            {sku.averageRating != null && sku.ratingCount > 0 && (
               <View style={styles.rating}>
                 <Ionicons name="star" size={11} color={Colors.warning} />
                 <MandiText variant="caption" color={Colors.textSecondary}>
                   {formatQuantity(sku.averageRating)}
-                  {sku.ratingCount > 0 ? ` (${sku.ratingCount})` : ''}
+                  {` (${sku.ratingCount})`}
                 </MandiText>
               </View>
             )}
@@ -152,83 +175,364 @@ export function SkuRow({
   );
 
   return (
-    <View style={styles.row}>
-      {onPress ? (
-        <Pressable
-          onPress={onPress}
-          accessibilityRole="button"
-          // The row opens the pack now, not the comparison. A label describing
-          // the old destination is worse than none: a screen reader user hears
-          // where they are going and lands somewhere else.
-          accessibilityLabel={
-            `${sku.skuName} from ${sku.supplierName}, ${formatMoney(sku.sellingPrice)}. `
-            + 'About this pack'
-          }
-          style={styles.main}
-        >
-          {body}
-        </Pressable>
-      ) : (
-        <View style={styles.main}>{body}</View>
-      )}
-
-      <View style={styles.trailing}>
-        {/* What this line comes to, over the control that sets it. Only once
-            there is a line: a total of nothing is not a fact about this pack,
-            and the unit price beside the name already says what one costs. */}
-        {onChangePacks != null && lineTotal != null && (packs ?? 0) > 0 && (
-          <MandiText variant="priceSmall">{formatMoney(lineTotal)}</MandiText>
+    <View style={styles.container}>
+      <View style={styles.row}>
+        {onPress ? (
+          <Pressable
+            onPress={onPress}
+            accessibilityRole="button"
+            // The row opens the pack now, not the comparison. A label describing
+            // the old destination is worse than none: a screen reader user hears
+            // where they are going and lands somewhere else.
+            accessibilityLabel={
+              `${sku.skuName} from ${sku.supplierName}, ${formatMoney(sku.sellingPrice)}. `
+              + 'About this pack'
+            }
+            style={styles.main}
+          >
+            {body}
+          </Pressable>
+        ) : (
+          <View style={styles.main}>{body}</View>
         )}
 
-        {onChangePacks != null ? (
-          <>
-            <MandiQuantityStepper
-              value={packs ?? 0}
-              disabled={unavailable}
-              onChange={onChangePacks}
-            />
-            {/* The SKU's own unit, which is what the quantity is counted in
-                everywhere else — a request line for this reads "2 KG".
-                
-                In the flow and right-aligned with the control, not floated
-                under it: absolutely positioned it escaped the row's height and
-                struck the divider below, and a caption sitting on a rule reads
-                as belonging to the next row. */}
-            {sku.packUnit != null && (
-              <MandiText variant="caption" color={Colors.textTertiary}>
-                {sku.packUnit.toLowerCase()}
-              </MandiText>
-            )}
-          </>
-        ) : onAdd ? (
-          <MandiButton
-            label={unavailable ? 'Out of stock' : 'Add'}
-            variant="secondary"
-            size="sm"
-            disabled={unavailable}
-            loading={adding}
-            onPress={onAdd}
-            fullWidth={false}
-          />
-        ) : null}
+        {/* The picture and its control. Add is a sibling of the picture's own
+            press target, not inside it, and hangs over the picture's bottom edge. */}
+        <View style={styles.media}>
+          {onPress ? (
+            <Pressable onPress={onPress} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <ProductThumb uri={sku.imageUrl} size={THUMB} radius={Radius.md} />
+            </Pressable>
+          ) : (
+            <ProductThumb uri={sku.imageUrl} size={THUMB} radius={Radius.md} />
+          )}
+
+          <View style={styles.control}>
+            {onChangePacks != null ? (
+              (packs ?? 0) > 0 ? (
+                <PackStepper
+                  packs={packs ?? 0}
+                  name={sku.skuName}
+                  unit={sku.packUnit}
+                  disabled={unavailable}
+                  onChange={onChangePacks}
+                />
+              ) : (
+                <AddButton
+                  name={sku.skuName}
+                  unavailable={unavailable}
+                  onPress={() => onChangePacks(1)}
+                />
+              )
+            ) : onAdd ? (
+              <AddButton name={sku.skuName} unavailable={unavailable} loading={adding} onPress={onAdd} />
+            ) : null}
+          </View>
+        </View>
       </View>
+
+      {/* When an item is fulfilled by multiple brands, display all options
+          under the item with lowest priced one first. */}
+      {hasBrandOptions && (
+        <View style={styles.brandOptionsContainer}>
+          <View style={styles.brandOptionsHeader}>
+            <Ionicons name="pricetags-outline" size={11} color={Colors.primary} />
+            <MandiText variant="captionEmphasis" color={Colors.textSecondary}>
+              Brand options (lowest first):
+            </MandiText>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brandOptionsRail}
+          >
+            {sku.brandOptions?.map((opt, idx) => {
+              const isCurrent = opt.supplierSkuId === sku.supplierSkuId;
+              const isLowest = idx === 0;
+              const priceDisplay = opt.unitPriceInclusiveGst != null
+                ? formatMoney(opt.unitPriceInclusiveGst)
+                : formatMoney(opt.sellingPrice);
+
+              return (
+                <Pressable
+                  key={opt.supplierSkuId}
+                  onPress={() => onSelectBrandSku?.(opt.supplierSkuId) ?? onPress?.()}
+                  style={({ pressed }) => [
+                    styles.brandChip,
+                    isCurrent && styles.brandChipCurrent,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <MandiText
+                    variant="captionEmphasis"
+                    color={isCurrent ? Colors.primary : Colors.textPrimary}
+                    numberOfLines={1}
+                  >
+                    {opt.brandName || opt.skuName}
+                  </MandiText>
+                  {isLowest && (
+                    <View style={styles.lowestBadge}>
+                      <MandiText variant="caption" style={styles.lowestBadgeText}>
+                        Lowest
+                      </MandiText>
+                    </View>
+                  )}
+                  {opt.grade ? (
+                    <View style={styles.gradeBadge}>
+                      <MandiText variant="caption" style={styles.gradeBadgeText}>
+                        {opt.grade}
+                      </MandiText>
+                    </View>
+                  ) : null}
+                  <View style={styles.chipPricing}>
+                    {opt.mrp != null && Number(opt.mrp) > Number(opt.sellingPrice) && (
+                      <MandiText variant="caption" style={styles.chipMrpStrikethrough}>
+                        {formatMoney(opt.mrp)}
+                      </MandiText>
+                    )}
+                    <MandiText
+                      variant="caption"
+                      color={isCurrent ? Colors.primaryDark : Colors.textSecondary}
+                    >
+                      {priceDisplay}
+                    </MandiText>
+                    {opt.discountPercent != null && opt.discountPercent > 0 && (
+                      <View style={styles.chipDiscountBadge}>
+                        <MandiText variant="caption" style={styles.chipDiscountText}>
+                          {opt.discountPercent}% OFF
+                        </MandiText>
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** The orange outline Add. "Out of stock" when it cannot be added, and then it does nothing. */
+function AddButton({ name, unavailable, loading, onPress }: {
+  name: string;
+  unavailable: boolean;
+  loading?: boolean;
+  onPress: () => void;
+}) {
+  const inert = unavailable || loading === true;
+  return (
+    <Pressable
+      onPress={inert ? undefined : onPress}
+      disabled={inert}
+      accessibilityRole="button"
+      accessibilityLabel={`Add ${name}`}
+      accessibilityState={{ disabled: inert, busy: loading === true }}
+      hitSlop={{ top: 2, bottom: 2 }}
+      style={[styles.add, unavailable && styles.addOff]}
+    >
+      <MandiText variant="bodyEmphasis" color={unavailable ? Colors.textDisabled : Colors.primaryDark} numberOfLines={1}>
+        {loading ? '...' : unavailable ? 'Out of stock' : 'ADD'}
+      </MandiText>
+    </Pressable>
+  );
+}
+
+/** The filled stepper that replaces Add once there is a pack in the basket. */
+function PackStepper({ packs, name, unit, disabled, onChange }: {
+  packs: number;
+  name: string;
+  unit: string | null;
+  disabled: boolean;
+  onChange: (packs: number) => void;
+}) {
+  const suffix = ` ${name}`;
+  return (
+    <View style={styles.stepper}>
+      <Pressable
+        onPress={() => onChange(packs - 1)}
+        accessibilityRole="button"
+        accessibilityLabel={`Decrease quantity of ${name}`}
+        hitSlop={hitSlopFor(ControlHeight.sm)}
+        style={styles.stepperHit}
+      >
+        <Ionicons name="remove" size={18} color={Colors.textInverse} />
+      </Pressable>
+      <MandiText
+        variant="bodyEmphasis"
+        color={Colors.textInverse}
+        center
+        accessibilityLabel={`${packs}${unit ? ` ${unit.toLowerCase()}` : ''}${suffix}`}
+        style={styles.stepperValue}
+      >
+        {packs}
+      </MandiText>
+      <Pressable
+        onPress={disabled ? undefined : () => onChange(packs + 1)}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={`Increase quantity of ${name}`}
+        accessibilityState={{ disabled }}
+        hitSlop={hitSlopFor(ControlHeight.sm)}
+        style={styles.stepperHit}
+      >
+        <Ionicons name="add" size={18} color={Colors.textInverse} />
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.md,
+  container: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
+    paddingVertical: Spacing.xs,
   },
-  main: { flex: 1, flexDirection: 'row', gap: Spacing.md, alignItems: 'center' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    paddingTop: Spacing.sm,
+    // The Add control hangs below the picture; this is the room it hangs into.
+    paddingBottom: Spacing.sm + ADD_OVERLAP,
+  },
+  main: { flex: 1, flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start' },
   body: { flex: 1, gap: 2 },
+  flexShrink: { flexShrink: 1 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+  },
+  gradeBadge: {
+    backgroundColor: '#EDE7F6',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D1C4E9',
+  },
+  gradeBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#5E35B1',
+  },
+  mrpStrikethrough: {
+    textDecorationLine: 'line-through',
+    color: Colors.textTertiary,
+    fontSize: 10,
+  },
+  discountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFE0B2',
+  },
+  discountBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#E65100',
+  },
   unitPrice: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.xs },
   signals: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  trailing: { alignItems: 'flex-end', gap: 2 },
+  media: { width: THUMB, height: THUMB },
+  control: {
+    position: 'absolute',
+    bottom: -ADD_OVERLAP,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  add: {
+    minWidth: 76,
+    minHeight: ControlHeight.sm + 4,
+    paddingHorizontal: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surface,
+  },
+  addOff: { borderColor: Colors.border },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: ControlHeight.sm + 4,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primary,
+  },
+  stepperHit: { width: 32, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  stepperValue: { minWidth: 24 },
+  brandOptionsContainer: {
+    marginTop: 2,
+    marginBottom: Spacing.xs,
+    gap: 4,
+  },
+  brandOptionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  brandOptionsRail: {
+    gap: Spacing.xs,
+    paddingVertical: 2,
+  },
+  brandChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  brandChipCurrent: {
+    borderColor: Colors.primary,
+    backgroundColor: '#E8F5E9',
+  },
+  lowestBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#4CAF50',
+  },
+  lowestBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  chipPricing: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  chipMrpStrikethrough: {
+    textDecorationLine: 'line-through',
+    color: Colors.textTertiary,
+    fontSize: 8,
+  },
+  chipDiscountBadge: {
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 3,
+    paddingVertical: 0.5,
+    borderRadius: 2,
+  },
+  chipDiscountText: {
+    fontSize: 7,
+    fontWeight: '700',
+    color: '#E65100',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
 });

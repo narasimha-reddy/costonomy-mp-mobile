@@ -27,6 +27,10 @@ export const Radius = {
   md: 12,
   lg: 16,
   xl: 20,
+  /** The hero card on the tracking screen. */
+  hero: 18,
+  /** The top corners of the tracking sheet. */
+  sheet: 22,
   /** Pills: chips, badges, the primary CTA. */
   full: 9999,
 } as const;

@@ -1,12 +1,20 @@
-import React from 'react';
+import { paymentStatusCopy } from '@/lib/payments/statusLabel';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { billingFailureMessage, creditNotesNotice } from '@/lib/billing/messages';
+import { fetchTaxInvoice, fetchCreditNotes, type TaxInvoice, type CreditNote } from '@/services/billing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useSession } from '@/contexts/SessionProvider';
 import { fetchSupplierOrder } from '@/services/procurement';
+import { fetchRating } from '@/services/trust';
+import { fetchDelivery } from '@/services/delivery';
 import {
   MandiButton,
+  DetailRowCard,
+  type DetailRow,
   MandiCard,
   MandiErrorState,
   MandiChatAction,
@@ -14,15 +22,26 @@ import {
   MandiScreen,
   MandiSkeletonList,
   MandiStickyBar,
-  MandiStatusChip,
   MandiText,
 } from '@/components/common';
-import { PaymentMethodPill } from '@/components/order';
-import { DeliveryMode, orderStatusFor, resolveStatus } from '@/models/status';
-import { formatGstRate, formatMoney, formatQuantity } from '@/utils/money';
-import { formatMomentWithRecency } from '@/utils/dateRange';
+import { AmountRow, BillSummary, DisputeRefundLines, billSummaryFor, CatchWeightNote, ColdChainBanner, PaymentMethodPill } from '@/components/order';
+import { isApiError } from '@/lib/api/errors';
+import { useServerNow } from '@/hooks/useServerNow';
+import { orderTrackingView } from '@/lib/delivery/orderTracking';
+import { buyerTrackingHeader } from '@/lib/delivery/trackingHeader';
+import { formatMoney, formatQuantity } from '@/utils/money';
+import { itemTaxLine } from '@/components/order/BillSummary';
+import { formatDay, formatMoment, formatMomentWithRecency } from '@/utils/dateRange';
+import { paymentLine } from '@/lib/payments/paymentLine';
 import { skuSecondaryLine } from '@/utils/skuLabel';
-import { Colors, Spacing } from '@/theme';
+import { splitStoreName } from '@/components/restaurant/SupplierStoreHeader';
+import { Colors, IconSize, Spacing, TouchTarget } from '@/theme';
+
+const ACTIVE_POLL_MS = 15_000;
+const ENDED_ORDER = ['COMPLETED', 'CANCELLED'];
+const ENDED_DELIVERY = ['DELIVERED', 'CANCELLED', 'DELIVERY_FAILED'];
+/** Statuses from which a delivery can exist. A DRAFT or CANCELLED order never has one, so asking would only 404. */
+const DELIVERY_POSSIBLE = ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'];
 
 /**
  * REST-ORDERS-01 detail. Doc 05 §15–§16.
@@ -50,17 +69,57 @@ export default function OrderDetailScreen() {
     queryKey: ['supplier-order', orderId],
     queryFn: () => fetchSupplierOrder(accessToken as string, orderId),
     enabled: Number.isFinite(orderId) && accessToken != null,
-    // An order still moving is changing under us; a settled one is not. After
-    // D-091 nothing is waiting on an acceptance, so what is worth polling is the
-    // work itself — being prepared, or on its way.
+    // An order still moving is changing under us; a settled one is not. The tracker follows the partner, so it polls
+    // until the order is completed or cancelled.
     refetchInterval: (q) => {
       const status = q.state.data?.status;
-      return status === 'CONFIRMED' || status === 'PREPARING'
-        || status === 'OUT_FOR_DELIVERY' ? 30_000 : false;
+      return status != null && ENDED_ORDER.includes(status) ? false : ACTIVE_POLL_MS;
     },
   });
 
   const order = query.data;
+  const nowMs = useServerNow();
+
+  const delivery = useQuery({
+    queryKey: ['supplier-order', orderId, 'delivery'],
+    queryFn: () => fetchDelivery(accessToken as string, orderId),
+    enabled: Number.isFinite(orderId) && accessToken != null
+      && order != null && DELIVERY_POSSIBLE.includes(order.status),
+    // A 404 is "no delivery yet"; retrying it would only delay the screen.
+    retry: (count, error) => !isApiError(error) && count < 2,
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      if (status != null && ENDED_DELIVERY.includes(status)) return false;
+      const orderStatus = order?.status;
+      if (status == null && orderStatus != null && ENDED_ORDER.includes(orderStatus)) return false;
+      return ACTIVE_POLL_MS;
+    },
+  });
+
+  // The receipt's own read (same key, a GET): a rated order no longer offers "Rate this order". A 404 is "not rated yet".
+  const rating = useQuery({
+    queryKey: ['supplier-order', orderId, 'rating'],
+    queryFn: () => fetchRating(accessToken as string, orderId),
+    enabled: Number.isFinite(orderId) && accessToken != null && order?.status === 'COMPLETED',
+    retry: (count, error) => !isApiError(error) && count < 2,
+  });
+  const rated = rating.data != null;
+
+  const deliveryStatus = delivery.data ?? null;
+  const view = order == null
+    ? null
+    : orderTrackingView({ audience: 'buyer', order, delivery: deliveryStatus, nowMs });
+
+  const header = order == null || view == null
+    ? null
+    : buyerTrackingHeader({ view, order, delivery: deliveryStatus, drop: null, nowMs });
+  // Who it is from, the name once (SupplierStoreHeader's rule). No store name: the supplier alone.
+  const party = order?.storeName != null && order.storeName.trim() !== ''
+    ? splitStoreName(order.storeName, order.supplierName)
+    : { title: order?.supplierName ?? '', subtitle: null };
+  // Track while the order is moving, or whenever the server says the partner can be followed. A DRAFT is not yet sent.
+  const showTrack = view != null && order != null && order.status !== 'DRAFT'
+    && (view.showTrack || !view.terminal);
 
   /**
    * The supplier answered, and for less than was asked.
@@ -74,23 +133,137 @@ export default function OrderDetailScreen() {
     && order.items.some((item) => item.acceptedQuantity != null)
     && Number(order.acceptedAmount) !== Number(order.totalAmount);
 
+  const payment = order?.paymentStatus
+    ? paymentStatusCopy({
+      status: order.paymentStatus,
+      instrument: order.paymentInstrument,
+      // The figure the Total row shows: as sent, not worked out here.
+      amount: settled ? order.acceptedAmount : order.totalAmount,
+      cancelled: order.status === 'CANCELLED',
+      refundAmount: order.refundAmount,
+      refundedAt: order.refundedAt,
+    })
+    : undefined;
+
+  /** Payment method, the delivery window, the address, and a way to report a problem once it has arrived. */
+  function detailRows(o: NonNullable<typeof order>): DetailRow[] {
+    const rows: DetailRow[] = [];
+    // A plain on-credit order already says "On credit" on the bar and in the bill: no row for it. Any other status on a
+    // credit order (Refunded, Cancelled · being settled, Refund delayed) is news, and keeps its row, label and pill.
+    // The same goes for a plain wallet or card payment ("Paid from wallet" is the bill's own last line): one payment
+    // line, not three. Only a status that is news (held, refunded, delayed, failed) gets a row.
+    const plainCredit = o.paymentStatus === 'ON_CREDIT' || o.paymentStatus === 'PAID' || o.paymentStatus === 'CAPTURED';
+    if (!plainCredit && (o.paymentMethod != null || payment != null)) {
+      rows.push({
+        key: 'payment',
+        icon: 'card-outline',
+        title: 'Payment method',
+        // Said by the server's status and instrument, never guessed: a UPI order that was cancelled has been
+        // debited and is being refunded, which is not "no money was taken".
+        subtitle: payment == null ? null : [payment.label, payment.detail].filter(Boolean).join('. '),
+        right: o.paymentMethod != null ? <PaymentMethodPill method={o.paymentMethod} /> : undefined,
+      });
+    }
+    const when = o.deliverySlotName ?? o.scheduledDeliveryDate;
+    if (when) {
+      rows.push({
+        key: 'window',
+        icon: 'time-outline',
+        title: 'Delivery window',
+        subtitle: o.deliverySlotName && o.scheduledDeliveryDate
+          ? `${formatDay(o.scheduledDeliveryDate) ?? o.scheduledDeliveryDate}, ${o.deliverySlotName}`
+          : o.deliverySlotName ?? formatDay(o.scheduledDeliveryDate) ?? when,
+      });
+    }
+    if (o.isSubscriptionOrder) {
+      rows.push({ key: 'subscription', icon: 'repeat-outline', title: 'Order type', subtitle: 'Daily subscription' });
+    }
+    const address = [o.outletName, o.outletLocality, o.outletCity].filter(Boolean).join(', ');
+    if (address) {
+      rows.push({ key: 'address', icon: 'location-outline', title: 'Delivery address', subtitle: address });
+    }
+    if (view?.complete) {
+      rows.push({
+        key: 'report',
+        icon: 'flag-outline',
+        title: 'Report an issue',
+        onPress: () => router.push(`/restaurant/dispute/${o.id}`),
+        right: <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />,
+      });
+    }
+    return rows;
+  }
+
+  // ── Billing: statutory invoices & credit notes ──────────────────────
+  const [invoice, setInvoice] = useState<TaxInvoice | null>(null);
+  const [creditNotes, setCreditNotes] = useState<CreditNote[] | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  // On the card, not an Alert: Alert.alert does nothing on the web.
+  const [billingNotice, setBillingNotice] = useState<string | null>(null);
+
+  const billingEligible = order != null && [
+    'DELIVERED', 'COMPLETED', 'SETTLED',
+  ].includes(order.status);
+
+  async function handleViewInvoice() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    setBillingNotice(null);
+    try {
+      const inv = await fetchTaxInvoice(accessToken, orderId);
+      setInvoice(inv);
+    } catch (caught) {
+      setBillingNotice(billingFailureMessage(caught, 'Tax invoice is not yet available for this order.'));
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function handleViewCreditNotes() {
+    if (!accessToken || !orderId) return;
+    setBillingLoading(true);
+    setBillingNotice(null);
+    try {
+      const notes = await fetchCreditNotes(accessToken, orderId);
+      if (notes.length === 0) {
+        setBillingNotice('No credit notes yet.');
+      } else {
+        setCreditNotes(notes);
+      }
+    } catch (caught) {
+      setBillingNotice(creditNotesNotice(caught));
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
   return (
     <MandiScreen
       header={
         <MandiHeader
-          title="Order"
-          subtitle={order?.orderNumber ?? undefined}
+          title="Order details"
           back
-          right={
+          right={order != null && (
             <MandiChatAction
-              outletId={order?.outletId}
-              supplierStoreId={order?.supplierStoreId}
+              outletId={order.outletId}
+              supplierStoreId={order.supplierStoreId}
               side="RESTAURANT"
-              // What this conversation is about, offered for sharing once the
-              // thread opens rather than assumed.
-              suggest={order == null ? undefined : { type: 'ORDER', id: order.id }}
-            />
-          }
+              // What this conversation is about, offered for sharing once the thread opens rather than assumed.
+              suggest={{ type: 'ORDER', id: order.id }}
+            >
+              {({ onPress, label, busy }) => (
+                <Pressable
+                  onPress={onPress}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  style={styles.support}
+                >
+                  <MandiText variant="bodyEmphasis" color={Colors.primaryDark}>Support</MandiText>
+                </Pressable>
+              )}
+            </MandiChatAction>
+          )}
         />
       }
       onRefresh={() => query.refetch()}
@@ -103,54 +276,76 @@ export default function OrderDetailScreen() {
         <MandiErrorState message="Couldn't load this order." onRetry={() => query.refetch()} />
       ) : (
         <>
-          <MandiCard>
-            {/* Laid out like the request this came from: both chips on one
-                line, then when, then who. An order and the request behind it
-                are two stages of one thing, and a reader should not have to
-                re-learn where to look when they move between them.
-                
-                The two chips answer different questions — where the order is,
-                and how it travels — which is why they sit together rather than
-                one being buried further down. */}
-            <View style={styles.statusRow}>
-              <MandiStatusChip {...orderStatusFor(order.status, order.deliveryMode)} />
-              {order.deliveryMode != null && (
-                <MandiStatusChip {...resolveStatus(DeliveryMode, order.deliveryMode)} />
-              )}
-            </View>
+          {/* The status card: where the order is, in the buyer tracking header's own words. Hidden once cancelled,
+              when the payment row below carries the refund copy. */}
+          {header != null && order.status !== 'CANCELLED' && (
+            <DetailRowCard
+              rows={[{
+                key: 'status',
+                // A finished order gets a check: the navigate arrow says "on its way", which it no longer is.
+                icon: header.state === 'completed' ? 'checkmark-circle-outline' : 'navigate-outline',
+                title: header.title,
+                subtitle: header.pill?.text ?? null,
+                accessibilityLabel: `Order status, ${header.title}`,
+                // Track while the order is moving (or the server says it can be followed); nothing once it ended.
+                right: showTrack ? (
+                  <MandiText variant="bodyEmphasis" color={Colors.primaryDark}>Track ›</MandiText>
+                ) : undefined,
+                onPress: showTrack ? () => router.push(`/restaurant/tracking/${order.id}`) : undefined,
+              }]}
+            />
+          )}
 
-            {/* The number is the screen's title; only the date belongs here. */}
+          <MandiCard>
             <MandiText variant="caption" color={Colors.textTertiary}>
               {formatMomentWithRecency(order.createdAt)}
             </MandiText>
             {/* Through to the supplier's shelf. Somebody reading an order
                 often wants the next one, or to check what else this supplier
                 carries — and the name is where they reach for it. */}
-            <Pressable
-              onPress={() => router.push(`/restaurant/supplier/${order.supplierStoreId}`)}
-              accessibilityRole="button"
-              accessibilityLabel={`See everything ${order.storeName ?? order.supplierName} sells`}
-              style={({ pressed }) => [styles.partyRow, pressed && styles.pressed]}
-            >
-              <View style={styles.flex}>
-                <MandiText variant="bodyEmphasis" style={styles.party}>
-                  {order.supplierName}
-                </MandiText>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  {order.storeName}
-                </MandiText>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
-            </Pressable>
+            <View style={styles.partyRow}>
+              <Pressable
+                onPress={() => router.push(`/restaurant/supplier/${order.supplierStoreId}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`See everything ${order.storeName ?? order.supplierName} sells`}
+                style={({ pressed }) => [styles.partyLink, pressed && styles.pressed]}
+              >
+                {/* The name once: "Sri Balaji Traders — Domlur" under "Sri Balaji Traders" reads as the supplier
+                    with the locality as the caption (the storefront header's own rule). */}
+                <View style={styles.flex}>
+                  <MandiText variant="bodyEmphasis" style={styles.party}>
+                    {party.title}
+                  </MandiText>
+                  {party.subtitle != null && party.subtitle !== '' && (
+                    <MandiText variant="caption" color={Colors.textSecondary}>
+                      {party.subtitle}
+                    </MandiText>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+              </Pressable>
+              <MandiChatAction
+                outletId={order.outletId}
+                supplierStoreId={order.supplierStoreId}
+                side="RESTAURANT"
+                suggest={{ type: 'ORDER', id: order.id }}
+              />
+            </View>
+            <View style={styles.hairline} />
+            <View style={styles.orderIdRow}>
+              <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
+                Order ID: {order.orderNumber}
+              </MandiText>
+              <Pressable
+                onPress={() => { void Clipboard.setStringAsync(order.orderNumber); }}
+                accessibilityRole="button"
+                accessibilityLabel="Copy order ID"
+                style={styles.copy}
+              >
+                <Ionicons name="copy-outline" size={IconSize.md} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
 
-            {/* No acceptance countdown. The supplier answered on the request,
-                and this order exists because they said yes — a clock here would
-                count down to nothing. The request's own clock is on the request.
-                D-091. */}
-          </MandiCard>
-
-          <MandiCard>
-            <MandiText variant="bodyEmphasis">Items</MandiText>
             {order.items.map((item) => {
               const short =
                 item.acceptedQuantity != null &&
@@ -166,17 +361,19 @@ export default function OrderDetailScreen() {
                     accessibilityLabel={`About ${item.productName}`}
                     style={styles.itemText}
                   >
-                    <MandiText variant="body">{item.productName}</MandiText>
-                    {/* The pack, as every other screen describes it. The
-                        quantity goes below: it belongs to this order, not to
-                        the pack. */}
+                    <MandiText variant="body">
+                      {formatQuantity(item.requestedQuantity)} x {item.productName}
+                    </MandiText>
+                    {/* The pack, as every other screen describes it. */}
                     <MandiText variant="caption" color={Colors.textSecondary}>
                       {skuSecondaryLine(item.sku, item.unitPriceInclusiveGst)}
                     </MandiText>
                     <MandiText variant="caption" color={Colors.textTertiary}>
-                      {formatQuantity(item.requestedQuantity)} {item.unit} ordered ·
-                      Inc. {formatGstRate(item.gstRate)} GST
+                      {itemTaxLine(item)}
                     </MandiText>
+                    {item.requiresColdChain && (
+                      <ColdChainBanner compact text="Chilled goods" />
+                    )}
                     {short && (
                       <View style={styles.shortRow}>
                         <Ionicons name="alert-circle-outline" size={14} color={Colors.warning} />
@@ -199,55 +396,97 @@ export default function OrderDetailScreen() {
                     <MandiText variant="bodyEmphasis">
                       {formatMoney(item.acceptedLineTotal ?? item.lineTotal)}
                     </MandiText>
+                    {item.isCatchWeight === true && (
+                      <CatchWeightNote billed={item.billableQuantity} unit={item.unit} />
+                    )}
                   </View>
                 </View>
               );
             })}
           </MandiCard>
 
-          <MandiCard>
-            {/* One figure per row: what this order actually comes to. The
-                ordered amounts are struck on the lines above, where the change is
-                a fact about a particular item — repeating them here turned a
-                summary into a second comparison, and a summary that shows two
-                numbers for every row is not a summary. */}
-            <Row
-              label="Item value"
-              value={formatMoney(settled ? order.acceptedSubtotal : order.subtotal)}
-            />
-            <Row
-              label="GST"
-              value={formatMoney(settled ? order.acceptedGst : order.gstAmount)}
-            />
-            {/* Where the request screen puts it, and only when it cost
-                something: a "Delivery  Free" line on a collected order states
-                the obvious next to a chip that already said "You collect". */}
-            {order.deliveryFee != null && Number(order.deliveryFee) > 0 && (
-              <Row label="Delivery" value={formatMoney(order.deliveryFee)} />
-            )}
-            <Row
-              label="Total"
-              value={formatMoney(settled ? order.acceptedAmount : order.totalAmount)}
-              emphasis
-            />
-            {order.paymentStatus && (
-              <Row label="Payment" value={humanise(order.paymentStatus)} />
-            )}
-            {/* How this one is funded — the restaurant is the party who either
-                paid or owes, and until now its own view of the order was the
-                only one that never said which. It takes a labelled row like
-                every other line in this block rather than floating under them,
-                and the same pill the card and the supplier's view carry, so the
-                two sides cannot describe one order's funding differently. */}
-            {order.paymentMethod != null && (
-              <View style={styles.totalsRow}>
-                <View style={styles.flex}>
-                  <MandiText variant="body" color={Colors.textSecondary}>Funded by</MandiText>
-                </View>
-                <PaymentMethodPill method={order.paymentMethod} />
+          {/* Each figure is a server field: nothing is added here. */}
+          <BillSummary
+            {...billSummaryFor(order, settled)}
+            extra={billingEligible ? <DisputeRefundLines orderId={orderId} /> : undefined}
+          />
+
+          {order.hasColdChainItems && (
+            <ColdChainBanner text="Chilled goods: carried only by a carrier verified for temperature-controlled transport." />
+          )}
+          <DetailRowCard rows={detailRows(order)} />
+
+          {/* ── Statutory Billing Documents ────────────────────────── */}
+          {billingEligible && (
+            <MandiCard>
+              <View style={styles.docsHead}>
+                <Ionicons name="document-text-outline" size={IconSize.md} color={Colors.textSecondary} />
+                <MandiText variant="bodyEmphasis">GST documents</MandiText>
               </View>
-            )}
-          </MandiCard>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : 'View invoice'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={handleViewInvoice}
+                  disabled={billingLoading}
+                />
+                <MandiButton
+                  label={billingLoading ? 'Loading…' : 'Credit notes'}
+                  size="sm"
+                  variant="secondary"
+                  onPress={handleViewCreditNotes}
+                  disabled={billingLoading}
+                />
+              </View>
+
+              {billingNotice != null && (
+                <MandiText variant="caption" color={Colors.textSecondary} style={{ marginTop: 8 }} testID="billing-notice">
+                  {billingNotice}
+                </MandiText>
+              )}
+
+              {invoice != null && (
+                <View style={{ marginTop: 12 }}>
+                  <MandiText variant="captionEmphasis" color={Colors.primary}>
+                    {invoice.invoiceNumber} — {formatMoney(invoice.totalAmount)}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Issued {formatMoment(invoice.issuedAt)} • {invoice.isInterState ? 'IGST' : 'CGST + SGST'}
+                  </MandiText>
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Seller: {invoice.supplierName} (GSTIN {invoice.supplierGstin})
+                  </MandiText>
+                  {invoice.items.map((item) => (
+                    <View key={item.id} style={styles.totalsRow}>
+                      <MandiText variant="caption">{item.productName} ({item.hsnCode})</MandiText>
+                      <MandiText variant="caption">{formatMoney(item.totalAmount)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {creditNotes != null && creditNotes.length > 0 && creditNotes.map((cn) => (
+                <View key={cn.id} style={{ marginTop: 12 }}>
+                  <AmountRow
+                    variant="captionEmphasis"
+                    color={Colors.danger}
+                    label={`${cn.creditNoteNumber} — Refund`}
+                    amount={formatMoney(cn.totalRefundAmount)}
+                  />
+                  <MandiText variant="caption" color={Colors.textSecondary}>
+                    Reason: {cn.reasonCode} • Issued {formatMoment(cn.issuedAt)}
+                  </MandiText>
+                  {cn.items.map((item) => (
+                    <View key={item.id} style={styles.totalsRow}>
+                      <MandiText variant="caption">{item.productName}: {item.rejectedQuantity} rejected</MandiText>
+                      <MandiText variant="caption" color={Colors.danger}>-{formatMoney(item.totalRefund)}</MandiText>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </MandiCard>
+          )}
         </>
       )}
     </MandiScreen>
@@ -264,12 +503,10 @@ export default function OrderDetailScreen() {
   function renderActions() {
     if (order == null) return undefined;
 
-    // There is something to track only when somebody else is carrying it.
-    // D-091 gave orders a mode, and this check predates it: a PICKUP order has
-    // no courier and no positions, so "Track Delivery" opened a map of nothing.
+    // Only somebody else carrying it can be received as a delivery; a collected order has no courier and no positions.
     const carried = order.deliveryMode != null && order.deliveryMode !== 'PICKUP';
-    const trackable = carried
-      && ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'PREPARING'].includes(order.status);
+    // From the tracker: a partner is assigned, not yet delivered, and the server says it can be followed.
+    const trackable = view?.showTrack ?? false;
 
     // A collected order is received when the restaurant has it, which is the
     // moment it is ready — nothing delivers it, so it never reaches DELIVERED.
@@ -289,34 +526,25 @@ export default function OrderDetailScreen() {
             pay": by the time an order exists the money has moved. */}
         <View style={styles.barRow}>
           <MandiText variant="caption" color={Colors.textSecondary}>
-            {unpaid ? 'To pay' : 'You paid'}
+            {paymentLine(order).barLabel}
           </MandiText>
           <MandiText variant="priceLarge">
-            {formatMoney(settled ? order.acceptedAmount : order.totalAmount)}
+            {formatMoney(paymentLine(order).amount)}
           </MandiText>
         </View>
 
         <View style={styles.barActions}>
           {unpaid && (
             <MandiButton
-              label="Pay Now"
+              label="Pay now"
               size="lg"
               style={styles.barAction}
               onPress={() => router.push(`/restaurant/pay/${order.id}`)}
             />
           )}
-          {settled && (
-            <MandiButton
-              label="Something Was Wrong"
-              variant="tertiary"
-              size="lg"
-              style={styles.barAction}
-              onPress={() => router.push(`/restaurant/dispute/${order.id}`)}
-            />
-          )}
           {trackable && (
             <MandiButton
-              label="Track Delivery"
+              label="Track delivery"
               size="lg"
               icon="navigate-outline"
               style={styles.barAction}
@@ -325,15 +553,15 @@ export default function OrderDetailScreen() {
           )}
           {receivable && (
             <MandiButton
-              label={carried ? 'Check In Delivery' : 'Confirm Collection'}
+              label={carried ? 'Check in delivery' : 'Confirm collection'}
               size="lg"
               style={styles.barAction}
               onPress={() => router.push(`/restaurant/receiving/${order.id}`)}
             />
           )}
-          {settled && (
+          {settled && !rated && !rating.isPending && (
             <MandiButton
-              label="Rate This Order"
+              label="Rate this order"
               size="lg"
               style={styles.barAction}
               onPress={() => router.push(`/restaurant/rating/${order.id}`)}
@@ -345,39 +573,14 @@ export default function OrderDetailScreen() {
   }
 }
 
-function Row({
-  label,
-  value,
-  emphasis,
-  hint,
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-  hint?: string;
-}) {
-  return (
-    <View style={styles.totalsRow}>
-      <View style={styles.flex}>
-        <MandiText variant={emphasis ? 'bodyEmphasis' : 'body'} color={Colors.textSecondary}>
-          {label}
-        </MandiText>
-        {hint && (
-          <MandiText variant="caption" color={Colors.textTertiary}>{hint}</MandiText>
-        )}
-      </View>
-      <MandiText variant={emphasis ? 'price' : 'body'}>{value}</MandiText>
-    </View>
-  );
-}
-
-function humanise(value: string): string {
-  const spaced = value.replace(/_/g, ' ').toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
 const styles = StyleSheet.create({
+  docsHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   partyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  partyLink: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: Colors.border, marginVertical: Spacing.sm },
+  orderIdRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  copy: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  support: { minHeight: 48, minWidth: TouchTarget.min, paddingHorizontal: Spacing.sm, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.7 },
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
@@ -397,9 +600,21 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
   },
+  placed: { marginTop: Spacing.sm },
+  sectionGap: { gap: Spacing.xs },
+  helpRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  countdown: { marginTop: Spacing.md, gap: Spacing.xs },
+  deliverySummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
   barActions: { flexDirection: 'row', gap: Spacing.sm },
   barAction: { flex: 1 },
   party: { marginTop: Spacing.xs },
+  deliverySummaryBody: { gap: Spacing.xs },
   item: {
     flexDirection: 'row',
     gap: Spacing.md,

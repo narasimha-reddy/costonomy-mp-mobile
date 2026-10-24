@@ -14,10 +14,10 @@ import {
   MandiHeader,
   MandiScreen,
   MandiSkeletonList,
-  MandiStatusChip,
   MandiText,
   useToast,
 } from '@/components/common';
+import { DisputeStatusChip } from '@/components/dispute/DisputeStatusChip';
 import { DisputeThread } from '@/components/dispute/DisputeThread';
 import { categoryLabel } from '@/lib/disputes/categories';
 import { RefundStatusCard } from '@/components/dispute/RefundStatusCard';
@@ -117,11 +117,7 @@ export default function SupplierDisputeScreen() {
               <MandiText variant="bodyEmphasis">
                 {categoryLabel(dispute.data.category)}
               </MandiText>
-              <MandiStatusChip
-                label={dispute.data.status.replace(/_/g, ' ').toLowerCase()}
-                tone={dispute.data.status === 'RESOLVED' ? 'success' : 'pending'}
-                size="sm"
-              />
+              <DisputeStatusChip status={dispute.data.status} />
             </View>
             <MandiText variant="body">{dispute.data.description}</MandiText>
           </MandiCard>
@@ -135,7 +131,7 @@ export default function SupplierDisputeScreen() {
               )}
               {actionable && mayDecide && !declining && (
                 <View style={styles.actions}>
-                  <MandiButton label="Approve Refund" size="md"
+                  <MandiButton label="Approve refund" size="md"
                     loading={decide.isPending && confirming === 'approve'}
                     onPress={() => setConfirming('approve')} />
                   <MandiButton label="Decline" variant="secondary" size="md"
@@ -154,7 +150,7 @@ export default function SupplierDisputeScreen() {
                     required
                   />
                   <View style={styles.actions}>
-                    <MandiButton label="Decline Refund" variant="secondary" size="md"
+                    <MandiButton label="Decline refund" variant="secondary" size="md"
                       disabled={note.trim().length === 0}
                       loading={decide.isPending && confirming === 'decline'}
                       onPress={() => setConfirming('decline')} />
@@ -175,7 +171,7 @@ export default function SupplierDisputeScreen() {
         title={`Refund ${formatMoney(refund?.amount)}?`}
         message={`${formatMoney(refund?.amount)} is added to the restaurant's wallet now and taken from `
           + `your payout for order ${dispute.data?.orderNumber ?? ''}. This can't be undone.`}
-        confirmLabel="Approve Refund"
+        confirmLabel="Approve refund"
         destructive
         onConfirm={() => decide.mutate('approve')}
         onCancel={() => setConfirming(null)}
@@ -184,7 +180,7 @@ export default function SupplierDisputeScreen() {
         visible={confirming === 'decline'}
         title="Decline this refund?"
         message={`${OPS_TEAM} will then decide, and may still approve it.`}
-        confirmLabel="Decline Refund"
+        confirmLabel="Decline refund"
         onConfirm={() => decide.mutate('decline')}
         onCancel={() => setConfirming(null)}
       />

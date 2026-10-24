@@ -5,8 +5,8 @@ then let `CLAUDE.md` do the rest.
 
 Last updated **27 September 2026**, from the Razorpay branches
 (`feat/razorpay-4-checkout` → `-5-order-double-tap` → `-6-e2e-suite` →
-`-9-pay-screen-fixes` → `-10-capture-at-dispatch` → `-13-disputes-section`), which
-build
+`-9-pay-screen-fixes` → `-10-capture-at-dispatch` → `-13-disputes-section` →
+`-14-dispute-refund-e2e` → `-15-order-payment-status`), which build
 on `feat/edit-open-request-quantities`.
 
 ---
@@ -218,7 +218,7 @@ Four stacked PRs; the server side is in `costonomy-mp-api` (D-098 to D-102).
   server (D-102), so an order can be paid after a refresh or from the order
   screen's new **Pay Now**. A "still in progress" reply keeps the Create Order key.
 - **`tools/razorpay-e2e`** pays real test-mode orders through this app and
-  Razorpay's checkout — 31 cases, most of them failures — and checks both our
+  Razorpay's checkout — 32 cases, most of them failures — and checks both our
   database and Razorpay's records. Its README says how to run it.
 - **Money is taken when the supplier marks the order ready**, not at payment
   (`feat/razorpay-10-capture-at-dispatch`, API D-103). Until then it is only held,
@@ -237,6 +237,12 @@ Four stacked PRs; the server side is in `costonomy-mp-api` (D-098 to D-102).
   attempt whose outcome is unknown, and drops it after a refusal — the rule
   Create Order already followed, now in one place (`lib/api/idempotency.ts`).
   Visible product-name strings in new copy come from `lib/brand.ts`.
+- **Order screens say how an order was paid, and where its money is**
+  (`feat/razorpay-15-order-payment-status`, API D-105). The funding pill names
+  wallet orders ("From wallet") — it called everything but credit "Prepaid" — and
+  the Payment row reads the server's live status in plain words
+  (`lib/payments/statusLabel.ts`): "Held · taken when the order is ready", "Paid",
+  "Paid from wallet", "Released · not charged", "Partly refunded".
 
 What you will notice:
 
@@ -269,10 +275,12 @@ Do not close one of these silently.
 2. **Supplier and popular lists do not filter by serviceability**, unlike product
    comparison — so a restaurant can be shown a supplier who cannot deliver to
    them. Bug or deliberate reach, undecided.
-3. **The cart lost lines twice**, observed on screen and confirmed against the
-   database, and could not be reproduced across a plain load, expand-all,
-   expand-and-scroll or a 50-second idle poll. It is recorded here rather than
-   closed, because it happened.
+3. **Resolved (API D-137): the cart lost lines.** Two causes, both found: the app sent every
+   tap as its own write and dropped a tap still waiting when the screen was left, and the API let
+   simultaneous adds, removals and sends race. The cart now holds taps briefly and sends the last
+   (`hooks/useDebouncedEdits.ts`), writes them in order, flushes on leaving and before sending or
+   ordering, and removes the line with an Undo when minus is pressed at one. Tests:
+   `tests/useDebouncedEdits.test.tsx`, `tests/cartSend.test.tsx`.
 4. **The Razorpay checkout has not run on a phone.** Web only so far — a
    development build is needed. **UPI is untested** too: the Razorpay test
    account's checkout doesn't offer it yet.

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { MandiFormField, MandiText } from '@/components/common';
 import type { OperatingHours } from '@/services/supplier';
+import { hoursAreSet, hoursUnset } from '@/lib/supplier/storeHours';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 /** Monday first, and abbreviated — seven full names do not fit a phone row. */
@@ -42,6 +43,8 @@ export function OperatingHoursFields({
   };
 
   const everyDay = value.days.length === 7;
+  // An unset store carries 00:00-00:00; show that as empty boxes, and blank the other box once one is typed.
+  const unset = hoursUnset(value);
 
   return (
     <View style={styles.block}>
@@ -85,16 +88,16 @@ export function OperatingHoursFields({
       <View style={styles.times}>
         <MandiFormField
           label="Opens"
-          value={value.opensAt}
-          onChangeText={(text) => onChange({ ...value, opensAt: text })}
-          placeholder="10:00"
+          value={unset ? '' : value.opensAt}
+          onChangeText={(text) => onChange({ ...value, opensAt: text, ...(unset ? { closesAt: '' } : null) })}
+          placeholder="Opens"
           style={styles.flex}
         />
         <MandiFormField
           label="Closes"
-          value={value.closesAt}
-          onChangeText={(text) => onChange({ ...value, closesAt: text })}
-          placeholder="21:00"
+          value={unset ? '' : value.closesAt}
+          onChangeText={(text) => onChange({ ...value, closesAt: text, ...(unset ? { opensAt: '' } : null) })}
+          placeholder="Closes"
           style={styles.flex}
         />
       </View>
@@ -102,7 +105,9 @@ export function OperatingHoursFields({
       <MandiText variant="caption" color={Colors.textSecondary}>
         {value.days.length === 0
           ? 'Choose at least one day. To stop taking orders, go offline below.'
-          : `Restaurants can order from you ${everyDay ? 'every day' : `on ${value.days.length} days`}`
+          : !hoursAreSet(value)
+            ? 'Hours not set. Add opening and closing times so restaurants know when they can order.'
+            : `Restaurants can order from you ${everyDay ? 'every day' : `on ${value.days.length} days`}`
             + `, ${value.opensAt}–${value.closesAt}. Outside that they see you as closed.`}
       </MandiText>
     </View>

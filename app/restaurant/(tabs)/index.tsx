@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -7,22 +7,21 @@ import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchCategories } from '@/services/catalog';
 import { fetchOutletOrders } from '@/services/procurement';
 import { fetchIntents } from '@/services/intent';
+import { fetchQuickScanConfig } from '@/services/quickscan';
 import { intentsKey } from '@/lib/queryKeys';
-import { CategoryTile } from '@/components/product/CategoryTile';
+import { QuickActionTiles, type MoneyAction } from '@/components/wallet/QuickActionTiles';
+import { CategoryScroller } from '@/components/home/CategoryScroller';
+import { HomeSearchRow } from '@/components/home/HomeSearchRow';
 import {
   MandiCard,
   MandiEmptyState,
   MandiErrorState,
   MandiScreen,
-  MandiSearchBar,
   MandiSectionHeader,
   MandiSkeletonList,
   toneColors,
 } from '@/components/common';
-import {
-  resolveStatus,
-  SupplierOrderStatus,
-} from '@/models/status';
+import { buyerOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
 import { RestaurantRequestCard } from '@/components/request/RestaurantRequestCard';
@@ -30,9 +29,17 @@ import { PopularSuppliersCarousel } from '@/components/restaurant/PopularSupplie
 import type { Intent } from '@/models/intent';
 import type { SupplierOrder } from '@/models/procurement';
 import { track } from '@/analytics';
+import { searchHints } from '@/lib/search/hints';
+import { paymentLine } from '@/lib/payments/paymentLine';
+import { ScanQrIcon } from '@/components/icons/ScanQrIcon';
+import { ActiveOrderPill, ACTIVE_PILL_CLEARANCE } from '@/components/delivery/ActiveOrderPill';
+import { inFlightOrders, useLatestInFlight } from '@/hooks/useLatestInFlight';
+import { useCreditAttention } from '@/hooks/useCreditAttention';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spacing } from '@/theme';
 
 const SCREEN = 'REST-HOME-01';
+const SEARCH_HINTS = searchHints();
 
 /**
  * REST-HOME-01. Doc 05 §5.
@@ -48,33 +55,138 @@ const SCREEN = 'REST-HOME-01';
 export default function RestaurantHome() {
   const router = useRouter();
   const { outletId } = useOutlet();
+  const inFlight = useLatestInFlight(outletId);
 
   return (
     <MandiScreen
-      header={<RestaurantHeader screen={SCREEN} />}
+      header={<RestaurantHeader screen={SCREEN} location />}
+      contentStyle={inFlight != null ? { paddingBottom: ACTIVE_PILL_CLEARANCE } : undefined}
+      floating={inFlight != null ? (
+        <ActiveOrderPill
+          supplierName={inFlight.supplierName}
+          statusText={inFlight.statusText}
+          etaMins={inFlight.etaMins}
+          accessibilityLabel={inFlight.accessibilityLabel}
+          onPress={() => router.push(inFlight.href)}
+        />
+      ) : undefined}
     >
-      <MandiSearchBar
-        value=""
-        onChangeText={() => {}}
-        readOnly
-        onPress={() => {
-          track('open_search', { screen: SCREEN, outletId });
-          router.push('/restaurant/search');
-        }}
-        placeholder="Search paneer, rice, oil…"
-      />
+      <HomeSearch outletId={outletId} />
+
+      <CategoriesSection outletId={outletId} />
+
+      {/* Chips and the Recommended grid. Browsing sits up top in the restyle;
+          the work below (money, requests, orders) is unchanged. */}
+      <PopularSuppliersCarousel outletId={outletId} />
+
+      <QuickActions outletId={outletId} />
 
       <RequestsSection outletId={outletId} />
-      {/* Below requests, above orders: a request is somebody already waiting on
-          this kitchen's behalf, and an order is work in hand. Browsing sits
-          between them — worth offering, not worth leading with. */}
-      <PopularSuppliersCarousel outletId={outletId} />
       <OrdersSection outletId={outletId} />
-      <CategoriesSection outletId={outletId} />
     </MandiScreen>
   );
 }
 
+
+/**
+ * Search, with Quick Scan as the round side button when the outlet can use it.
+ * Shares the QuickActions query key, so it is one request, not two.
+ */
+function HomeSearch({ outletId }: { outletId: number | null }) {
+  const router = useRouter();
+  const { accessToken } = useSession();
+  const config = useQuery({
+    queryKey: ['outlet', outletId, 'quickscan-config'],
+    queryFn: () => fetchQuickScanConfig(accessToken as string, outletId as number),
+    enabled: outletId != null && accessToken != null,
+  });
+
+  return (
+    <HomeSearchRow
+      hints={SEARCH_HINTS}
+      placeholder="Search paneer, rice, oil…"
+      onPressSearch={() => {
+        track('open_search', { screen: SCREEN, outletId });
+        router.push('/restaurant/search');
+      }}
+      side={config.data?.enabled === true ? {
+        icon: 'qr-code-outline',
+        label: 'Scan to pay',
+        onPress: () => {
+          track('open_quickscan', { screen: SCREEN, outletId });
+          router.push('/restaurant/quickscan');
+        },
+      } : null}
+    />
+  );
+}
+
+/**
+ * The "Money transfers" section: Quick Scan, Wallet and Credit in a row of four slots.
+ *
+ * <p><b>QuickScan is hidden rather than broken.</b> Loading and erroring both
+ * leave it out: a feature the outlet cannot use yet, or that this call failed to
+ * confirm, is one Home should not offer rather than show disabled. `enabled` is
+ * the server's word on whether the outlet can use it at all; the pay screen
+ * checks the rest itself. Wallet then takes the first slot.
+ *
+ * <p>No balance here: it lives on the wallet screen, which is where Add money is.
+ * More actions are one more entry in `actions`.
+ */
+function QuickActions({ outletId }: { outletId: number | null }) {
+  const router = useRouter();
+  const { accessToken } = useSession();
+  const { outlet } = useOutlet();
+  const { canForOutlet } = usePermissions();
+  const attention = useCreditAttention();
+  const mayViewCredit = canForOutlet('CREDIT_VIEW', outlet);
+
+  const config = useQuery({
+    queryKey: ['outlet', outletId, 'quickscan-config'],
+    queryFn: () => fetchQuickScanConfig(accessToken as string, outletId as number),
+    enabled: outletId != null && accessToken != null,
+  });
+
+  const actions: MoneyAction[] = [
+    {
+      key: 'quickscan',
+      label: 'Quick scan',
+      icon: 'qr-code-outline',
+      renderIcon: (size) => <ScanQrIcon size={size} variant="white" />,
+      accessibilityLabel: 'Quick Scan. Pay a shop by scanning its QR.',
+      visible: config.data?.enabled === true,
+      onPress: () => {
+        track('open_quickscan', { screen: SCREEN, outletId });
+        router.push('/restaurant/quickscan');
+      },
+    },
+    {
+      key: 'wallet',
+      label: 'Wallet',
+      icon: 'wallet-outline',
+      accessibilityLabel: 'Wallet',
+      visible: true,
+      onPress: () => {
+        track('open_wallet', { screen: SCREEN, outletId });
+        router.push('/restaurant/wallet');
+      },
+    },
+    {
+      key: 'credit',
+      label: 'Credit',
+      icon: 'card-outline',
+      accessibilityLabel: attention.overdue ? 'Credit, payment overdue' : 'Credit',
+      visible: mayViewCredit,
+      badge: attention.overdue,
+      onPress: () => {
+        track('open_credit', { screen: SCREEN, outletId });
+        router.push('/restaurant/credit');
+      },
+    },
+  ];
+
+  return <QuickActionTiles actions={actions} />;
+}
 
 /**
  * The one thing about the open requests worth a line.
@@ -110,7 +222,8 @@ function ordersSubtitle(active: SupplierOrder[]): string | undefined {
   if (active.length === 0) return undefined;
 
   const onTheWay = active.filter((order) => order.status === 'OUT_FOR_DELIVERY').length;
-  const ready = active.filter((order) => order.status === 'READY_FOR_PICKUP').length;
+  // Only a collect-yourself order is "ready to collect"; a delivery order that is ready is waiting for a rider.
+  const ready = active.filter((order) => order.status === 'READY_FOR_PICKUP' && order.deliveryMode === 'PICKUP').length;
 
   if (onTheWay > 0) return `${onTheWay} on the way`;
   if (ready > 0) return `${ready} ready to collect`;
@@ -148,7 +261,7 @@ function RequestsSection({ outletId }: { outletId: number | null }) {
   return (
     <View style={styles.section}>
       <MandiSectionHeader
-        title="Open Requests"
+        title="Open requests"
         count={live.length}
         subtitle={requestsSubtitle(live)}
         actionLabel="New request"
@@ -187,20 +300,15 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
     enabled: outletId != null && accessToken != null,
   });
 
-  // "Active" is everything the restaurant is still waiting on a supplier for. A
-  // terminal order belongs in the Orders tab's history, and a DRAFT one never
-  // reached a supplier at all — its payment did not complete — so presenting it
-  // as in flight would tell the restaurant something untrue about an order
-  // nobody is working on.
-  const active = (query.data ?? []).filter(
-    (order) => !['DRAFT', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED']
-      .includes(order.status),
-  );
+  // "Active" is what the restaurant is still waiting on a supplier for, the same statuses as the Orders tab's Active
+  // filter: a terminal order belongs in history and a DRAFT one never reached a supplier. No age rule here: an order
+  // scheduled for the day after tomorrow is on schedule, not stuck. The count and the "on the way" line use this list.
+  const active = inFlightOrders(query.data);
 
   return (
     <View style={styles.section}>
       <MandiSectionHeader
-        title="Active Orders"
+        title="Active orders"
         count={active.length}
         subtitle={ordersSubtitle(active)}
         actionLabel={active.length > 3 ? 'See all' : undefined}
@@ -222,7 +330,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
           <MandiCard
             key={order.id}
             onPress={() => router.push(`/restaurant/orders/${order.id}`)}
-            accentColor={toneColors(resolveStatus(SupplierOrderStatus, order.status).tone).fg}
+            accentColor={toneColors(buyerOrderStatus(order.status, order.deliveryMode).tone).fg}
           >
             <OrderCardBody
               primary={order.supplierName}
@@ -234,8 +342,8 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
               orderNumber={order.orderNumber}
               paymentMethod={order.paymentMethod}
               createdAt={order.createdAt}
-              amount={order.totalAmount}
-              status={resolveStatus(SupplierOrderStatus, order.status)}
+              amount={paymentLine(order).amount}
+              status={buyerOrderStatus(order.status, order.deliveryMode)}
             />
           </MandiCard>
         ))
@@ -247,6 +355,7 @@ function OrdersSection({ outletId }: { outletId: number | null }) {
 function CategoriesSection({ outletId }: { outletId: number | null }) {
   const router = useRouter();
   const { accessToken } = useSession();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const query = useQuery({
     queryKey: ['categories'],
@@ -260,21 +369,16 @@ function CategoriesSection({ outletId }: { outletId: number | null }) {
   if (query.isPending || query.error || !query.data?.length) return null;
 
   return (
-    <View style={styles.section}>
-      <MandiSectionHeader title="Browse by category" />
-      <View style={styles.grid}>
-        {query.data.map((category) => (
-          <CategoryTile
-            key={category.id}
-            category={category}
-            onPress={() => {
-              track('open_category', { screen: SCREEN, outletId, entityId: category.id });
-              router.push(`/restaurant/category/${category.id}`);
-            }}
-          />
-        ))}
-      </View>
-    </View>
+    <CategoryScroller
+      categories={query.data}
+      selectedId={selectedId}
+      onSelect={(category) => {
+        // Marked before navigating, so the underline is there on coming back.
+        setSelectedId(category.id);
+        track('open_category', { screen: SCREEN, outletId, entityId: category.id });
+        router.push(`/restaurant/category/${category.id}`);
+      }}
+    />
   );
 }
 
@@ -286,5 +390,4 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
 });

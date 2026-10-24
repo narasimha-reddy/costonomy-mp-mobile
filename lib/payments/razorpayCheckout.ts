@@ -17,7 +17,7 @@ import {
  * can say what is wrong.
  */
 export async function openRazorpayCheckout(request: CheckoutRequest): Promise<CheckoutResult> {
-  let RazorpayCheckout: { open: (options: object) => Promise<{ razorpay_payment_id: string }> };
+  let RazorpayCheckout: { open: (options: object) => Promise<{ razorpay_payment_id: string; razorpay_signature?: string }> };
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     RazorpayCheckout = require('react-native-razorpay').default;
@@ -35,7 +35,10 @@ export async function openRazorpayCheckout(request: CheckoutRequest): Promise<Ch
       description: request.description,
       theme: { color: request.themeColor },
     });
-    return { providerPaymentId: result.razorpay_payment_id };
+    return {
+      providerPaymentId: result.razorpay_payment_id,
+      providerSignature: result.razorpay_signature,
+    };
   } catch (caught) {
     // On Android Expo Go the require succeeds but the native module is absent,
     // so open() fails with a TypeError rather than a checkout error. That is

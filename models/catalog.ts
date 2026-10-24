@@ -1,4 +1,5 @@
 import type { Money } from '@/utils/money';
+import type { BrandOption } from './discovery';
 
 /**
  * Catalog shapes as the API returns them (doc 04 §8).
@@ -79,11 +80,15 @@ export interface SkuDetail {
   offerId: number | null;
   skuName: string;
   brandName: string | null;
+  grade?: string | null;
   packSize: Money;
   packUnit: string;
   measureValue: Money | null;
   measureUnit: string | null;
+  mrp?: Money | null;
   sellingPrice: Money | null;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
   gstRate: Money | null;
   /** One pack with GST, computed by the server (guardrail 3). */
   unitPriceInclusiveGst: Money | null;
@@ -94,6 +99,7 @@ export interface SkuDetail {
   images: string[];
   youtubeUrl: string | null;
   description: string | null;
+  isCatchWeight?: boolean;
   lengthCm: Money | null;
   widthCm: Money | null;
   heightCm: Money | null;
@@ -118,6 +124,8 @@ export interface SkuDetail {
   reviews: SkuReview[];
   /** Other packs of the same product from the same store. */
   otherPacks: SkuSibling[];
+  /** All brand options for this item from this supplier, sorted lowest priced first. */
+  brandOptions?: BrandOption[];
 }
 
 export interface SkuReview {
@@ -134,7 +142,57 @@ export interface SkuSibling {
   skuName: string;
   packSize: Money;
   packUnit: string;
+  mrp?: Money | null;
   sellingPrice: Money | null;
+  discountAmount?: Money | null;
+  discountPercent?: number | null;
   imageUrl: string | null;
   availability: string | null;
+  brandName?: string | null;
+  grade?: string | null;
+  isCatchWeight?: boolean;
+  gstRate?: Money | null;
+  unitPriceInclusiveGst?: Money | null;
+  offerId?: number | null;
+}
+
+export interface RateSheetRow {
+  skuId: number;
+  canonicalProductId: number;
+  productName: string | null;
+  skuName: string;
+  brandName: string | null;
+  grade: string | null;
+  isCatchWeight: boolean;
+  requiresColdChain?: boolean;
+  packSize: Money;
+  packUnit: string;
+  mrp: Money | null;
+  sellingPrice: Money | null;
+  gstRate: Money;
+  availability: string;
+  availableQuantity: Money | null;
+  updatedAt: string | null;
+}
+
+export interface RateSheetResponse {
+  supplierStoreId: number;
+  rows: RateSheetRow[];
+}
+
+export interface UpdateRateSheetItem {
+  skuId: number;
+  sellingPrice?: Money | null;
+  mrp?: Money | null;
+  availability?: string | null;
+  availableQuantity?: Money | null;
+}
+
+export interface UpdateRateSheetRequest {
+  rows: UpdateRateSheetItem[];
+}
+
+export interface UpdateRateSheetResponse {
+  updatedCount: number;
+  rows: RateSheetRow[];
 }

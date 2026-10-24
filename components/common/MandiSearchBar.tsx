@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -9,6 +9,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { RotatingHint } from './RotatingHint';
 import {
   Colors,
   ControlHeight,
@@ -19,10 +20,17 @@ import {
   hitSlopFor,
 } from '@/theme';
 
+const SEARCH_LABEL = 'Search for products';
+
 interface MandiSearchBarProps {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  /**
+   * Hints that replace the static placeholder one at a time while the field is
+   * empty. Absent or empty: `placeholder` is used, as before.
+   */
+  rotatingHints?: readonly string[];
   onSubmit?: () => void;
   /** Spinner in the trailing slot while suggestions are in flight. */
   loading?: boolean;
@@ -58,6 +66,7 @@ export function MandiSearchBar({
   value,
   onChangeText,
   placeholder = 'Search for products',
+  rotatingHints,
   onSubmit,
   loading = false,
   autoFocus = false,
@@ -68,35 +77,53 @@ export function MandiSearchBar({
   style,
   testID,
 }: MandiSearchBarProps) {
+  const [focused, setFocused] = useState(false);
+  const showHint = !!rotatingHints && rotatingHints.length > 0 && value === '';
+  // One stable name; the rotating text must never leak into it.
+  const label = rotatingHints && rotatingHints.length > 0 ? SEARCH_LABEL : placeholder;
+  const hint = showHint ? (
+    <RotatingHint hints={rotatingHints} testID={testID ? `${testID}-hint` : undefined} />
+  ) : null;
   const body = (
-    <View style={[styles.container, pill && styles.pill, style]}>
+    <View
+      testID={testID ? `${testID}-container` : undefined}
+      // Focus last: a caller's style may size and place the bar but not remove its focus indicator.
+      style={[styles.container, pill && styles.pill, style, focused && styles.focused]}
+    >
       {leading}
       <Ionicons name="search" size={IconSize.md} color={Colors.textTertiary} />
 
       {readOnly ? (
         <View style={styles.readOnlyText}>
-          <Text
-            numberOfLines={1}
-            style={[styles.input, !value && { color: Colors.textTertiary }]}
-          >
-            {value || placeholder}
-          </Text>
+          {hint ?? (
+            <Text
+              numberOfLines={1}
+              style={[styles.input, !value && { color: Colors.textTertiary }]}
+            >
+              {value || placeholder}
+            </Text>
+          )}
         </View>
       ) : (
-        <TextInput
-          testID={testID}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={Colors.textTertiary}
-          onSubmitEditing={onSubmit}
-          autoFocus={autoFocus}
-          returnKeyType="search"
-          autoCorrect={false}
-          autoCapitalize="none"
-          accessibilityLabel={placeholder}
-          style={styles.input}
-        />
+        <View style={styles.readOnlyText}>
+          <TextInput
+            testID={testID}
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={showHint ? '' : placeholder}
+            placeholderTextColor={Colors.textTertiary}
+            onSubmitEditing={onSubmit}
+            autoFocus={autoFocus}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+            accessibilityLabel={label}
+            style={[styles.input, styles.noRing]}
+          />
+          {hint && <View pointerEvents="none" style={styles.overlay}>{hint}</View>}
+        </View>
       )}
 
       {loading && <ActivityIndicator size="small" color={Colors.textTertiary} />}
@@ -120,7 +147,8 @@ export function MandiSearchBar({
         testID={testID}
         onPress={onPress}
         accessibilityRole="search"
-        accessibilityLabel={placeholder}
+        accessibilityLabel={label}
+        accessibilityHint="Opens search"
       >
         {body}
       </Pressable>
@@ -139,7 +167,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     backgroundColor: Colors.surfaceSunken,
     borderRadius: Radius.md,
+    // Always 2 px, so focusing changes only the colour and nothing shifts by 2 px.
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
+  // The browser's own blue ring around the bare input looks like a second box inside the pill: the container shows
+  // focus instead, with a border that is visible to keyboard users too.
+  focused: { borderWidth: 2, borderColor: Colors.primary },
+  noRing: { outlineStyle: 'none' } as object,
   pill: {
     height: ControlHeight.lg,
     borderRadius: Radius.full,
@@ -153,6 +188,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   readOnlyText: { flex: 1, justifyContent: 'center' },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center' },
 });
 
 export default MandiSearchBar;

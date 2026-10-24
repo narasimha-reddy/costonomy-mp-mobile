@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { useDeviceLocation } from '@/hooks/useDeviceLocation';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   fetchCreditPolicy,
   fetchDeliveryPolicy,
@@ -29,6 +30,7 @@ import {
   MandiText,
   useToast,
 } from '@/components/common';
+import { normaliseHours } from '@/lib/supplier/storeHours';
 import { OperatingHoursFields } from '@/components/supplier/OperatingHoursFields';
 import { ApiError } from '@/lib/api/errors';
 import { track } from '@/analytics';
@@ -59,6 +61,7 @@ const SCREEN = 'SUP-ONB-01';
  * compare across suppliers.
  */
 export default function StoreDetailScreen() {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const storeId = Number(id);
   const toast = useToast();
@@ -66,6 +69,10 @@ export default function StoreDetailScreen() {
   const { accessToken } = useSession();
   const { supplier } = useStore();
   const location = useDeviceLocation();
+  const { canForStore } = usePermissions();
+  // Hiding is a courtesy; the server checks CREDIT_MODIFY again.
+  const canModifyCredit = supplier != null
+    && canForStore('CREDIT_MODIFY', { id: storeId, supplierOrganizationId: supplier.id });
 
   const store = useQuery({
     queryKey: ['supplier-store', storeId],
@@ -112,6 +119,7 @@ export default function StoreDetailScreen() {
   const [creditLimit, setCreditLimit] = useState<string | null>(null);
   const [creditDays, setCreditDays] = useState<string | null>(null);
   const [graceDays, setGraceDays] = useState<string | null>(null);
+  const [autoReminders, setAutoReminders] = useState<boolean | null>(null);
 
   const nameValue = name ?? data?.name ?? '';
   const line1Value = line1 ?? data?.addressLine1 ?? '';
@@ -149,11 +157,13 @@ export default function StoreDetailScreen() {
     ? String(Number(credit.data.defaultCreditLimit)) : '');
   const creditDaysValue = creditDays ?? String(credit.data?.defaultCreditPeriodDays ?? 30);
   const graceDaysValue = graceDays ?? String(credit.data?.defaultGracePeriodDays ?? 5);
+  // Absent from an older server means on, which is the server's default too.
+  const autoRemindersValue = autoReminders ?? credit.data?.autoRemindersEnabled ?? true;
 
   const touched = [
     name, line1, line2, city, stateName, pincode, contactName, contactPhone, prep, hours, pin,
     own, partner, ownFee, ownMin, radius,
-    creditOn, creditLimit, creditDays, graceDays,
+    creditOn, creditLimit, creditDays, graceDays, autoReminders,
   ].some((value) => value !== null) || location.coordinates != null;
 
   const online = data?.status === 'ACTIVE';
@@ -171,6 +181,7 @@ export default function StoreDetailScreen() {
     : contactNameValue.trim().length < 2 ? 'Enter a contact name for this store.'
     : !PHONE.test(contactPhoneValue.trim()) ? 'Enter a contact number for this store.'
     : hoursValue.days.length === 0 ? 'Choose at least one day you trade on.'
+    : normaliseHours(hoursValue).problem != null ? normaliseHours(hoursValue).problem
     : !ownValue && !partnerValue ? 'Choose at least one way to deliver.'
     : null;
 
@@ -185,7 +196,7 @@ export default function StoreDetailScreen() {
         pincode: pincodeValue.trim(),
         contactName: contactNameValue.trim(),
         contactPhone: contactPhoneValue.trim(),
-        operatingHours: hoursValue,
+        operatingHours: normaliseHours(hoursValue).hours,
         preparationMinutes: Number(prepValue) || 0,
         directOrdersEnabled: directOrdersValue,
         ...(pinValue && pinValue.latitude !== '' && pinValue.longitude !== ''
@@ -206,6 +217,8 @@ export default function StoreDetailScreen() {
         defaultCreditLimit: creditLimitValue.trim() || null,
         defaultCreditPeriodDays: Number(creditDaysValue) || null,
         defaultGracePeriodDays: Number(graceDaysValue) || null,
+        // Only a change goes up, and only from someone who may make it: a left-out field keeps the server's value.
+        ...(canModifyCredit && autoReminders != null ? { autoRemindersEnabled: autoReminders } : {}),
       });
     },
     onSuccess: () => {
@@ -235,7 +248,7 @@ export default function StoreDetailScreen() {
     setName(null); setLine1(null); setLine2(null); setCity(null); setStateName(null);
     setPincode(null); setContactName(null); setContactPhone(null); setPrep(null); setHours(null);
     setOwn(null); setPartner(null); setOwnFee(null); setOwnMin(null); setRadius(null);
-    setCreditOn(null); setCreditLimit(null); setCreditDays(null); setGraceDays(null);
+    setCreditOn(null); setCreditLimit(null); setCreditDays(null); setGraceDays(null); setAutoReminders(null);
     setPin(null);
   }
 
@@ -260,7 +273,7 @@ export default function StoreDetailScreen() {
                 style={styles.flex}
               />
               <MandiButton
-                label="Save Changes"
+                label="Save changes"
                 size="lg"
                 disabled={!touched || problem != null}
                 loading={save.isPending}
@@ -346,6 +359,8 @@ export default function StoreDetailScreen() {
               onCapture={location.capture}
               onCoordinatesChange={setPin}
               subject="store"
+              address={[line1Value, line2Value, cityValue, stateValue, pincodeValue]
+                .map((part) => part.trim()).filter(Boolean).join(', ')}
             />
           </Section>
 
@@ -416,7 +431,7 @@ export default function StoreDetailScreen() {
           <Section title="How you deliver">
             <Toggle
               label="Costonomy delivery"
-              hint="We find and pay a courier, and quote the restaurant one fee."
+              hint="We find and pay a delivery partner, and quote the restaurant one fee."
               value={partnerValue}
               onValueChange={setPartner}
             />
@@ -456,6 +471,15 @@ export default function StoreDetailScreen() {
                 />
               </>
             ) : null}
+            <View style={{ marginTop: Spacing.sm }}>
+              <MandiButton
+                label="Manage delivery slots"
+                variant="secondary"
+                size="md"
+                icon="time-outline"
+                onPress={() => router.push(`/supplier/settings/slots?storeId=${storeId}` as any)}
+              />
+            </View>
           </Section>
 
           <Section title="Credit you offer">
@@ -490,6 +514,14 @@ export default function StoreDetailScreen() {
                     style={styles.flex}
                   />
                 </View>
+                {canModifyCredit && (
+                  <Toggle
+                    label="Automatic reminders"
+                    hint="We remind restaurants 3 days before, on the due date and weekly while overdue."
+                    value={autoRemindersValue}
+                    onValueChange={setAutoReminders}
+                  />
+                )}
               </>
             ) : null}
             <MandiText variant="caption" color={Colors.textTertiary}>

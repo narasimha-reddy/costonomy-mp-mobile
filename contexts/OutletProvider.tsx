@@ -99,6 +99,14 @@ export function useOutlet(): OutletState {
 }
 
 /**
+ * The outlet if there is a provider above, else null. For screens shared with the supplier app, which has no outlet
+ * selection and so no `OutletProvider`: `useOutlet()` would throw there.
+ */
+export function useOptionalOutlet(): OutletState | null {
+  return useContext(OutletContext);
+}
+
+/**
  * The current outlet id, for a query that cannot run without one.
  *
  * <p>Returns null while outlets are still loading; callers disable the query on

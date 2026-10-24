@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { requestOtp } from '@/services/auth';
@@ -52,6 +52,15 @@ export default function PhoneScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          hitSlop={12}
+          style={styles.back}
+        >
+          <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+        </Pressable>
         <View style={styles.header}>
           <View style={styles.mark}>
             <Ionicons name="leaf" size={22} color={Colors.primary} />
@@ -77,13 +86,14 @@ export default function PhoneScreen() {
               autoCapitalize="none"
               required
               error={error}
+              autoFocus
               hint="We'll text you a six-digit code."
               style={styles.flex}
             />
           </View>
 
           <MandiButton
-            label="Send Code"
+            label="Send code"
             onPress={submit}
             size="lg"
             loading={submitting}
@@ -114,6 +124,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xxl,
   },
   header: { gap: Spacing.sm },
+  back: { alignSelf: 'flex-start', width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginLeft: -Spacing.sm },
   mark: {
     width: 48,
     height: 48,

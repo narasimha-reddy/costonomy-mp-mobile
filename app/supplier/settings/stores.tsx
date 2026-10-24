@@ -13,6 +13,7 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
+import { storeHoursLine } from '@/lib/supplier/storeHours';
 import { Colors, Spacing } from '@/theme';
 
 /**
@@ -87,7 +88,7 @@ function StoreRow({ store, onOpen }: { store: SupplierStore; onOpen: () => void 
           it. "Every day · 10:00–21:00" is one statement, and splitting it across
           a label and a hint made two small things out of one. */}
       <MandiText variant="caption" color={Colors.textTertiary} numberOfLines={1}>
-        {hours ? `${dayLabel(hours.days)} · ${hours.opensAt}–${hours.closesAt}` : 'Hours not set'}
+        {storeHoursLine(hours)}
       </MandiText>
 
       {/* Only when something is wrong. "Located · Quotable" on every row was a
@@ -103,31 +104,6 @@ function StoreRow({ store, onOpen }: { store: SupplierStore; onOpen: () => void 
       ) : null}
     </MandiCard>
   );
-}
-
-const ORDER = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
-const SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-/**
- * "Every day", "Mon–Sat" where the days run together, else the days themselves.
- *
- * <p>A count — "6 days a week" — is the one answer that makes a supplier open the
- * screen to find out *which* six.
- */
-function dayLabel(days: string[]): string {
-  const indexes = days
-    .map((day) => ORDER.indexOf(day))
-    .filter((index) => index >= 0)
-    .sort((a, b) => a - b);
-
-  if (indexes.length === 0) return 'No days set';
-  if (indexes.length === 7) return 'Every day';
-
-  const contiguous = indexes.every((index, i) => i === 0 || index === indexes[i - 1]! + 1);
-  if (contiguous && indexes.length > 2) {
-    return `${SHORT[indexes[0]!]}–${SHORT[indexes[indexes.length - 1]!]}`;
-  }
-  return indexes.map((index) => SHORT[index]).join(', ');
 }
 
 const styles = StyleSheet.create({

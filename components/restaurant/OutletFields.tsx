@@ -154,13 +154,13 @@ export function OutletFields({
           onChangeText={(text) => onChange({ contactPhone: text.replace(/[^\d+]/g, '') })}
           disabled={disabled}
           keyboardType="phone-pad"
-          hint="Who a driver calls when they arrive."
+          hint="Who the delivery partner calls when they arrive."
         />
       </Section>
 
       <Section title="Delivery notes">
         <MandiFormField
-          label="Anything a driver should know (optional)"
+          label="Anything the delivery partner should know (optional)"
           value={draft.deliveryInstructions}
           onChangeText={(deliveryInstructions) => onChange({ deliveryInstructions })}
           disabled={disabled}

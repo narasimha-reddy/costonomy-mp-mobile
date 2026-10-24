@@ -2745,3 +2745,43 @@ place — "we have submitted this to a supplier and are waiting" is genuinely no
 A requirement returns to `SOURCING` from `PARTIALLY_FULFILLED` when the shortfall
 is submitted to another supplier, which is the loop guardrail 14 exists to keep
 open.
+
+---
+
+## D-108 — Delivery Slots, Recurring Subscriptions, and Delivery Mode Gating
+**2026-10-02 · Settled**
+
+**Decision:**
+1. **Delivery Mode Flexibility & Gating**:
+   - Buyers and suppliers can trade via three delivery modes: Store Pickup (`PICKUP`), Supplier Own Delivery (`SUPPLIER_DELIVERY` / `SUPPLIER_OWN`), and Costonomy Marketplace Delivery (`COSTONOMY_DELIVERY` / `COSTONOMY`).
+   - **Logistics Dispatch Gating Rule**: Automated courier booking and quote auctions (`quoteAndBook`) kick off *only* if `COSTONOMY` delivery mode is selected. For `PICKUP`, courier booking is bypassed completely. For `SUPPLIER_OWN`, the delivery record assigns the store contact as driver without dispatching to external third-party couriers.
+2. **Delivery Slots**:
+   - Suppliers configure daily time windows (e.g., Morning 06:00 - 10:00) with daily order capacity (`max_orders_per_day`) and same-day order cutoff times (`order_cutoff_time`).
+   - Slot availability endpoint evaluates cutoff for today's date and remaining capacity against active orders before allowing checkout.
+3. **Recurring Subscriptions (BigBasket Daily Model)**:
+   - Buyers can subscribe to SKUs with frequencies (`DAILY`, `WEEKDAYS`, `ALTERNATE_DAYS`, `WEEKLY`), preferred delivery slots, skip dates, pause, resume, and cancellation.
+   - Suppliers receive an operational Daily Manifest aggregating bulk SKU packing volumes and scheduled dispatches grouped by time slot.
+   - Daily replenishment orders are generated deterministically and idempotently via `generateDailyOrders`.
+
+---
+
+## D-M18 — Restaurant detail shows only what the API sends
+**Raised 2026-10-06 · Settled 2026-10-06**
+
+The plan's banners and terms editor want the suspension source, the auto-pause amount and the lowest allowed limit. `AgreementResponse` carries none of them yet.
+
+**Decision:** the model has them as optional fields (`suspensionSource`, `maxOverdueAmount`, `minLimit`). Each piece of UI that needs one appears only when the server sends it; nothing is guessed from other fields. Without `minLimit` the server's own message names the floor on a refused cut. Reinstate asks for a reason and sends it, though the endpoint stores none today. The modify endpoint overwrites the cap and the auto-pause amount with what it is sent, so the editor always sends the cap and grace it holds; the auto-pause amount cannot be preserved until the API returns it.
+
+## D-M19 — Recording a payment shows only what the server sends
+**Raised 2026-10-06 · Settled 2026-10-06**
+
+The sheet needs a starting amount and the invoice split. The preview's allocations carry the amount applied and `statusAfter`, but not what each invoice will still owe.
+
+**Decision:** the app adds and subtracts nothing. The starting amount is the line's `due` (nothing chosen) or the one chosen invoice's `outstanding`; with two or more invoices chosen there is no server total, so the amount starts empty and each invoice's outstanding is listed. "Overdue only" is the line's `overdue` and is offered only when no invoice is chosen. A part payment reads "It will still owe the rest" (no figure); the position after is the preview's `agreement.due`/`overdue`. There is no date picker in the app, so the day is the stepper the restaurant's claim form uses; "before the invoice was issued" is left to the server's message. The duplicate-reference question is an in-sheet panel (not a second modal) and its "Record anyway" keeps the key because the server checks the reference before it claims the key. The preview and Record sheet stay mounted while a waiting claim is reviewed, so nothing typed is lost.
+
+## D-M27 — Credit notes, write-offs and refunds: what the app sends and says
+**Raised 2026-10-06 · Settled 2026-10-06**
+
+A credit note moves what is owed and a write-off gives it up, so the app must neither work out the figures nor let a stale screen write off the wrong amount.
+
+**Decision:** the amount sent is the text typed (2 decimals, a string). A write-off whose amount was left as shown sends NO amount, so the server writes off everything it says is owed even if the screen was a little old; a typed amount is sent as typed. "Keep the line open" is sent only when on. The consequence text uses the amount on screen (typed, or the server outstanding already shown) and does no sums. The idempotency key is made per whole attempt and a server refusal spends it (a fresh key next try); a dropped connection or 5xx keeps it. Write-off is hidden without CREDIT_WRITE_OFF (the server answers 404 to others). A fully credited invoice (PAID, paid 0, credited above 0) reads "Settled by credit note" on both apps. Mark-refunded has no key (the server answers 200 for one already marked). The "Refunds to give back (N)" row counts the OPEN list from one read; a failed read hides it. The Type filter narrows loaded lines client-side by the server's `type`, as Orders and Repayments already do.

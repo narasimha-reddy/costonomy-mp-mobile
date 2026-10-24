@@ -5,10 +5,15 @@ import { useMutation } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { useRequestBasket, useInvalidateBasket } from '@/hooks/useRequestBasket';
+import { useDebouncedEdits } from '@/hooks/useDebouncedEdits';
+import { DeliveryDayChoice, type DeliveryWhen } from '@/components/restaurant/DeliveryDayChoice';
+import { istInstant, preferredDateFor } from '@/lib/delivery/deliveryDay';
 import {
+  addIntentItem,
   prepareDirectOrder,
   removeIntentItem,
   sendBasket,
+  setDeliveryPreference,
   updateIntentItem,
 } from '@/services/intent';
 import {
@@ -26,10 +31,10 @@ import {
   MandiScreen,
   MandiSectionHeader,
   MandiSkeletonList,
-  MandiStickyBar,
   MandiText,
   useToast,
 } from '@/components/common';
+import { StickyActionBar } from '@/components/common/StickyActionBar';
 import type { HeldRequest, Intent } from '@/models/intent';
 import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
@@ -78,21 +83,79 @@ export default function BasketScreen() {
     direct?: boolean;
   } | null>(null);
   const [explaining, setExplaining] = useState(false);
+  /** When the buyer wants delivery: immediate, or a day and optionally an hour. Sent with every request. */
+  const [when, setWhen] = useState<DeliveryWhen>({ offset: null, byHour: null });
 
-  const update = useMutation({
-    mutationFn: ({ itemId, quantity }: { itemId: number; quantity: string }) =>
-      updateIntentItem(accessToken as string, itemId, quantity),
+  /**
+   * Quantity taps are held briefly and sent as one decision, so a burst of taps
+   * is one write, edits to a line land in order, and nothing is dropped when the
+   * screen is left. Sending and ordering wait for them (see `flush` below).
+   */
+  const edits = useDebouncedEdits(async (itemId, quantity) => {
+    try {
+      await updateIntentItem(accessToken as string, itemId, String(quantity));
+    } catch (caught) {
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not update that.', 'error');
+    }
+    await invalidate();
+  });
+  const { flush } = edits;
+
+  const preference = useMutation({
+    mutationFn: ({ intentId, value }: { intentId: number; value: 'DELIVERY' | 'PICKUP' }) =>
+      setDeliveryPreference(accessToken as string, intentId, value),
     onSuccess: () => void invalidate(),
     onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not update that.', 'error'),
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not change that.', 'error'),
   });
 
   const remove = useMutation({
-    mutationFn: (itemId: number) => removeIntentItem(accessToken as string, itemId),
-    onSuccess: () => void invalidate(),
+    mutationFn: ({ itemId }: { itemId: number; supplierSkuId: number; quantity: string }) =>
+      removeIntentItem(accessToken as string, itemId),
+    onSuccess: (_result, removed) => {
+      void invalidate();
+      // The line is gone for good (the server keeps no row), so putting it back
+      // is a fresh add of the same pack and quantity.
+      toast.show('Removed from your request', 'info', {
+        label: 'Undo',
+        onPress: () => {
+          addIntentItem(accessToken as string, outletId as number, {
+            supplierSkuId: removed.supplierSkuId,
+            quantity: removed.quantity,
+          })
+            .then(() => invalidate())
+            .catch((caught) =>
+              toast.show(
+                caught instanceof ApiError ? caught.message : 'Could not put that back.',
+                'error',
+              ));
+        },
+      });
+    },
     onError: (caught) =>
       toast.show(caught instanceof ApiError ? caught.message : 'Could not remove that.', 'error'),
   });
+
+  /** Minus at one removes the line, with an undo, rather than writing a zero. */
+  const removeLine = (itemId: number) => {
+    const item = drafts.flatMap((draft) => draft.items).find((line) => line.id === itemId);
+    if (item == null) return;
+    edits.discard(itemId);
+    remove.mutate({
+      itemId,
+      supplierSkuId: item.supplierSkuId,
+      quantity: String(item.requestedQuantity),
+    });
+  };
+
+  const changeQuantity = (itemId: number, quantity: string) => {
+    const packs = Number(quantity);
+    if (packs <= 0) {
+      removeLine(itemId);
+      return;
+    }
+    edits.set(itemId, packs);
+  };
 
   /**
    * Order from one supplier without asking them first. D-094.
@@ -108,10 +171,13 @@ export default function BasketScreen() {
    * basket already uses. Nothing is prepared until it is agreed to.
    */
   const orderDirectly = useMutation({
-    mutationFn: ({ intentId, acceptPriceChanges }: {
+    mutationFn: async ({ intentId, acceptPriceChanges }: {
       intentId: number;
       acceptPriceChanges: boolean;
-    }) => prepareDirectOrder(accessToken as string, intentId, acceptPriceChanges),
+    }) => {
+      await flush();
+      return prepareDirectOrder(accessToken as string, intentId, acceptPriceChanges);
+    },
     onSuccess: (result, variables) => {
       void invalidate();
       if (result.held.length > 0) {
@@ -132,11 +198,23 @@ export default function BasketScreen() {
   });
 
   const send = useMutation({
-    mutationFn: ({ acceptPriceChanges, intentId }: {
+    mutationFn: async ({ acceptPriceChanges, intentId }: {
       acceptPriceChanges: boolean;
       intentId?: number;
-    }) => sendBasket(accessToken as string, outletId as number,
-      { acceptPriceChanges, intentId }),
+    }) => {
+      // What was tapped is what gets sent: a quantity still waiting its turn is
+      // written first, or the request would go out with the old one.
+      await flush();
+      return sendBasket(accessToken as string, outletId as number, {
+        acceptPriceChanges,
+        intentId,
+        preferredDeliveryDate: preferredDateFor(when.offset),
+        // "By 6 am" on that day, as an instant: the supplier is shown it as the time it is wanted by.
+        requestedDeliveryTime: when.offset != null && when.byHour != null
+          ? istInstant(preferredDateFor(when.offset) as string, when.byHour)
+          : undefined,
+      });
+    },
     onSuccess: (result, variables) => {
       track('basket_sent', { screen: SCREEN, outletId }, { sent: result.sent.length });
       void invalidate();
@@ -253,6 +331,10 @@ export default function BasketScreen() {
       );
     }
 
+    nodes.push(
+      <DeliveryDayChoice key="delivery-day" value={when} onChange={setWhen} />,
+    );
+
     drafts.forEach((draft, index) => {
       const warning = sectionWarning(draft);
       const expanded = isExpanded(draft);
@@ -277,8 +359,11 @@ export default function BasketScreen() {
           expanded={expanded}
           sending={send.isPending && send.variables?.intentId === draft.id}
           ordering={orderDirectly.isPending && orderDirectly.variables?.intentId === draft.id}
-          onChangeQuantity={(itemId, quantity) => update.mutate({ itemId, quantity })}
-          onRemove={(itemId) => remove.mutate(itemId)}
+          shownQuantity={edits.valueFor}
+          onChangeQuantity={changeQuantity}
+          onRemove={removeLine}
+          onChangeDeliveryPreference={(value) => preference.mutate({ intentId: draft.id, value })}
+          onlyRequest={drafts.length === 1}
           onSend={() => send.mutate({ acceptPriceChanges: false, intentId: draft.id })}
           onOrderDirectly={() =>
             orderDirectly.mutate({ intentId: draft.id, acceptPriceChanges: false })}
@@ -334,36 +419,24 @@ export default function BasketScreen() {
       contentStyle={styles.list}
       footer={
         empty || basket == null ? undefined : (
-          <MandiStickyBar>
-            <View style={styles.totalRow}>
-              <View style={styles.flex}>
-                <MandiText variant="caption" color={Colors.textSecondary}>
-                  {basket.itemCount} item{basket.itemCount === 1 ? '' : 's'} ·{' '}
-                  {basket.supplierCount} supplier{basket.supplierCount === 1 ? '' : 's'}
-                </MandiText>
-                {!basket.pricedComplete && (
-                  <MandiText variant="caption" color={Colors.warning}>
-                    Some items have no price
-                  </MandiText>
-                )}
-              </View>
-              <MandiText variant="priceLarge">{formatMoney(basket.agreedTotal)}</MandiText>
-            </View>
-            {/* One button for the lot, which still creates a separate request
-                per supplier — each is its own conversation and becomes its own
-                order, so the label counts them rather than pretending it is one
-                thing. */}
-            <MandiButton
-              label={
-                basket.supplierCount === 1
-                  ? 'Send Request'
-                  : `Send ${basket.supplierCount} Requests`
-              }
-              size="lg"
-              loading={send.isPending && send.variables?.intentId == null}
-              onPress={() => send.mutate({ acceptPriceChanges: false })}
-            />
-          </MandiStickyBar>
+          /* One button for the lot, which still creates a separate request per supplier: each is its own
+             conversation and becomes its own order, so the label counts them rather than pretending it is one
+             thing. The figure is the server's agreedTotal. */
+          <StickyActionBar
+            variant="continue"
+            left={{
+              eyebrow: '',
+              label: `${basket.itemCount} item${basket.itemCount === 1 ? '' : 's'} · ${formatMoney(basket.agreedTotal)}`
+                + (basket.pricedComplete ? '' : ' · Some items have no price'),
+            }}
+            ctaLabel={
+              basket.supplierCount === 1
+                ? 'Send request'
+                : `Send ${basket.supplierCount} Requests`
+            }
+            loading={send.isPending && send.variables?.intentId == null}
+            onPress={() => send.mutate({ acceptPriceChanges: false })}
+          />
         )
       }
     >
@@ -434,12 +507,12 @@ function PriceChangeSheet({
       {/* The label says what agreeing does, which is not the same on both
           paths: one sends a request, the other starts an order. */}
       <MandiButton
-        label={direct ? 'Accept And Continue' : 'Accept And Send'}
+        label={direct ? 'Accept and continue' : 'Accept and send'}
         size="lg"
         loading={accepting}
         onPress={onAccept}
       />
-      <MandiButton label="Keep In Basket" variant="tertiary" size="md" onPress={onDismiss} />
+      <MandiButton label="Keep in basket" variant="tertiary" size="md" onPress={onDismiss} />
     </MandiBottomSheet>
   );
 }
@@ -481,7 +554,7 @@ function HowItWorksSheet({ visible, onClose }: { visible: boolean; onClose: () =
         <Step
           number={3}
           title="You create the order"
-          body="Once a supplier has accepted, you have a window to order against their answer. This is where you choose how the goods travel — collect them yourself, have the supplier deliver, or have us arrange a courier. A delivery fee is quoted before you commit to it."
+          body="Once a supplier has accepted, you have a window to order against their answer. This is where you choose how the goods travel — collect them yourself, have the supplier deliver, or have us arrange a delivery partner. A delivery fee is quoted before you commit to it."
         />
         <Step
           number={4}
@@ -541,13 +614,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    marginBottom: Spacing.sm,
   },
   sheetScroll: { maxHeight: 280 },
   heldBlock: { gap: Spacing.xs, marginTop: Spacing.md },

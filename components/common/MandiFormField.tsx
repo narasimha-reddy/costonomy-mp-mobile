@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useContext, useRef } from 'react';
 import {
   StyleSheet,
   TextInput,
   View,
+  type TextInputProps,
   type KeyboardTypeOptions,
+  type ReturnKeyTypeOptions,
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ControlHeight, IconSize, Radius, Spacing, TextStyles } from '@/theme';
 import { MandiText } from './MandiText';
+import { ScreenScrollContext } from './screenKeyboard';
 
 interface MandiFormFieldProps {
   label: string;
@@ -29,9 +32,17 @@ interface MandiFormFieldProps {
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   secureTextEntry?: boolean;
   maxLength?: number;
+  returnKeyType?: ReturnKeyTypeOptions;
+  onSubmitEditing?: () => void;
   leadingIcon?: keyof typeof Ionicons.glyphMap;
   /** e.g. "+91" on a phone field. */
   prefix?: string;
+  onFocus?: TextInputProps['onFocus'];
+  /** Focus this field when the screen opens (sign-in screens, so the keyboard is already up). */
+  autoFocus?: boolean;
+  /** Let the OS offer the SMS code from a text message (iOS oneTimeCode, Android sms-otp). */
+  textContentType?: TextInputProps['textContentType'];
+  autoComplete?: TextInputProps['autoComplete'];
   style?: ViewStyle;
   testID?: string;
 }
@@ -51,15 +62,24 @@ export function MandiFormField({
   autoCapitalize = 'sentences',
   secureTextEntry = false,
   maxLength,
+  returnKeyType,
+  onSubmitEditing,
   leadingIcon,
   prefix,
+  onFocus,
+  autoFocus,
+  textContentType,
+  autoComplete,
   style,
   testID,
 }: MandiFormFieldProps) {
+  // Inside `MandiScreen avoidKeyboard` focusing the field scrolls it above the keyboard.
+  const screenScroll = useContext(ScreenScrollContext);
+  const wrapper = useRef<View>(null);
   const invalid = error != null && error !== '';
 
   return (
-    <View style={[styles.field, style]}>
+    <View ref={wrapper} style={[styles.field, style]} testID={testID ? `${testID}-field` : undefined}>
       <MandiText variant="captionEmphasis" muted>
         {label}
         {required && <MandiText variant="captionEmphasis" color={Colors.danger}> *</MandiText>}
@@ -93,6 +113,12 @@ export function MandiFormField({
           autoCapitalize={autoCapitalize}
           secureTextEntry={secureTextEntry}
           maxLength={maxLength}
+          returnKeyType={returnKeyType}
+          autoFocus={autoFocus}
+          textContentType={textContentType}
+          autoComplete={autoComplete}
+          onSubmitEditing={onSubmitEditing}
+          onFocus={(e) => { onFocus?.(e); screenScroll?.reveal(wrapper.current); }}
           accessibilityLabel={label}
           accessibilityHint={hint}
           // Screen readers announce the field as invalid rather than relying on

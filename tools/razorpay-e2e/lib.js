@@ -168,8 +168,8 @@ async function browser({ headless = process.env.HEADED !== '1' } = {}) {
 }
 
 /** A page signed in as the buyer, on a path in the web app. */
-async function signedInPage(b, pathname) {
-  const s = await session(BUYER);
+async function signedInPage(b, pathname, phone = BUYER) {
+  const s = await session(phone);
   // Incognito per test: Razorpay remembers a contact number across payments in
   // one profile, which would make each test depend on the one before it.
   const context = await b.createBrowserContext();
@@ -186,10 +186,45 @@ async function signedInPage(b, pathname) {
  * Take whatever the page now has, so the next session() refreshes instead of
  * spending an OTP (and a minute of cooldown).
  */
-async function adoptSession(page) {
+async function adoptSession(page, phone = BUYER) {
   const t = await page.evaluate(() => ({ accessToken: localStorage.getItem('mp.accessToken'),
                                          refreshToken: localStorage.getItem('mp.refreshToken') }));
-  if (t.refreshToken) { const c = loadCache(); c[BUYER] = t; saveCache(c); }
+  if (t.refreshToken) { const c = loadCache(); c[phone] = t; saveCache(c); }
+}
+
+/** Type into the visible input with this placeholder (expo-router keeps old screens mounted). */
+async function typeInto(page, placeholder, text) {
+  await page.waitForFunction((p) => [...document.querySelectorAll('input,textarea')]
+    .some((e) => e.offsetParent !== null && e.placeholder === p), { timeout: 15000 }, placeholder);
+  const handle = await page.evaluateHandle((p) => [...document.querySelectorAll('input,textarea')]
+    .filter((e) => e.offsetParent !== null && e.placeholder === p).pop(), placeholder);
+  await handle.asElement().click({ clickCount: 3 });
+  await handle.asElement().type(text, { delay: 20 });
+}
+
+/**
+ * Take a ready pickup order through receiving (which completes it) and raise a
+ * dispute on it, through the API. The refund cases start from here (D-104).
+ */
+async function disputedOrder(orderId) {
+  const buyer = (await session(BUYER)).accessToken;
+  const status = db(`select status from supplier_order where id=${orderId}`);
+  if (status === 'READY_FOR_PICKUP') {
+    const lines = db(`select id, accepted_quantity from supplier_order_item where supplier_order_id=${orderId}`)
+      .split('\n').map((row) => row.split('\t'));
+    const r = await api(`/supplier-orders/${orderId}/receive`, {
+      token: buyer, headers: { 'Idempotency-Key': crypto.randomUUID() },
+      body: { items: lines.map(([id, qty]) => ({ supplierOrderItemId: Number(id), receivedQuantity: qty,
+        damagedQuantity: '0', missingQuantity: '0' })) },
+    });
+    if (r.status !== 200) throw new Error('receive ' + JSON.stringify(r.error));
+  }
+  const d = await api(`/supplier-orders/${orderId}/disputes`, {
+    token: buyer, headers: { 'Idempotency-Key': crypto.randomUUID() },
+    body: { category: 'QUALITY', description: 'e2e: the paneer was sour' },
+  });
+  if (d.status !== 200) throw new Error('dispute ' + JSON.stringify(d.error));
+  return d.data.id;
 }
 
 /** Click the last visible [role=button] whose text starts with `label` (expo-router keeps old screens mounted). */
@@ -243,5 +278,5 @@ async function ftype(frame, selector, text, { timeout = 20000 } = {}) {
 module.exports = {
   API, WEB, KEY_ID, BUYER, SELLER, STRANGER, sleep, api, session, db, rzp, signWebhook,
   acceptedRequest, placedOrder, dispatch, orderStatus, paymentRow, paymentIdForOrder, until,
-  browser, signedInPage, adoptSession, tap, visibleText, fclick, ftype,
+  browser, signedInPage, adoptSession, tap, visibleText, fclick, ftype, typeInto, disputedOrder,
 };

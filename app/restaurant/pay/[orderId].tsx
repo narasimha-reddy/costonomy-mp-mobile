@@ -1,10 +1,20 @@
+import { endedPaymentBody } from '@/lib/payments/statusLabel';
 import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
-import { confirmPayment, fetchPaymentIntent, type OrderPaymentIntent } from '@/services/payments';
+import {
+  cancelUnpaidOrder,
+  changePaymentMethod,
+  confirmPayment,
+  fetchPaymentIntent,
+  type OrderPaymentIntent,
+} from '@/services/payments';
+import { newIdempotencyKey } from '@/lib/api/client';
+import { anotherWayLabel, canPayAnotherWay, paidAnotherWayMessage } from '@/lib/payments/anotherWay';
+import { PaymentMethodPicker, type PaymentMethod } from '@/components/request/PaymentMethodPicker';
 import { fetchSupplierOrder } from '@/services/procurement';
 import { completeCheckout } from '@/lib/payments/checkout';
 import { payOutcome } from '@/lib/payments/outcome';
@@ -13,6 +23,7 @@ import { orderPaymentKey } from '@/lib/queryKeys';
 import {
   MandiButton,
   MandiCard,
+  MandiConfirm,
   MandiScreen,
   MandiSkeletonList,
   MandiText,
@@ -75,6 +86,52 @@ export default function PayForOrderScreen() {
     queryKey: ['supplier-order', orderId],
     queryFn: () => fetchSupplierOrder(accessToken as string, orderId),
     enabled: Number.isFinite(orderId) && accessToken != null,
+  });
+
+  // Pay another way, or cancel, while the order is still unpaid (API D-152). One key per choice, so a retry of the
+  // same tap is the same request.
+  const [otherMethod, setOtherMethod] = useState<PaymentMethod | null>(null);
+  const [otherError, setOtherError] = useState<string | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const otherKey = useRef<{ method: string; key: string } | null>(null);
+
+  const payAnotherWay = useMutation({
+    mutationFn: (method: 'WALLET' | 'CREDIT') => {
+      if (otherKey.current?.method !== method) otherKey.current = { method, key: newIdempotencyKey() };
+      return changePaymentMethod(accessToken as string, orderId, method, otherKey.current.key);
+    },
+    onSuccess: (_done, method) => {
+      track('payment_method_changed', { screen: SCREEN, entityId: orderId });
+      void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId] });
+      void queryClient.invalidateQueries({ queryKey: ['outlet'] });
+      void queryClient.invalidateQueries({ queryKey: orderPaymentKey(orderId) });
+      setMessage(paidAnotherWayMessage(method));
+      router.replace(`/restaurant/orders/${orderId}`);
+    },
+    onError: (caught) => {
+      otherKey.current = null;
+      if (caught instanceof ApiError && caught.status === 409) {
+        // The card payment got there first. Ask the server rather than guess.
+        // eslint-disable-next-line costonomy/no-tdz -- onError runs after a failed press, long after render has declared askServer
+        void askServer(true);
+        setOtherError('Your card payment already went through, so this order is paid.');
+        return;
+      }
+      setOtherError(caught instanceof ApiError ? caught.message : 'Could not switch the payment method.');
+    },
+  });
+
+  const cancelUnpaid = useMutation({
+    mutationFn: () => cancelUnpaidOrder(accessToken as string, orderId, newIdempotencyKey()),
+    onSuccess: () => {
+      track('unpaid_order_cancelled', { screen: SCREEN, entityId: orderId });
+      void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId] });
+      router.replace('/restaurant/(tabs)/orders');
+    },
+    onError: (caught) => {
+      setConfirmingCancel(false);
+      setOtherError(caught instanceof ApiError ? caught.message : 'Could not cancel this order.');
+    },
   });
 
   /** Settle what the screen says from the server's payment, never from a guess. */
@@ -183,11 +240,22 @@ export default function PayForOrderScreen() {
       : phase;
   const payable = current != null && serverPhase === 'retry';
 
+  const anotherWay = canPayAnotherWay(current?.switchable, shown);
   const total = order.data?.totalAmount;
   const loading = (intent.isPending && handedOver == null) || (order.isPending && shown === 'review');
 
   return (
     <MandiScreen header={undefined}>
+      <MandiConfirm
+        visible={confirmingCancel}
+        title="Cancel this unpaid order?"
+        message="Nothing has been charged. If a card payment for it still goes through, we will send it back."
+        confirmLabel="Cancel order"
+        cancelLabel="Keep it"
+        destructive
+        onConfirm={() => cancelUnpaid.mutate()}
+        onCancel={() => setConfirmingCancel(false)}
+      />
       {loading ? (
         <MandiSkeletonList count={2} />
       ) : intent.isError && current == null ? (
@@ -200,8 +268,8 @@ export default function PayForOrderScreen() {
             </MandiText>
           </View>
           <View style={styles.actions}>
-            <MandiButton label="Try Again" size="lg" onPress={() => void intent.refetch()} />
-            <MandiButton label="Go To Orders" variant="tertiary" size="lg"
+            <MandiButton label="Try again" size="lg" onPress={() => void intent.refetch()} />
+            <MandiButton label="Go to orders" variant="tertiary" size="lg"
               onPress={() => router.replace('/restaurant/(tabs)/orders')} />
           </View>
         </MandiCard>
@@ -225,7 +293,7 @@ export default function PayForOrderScreen() {
             />
             <MandiText variant="bodyEmphasis">{title(shown)}</MandiText>
             <MandiText variant="caption" color={Colors.textSecondary} style={styles.centred}>
-              {message ?? body(shown)}
+              {message ?? (shown === 'ended' ? endedPaymentBody(current?.status) : body(shown))}
             </MandiText>
 
             {total != null && (
@@ -239,21 +307,21 @@ export default function PayForOrderScreen() {
           <View style={styles.actions}>
             {shown === 'review' && payable && (
               <MandiButton
-                label={total != null ? `Pay ${formatMoney(total)}` : 'Pay Now'}
+                label={total != null ? `Pay ${formatMoney(total)}` : 'Pay now'}
                 size="lg"
                 onPress={() => void pay()}
               />
             )}
             {/* Only while the server still takes a payment for this order. */}
             {shown === 'failed' && payable && (
-              <MandiButton label="Try Again" size="lg" onPress={() => void pay()} />
+              <MandiButton label="Try again" size="lg" onPress={() => void pay()} />
             )}
             {/* Never while the charge is in flight: leaving mid-authorisation
                 is how somebody ends up paying for an order they think they
                 abandoned. */}
             {shown !== 'authorizing' && shown !== 'confirming' && (
               <MandiButton
-                label={shown === 'success' ? 'View Order' : 'Go To Orders'}
+                label={shown === 'success' ? 'View order' : 'Go to orders'}
                 variant={shown === 'review' || (shown === 'failed' && payable) ? 'tertiary' : 'primary'}
                 size="lg"
                 onPress={() =>
@@ -266,6 +334,49 @@ export default function PayForOrderScreen() {
             )}
           </View>
         </MandiCard>
+      )}
+
+      {anotherWay && order.data != null && (
+        <>
+          <PaymentMethodPicker
+            outletId={order.data.outletId}
+            supplierStoreId={order.data.supplierStoreId}
+            amount={total}
+            selected={otherMethod}
+            onSelect={(method) => { setOtherMethod(method); setOtherError(null); }}
+            offered={['WALLET', 'CREDIT']}
+            autoSelect={false}
+            title="Or pay another way"
+          />
+          {otherError != null && (
+            <MandiText variant="caption" color={Colors.danger}>{otherError}</MandiText>
+          )}
+          <MandiButton
+            label={otherMethod === 'WALLET' || otherMethod === 'CREDIT'
+              ? anotherWayLabel(otherMethod, total) : 'Choose how to pay'}
+            size="lg"
+            variant="secondary"
+            disabled={otherMethod !== 'WALLET' && otherMethod !== 'CREDIT'}
+            loading={payAnotherWay.isPending}
+            onPress={() => {
+              if (otherMethod === 'WALLET' || otherMethod === 'CREDIT') payAnotherWay.mutate(otherMethod);
+            }}
+          />
+          <MandiButton
+            label="Cancel order"
+            variant="tertiary"
+            size="lg"
+            loading={cancelUnpaid.isPending}
+            onPress={() => setConfirmingCancel(true)}
+          />
+        </>
+      )}
+
+      {current != null && current.switchable === false && current.orderPaymentMethod != null
+        && current.orderPaymentMethod !== 'PREPAID' && shown === 'ended' && (
+        <MandiText variant="caption" color={Colors.textSecondary}>
+          This order was paid another way. Open it from Orders.
+        </MandiText>
       )}
     </MandiScreen>
   );
@@ -298,7 +409,7 @@ function body(phase: Phase): string {
       // only ever taken from a funded one. A bank hold, if any, is released.
       return 'No money has been taken for this order. If your bank shows a hold, it is released automatically. You can try again.';
     case 'ended':
-      return 'This order’s payment has closed without being paid, and no money was taken for it. Check Orders, or order again from the request.';
+      return endedPaymentBody(null);
     case 'unknown':
       return 'We could not confirm the outcome from here. Your money is not at risk — the payment provider tells us directly, and Orders will show the result shortly. Do not pay again.';
   }

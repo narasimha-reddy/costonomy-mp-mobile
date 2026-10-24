@@ -29,10 +29,33 @@ const NO_COLOR_LITERALS = {
   },
 };
 
+/**
+ * Temporal-dead-zone guard.
+ *
+ * A closure that names a `const` declared LATER in the same scope throws
+ * "Cannot access 'x' before initialization" on a native-const bundle (web
+ * production) when the closure runs before the declaration, e.g. a react-query
+ * `refetchInterval` callback, which runs synchronously on the first render.
+ * Jest does not see it because babel compiles const to var. See
+ * docs/NO_USE_BEFORE_DEFINE.md.
+ */
+const noTdz = require('./tools/eslint/no-tdz');
+const NO_USE_BEFORE_DEFINE = {
+  plugins: { costonomy: { rules: { 'no-tdz': noTdz } } },
+  files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'hooks/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}', 'contexts/**/*.{ts,tsx}'],
+  rules: {
+    'costonomy/no-tdz': [
+      'error',
+      { functions: false, classes: true, variables: true, allowNamedExports: false, ignoreTypeReferences: true },
+    ],
+  },
+};
+
 module.exports = [
   ...expoConfig,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'coverage/**'],
   },
   NO_COLOR_LITERALS,
+  NO_USE_BEFORE_DEFINE,
 ];

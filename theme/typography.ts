@@ -61,6 +61,14 @@ export const TextStyles = {
     letterSpacing: -0.8,
   },
 
+  /** The ETA headline on the tracking hero: the one thing the screen is for. */
+  trackerHeadline: {
+    fontFamily: FontFamily.extrabold,
+    fontSize: 30,
+    lineHeight: 34,
+    letterSpacing: -0.4,
+  },
+
   display: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.xxxl,
@@ -145,6 +153,24 @@ export const TextStyles = {
     fontFamily: FontFamily.semibold,
     fontSize: FontSize.sm,
     lineHeight: Math.round(FontSize.sm * LineHeight.normal),
+  },
+  /** A supplier store's name on its menu header: 22/800. */
+  storeTitle: {
+    fontFamily: FontFamily.extrabold,
+    fontSize: FontSize.xl,
+    lineHeight: Math.round(FontSize.xl * LineHeight.tight),
+  },
+  /** The buyer tracking header's title. */
+  trackHeaderTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 19,
+    lineHeight: 24,
+  },
+  /** Text inside the ETA pill. */
+  pillText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.sm,
+    lineHeight: 18,
   },
   /** Badges, chips, overline labels. */
   label: {

@@ -7,7 +7,7 @@ import { isDefinitiveFailure } from '@/lib/api/idempotency';
  * whose outcome is unknown, a new one once it succeeded or was refused.
  *
  * <p>Call `key()` when sending and `settle(error?)` when it returns — with no
- * argument on success.
+ * argument on success. `reset()` starts over when the request itself changes (a different amount, another invoice).
  */
 export function useIdempotencyKey() {
   const current = useRef<string | null>(null);
@@ -21,5 +21,10 @@ export function useIdempotencyKey() {
     if (caught === undefined || isDefinitiveFailure(caught)) current.current = null;
   }, []);
 
-  return { key, settle };
+  /** Forget the key: the next `key()` is a new attempt. For when what is being sent has changed. */
+  const reset = useCallback(() => {
+    current.current = null;
+  }, []);
+
+  return { key, settle, reset };
 }

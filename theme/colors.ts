@@ -109,6 +109,12 @@ export const Colors = {
   recommended: '#FF6000',
   recommendedLight: '#FFF7ED',
 
+  // ── Cold chain (API D-134) ──────────────────────────────────────────
+  /** Text and icon for chilled goods. 5.9:1 on `coldChainLight`. */
+  coldChain: '#0369A1',
+  /** The banner behind it. */
+  coldChainLight: '#E0F2FE',
+
   // ── Marketplace: delivery (PRD §15, §23A.21) ────────────────────────
   /** Delivery in progress with a fresh provider location. */
   deliveryLive: '#2563EB',
@@ -119,6 +125,38 @@ export const Colors = {
   deliveryDriver: '#FF6000',
   /** The destination (outlet) marker. */
   deliveryDestination: '#16A34A',
+
+  // ── Marketplace: buyer tracking restyle ─────────────────────────────
+  // Orange is Colors.primary (#FF6000); orange text on white is primaryDark.
+  /** The live-tracking header bar. White text on it is 5.31:1. */
+  trackHeader: '#1E7B3C',
+  /** The ETA pill on the header: solid and darker, white text on it is 7.63:1. */
+  trackHeaderPill: '#17602F',
+  onTrackHeader: '#FFFFFF',
+  /** Supplier line on the header only (13/600). */
+  onTrackHeaderMuted: 'rgba(255,255,255,0.85)',
+  /** The not-yet-driven leg of the route: dashed, 2dp. */
+  routePending: '#1F2937',
+  geofenceFill: 'rgba(22,163,74,0.15)',
+  geofenceStroke: 'rgba(22,163,74,0.45)',
+  pickupPin: '#1F2937',
+  /**
+   * The truck marker, seen from above: a brand-orange cab, a white cargo roof with a grey edge (so it reads on a
+   * light map) carrying the Costonomy C in its two tones, dark mirrors and windscreen, a soft shadow under it.
+   * Stale uses the muted set: grey cab and logo on a pale roof.
+   */
+  truckBody: '#FF6000',
+  truckRoof: '#FFFFFF',
+  truckRoofEdge: '#C9CFD8',
+  truckCab: '#1F2937',
+  truckGlass: '#33475B',
+  truckShadow: 'rgba(17,24,39,0.16)',
+  /** The Costonomy C: the upper quarter is sand, the rest the deeper orange. */
+  truckLogoSand: '#E9A868',
+  truckLogoOrange: '#E8893C',
+  truckMuted: '#9CA3AF',
+  truckMutedLight: '#D1D5DB',
+  truckMutedRoof: '#F1F3F5',
 
   // ── Marketplace: data freshness (PRD §23A.46, guardrail 16/17) ──────
   // Stale is deliberately *grey*, not amber: a stale price or an old GPS fix is
@@ -135,6 +173,41 @@ export const Colors = {
   availableLight: '#F0FDF4',
   outOfStock: '#9CA3AF',
   outOfStockLight: '#F3F4F6',
+
+  // ── Marketplace: order tracker (stepper) ────────────────────────────
+  // Aliases of existing colours, named for the role so the tracker can be
+  // retuned in one place.
+  trackerStepDone: '#16A34A',
+  trackerStepCurrent: '#FF6000',
+  trackerStepTodo: '#E5E7EB',
+  trackerRail: '#E5E7EB',
+  trackerRailDone: '#16A34A',
+  trackerHalo: '#FFF7ED',
+  trackerProblem: '#D97706',
+  /** The delivery partner's initials avatar. */
+  partnerAvatarBg: '#FFF7ED',
+  partnerAvatarText: '#CC4D00',
+
+  // ── Marketplace: tracking screen ────────────────────────────────────
+  /** The band at the top once an order is delivered; same two-stop idea as the brand gradient. */
+  successGradientStart: '#14663A',
+  successGradientEnd: '#16A34A',
+  /** Text on the light status backgrounds, dark enough to read at small sizes. */
+  successText: '#15803D',
+  warningText: '#92400E',
+  /** The amber banner for a delay or a partner change. */
+  warningBanner: '#FBEFD5',
+  /** The tracking sheet's grab handle. */
+  sheetHandle: '#DCD7D1',
+  /** Segments of the progress bar still to come. */
+  progressTrack: '#E5E7EB',
+  /** The stylised map drawn where there are no tiles (web). */
+  mapBackground: '#E8EEE4',
+  mapWater: '#CFE0EE',
+  mapPark: '#D5E6CF',
+  mapRoad: '#FFFFFF',
+  /** The "order in progress" bar on the orders list. */
+  inProgressBar: '#1F2937',
 
   // ── Skeletons ───────────────────────────────────────────────────────
   skeletonBase: '#E5E7EB',

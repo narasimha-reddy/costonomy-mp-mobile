@@ -22,6 +22,12 @@ export interface CheckoutRequest {
  */
 export interface CheckoutResult {
   providerPaymentId: string;
+  /**
+   * The provider's proof for the payment, when it sends one. An order payment
+   * ignores it (the server asks the provider itself); a wallet top-up passes it
+   * on so the server can verify it before crediting.
+   */
+  providerSignature?: string;
 }
 
 /** The customer closed checkout without completing a payment. */

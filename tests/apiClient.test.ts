@@ -56,6 +56,27 @@ describe('apiRequest token renewal (D-058)', () => {
     expect(calls).toBe(2);
   });
 
+  it('sends the SAME Idempotency-Key on the call refused with 401 and on its repeat after renewal (R21)', async () => {
+    const seen: { auth?: string; key?: string; body?: string }[] = [];
+    global.fetch = jest.fn(async (_url: string, init: RequestInit) => {
+      const headers = init.headers as Record<string, string>;
+      seen.push({ auth: headers.Authorization, key: headers['Idempotency-Key'], body: init.body as string });
+      return seen.length === 1
+        ? jsonResponse(UNAUTHENTICATED, 401)
+        : jsonResponse({ data: { paid: true }, error: null, meta: {} });
+    }) as unknown as typeof fetch;
+    registerTokenRenewal(async () => 'fresh-token');
+
+    await expect(apiRequest('/pay', {
+      method: 'POST', token: 'stale', idempotencyKey: 'key-123', body: { amount: 500 },
+    })).resolves.toEqual({ paid: true });
+    expect(seen).toHaveLength(2);
+    expect(seen[0]?.key).toBe('key-123');
+    expect(seen[1]?.key).toBe('key-123');
+    expect(seen[1]?.auth).toBe('Bearer fresh-token');
+    expect(seen[1]?.body).toBe(seen[0]?.body);
+  });
+
   it('gives up after one renewal rather than looping', async () => {
     let calls = 0;
     global.fetch = jest.fn(async () => {

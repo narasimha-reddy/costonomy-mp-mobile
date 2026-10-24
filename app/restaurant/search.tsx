@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useInfiniteQuery, useQuery, type InfiniteData, type UseInfiniteQueryResult,
+} from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
@@ -12,6 +14,11 @@ import { useAddToRequest } from '@/hooks/useAddToRequest';
 import { ProductCard } from '@/components/product/ProductCard';
 import { SkuRow } from '@/components/product/SkuRow';
 import { SupplierRow } from '@/components/product/SupplierRow';
+import {
+  SupplierFilterBar,
+  activeFilterDescriptions,
+  type SupplierFilters,
+} from '@/components/restaurant/SupplierFilterBar';
 import type { SupplierSearchPage } from '@/models/discovery';
 import {
   MandiEmptyState,
@@ -23,11 +30,12 @@ import {
   MandiText,
 } from '@/components/common';
 import { track } from '@/analytics';
+import { searchHints } from '@/lib/search/hints';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 const SCREEN = 'REST-SEARCH-02';
+const SEARCH_HINTS = searchHints();
 const MIN_TERM = 2;
-
 /** The default distance for the supplier directory, in kilometres. */
 const NEARBY_KM = 10;
 
@@ -63,7 +71,12 @@ export default function SearchScreen() {
   const { outletId } = useOutlet();
   const [term, setTerm] = useState('');
   const [tab, setTab] = useState<Tab>('products');
-  const [radiusKm, setRadiusKm] = useState<number | undefined>(NEARBY_KM);
+  // Starts within 10 km, as the directory always did: "who is near me" is the question the tab answers, and the
+  // "N more deliver here, show them" row is how a kitchen widens it.
+  const [supplierFilters, setSupplierFilters] = useState<SupplierFilters>({
+    radiusKm: NEARBY_KM,
+    sort: 'nearest',
+  });
   const { recent, remember, clear } = useRecentSearches();
   const addToRequest = useAddToRequest();
 
@@ -84,12 +97,24 @@ export default function SearchScreen() {
     enabled: tab === 'skus' && searching && accessToken != null,
   });
 
-  const suppliers = useQuery({
-    queryKey: ['search', 'suppliers', query, outletId, radiusKm],
-    queryFn: ({ signal }) =>
-      searchSuppliers(accessToken as string, query, outletId ?? undefined, radiusKm, signal),
-    enabled: tab === 'suppliers' && searching && accessToken != null,
+  // Paged: the directory returns the nearest 50 and says where the next page starts (API D-139).
+  // Changing a filter resets paging (TanStack Query resets pages on queryKey change).
+  const suppliers = useInfiniteQuery({
+    queryKey: ['search', 'suppliers', query, outletId, supplierFilters],
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      searchSuppliers(accessToken as string, query, outletId ?? undefined, supplierFilters.radiusKm, signal, {
+        offset: pageParam,
+        openNow: supplierFilters.openNow,
+        minRating: supplierFilters.minRating,
+        sort: supplierFilters.sort,
+      }),
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+    // Also asked when the Products tab came back empty, to tell the kitchen a supplier of that name exists.
+    enabled: (tab === 'suppliers' || (tab === 'products' && products.isSuccess && products.data.length === 0))
+      && searching && accessToken != null,
   });
+  const supplierMatches = suppliers.data?.pages[0]?.total ?? suppliers.data?.pages[0]?.suppliers.length ?? 0;
 
   function openProduct(productId: number) {
     if (searching) remember(query);
@@ -127,6 +152,13 @@ export default function SearchScreen() {
           query={products}
           empty={`Nothing for "${query}"`}
           hint="Try a shorter word, or the name your supplier uses."
+          emptyTitle={supplierMatches > 0
+            ? `${supplierMatches} ${supplierMatches === 1 ? 'supplier matches' : 'suppliers match'}`
+            : undefined}
+          emptyHint={supplierMatches > 0 ? `No products for "${query}". Some suppliers match.` : undefined}
+          emptyAction={supplierMatches > 0 ? { label: 'View suppliers', onPress: () => setTab('suppliers') } : undefined}
+          // No flash of "Nothing for" before the supplier check lands.
+          checking={suppliers.isFetching}
           render={(list) =>
             list.map((product) => (
               <ProductCard
@@ -162,7 +194,10 @@ export default function SearchScreen() {
         <Suppliers
           query={suppliers}
           term={query}
-          onWiden={() => setRadiusKm(undefined)}
+          filters={supplierFilters}
+          onFiltersChange={(updated) => setSupplierFilters(updated)}
+          onClearFilters={() => setSupplierFilters({ sort: 'nearest' })}
+          onWiden={() => setSupplierFilters((prev) => ({ ...prev, radiusKm: undefined }))}
           onOpen={openSupplier}
         />
       )}
@@ -178,11 +213,21 @@ function Results<T>({
   query,
   empty,
   hint,
+  emptyTitle,
+  emptyHint,
+  emptyAction,
+  checking,
   render,
 }: {
   query: { isPending: boolean; error: unknown; data?: T[]; refetch: () => unknown };
   empty: string;
   hint: string;
+  /** What to say instead when the list is empty but something else matches (the Products tab, a supplier of that name). */
+  emptyTitle?: string;
+  emptyHint?: string;
+  emptyAction?: { label: string; onPress: () => void };
+  /** The empty list is not final yet: the supplier check that may replace it is still running. */
+  checking?: boolean;
   render: (list: T[]) => React.ReactNode;
 }) {
   if (query.isPending) return <MandiSkeletonList count={5} />;
@@ -190,8 +235,17 @@ function Results<T>({
     return <MandiErrorState message="Search didn't work." onRetry={() => query.refetch()} />;
   }
   const list = query.data ?? [];
+  if (list.length === 0 && checking) return <MandiSkeletonList count={5} />;
   if (list.length === 0) {
-    return <MandiEmptyState icon="search-outline" title={empty} description={hint} />;
+    return (
+      <MandiEmptyState
+        icon="search-outline"
+        title={emptyTitle ?? empty}
+        description={emptyHint ?? hint}
+        actionLabel={emptyAction?.label}
+        onAction={emptyAction?.onPress}
+      />
+    );
   }
   // Wrapped, so `MandiScreen`'s section gap applies to the list rather than
   // between every row of it — the rows carry their own padding and separator.
@@ -208,50 +262,86 @@ function Results<T>({
 function Suppliers({
   query,
   term,
+  filters,
+  onFiltersChange,
+  onClearFilters,
   onWiden,
   onOpen,
 }: {
-  query: UseQueryResult<SupplierSearchPage>;
+  query: UseInfiniteQueryResult<InfiniteData<SupplierSearchPage>>;
   term: string;
+  filters: SupplierFilters;
+  onFiltersChange: (filters: SupplierFilters) => void;
+  onClearFilters: () => void;
   onWiden: () => void;
   onOpen: (storeId: number) => void;
 }) {
-  if (query.isPending) return <MandiSkeletonList count={4} />;
-  if (query.error) {
-    return <MandiErrorState message="Couldn't load suppliers." onRetry={() => query.refetch()} />;
-  }
-
-  const page = query.data;
-  const list = page?.suppliers ?? [];
-  const beyond = page?.beyondRadius ?? 0;
-
-  if (list.length === 0) {
-    return (
-      <View style={styles.section}>
-        <MandiEmptyState
-          icon="storefront-outline"
-          title={`No supplier has "${term}"`}
-          description="Nobody delivering here stocks it, under that name or any other they use for it."
-        />
-        {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
-      </View>
-    );
-  }
+  const activeFilters = activeFilterDescriptions(filters);
+  const hasActiveFilters = filters.radiusKm != null || Boolean(filters.openNow) || filters.minRating != null;
 
   return (
     <View style={styles.section}>
-      <MandiSectionHeader title="Matching suppliers" count={list.length} />
-      <View style={styles.list}>
-        {list.map((supplier) => (
-          <SupplierRow
-            key={supplier.supplierStoreId}
-            supplier={supplier}
-            onPress={() => onOpen(supplier.supplierStoreId)}
-          />
-        ))}
-      </View>
-      {/* Nothing serviceable is hidden — it is one tap away and says how many. */}
-      {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
+      <SupplierFilterBar filters={filters} onChange={onFiltersChange} />
+
+      {query.isPending ? (
+        <MandiSkeletonList count={4} />
+      ) : query.error ? (
+        <MandiErrorState message="Couldn't load suppliers." onRetry={() => query.refetch()} />
+      ) : (() => {
+        const pages = query.data?.pages ?? [];
+        const list = pages.flatMap((page) => page.suppliers);
+        const beyond = pages[0]?.beyondRadius ?? 0;
+        const total = pages[pages.length - 1]?.total ?? list.length;
+
+        if (list.length === 0) {
+          const emptyDesc = hasActiveFilters
+            ? `No suppliers matching "${term}" with active filters: ${activeFilters.join(', ')}.`
+            : 'Nobody delivering here stocks it, under that name or any other they use for it.';
+
+          return (
+            <View style={styles.section}>
+              <MandiEmptyState
+                icon="storefront-outline"
+                title={`No supplier has "${term}"`}
+                description={emptyDesc}
+                actionLabel={hasActiveFilters ? 'Clear filters' : undefined}
+                onAction={hasActiveFilters ? onClearFilters : undefined}
+              />
+              {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
+            </View>
+          );
+        }
+
+        return (
+          <>
+            <MandiSectionHeader title="Matching suppliers" count={total} />
+            <View style={styles.list}>
+              {list.map((supplier) => (
+                <SupplierRow
+                  key={supplier.supplierStoreId}
+                  supplier={supplier}
+                  onPress={() => onOpen(supplier.supplierStoreId)}
+                />
+              ))}
+            </View>
+            {query.hasNextPage && (
+              <Pressable
+                onPress={() => void query.fetchNextPage()}
+                disabled={query.isFetchingNextPage}
+                accessibilityRole="button"
+                accessibilityLabel="Load more suppliers"
+                style={styles.widen}
+              >
+                <MandiText variant="captionEmphasis" color={Colors.primary}>
+                  {query.isFetchingNextPage ? 'Loading…' : 'Load more'}
+                </MandiText>
+              </Pressable>
+            )}
+            {/* Nothing serviceable is hidden — it is one tap away and says how many. */}
+            {beyond > 0 && <WidenRow count={beyond} onWiden={onWiden} />}
+          </>
+        );
+      })()}
     </View>
   );
 }
@@ -355,9 +445,11 @@ function Header({
     <View style={styles.header}>
       <View style={styles.searchRow}>
         <MandiSearchBar
+          testID="search-input"
           value={term}
           onChangeText={onTerm}
           placeholder="Search for paneer, rice, oil and more"
+          rotatingHints={SEARCH_HINTS}
           autoFocus
           pill
           loading={loading}

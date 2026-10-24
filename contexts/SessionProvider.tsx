@@ -4,6 +4,7 @@ import React, {
 import { fetchMe, logout as logoutRequest, refreshSession, verifyOtp } from '@/services/auth';
 import { ApiError } from '@/lib/api/errors';
 import { registerTokenRenewal } from '@/lib/api/session-bridge';
+import { resetAttemptKeys } from '@/lib/credit/attemptKeys';
 import { deleteSecret, getSecret, setSecret } from '@/lib/session/storage';
 import { audienceOf, type Audience, type AuthMe, type AuthTokens } from '@/lib/session/types';
 
@@ -148,6 +149,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         // Ignored deliberately — see above.
       }
     }
+    resetAttemptKeys();
     await clear();
   }, [clear]);
 
@@ -173,4 +175,9 @@ export function useSession(): SessionState {
   const context = useContext(SessionContext);
   if (!context) throw new Error('useSession must be used inside a SessionProvider');
   return context;
+}
+
+/** The session if there is a provider above, else null: for chrome (the device frame) that also renders in isolation. */
+export function useOptionalSession(): SessionState | null {
+  return useContext(SessionContext);
 }

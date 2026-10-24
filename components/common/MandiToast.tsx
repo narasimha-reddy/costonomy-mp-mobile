@@ -1,5 +1,5 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { Animated, StyleSheet } from 'react-native';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Duration, Elevation, IconSize, Radius, Spacing } from '@/theme';
@@ -8,10 +8,16 @@ import { MandiText } from './MandiText';
 
 export type ToastTone = 'success' | 'error' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onPress: () => void;
+}
+
 interface Toast {
   id: number;
   message: string;
   tone: ToastTone;
+  action?: ToastAction;
 }
 
 interface ToastApi {
@@ -24,7 +30,7 @@ interface ToastApi {
    * by a toast that appears whether or not the write landed. Use this for
    * reversible, low-stakes feedback: "Copied", "Added to cart", "Saved to drafts".
    */
-  show: (message: string, tone?: ToastTone) => void;
+  show: (message: string, tone?: ToastTone, action?: ToastAction) => void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -36,6 +42,8 @@ const TONES: Record<ToastTone, { bg: string; icon: keyof typeof Ionicons.glyphMa
 };
 
 const VISIBLE_MS = 2600;
+/** Long enough to reach for an action, such as Undo. */
+const VISIBLE_WITH_ACTION_MS = 6000;
 
 /** Mount once, in the root layout, above the navigator. */
 export function MandiToastProvider({ children }: { children: React.ReactNode }) {
@@ -48,9 +56,9 @@ export function MandiToastProvider({ children }: { children: React.ReactNode }) 
   const reducedMotion = useReducedMotion();
 
   const show = useCallback(
-    (message: string, tone: ToastTone = 'info') => {
+    (message: string, tone: ToastTone = 'info', action?: ToastAction) => {
       if (timer.current) clearTimeout(timer.current);
-      setToast({ id: nextId.current++, message, tone });
+      setToast({ id: nextId.current++, message, tone, action });
 
       const fade = (toValue: number) =>
         Animated.timing(opacity, {
@@ -64,10 +72,14 @@ export function MandiToastProvider({ children }: { children: React.ReactNode }) 
         fade(0).start(({ finished }) => {
           if (finished) setToast(null);
         });
-      }, VISIBLE_MS);
+      }, action ? VISIBLE_WITH_ACTION_MS : VISIBLE_MS);
     },
     [opacity, reducedMotion],
   );
+
+  // A toast still waiting to fade must not fire after the provider is gone (it would animate a
+  // torn-down tree; in tests it is the timer that keeps Jest from exiting).
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const api = useMemo(() => ({ show }), [show]);
 
@@ -76,7 +88,7 @@ export function MandiToastProvider({ children }: { children: React.ReactNode }) 
       {children}
       {toast && (
         <Animated.View
-          pointerEvents="none"
+          pointerEvents={toast.action ? 'box-none' : 'none'}
           style={[
             styles.toast,
             Elevation.floating,
@@ -94,6 +106,22 @@ export function MandiToastProvider({ children }: { children: React.ReactNode }) 
           <MandiText variant="captionEmphasis" color={Colors.textInverse} style={styles.message}>
             {toast.message}
           </MandiText>
+          {toast.action && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={toast.action.label}
+              hitSlop={12}
+              onPress={() => {
+                const { onPress } = toast.action as ToastAction;
+                setToast(null);
+                onPress();
+              }}
+            >
+              <MandiText variant="captionEmphasis" color={Colors.textInverse}>
+                {toast.action.label}
+              </MandiText>
+            </Pressable>
+          )}
         </Animated.View>
       )}
     </ToastContext.Provider>

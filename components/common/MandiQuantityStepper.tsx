@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -27,6 +27,14 @@ interface MandiQuantityStepperProps {
   unit?: string;
   /** Allows typing a quantity directly. Off for compact card-level steppers. */
   editable?: boolean;
+  /**
+   * With {@code editable}: report a typed quantity when typing ends, not on every keystroke.
+   *
+   * <p>For a screen where a change is saved. Per keystroke, clearing the box to type a new number reports zero and
+   * the line would be removed; here the box can be emptied and refilled freely, and an empty or zero entry goes
+   * back to the quantity it had (minus is how a line is taken away).
+   */
+  commitOnBlur?: boolean;
   disabled?: boolean;
   /**
    * Show the quantity in the same frame, with no controls.
@@ -42,6 +50,11 @@ interface MandiQuantityStepperProps {
   testID?: string;
   /** Names the thing being counted, e.g. "Paneer 1 kg". Used for a11y labels. */
   itemLabel?: string;
+  /**
+   * Names this quantity in full, e.g. "Received quantity for Onion", where one line has several boxes and "Quantity"
+   * would not say which. Takes precedence over itemLabel; the buttons read "Increase received quantity for Onion".
+   */
+  quantityLabel?: string;
 }
 
 /** PRD §23A.3. Used on product detail, cart, partial acceptance and receiving. */
@@ -53,23 +66,43 @@ export function MandiQuantityStepper({
   step = 1,
   unit,
   editable = false,
+  commitOnBlur = false,
   disabled = false,
   readOnly = false,
   size = 'md',
   style,
   testID,
   itemLabel,
+  quantityLabel,
 }: MandiQuantityStepperProps) {
   const canDecrease = !disabled && !readOnly && value > min;
   const canIncrease = !disabled && !readOnly && (max == null || value < max);
   const height = size === 'sm' ? ControlHeight.sm : ControlHeight.md;
   const glyph = size === 'sm' ? IconSize.sm : IconSize.md;
   const suffix = itemLabel ? ` ${itemLabel}` : '';
+  const ofItem = itemLabel ? ` of ${itemLabel}` : '';
+  const named = quantityLabel != null && quantityLabel !== '' ? quantityLabel : null;
+  const lowerNamed = named == null ? null : named.charAt(0).toLowerCase() + named.slice(1);
+
+  // What is in the box while it is being typed in (commitOnBlur only).
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
 
   const clamp = (next: number) => {
     if (next < min) return min;
     if (max != null && next > max) return max;
     return next;
+  };
+
+  const commitText = () => {
+    const parsed = Number(text.replace(/[^0-9.]/g, ''));
+    if (!Number.isFinite(parsed) || parsed <= 0 || text.trim() === '') {
+      setText(String(value));
+      return;
+    }
+    const next = clamp(parsed);
+    setText(String(next));
+    if (next !== value) onChange(next);
   };
 
   return (
@@ -79,7 +112,7 @@ export function MandiQuantityStepper({
         onPress={canDecrease ? () => onChange(clamp(value - step)) : undefined}
         disabled={!canDecrease}
         accessibilityRole="button"
-        accessibilityLabel={`Decrease quantity${suffix}`}
+        accessibilityLabel={lowerNamed != null ? `Decrease ${lowerNamed}` : `Decrease quantity${ofItem}`}
         accessibilityState={{ disabled: !canDecrease }}
         hitSlop={hitSlopFor(glyph)}
         style={styles.control}
@@ -94,15 +127,20 @@ export function MandiQuantityStepper({
 
       {editable && !readOnly ? (
         <TextInput
-          value={String(value)}
-          onChangeText={(text) => {
-            const parsed = Number(text.replace(/[^0-9.]/g, ''));
+          value={commitOnBlur ? text : String(value)}
+          onChangeText={(typed) => {
+            if (commitOnBlur) {
+              setText(typed);
+              return;
+            }
+            const parsed = Number(typed.replace(/[^0-9.]/g, ''));
             onChange(Number.isFinite(parsed) ? clamp(parsed) : min);
           }}
+          onEndEditing={commitOnBlur ? commitText : undefined}
           keyboardType="decimal-pad"
           editable={!disabled}
           selectTextOnFocus
-          accessibilityLabel={`Quantity${suffix}`}
+          accessibilityLabel={named ?? `Quantity${suffix}`}
           style={styles.input}
         />
       ) : (
@@ -111,7 +149,7 @@ export function MandiQuantityStepper({
           center
           style={styles.value}
           // Announced as one phrase — "3 KG" — rather than a bare digit.
-          accessibilityLabel={`${value}${unit ? ` ${unit}` : ''}${suffix}`}
+          accessibilityLabel={`${value}${unit ? ` ${unit}` : ''}${named != null ? `, ${lowerNamed}` : suffix}`}
         >
           {value}
         </MandiText>
@@ -128,7 +166,7 @@ export function MandiQuantityStepper({
         onPress={canIncrease ? () => onChange(clamp(value + step)) : undefined}
         disabled={!canIncrease}
         accessibilityRole="button"
-        accessibilityLabel={`Increase quantity${suffix}`}
+        accessibilityLabel={lowerNamed != null ? `Increase ${lowerNamed}` : `Increase quantity${ofItem}`}
         accessibilityState={{ disabled: !canIncrease }}
         hitSlop={hitSlopFor(glyph)}
         style={styles.control}

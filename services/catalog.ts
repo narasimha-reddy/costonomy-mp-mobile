@@ -92,9 +92,22 @@ export function fetchRecommendations(
   productId: number,
   outletId: number,
   quantity?: string,
+  options: {
+    sort?: 'best_value' | 'price' | 'nearest' | 'rating';
+    coversQuantity?: boolean;
+    openNow?: boolean;
+    radiusKm?: number;
+  } = {},
 ): Promise<ProductRecommendation> {
   return apiRequest<ProductRecommendation>(
-    `/api/v1/products/${productId}/recommendations${queryString({ outletId, quantity })}`,
+    `/api/v1/products/${productId}/recommendations${queryString({
+      outletId,
+      quantity,
+      sort: options.sort,
+      coversQuantity: options.coversQuantity,
+      openNow: options.openNow,
+      radiusKm: options.radiusKm,
+    })}`,
     { token },
   );
 }
@@ -116,9 +129,29 @@ export function searchSuppliers(
   outletId?: number,
   radiusKm?: number,
   signal?: AbortSignal,
+  options: {
+    /** `all` skips the serviceability filter, for a screen that needs every supplier (a credit request). */
+    reach?: 'all';
+    /** The page to fetch: the previous page's `nextOffset`. */
+    offset?: number;
+    limit?: number;
+    openNow?: boolean;
+    minRating?: number;
+    sort?: 'nearest' | 'rating';
+  } = {},
 ): Promise<SupplierSearchPage> {
   return apiRequest<SupplierSearchPage>(
-    `/api/v1/search/suppliers${queryString({ q: term, outletId, radiusKm })}`,
+    `/api/v1/search/suppliers${queryString({
+      q: term,
+      outletId,
+      radiusKm,
+      reach: options.reach,
+      offset: options.offset,
+      limit: options.limit,
+      openNow: options.openNow,
+      minRating: options.minRating,
+      sort: options.sort,
+    })}`,
     { token, signal },
   );
 }
@@ -248,10 +281,22 @@ export function fetchPopularSuppliers(
    * drop a supplier who stocks the aisle but lists six others more deeply.
    */
   categoryId?: number | null,
+  options: {
+    radiusKm?: number;
+    openNow?: boolean;
+    minRating?: number;
+    sort?: 'nearest' | 'rating';
+  } = {},
 ): Promise<PopularSupplier[]> {
-  const aisle = categoryId == null ? '' : `&categoryId=${categoryId}`;
   return apiRequest<PopularSupplier[]>(
-    `/api/v1/outlets/${outletId}/suppliers/popular?limit=${limit}${aisle}`,
+    `/api/v1/outlets/${outletId}/suppliers/popular${queryString({
+      limit,
+      categoryId: categoryId ?? undefined,
+      radiusKm: options.radiusKm,
+      openNow: options.openNow,
+      minRating: options.minRating,
+      sort: options.sort,
+    })}`,
     { token },
   );
 }

@@ -10,6 +10,7 @@ export interface ReceiveItemInput {
   receivedQuantity: string;
   damagedQuantity: string;
   missingQuantity: string;
+  rejectionReason?: string;
   note?: string;
 }
 

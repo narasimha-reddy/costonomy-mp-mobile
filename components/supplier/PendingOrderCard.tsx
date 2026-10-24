@@ -1,4 +1,5 @@
 import React from 'react';
+import { partyTitle } from '@/lib/supplier/partyTitle';
 import type { IncomingOrder } from '@/models/procurement';
 import { MandiCard } from '@/components/common';
 import { OrderCardBody } from '@/components/order';
@@ -28,9 +29,8 @@ export function PendingOrderCard({
   return (
     <MandiCard onPress={onPress} outlined accentColor={Colors.primary}>
       <OrderCardBody
-        primary={order.outletName}
+        primary={partyTitle(order.restaurantName, order.outletName)}
         secondary={[
-          order.restaurantName,
           order.outletLocality,
           formatDistance(order.distanceKm),
         ]}

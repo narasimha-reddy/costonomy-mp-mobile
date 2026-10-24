@@ -16,6 +16,7 @@ import {
   MandiStatusChip,
   MandiText,
 } from '@/components/common';
+import { resolveStatus, SettlementStatus } from '@/models/status';
 import { formatMoney } from '@/utils/money';
 import { Colors, Spacing } from '@/theme';
 
@@ -55,14 +56,7 @@ export default function SettlementsScreen() {
           >
             <View style={styles.row}>
               <MandiText variant="bodyEmphasis">{settlement.settlementNumber}</MandiText>
-              <MandiStatusChip
-                label={settlement.status.toLowerCase()}
-                tone={
-                  settlement.status === 'PAID' ? 'success'
-                    : settlement.status === 'FAILED' ? 'danger' : 'pending'
-                }
-                size="sm"
-              />
+              <MandiStatusChip {...resolveStatus(SettlementStatus, settlement.status)} size="sm" />
             </View>
             <View style={styles.row}>
               <MandiText variant="caption" color={Colors.textSecondary}>

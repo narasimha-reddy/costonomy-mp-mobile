@@ -1,12 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
 import { useDebounced } from '@/hooks/useDebounced';
 import { fetchIntent, previewResponse, respondToIntent } from '@/services/intent';
+import { fetchDeliveryPolicy } from '@/services/supplier';
+import {
+  DeliveryOfferChoice, deliveryAnswerFor, deliveryChargeValid, deliveryOffersFor, type DeliveryOffer,
+} from '@/components/request/DeliveryOfferChoice';
 import { intentKey, storeIntentsKey } from '@/lib/queryKeys';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import {
@@ -32,6 +36,8 @@ import { ApiError } from '@/lib/api/errors';
 import { formatMoney, formatQuantity } from '@/utils/money';
 import { formatMomentWithRecency } from '@/utils/dateRange';
 import { skuSecondaryLine, skuTitle } from '@/utils/skuLabel';
+import { describeDeliveryDay } from '@/lib/delivery/deliveryDay';
+import { partyHeading } from '@/lib/supplier/partyTitle';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -56,6 +62,7 @@ export default function SupplierRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const intentId = Number(id);
   const toast = useToast();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { accessToken } = useSession();
   const { storeId } = useStore();
@@ -63,6 +70,22 @@ export default function SupplierRequestScreen() {
   const [offered, setOffered] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState('');
   const [confirmDecline, setConfirmDecline] = useState(false);
+  const [deliveryChoice, setDeliveryChoice] = useState<DeliveryOffer | null>(null);
+  // What to charge for this order when delivering themselves. Empty or 0 is free delivery.
+  const [deliveryCharge, setDeliveryCharge] = useState('');
+
+  // What this store is allowed to offer for delivery. The server checks it again.
+  const deliveryPolicy = useQuery({
+    queryKey: ['delivery-policy', storeId],
+    queryFn: () => fetchDeliveryPolicy(accessToken as string, storeId as number),
+    enabled: storeId != null && accessToken != null,
+  });
+  const offers = deliveryOffersFor(deliveryPolicy.data);
+  // No default: delivery is a promise to the restaurant, so the supplier picks how, and Accept waits for it.
+  const deliveryOffer: DeliveryOffer | null =
+    deliveryChoice != null && offers.includes(deliveryChoice) ? deliveryChoice : null;
+
+  const chargeValid = deliveryChargeValid(deliveryCharge);
 
   const query = useQuery({
     queryKey: intentKey(intentId),
@@ -102,9 +125,11 @@ export default function SupplierRequestScreen() {
       previewResponse(accessToken as string, intentId,
         (request?.items ?? []).map((item) => ({
           intentItemId: item.id,
-          offeredQuantity: String(offered[item.id] ?? 0),
+          offeredQuantity: String((JSON.parse(offeredKey) as Record<number, number>)[item.id] ?? 0),
         }))),
-    enabled: answerable && Object.keys(offered).length > 0 && accessToken != null,
+    // Not until the debounced key has caught up with the seeded quantities: while it still reads "{}" the query
+    // would fire once for that stale key and again when the key settled.
+    enabled: answerable && Object.keys(offered).length > 0 && offeredKey !== '{}' && accessToken != null,
     placeholderData: (previous) => previous,
   });
 
@@ -121,6 +146,13 @@ export default function SupplierRequestScreen() {
   }, [request, offered]);
 
   const everythingDeclined = request != null && totals.declined === totals.lines;
+  // The delivery card is on screen and nothing is picked yet.
+  // A delivery request cannot be answered before the store's delivery options are known: the reply would go out with no
+  // deliveryOffer. Declining everything needs no delivery answer, so it is never blocked here.
+  const policyUnavailable = request != null && request.deliveryPreference !== 'PICKUP' && !everythingDeclined
+    && (deliveryPolicy.isPending || deliveryPolicy.isError);
+  const needsDeliveryChoice = request != null && request.deliveryPreference !== 'PICKUP'
+    && deliveryPolicy.data != null && deliveryOffer == null && !everythingDeclined;
 
   const reply = useMutation({
     mutationFn: () =>
@@ -133,6 +165,7 @@ export default function SupplierRequestScreen() {
         // quantities while a request is open, so accepting without saying which
         // version you read is accepting whatever it happens to be now.
         expectedRevision: request?.revision,
+        ...deliveryAnswerFor(deliveryOffer, deliveryCharge),
         notes: notes.trim() === '' ? undefined : notes.trim(),
       }),
     onSuccess: () => {
@@ -157,12 +190,16 @@ export default function SupplierRequestScreen() {
     },
   });
 
+  // The restaurant leads; the outlet rides on the subtitle so a long pair is not cut at 360 px.
+  const heading = partyHeading(request?.restaurantName, request?.outletName, 'Request');
+  const subtitle = [heading.outlet, request?.reference].filter(Boolean).join(' · ') || undefined;
+
   return (
     <MandiScreen
       header={
         <MandiHeader
-          title="Request"
-          subtitle={request?.reference ?? undefined}
+          title={heading.title}
+          subtitle={subtitle}
           back
           right={
             <MandiChatAction
@@ -190,11 +227,17 @@ export default function SupplierRequestScreen() {
             {/* Status leads, as it does on the restaurant's screen: it is what
                 the reader is here to find out, and having the two sides put it
                 on opposite edges made the same request look like two things. */}
-            <View style={styles.row}>
+            <View style={styles.headRow}>
               <MandiStatusChip {...supplierIntentStatus(request.status, request.fulfilment)} />
               <View style={styles.countColumn}>
                 <MandiText variant="bodyEmphasis">
                   {request.items.length} item{request.items.length === 1 ? '' : 's'} requested
+                </MandiText>
+                <MandiText variant="caption" color={Colors.textSecondary}>
+                  {request.deliveryPreference === 'PICKUP' ? 'Will collect · ' : 'Delivery wanted · '}
+                  {request.preferredDeliveryDate != null
+                    ? `Wanted ${describeDeliveryDay(request.preferredDeliveryDate)}`
+                    : 'Wanted immediately'}
                 </MandiText>
                 {request.requestedDeliveryTime != null && (
                   <MandiText variant="caption" color={Colors.textSecondary}>
@@ -258,6 +301,25 @@ export default function SupplierRequestScreen() {
             ))}
           </MandiCard>
 
+          {answerable && request.deliveryPreference === 'PICKUP' && (
+            <MandiCard>
+              <MandiText variant="bodyEmphasis">The restaurant will collect this</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                No delivery is needed, so there is nothing to offer for delivery.
+              </MandiText>
+            </MandiCard>
+          )}
+
+          {answerable && request.deliveryPreference !== 'PICKUP' && deliveryPolicy.data != null && (
+            <DeliveryOfferChoice
+              policy={deliveryPolicy.data}
+              value={deliveryOffer}
+              onChange={setDeliveryChoice}
+              fee={deliveryCharge}
+              onFeeChange={setDeliveryCharge}
+            />
+          )}
+
           {answerable ? (
             <MandiCard>
               <MandiFormField
@@ -288,6 +350,14 @@ export default function SupplierRequestScreen() {
                 </MandiText>
               )}
             </MandiCard>
+          )}
+          {request.supplierOrderId != null && (
+            <MandiButton
+              label="View order"
+              variant="secondary"
+              size="md"
+              onPress={() => router.push(`/supplier/orders/${request.supplierOrderId}` as never)}
+            />
           )}
         </>
       )}
@@ -335,6 +405,19 @@ export default function SupplierRequestScreen() {
             </MandiText>
           </View>
         )}
+        {policyUnavailable && deliveryPolicy.isError && (
+          <View style={styles.choiceHint}>
+            <MandiText variant="caption" color={Colors.warning} accessibilityLiveRegion="polite">
+              Couldn&apos;t load your delivery options.
+            </MandiText>
+            <MandiButton label="Try again" variant="secondary" size="md" onPress={() => void deliveryPolicy.refetch()} />
+          </View>
+        )}
+        {needsDeliveryChoice && (
+          <MandiText variant="caption" color={Colors.warning} accessibilityLiveRegion="polite" style={styles.choiceHint}>
+            Choose how this will be delivered
+          </MandiText>
+        )}
         <MandiButton
           label={
             everythingDeclined
@@ -349,6 +432,7 @@ export default function SupplierRequestScreen() {
           size="lg"
           variant={everythingDeclined ? 'destructive' : 'primary'}
           loading={reply.isPending}
+          disabled={policyUnavailable || needsDeliveryChoice || (!everythingDeclined && deliveryOffer === 'SELF' && !chargeValid)}
           onPress={() => (everythingDeclined ? setConfirmDecline(true) : reply.mutate())}
         />
       </MandiStickyBar>
@@ -461,7 +545,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
-  countColumn: { alignItems: 'flex-end', gap: 2 },
+  // Stacked, not side by side: at 360 to 390 px a right-aligned column beside the chip clipped its own text.
+  headRow: { gap: Spacing.sm, alignItems: 'flex-start' },
+  countColumn: { alignItems: 'flex-start', gap: 2, alignSelf: 'stretch' },
   note: { marginTop: Spacing.md, fontStyle: 'italic' },
   countdown: { marginTop: Spacing.md, gap: Spacing.xs },
   hint: {
@@ -486,6 +572,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginBottom: Spacing.sm,
   },
+  choiceHint: { marginBottom: Spacing.sm },
   summary: {
     flexDirection: 'row',
     alignItems: 'center',

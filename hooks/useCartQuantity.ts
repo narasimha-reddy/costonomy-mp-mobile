@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { addIntentItem, removeIntentItem, updateIntentItem } from '@/services/intent';
 import { draftsKey } from '@/lib/queryKeys';
 import { useToast } from '@/components/common';
+import { useDebouncedEdits } from '@/hooks/useDebouncedEdits';
 import { ApiError } from '@/lib/api/errors';
 import type { Intent, IntentItem } from '@/models/intent';
 
@@ -16,7 +17,7 @@ import type { Intent, IntentItem } from '@/models/intent';
  * was touched — and what they would drift on is how many of something a kitchen
  * is buying.
  *
- * <p>Three problems it solves, none of which is obvious from a stepper:
+ * <p>Four problems it solves, none of which is obvious from a stepper:
  *
  * <ul>
  *   <li><b>The cart is a round trip away.</b> A stepper that waits for one
@@ -27,6 +28,9 @@ import type { Intent, IntentItem } from '@/models/intent';
  *   <li><b>A burst of taps is one decision.</b> Four taps on "+" would race
  *       four requests to set the last value. The quantity is absolute rather
  *       than an increment, so only the final tap is worth sending.</li>
+ *   <li><b>Leaving the screen does not drop a tap.</b> A change still waiting
+ *       its turn is sent when the screen goes, not thrown away with its
+ *       timer.</li>
  *   <li><b>Zero is not a quantity.</b> It is the absence of the line, so it
  *       removes rather than writing a zero the server would have to interpret.</li>
  * </ul>
@@ -51,69 +55,50 @@ export function useCartQuantity(drafts: Intent[]) {
     return map;
   }, [drafts]);
 
-  const [desired, setDesired] = useState<Record<number, number>>({});
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  // The latest cart, for a commit that runs after the screen has gone: it must
+  // read what the cart says now, not what it said when the hook last rendered.
+  const inCartRef = useRef(inCart);
+  inCartRef.current = inCart;
+  const sessionRef = useRef({ accessToken, outletId });
+  sessionRef.current = { accessToken, outletId };
 
-  useEffect(() => {
-    const pending = timers.current;
-    return () => Object.values(pending).forEach(clearTimeout);
-  }, []);
-
-  const change = useMutation({
-    mutationFn: async ({ skuId, packs }: { skuId: number; packs: number }) => {
-      const line = inCart.get(skuId);
+  const edits = useDebouncedEdits(async (skuId, packs) => {
+    const { accessToken: token, outletId: outlet } = sessionRef.current;
+    const line = inCartRef.current.get(skuId);
+    try {
       if (line == null) {
         // The SKU decides which supplier, and therefore which request this
         // lands on. Packs, because that is what is being asked for.
-        return addIntentItem(accessToken as string, outletId as number, {
+        await addIntentItem(token as string, outlet as number, {
           supplierSkuId: skuId,
           quantity: String(packs),
         });
+      } else if (packs <= 0) {
+        await removeIntentItem(token as string, line.id);
+      } else {
+        await updateIntentItem(token as string, line.id, String(packs));
       }
-      return packs <= 0
-        ? removeIntentItem(accessToken as string, line.id)
-        : updateIntentItem(accessToken as string, line.id, String(packs));
-    },
-    onSuccess: async (_data, variables) => {
-      // Awaited, then released: dropping the local value before the cart has
-      // refetched would flash the old quantity for a frame.
-      await queryClient.invalidateQueries({ queryKey: draftsKey(outletId) });
-      setDesired((current) => {
-        const next = { ...current };
-        delete next[variables.skuId];
-        return next;
-      });
-    },
-    onError: (error, variables) => {
-      // Put the stepper back where the cart says it is, rather than leaving it
-      // showing a quantity the server refused.
-      setDesired((current) => {
-        const next = { ...current };
-        delete next[variables.skuId];
-        return next;
-      });
+    } catch (error) {
       // The server's own words. §23A.8: a refusal explains itself, and a
       // generic "something went wrong" is what makes a user try again.
       toast.show(
         error instanceof ApiError ? error.message : 'Could not update your cart.',
         'error',
       );
-    },
+    }
+    // Awaited, then released: dropping the held value before the cart has
+    // refetched would flash the old quantity for a frame. Also on failure, so
+    // the stepper goes back to where the cart says it is.
+    await queryClient.invalidateQueries({ queryKey: draftsKey(outlet) });
   });
 
-  const queueChange = useCallback((skuId: number, packs: number) => {
-    setDesired((current) => ({ ...current, [skuId]: packs }));
-    clearTimeout(timers.current[skuId]);
-    timers.current[skuId] = setTimeout(() => change.mutate({ skuId, packs }), 400);
-  }, [change]);
+  const queueChange = edits.set;
 
   /** What the stepper should show: the tapped value, else the cart's. */
   const packsFor = useCallback((skuId: number) => {
-    const held = desired[skuId];
-    if (held != null) return held;
     const line = inCart.get(skuId);
-    return line == null ? 0 : Number(line.requestedQuantity);
-  }, [desired, inCart]);
+    return edits.valueFor(skuId, line == null ? 0 : Number(line.requestedQuantity));
+  }, [edits, inCart]);
 
   /**
    * What this line comes to, as the server has it.
@@ -127,5 +112,5 @@ export function useCartQuantity(drafts: Intent[]) {
     return inCart.get(skuId)?.agreedLineTotal ?? null;
   }, [inCart]);
 
-  return { packsFor, queueChange, lineTotalFor, inCart };
+  return { packsFor, queueChange, lineTotalFor, inCart, flush: edits.flush };
 }

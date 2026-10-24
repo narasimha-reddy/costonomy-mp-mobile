@@ -29,6 +29,50 @@ export const IconSize = {
   hero: 40,
 } as const;
 
+/** Order tracker stepper geometry. */
+export const Tracker = {
+  dot: 12,
+  dotCurrent: 16,
+  halo: 28,
+} as const;
+
+export const AvatarSize = {
+  md: 44,
+  lg: 52,
+} as const;
+
+/** The buyer tracking screen (restyle). `TrackingLayout` stays for the supplier. */
+export const TrackLayout = {
+  headerBottomPad: 14,
+  pillHeight: 30,
+  mapHeight: 200,
+  mapHeightClose: 280,
+  /** Metres from the drop at which the map shows the arriving ring, and the reached ring. */
+  geofenceArriveM: 300,
+  geofenceReachM: 50,
+  /** The truck marker's square box (the truck turns inside it), in dp. */
+  truckSize: 44,
+} as const;
+
+/** The tracking screen: what sits above the sheet, and how far the sheet rides up over it. */
+export const TrackingLayout = {
+  topHeight: 300,
+  /** The same area as a tappable preview on an order's detail screen. */
+  previewHeight: 180,
+  sheetOverlap: 26,
+  grabWidth: 38,
+  grabHeight: 4,
+  segmentHeight: 5,
+  /** The call button's drawn size; it claims 44pt with a hit slop. */
+  callButton: 42,
+  illustrationIcon: 88,
+} as const;
+
+export const MapHeight = {
+  compact: 160,
+  full: 280,
+} as const;
+
 export const TouchTarget = {
   min: 44,
 } as const;

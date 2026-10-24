@@ -18,6 +18,8 @@ export const Duration = {
   normal: 250,
   /** Order-status timeline advance — slow enough to be noticed as a change. */
   slow: 400,
+  /** One breath of the current-step halo on the order tracker. */
+  pulse: 1200,
 } as const;
 
 export const Easing = {

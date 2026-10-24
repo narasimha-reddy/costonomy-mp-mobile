@@ -5,6 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
 import { useOutlet } from '@/contexts/OutletProvider';
 import { fetchOutletOrders } from '@/services/procurement';
+import { fetchOutletDeliveryRadar } from '@/services/delivery';
+import { deliveriesLabel } from '@/lib/delivery/deliveriesLabel';
+import { paymentLine } from '@/lib/payments/paymentLine';
+import { Ionicons } from '@expo/vector-icons';
 import type { SupplierOrder, SupplierOrderStatus as Status } from '@/models/procurement';
 import {
   MandiCard,
@@ -15,9 +19,11 @@ import {
   MandiText,
   toneColors,
 } from '@/components/common';
-import { resolveStatus, SupplierOrderStatus } from '@/models/status';
+import { buyerOrderStatus, resolveStatus, SupplierOrderStatus } from '@/models/status';
 import { OrderCardBody } from '@/components/order';
+import { ActiveOrderPill } from '@/components/delivery/ActiveOrderPill';
 import { RestaurantHeader } from '@/components/restaurant/RestaurantHeader';
+import { useLatestInFlight } from '@/hooks/useLatestInFlight';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
 /** REST-ORDERS-01. Doc 05 §15 — pending, active, completed, cancelled. */
@@ -42,6 +48,9 @@ const TABS: { key: Tab; label: string; statuses: Status[] }[] = [
   { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED'] },
 ];
 
+/** Room under the list for the pill that floats over it. */
+const BAR_CLEARANCE = 96;
+
 export default function OrdersScreen() {
   const router = useRouter();
   const { accessToken } = useSession();
@@ -54,6 +63,17 @@ export default function OrdersScreen() {
     enabled: outletId != null && accessToken != null,
   });
 
+  const inFlight = useLatestInFlight(outletId);
+
+  // The Deliveries screen's own default query (same key), so opening it starts from this; the count is the server's.
+  const radar = useQuery({
+    queryKey: ['outlet-delivery-radar', outletId, 'radar'],
+    queryFn: () => fetchOutletDeliveryRadar(accessToken as string, outletId as number),
+    enabled: outletId != null && accessToken != null,
+  });
+  // On the way and waiting for check-in, said apart: a delivered order is not "active" (flow review 4).
+  const deliveries = deliveriesLabel(radar.data?.summary);
+
   const orders = useMemo(() => {
     const statuses = TABS.find((t) => t.key === tab)?.statuses ?? [];
     return (query.data ?? []).filter((order) => statuses.includes(order.status));
@@ -61,9 +81,19 @@ export default function OrdersScreen() {
 
   return (
     <MandiScreen
-      header={<Header tab={tab} onTab={setTab} />}
+      header={<Header tab={tab} onTab={setTab} deliveries={deliveries} onDeliveries={() => router.push('/restaurant/deliveries')} />}
       onRefresh={() => query.refetch()}
       refreshing={query.isRefetching}
+      contentStyle={inFlight != null ? { paddingBottom: BAR_CLEARANCE } : undefined}
+      floating={inFlight != null ? (
+        <ActiveOrderPill
+          supplierName={inFlight.supplierName}
+          statusText={inFlight.statusText}
+          etaMins={inFlight.etaMins}
+          accessibilityLabel={inFlight.accessibilityLabel}
+          onPress={() => router.push(inFlight.href)}
+        />
+      ) : undefined}
     >
       {outletLoading || query.isPending ? (
         <MandiSkeletonList count={3} />
@@ -107,18 +137,35 @@ function OrderCard({ order, onPress }: { order: SupplierOrder; onPress: () => vo
         items={order.items}
         orderNumber={order.orderNumber}
         paymentMethod={order.paymentMethod}
-              createdAt={order.createdAt}
-        amount={order.totalAmount}
-        status={resolveStatus(SupplierOrderStatus, order.status)}
+        createdAt={order.createdAt}
+        amount={paymentLine(order).amount}
+        status={buyerOrderStatus(order.status, order.deliveryMode)}
       />
     </MandiCard>
   );
 }
 
-function Header({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
+function Header({ tab, onTab, deliveries, onDeliveries }: {
+  tab: Tab;
+  onTab: (tab: Tab) => void;
+  deliveries: { text: string; accessibilityLabel: string };
+  onDeliveries: () => void;
+}) {
   return (
     <View style={styles.header}>
       <RestaurantHeader screen="REST-ORDERS-01" subtitle="Orders" />
+      <Pressable
+        onPress={onDeliveries}
+        accessibilityRole="button"
+        accessibilityLabel={deliveries.accessibilityLabel}
+        style={styles.deliveries}
+      >
+        <Ionicons name="bicycle-outline" size={18} color={Colors.primaryDark} />
+        <MandiText variant="captionEmphasis" color={Colors.primaryDark}>
+          {deliveries.text}
+        </MandiText>
+        <Ionicons name="chevron-forward" size={16} color={Colors.primaryDark} />
+      </Pressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {TABS.map((option) => {
           const active = option.key === tab;
@@ -146,6 +193,17 @@ function Header({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
 
 const styles = StyleSheet.create({
   header: { gap: Spacing.sm, paddingBottom: Spacing.sm },
+  deliveries: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: Spacing.xs,
+    marginHorizontal: Spacing.screenHorizontal,
+    paddingHorizontal: Spacing.md,
+    minHeight: TouchTarget.min - 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryLight,
+  },
   tabs: { paddingHorizontal: Spacing.screenHorizontal, gap: Spacing.sm },
   tab: {
     paddingHorizontal: Spacing.lg,

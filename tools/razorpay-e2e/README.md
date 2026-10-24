@@ -32,7 +32,7 @@ payments and ₹10 refunds in the Razorpay account it runs against.
 ```bash
 cd tools/razorpay-e2e
 npm install
-npm test              # all 31, about ten minutes
+npm test              # all 32, about twelve minutes
 node suite.js F       # only cases whose id starts with F
 HEADED=1 node suite.js C1   # watch it in a visible window
 ```
@@ -73,11 +73,18 @@ Razorpay's window → test card → demo bank or OTP.
 | W3 | Valid webhook delivered twice | 200 both; stored once; ledger unmoved |
 | W4 | Signed webhook with no event id | 400 malformed |
 | W5 | Webhook for a payment we never made | 200; stored `IGNORED` |
-| R1 | Refund without `Idempotency-Key` | refused |
-| R2 | Refund with an unknown reason | 400 |
-| R3 | Refund more than captured | refused; nothing at Razorpay |
-| R4 | Same refund key sent twice | one refund at Razorpay |
-| R5 | Refund on an uncaptured payment | 409 |
+| R1 | Restaurant asks for a refund on a dispute, **in the app** | request REQUESTED; nothing at Razorpay |
+| R2 | Supplier approves it, **in the app** | wallet credited, refund `destination = WALLET`, supplier deduction recorded; still nothing at Razorpay (API D-104) |
+| R3 | Restaurant withdraws ₹20 to the card, **in the app** | a Razorpay refund on each payment the money came from — oldest refund first, so on a wallet left over from an earlier run, not necessarily C1's; `refunded_amount` unchanged (counted once); statement shows "Sent" |
+| R4 | Withdrawal with one key sent twice; more than was refunded; no key | one Razorpay refund; 400; 400 |
+| R5 | The old self-refund endpoint | 404/405; nothing at Razorpay |
+| R6 | Asking beyond the supplier's payout, twice, or before delivery | 400; 409 `REFUND_ALREADY_REQUESTED`; 409 |
+
+R1–R6 build on C1's paid order: it is received (a pickup order completes from
+"ready") and a dispute is raised through the API, then the screens take over. Run
+them with it: `node suite.js C1,R`. The seed supplier keeps shop hours, so outside
+them order creation is refused with SUPPLIER_OFFLINE — open store 1 round the
+clock in the local database for an evening run.
 
 Webhook cases sign with the configured webhook secret, in Razorpay's payload
 shape, with the event id in `X-Razorpay-Event-Id` — Razorpay itself cannot reach

@@ -32,10 +32,12 @@ import { ApiError } from '@/lib/api/errors';
 import { formatMoney } from '@/utils/money';
 import { track } from '@/analytics';
 import { Colors, Elevation, Radius, Spacing, TouchTarget } from '@/theme';
+import { radioProps } from '@/lib/a11y';
 
 const SCREEN = 'SUP-CATALOG-02';
 const STEPS = ['Choose the product', 'Pack and price'];
 const GST_RATES = ['0', '5', '12', '18'];
+const STANDARD_GRADES = ['Grade A', 'Grade B', 'Grade C', 'Premium', 'Standard'];
 
 /** Big enough to hold the whole catalog in one call; the server pages at 20. */
 const PAGE_SIZE = 200;
@@ -72,9 +74,11 @@ export default function NewSkuScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [name, setName] = useState('');
   const [brandName, setBrandName] = useState('');
+  const [grade, setGrade] = useState('');
   const [skuCode, setSkuCode] = useState('');
   const [packSize, setPackSize] = useState('1');
   const [packUnit, setPackUnit] = useState('KG');
+  const [mrp, setMrp] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [gstRate, setGstRate] = useState('5');
   const [measureValue, setMeasureValue] = useState('');
@@ -192,12 +196,16 @@ export default function NewSkuScreen() {
     setStep(1);
   }
 
+  // Declared before the mutation below, whose callbacks read it (no-tdz).
+  const needsMeasure = (units.data?.requiresMeasure ?? []).includes(packUnit);
+
   const create = useMutation({
     mutationFn: () =>
       createSku(accessToken as string, storeId as number, {
         canonicalProductId: (product as Product).id,
         name: name.trim(),
         brandName: brandName.trim() || undefined,
+        grade: grade.trim() || undefined,
         skuCode: skuCode.trim() || undefined,
         packSize: packSize.trim(),
         packUnit,
@@ -205,6 +213,7 @@ export default function NewSkuScreen() {
         // measure on a unit that already states an amount.
         measureValue: needsMeasure ? measureValue.trim() : undefined,
         measureUnit: needsMeasure ? measureUnit : undefined,
+        mrp: mrp.trim() ? mrp.trim() : undefined,
         sellingPrice: sellingPrice.trim(),
         gstRate,
         imageUrl: imageUrl.trim() || undefined,
@@ -235,7 +244,6 @@ export default function NewSkuScreen() {
 
   const priceValid = Number(sellingPrice) > 0;
   const packValid = Number(packSize) > 0;
-  const needsMeasure = (units.data?.requiresMeasure ?? []).includes(packUnit);
   // A container with no contents is a listing nobody can compare, so it cannot
   // be saved — the server refuses it, and the button should not offer it.
   const measureValid = !needsMeasure || (Number(measureValue) > 0 && measureUnit !== '');
@@ -263,7 +271,7 @@ export default function NewSkuScreen() {
               </MandiText>
             </View>
             <MandiButton
-              label="Add To Catalog"
+              label="Add to catalog"
               size="lg"
               disabled={!canSave}
               loading={create.isPending}
@@ -406,6 +414,27 @@ export default function NewSkuScreen() {
             placeholder="Amul"
           />
 
+          <View style={styles.gradeSection}>
+            <MandiText variant="label">Grade (optional)</MandiText>
+            <View style={styles.chips}>
+              {STANDARD_GRADES.map((g) => (
+                <Chip
+                  key={g}
+                  label={g}
+                  active={grade === g}
+                  onPress={() => setGrade(grade === g ? '' : g)}
+                />
+              ))}
+            </View>
+            <MandiFormField
+              label="Custom grade (if not above)"
+              value={STANDARD_GRADES.includes(grade) ? '' : grade}
+              onChangeText={setGrade}
+              placeholder="e.g. Export Grade"
+              hint="Useful for commodities: Grade A, Grade B, Premium, etc."
+            />
+          </View>
+
           <PackFields
             packSize={packSize}
             onPackSize={setPackSize}
@@ -417,6 +446,23 @@ export default function NewSkuScreen() {
             onMeasureUnit={setMeasureUnit}
             units={units.data}
           />
+
+          <MandiFormField
+            label="MRP (optional for loose items)"
+            value={mrp}
+            onChangeText={(text) => setMrp(text.replace(/[^\d.]/g, ''))}
+            placeholder="500"
+            keyboardType="decimal-pad"
+            hint="Printed maximum retail price. Leave empty for loose/unbranded commodities."
+          />
+          {Number(mrp) > Number(sellingPrice) && Number(sellingPrice) > 0 && (
+            <View style={styles.discountPreview}>
+              <Ionicons name="pricetag-outline" size={14} color="#E65100" />
+              <MandiText variant="captionEmphasis" color="#E65100">
+                Buyer savings: {Math.round(((Number(mrp) - Number(sellingPrice)) / Number(mrp)) * 100)}% OFF (Save ₹{(Number(mrp) - Number(sellingPrice)).toFixed(2)})
+              </MandiText>
+            </View>
+          )}
 
           <MandiFormField
             label="Selling price"
@@ -646,7 +692,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
     <Pressable
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityState={{ selected: active }}
+      {...radioProps(active)}
       style={[styles.chip, active && styles.chipActive]}
     >
       <MandiText variant="captionEmphasis" color={active ? Colors.primary : Colors.textSecondary}>
@@ -713,4 +759,17 @@ const styles = StyleSheet.create({
   },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   preview: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  gradeSection: { gap: Spacing.xs },
+  discountPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.sm,
+    backgroundColor: '#FFF3E0',
+    alignSelf: 'flex-start',
+    marginTop: -Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
 });

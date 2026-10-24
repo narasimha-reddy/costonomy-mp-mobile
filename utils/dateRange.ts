@@ -101,6 +101,14 @@ export function formatMoment(iso: string | null | undefined, now = new Date()): 
   return when == null ? '—' : `${absolute(when)} (${relative(when, now)})`;
 }
 
+/** Just the day, `4th Oct 2026`, or null when the value is missing or not a date. */
+export function formatDay(iso: string | null | undefined): string | null {
+  const when = parseMoment(iso);
+  if (when == null) return null;
+  const day = when.getDate();
+  return `${day}${ORDINALS[day] ?? 'th'} ${MONTHS[when.getMonth()]} ${when.getFullYear()}`;
+}
+
 /** A day, in milliseconds. */
 const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MandiCard, MandiStatusChip, MandiText } from '@/components/common';
+import { DisputeStatusChip } from './DisputeStatusChip';
 import type { Dispute } from '@/models/trust';
 import { refundCopy, type RefundViewer } from '@/lib/disputes/refundCopy';
 import { categoryLabel } from '@/lib/disputes/categories';
@@ -27,11 +28,7 @@ export function DisputeListItem({
     <MandiCard onPress={onPress}>
       <View style={styles.row}>
         <MandiText variant="bodyEmphasis">{dispute.disputeNumber}</MandiText>
-        <MandiStatusChip
-          label={dispute.status.replace(/_/g, ' ').toLowerCase()}
-          tone={dispute.status === 'RESOLVED' ? 'success' : dispute.status === 'REJECTED' ? 'neutral' : 'pending'}
-          size="sm"
-        />
+        <DisputeStatusChip status={dispute.status} />
       </View>
       <MandiText variant="caption" color={Colors.textSecondary}>
         Order {dispute.orderNumber} · {categoryLabel(dispute.category)} ·{' '}

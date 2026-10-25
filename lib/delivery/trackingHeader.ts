@@ -17,7 +17,7 @@ import type { MapMode } from '@/components/delivery/MandiMapSketch';
 export type { MapMode };
 
 export type BuyerTrackState = 'draft' | 'placed' | 'preparing' | 'searching' | 'partner_changed' | 'no_partner'
-  | 'assigned' | 'at_pickup' | 'on_the_way' | 'arriving' | 'reached' | 'delivered' | 'completed' | 'failed'
+  | 'assigned' | 'at_pickup' | 'on_the_way' | 'arriving' | 'reached' | 'delivered' | 'completed' | 'failed' | 'review'
   | 'cancelled' | 'own_ready' | 'own_on_the_way' | 'pickup_ready';
 
 export interface BuyerTrackHeader {
@@ -47,7 +47,9 @@ const COPY = {
   draft: 'Payment incomplete',
   draftPill: (supplier: string) => `Pay to send this order to ${supplier}`,
   failed: 'Delivery didn\'t go through',
-  failedPill: 'Your supplier and our team have been told.',
+  failedPill: 'Your supplier and our team have been told. We will update this page when it is sorted out; you do not need to do anything.',
+  review: 'We\'re checking on your delivery',
+  reviewPill: 'Our team is on it and this page updates by itself. You do not need to do anything.',
   pickupReady: 'Ready to collect',
   pickupPill: (where: string) => `Pick up from ${where}`,
   ownReady: 'Packed and ready',
@@ -167,6 +169,10 @@ export function buyerTrackingHeader(i: {
   }
   if (dStatus === 'DELIVERY_FAILED') {
     return out('failed', COPY.failed, { ...neutral, pill: pill(COPY.failedPill, 'warning') });
+  }
+  // Our team is confirming a booking's outcome. Not a failure, and nothing the restaurant can do.
+  if (delivery?.underReview === true && dStatus !== 'CANCELLED') {
+    return out('review', COPY.review, { ...neutral, pill: pill(COPY.reviewPill, 'warning') });
   }
   if (kind === 'pickup' && oStatus === 'READY_FOR_PICKUP') {
     return out('pickup_ready', COPY.pickupReady, { pill: pill(COPY.pickupPill(order.storeName ?? supplier)) });

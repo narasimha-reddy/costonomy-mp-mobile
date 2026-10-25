@@ -19,6 +19,9 @@ const FILES = [
   'components/delivery/PartnerSearchPanel.tsx',
   'components/request/DeliveryModePicker.tsx',
   'components/request/DeliveryOfferChoice.tsx',
+  'app/supplier/settlements/delivery-funding.tsx',
+  'lib/deliveryFunding/display.ts',
+  'lib/deliveryFunding/payFlow.ts',
   'app/restaurant/cart.tsx',
   'app/supplier/settings/store/[id].tsx',
 ];

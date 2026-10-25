@@ -56,7 +56,16 @@ describe('buyerTrackingHeader state matrix', () => {
   it('failed', () => {
     expect(head(order(C, 'OUT_FOR_DELIVERY'), delivery('DELIVERY_FAILED'))).toMatchObject({
       state: 'failed', title: 'Delivery didn\'t go through', tone: 'neutral', map: 'none', partner: 'none',
-      pill: { text: 'Your supplier and our team have been told.', tone: 'warning' },
+      pill: {
+        text: 'Your supplier and our team have been told. We will update this page when it is sorted out; you do not need to do anything.',
+        tone: 'warning',
+      },
+    });
+  });
+  it('review: our team is checking a booking, and the restaurant is told there is nothing to do', () => {
+    expect(head(order(C, 'READY_FOR_PICKUP'), delivery('PROVIDER_UNAVAILABLE', { underReview: true }))).toMatchObject({
+      state: 'review', title: 'We\'re checking on your delivery',
+      pill: { text: 'Our team is on it and this page updates by itself. You do not need to do anything.', tone: 'warning' },
     });
   });
   it('pickup_ready', () => {

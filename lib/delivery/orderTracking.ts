@@ -264,7 +264,8 @@ export function orderTrackingView(input: {
   const delivered = dStatus === 'DELIVERED' || oStatus === 'DELIVERED';
   const completed = oStatus === 'COMPLETED';
   const failed = dStatus === 'DELIVERY_FAILED';
-  const retryable = canRetryPartner(delivery?.mode, dStatus);
+  const retryable = canRetryPartner(delivery?.mode, dStatus, delivery?.underReview);
+  const underReview = delivery?.underReview === true && !failed && dStatus !== 'DELIVERED' && dStatus !== 'CANCELLED';
   // A supplier delivering it themselves has a delivery row too (the supplier is the "driver"), but no partner to
   // introduce, no ETA to promise and no map: those are Costonomy-delivery things.
   const partnerPhase = kind !== 'own' && dStatus != null && PARTNER_PHASE.has(dStatus);
@@ -312,9 +313,23 @@ export function orderTrackingView(input: {
         tone: 'success',
       };
   } else if (failed) {
+    const reason = delivery?.failureReason ? partnerWording(delivery.failureReason) : null;
     copy = buyer
-      ? { headline: 'Delivery didn\'t go through', subline: 'Your supplier and our team have been told.', tone: 'danger' }
-      : { headline: 'Delivery failed', subline: delivery?.failureReason ? partnerWording(delivery.failureReason) : null, tone: 'danger' };
+      ? {
+        headline: 'Delivery didn\'t go through',
+        subline: 'Your supplier and our team have been told. We will update this page when it is sorted out; you do not need to do anything.',
+        tone: 'danger',
+      }
+      : {
+        headline: 'Delivery failed',
+        subline: `${reason ? `${reason} ` : ''}Our team is resolving this. Please do not arrange another delivery partner; this page updates when it is settled.`,
+        tone: 'danger',
+      };
+  } else if (underReview) {
+    // A booking's outcome is being confirmed. Not a failure, and no retry: another partner could mean two couriers.
+    copy = buyer
+      ? { headline: 'We\'re checking on your delivery', subline: 'Our team is on it and this page updates by itself. You do not need to do anything.', tone: 'warning' }
+      : { headline: 'Delivery under review', subline: 'We are confirming this delivery partner\'s booking. Please do not book another delivery partner; this page updates by itself.', tone: 'warning' };
   } else if (partnerChanged) {
     search = 'indeterminate';
     copy = { headline: 'Finding a new delivery partner', subline: 'Usually takes 2 to 5 mins', tone: 'warning' };

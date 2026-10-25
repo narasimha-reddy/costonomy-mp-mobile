@@ -34,12 +34,12 @@ export function partnerAwaitPhase(input: {
 
 /** The delivery query's refetch interval: fast while empty and expected, the normal follow-along otherwise. */
 export function deliveryPollMs(
-  found: { mode: string; status: string } | null | undefined,
+  found: { mode: string; status: string; underReview?: boolean } | null | undefined,
   awaiting: boolean,
   timedOut: boolean,
 ): number | false {
   if (found == null) return awaiting ? (timedOut ? TRACK_POLL_MS : FIND_POLL_MS) : false;
   return found.mode !== 'SUPPLIER_OWN'
-    && (canRetryPartner(found.mode, found.status) || found.status === 'DELIVERY_REQUESTED'
+    && (canRetryPartner(found.mode, found.status, found.underReview) || found.status === 'DELIVERY_REQUESTED'
       || found.status === 'PROVIDER_SELECTED') ? TRACK_POLL_MS : false;
 }

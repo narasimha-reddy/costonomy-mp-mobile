@@ -34,7 +34,7 @@ export function TrackingCards({
   switching?: boolean;
 }) {
   const buyer = audience === 'buyer';
-  const stopped = delivery != null && canRetryPartner(delivery.mode, delivery.status);
+  const stopped = delivery != null && canRetryPartner(delivery.mode, delivery.status, delivery.underReview);
   const showSearch = view.search != null || (!buyer && stopped);
   const partnerName = delivery?.driverName ?? null;
 

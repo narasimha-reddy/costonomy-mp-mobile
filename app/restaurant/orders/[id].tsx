@@ -1,3 +1,4 @@
+import { REVIEW_POLL_MS } from '@/lib/delivery/trackingPoll';
 import { paymentStatusCopy } from '@/lib/payments/statusLabel';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -39,7 +40,8 @@ import { Colors, IconSize, Spacing, TouchTarget } from '@/theme';
 
 const ACTIVE_POLL_MS = 15_000;
 const ENDED_ORDER = ['COMPLETED', 'CANCELLED'];
-const ENDED_DELIVERY = ['DELIVERED', 'CANCELLED', 'DELIVERY_FAILED'];
+/** Over for good. A failed delivery is not: our team resolves it, and this screen has to hear how (API D-206). */
+const ENDED_DELIVERY = ['DELIVERED', 'CANCELLED'];
 /** Statuses from which a delivery can exist. A DRAFT or CANCELLED order never has one, so asking would only 404. */
 const DELIVERY_POSSIBLE = ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'];
 
@@ -90,6 +92,7 @@ export default function OrderDetailScreen() {
     refetchInterval: (q) => {
       const status = q.state.data?.status;
       if (status != null && ENDED_DELIVERY.includes(status)) return false;
+      if (status === 'DELIVERY_FAILED' || q.state.data?.underReview === true) return REVIEW_POLL_MS;
       const orderStatus = order?.status;
       if (status == null && orderStatus != null && ENDED_ORDER.includes(orderStatus)) return false;
       return ACTIVE_POLL_MS;

@@ -80,6 +80,12 @@ export default function SupplierMoreScreen() {
           onPress={() => router.push('/supplier/settlements')}
         />
         <Row
+          icon="bicycle-outline"
+          title="Delivery charges"
+          subtitle="Your share of deliveries you pay for, what you owe and what you have paid"
+          onPress={() => router.push('/supplier/settlements/delivery-funding' as any)}
+        />
+        <Row
           icon="chatbubbles-outline"
           title="Disputes"
           subtitle="Problems restaurants raised, and refunds waiting for your answer"

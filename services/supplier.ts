@@ -486,6 +486,12 @@ export interface DeliveryPolicy {
   freeDeliveryThreshold?: Money | null;
   /** Null means no limit beyond the platform's own serviceability. */
   maxDeliveryRadiusKm: Money | null;
+  /**
+   * The supplier pays the rider on orders at or over `freeDeliveryThreshold`, up to `fundedDeliveryCap` (D-203).
+   * Absent from an older server means off, which is the server's default too.
+   */
+  fundCostonomyDelivery?: boolean;
+  fundedDeliveryCap?: Money | null;
 }
 
 export function fetchDeliveryPolicy(token: string, storeId: number): Promise<DeliveryPolicy> {
@@ -504,6 +510,8 @@ export function saveDeliveryPolicy(
     minOrderValue?: string | null;
     freeDeliveryThreshold?: string | null;
     maxDeliveryRadiusKm?: string | null;
+    fundCostonomyDelivery?: boolean;
+    fundedDeliveryCap?: string | null;
   },
 ): Promise<DeliveryPolicy> {
   return apiRequest<DeliveryPolicy>(

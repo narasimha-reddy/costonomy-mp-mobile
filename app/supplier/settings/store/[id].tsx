@@ -114,6 +114,12 @@ export default function StoreDetailScreen() {
   const [ownFee, setOwnFee] = useState<string | null>(null);
   const [ownMin, setOwnMin] = useState<string | null>(null);
   const [radius, setRadius] = useState<string | null>(null);
+  // The store-wide thresholds and the supplier-funded rider (D-203). The server saves the policy whole, so every one of
+  // these is sent on every save: leaving them out would reset the minimum, clear the threshold and switch funding off.
+  const [storeMin, setStoreMin] = useState<string | null>(null);
+  const [freeFrom, setFreeFrom] = useState<string | null>(null);
+  const [fund, setFund] = useState<boolean | null>(null);
+  const [fundCap, setFundCap] = useState<string | null>(null);
 
   const [creditOn, setCreditOn] = useState<boolean | null>(null);
   const [creditLimit, setCreditLimit] = useState<string | null>(null);
@@ -151,6 +157,13 @@ export default function StoreDetailScreen() {
     ? String(Number(delivery.data.ownDeliveryMinOrderValue)) : '');
   const radiusValue = radius ?? (delivery.data?.maxDeliveryRadiusKm != null
     ? String(Number(delivery.data.maxDeliveryRadiusKm)) : '');
+  const storeMinValue = storeMin ?? (delivery.data?.minOrderValue != null && Number(delivery.data.minOrderValue) > 0
+    ? String(Number(delivery.data.minOrderValue)) : '');
+  const freeFromValue = freeFrom ?? (delivery.data?.freeDeliveryThreshold != null
+    ? String(Number(delivery.data.freeDeliveryThreshold)) : '');
+  const fundValue = fund ?? delivery.data?.fundCostonomyDelivery ?? false;
+  const fundCapValue = fundCap ?? (delivery.data?.fundedDeliveryCap != null
+    ? String(Number(delivery.data.fundedDeliveryCap)) : '');
 
   const creditOnValue = creditOn ?? credit.data?.creditEnabled ?? false;
   const creditLimitValue = creditLimit ?? (credit.data?.defaultCreditLimit != null
@@ -162,7 +175,7 @@ export default function StoreDetailScreen() {
 
   const touched = [
     name, line1, line2, city, stateName, pincode, contactName, contactPhone, prep, hours, pin,
-    own, partner, ownFee, ownMin, radius,
+    own, partner, ownFee, ownMin, radius, storeMin, freeFrom, fund, fundCap,
     creditOn, creditLimit, creditDays, graceDays, autoReminders,
   ].some((value) => value !== null) || location.coordinates != null;
 
@@ -183,6 +196,10 @@ export default function StoreDetailScreen() {
     : hoursValue.days.length === 0 ? 'Choose at least one day you trade on.'
     : normaliseHours(hoursValue).problem != null ? normaliseHours(hoursValue).problem
     : !ownValue && !partnerValue ? 'Choose at least one way to deliver.'
+    // The server refuses each of these when paying for the rider is on (D-203), so the button waits.
+    : fundValue && !partnerValue ? 'Turn on Costonomy delivery to pay for it.'
+    : fundValue && !(Number(freeFromValue) > 0) ? 'Set the order value from which delivery is free before paying for it.'
+    : fundValue && !(Number(fundCapValue) > 0) ? 'Set the most you will pay towards one delivery.'
     : null;
 
   const save = useMutation({
@@ -210,6 +227,10 @@ export default function StoreDetailScreen() {
         ownDeliveryFee: ownFeeValue.trim() || '0',
         ownDeliveryMinOrderValue: ownMinValue.trim() || null,
         maxDeliveryRadiusKm: radiusValue.trim() || null,
+        minOrderValue: storeMinValue.trim() || null,
+        freeDeliveryThreshold: freeFromValue.trim() || null,
+        fundCostonomyDelivery: fundValue,
+        fundedDeliveryCap: fundValue ? fundCapValue.trim() || null : null,
       });
 
       await saveCreditPolicy(accessToken as string, storeId, {
@@ -248,6 +269,7 @@ export default function StoreDetailScreen() {
     setName(null); setLine1(null); setLine2(null); setCity(null); setStateName(null);
     setPincode(null); setContactName(null); setContactPhone(null); setPrep(null); setHours(null);
     setOwn(null); setPartner(null); setOwnFee(null); setOwnMin(null); setRadius(null);
+    setStoreMin(null); setFreeFrom(null); setFund(null); setFundCap(null);
     setCreditOn(null); setCreditLimit(null); setCreditDays(null); setGraceDays(null); setAutoReminders(null);
     setPin(null);
   }
@@ -435,6 +457,45 @@ export default function StoreDetailScreen() {
               value={partnerValue}
               onValueChange={setPartner}
             />
+            <View style={styles.pair}>
+              <MandiFormField
+                label="Minimum order"
+                value={storeMinValue}
+                onChangeText={(text) => setStoreMin(text.replace(/[^\d.]/g, ''))}
+                keyboardType="decimal-pad"
+                placeholder="None"
+                hint="Restaurants cannot check out below this."
+                style={styles.flex}
+              />
+              <MandiFormField
+                label="Free delivery from"
+                value={freeFromValue}
+                onChangeText={(text) => setFreeFrom(text.replace(/[^\d.]/g, ''))}
+                keyboardType="decimal-pad"
+                placeholder="Never"
+                hint="Order value, before GST."
+                style={styles.flex}
+              />
+            </View>
+            {partnerValue ? (
+              <>
+                <Toggle
+                  label="Pay for delivery on big orders"
+                  hint="From the free-delivery value up, you pay the delivery partner up to a limit you set, taken from your payout or paid by you. The restaurant pays the rest."
+                  value={fundValue}
+                  onValueChange={setFund}
+                />
+                {fundValue ? (
+                  <MandiFormField
+                    label="Most you pay for one delivery"
+                    value={fundCapValue}
+                    onChangeText={(text) => setFundCap(text.replace(/[^\d.]/g, ''))}
+                    keyboardType="decimal-pad"
+                    hint="If the delivery costs more, the restaurant pays the difference. If it costs less, you pay only what it cost."
+                  />
+                ) : null}
+              </>
+            ) : null}
             <Toggle
               label="Your own delivery"
               hint="You carry it yourself and set the fee."

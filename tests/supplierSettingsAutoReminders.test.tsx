@@ -112,4 +112,34 @@ describe('Automatic reminders setting', () => {
     await waitFor(() => expect(saveCreditPolicy).toHaveBeenCalled());
     expect((saveCreditPolicy as jest.Mock).mock.calls[0][2]).not.toHaveProperty('autoRemindersEnabled');
   });
+
+  it('sends the store thresholds and the rider-funding choice back on every save, since the server saves the policy whole', async () => {
+    (fetchDeliveryPolicy as jest.Mock).mockResolvedValue({
+      ownDeliveryEnabled: false, costonomyDeliveryEnabled: true, ownDeliveryFee: '0', ownDeliveryMinOrderValue: null,
+      maxDeliveryRadiusKm: null, minOrderValue: '500.0000', freeDeliveryThreshold: '2000.0000',
+      fundCostonomyDelivery: true, fundedDeliveryCap: '60.0000',
+    });
+    renderScreen();
+    await sw();
+    fireEvent.changeText(screen.getByDisplayValue('30'), '45');
+    await act(async () => { fireEvent.press(screen.getByText('Save changes')); });
+    await waitFor(() => expect(saveDeliveryPolicy).toHaveBeenCalled());
+    expect((saveDeliveryPolicy as jest.Mock).mock.calls[0][2]).toEqual(expect.objectContaining({
+      minOrderValue: '500', freeDeliveryThreshold: '2000', fundCostonomyDelivery: true, fundedDeliveryCap: '60',
+    }));
+  });
+
+  it('will not save paying for the rider without a free-delivery value and a cap, which the server would refuse', async () => {
+    (fetchDeliveryPolicy as jest.Mock).mockResolvedValue({
+      ownDeliveryEnabled: false, costonomyDeliveryEnabled: true, ownDeliveryFee: '0', ownDeliveryMinOrderValue: null,
+      maxDeliveryRadiusKm: null, minOrderValue: '0', freeDeliveryThreshold: null,
+      fundCostonomyDelivery: true, fundedDeliveryCap: null,
+    });
+    renderScreen();
+    await sw();
+    fireEvent.changeText(screen.getByDisplayValue('30'), '45');
+    expect(await screen.findByText('Set the order value from which delivery is free before paying for it.')).toBeTruthy();
+    await act(async () => { fireEvent.press(screen.getByText('Save changes')); });
+    expect(saveDeliveryPolicy).not.toHaveBeenCalled();
+  });
 });

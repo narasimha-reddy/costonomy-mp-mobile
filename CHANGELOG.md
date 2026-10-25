@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [phase6/delivery-failure-recovery] - A failed delivery shows what happens next and keeps updating (API D-206)
+#### Fixed
+- A `DELIVERY_FAILED` delivery was treated as over: the order screens stopped refreshing, so a delivery our team marked delivered or cancelled still showed as failed. They now keep refreshing every 30 s until the server reports `DELIVERED` or `CANCELLED`.
+- A failed delivery now tells the restaurant what happens next ("we will update this page; you do not need to do anything") and tells the supplier that our team is resolving it and not to arrange another delivery partner.
+#### Added
+- A delivery the API marks `underReview` (a booking whose outcome is being confirmed) shows "We're checking on your delivery" / "Delivery under review" and offers no retry, no "request a delivery partner" and no "I will deliver it myself": any of them could put a second partner on the same order.
+
+### [phase6/supplier-delivery-funding] - A supplier can set, see and pay their share of delivery (API D-203, D-204)
+#### Added
+- Store settings: the minimum order, the free-delivery value, "Pay for delivery on big orders" and its cap. Paying needs Costonomy delivery, a free-delivery value and a cap, so Save waits until they are set (the API refuses otherwise).
+- More > Money > Delivery charges (`/supplier/settlements/delivery-funding`): what is owed, paid by you, taken from payouts and waived, as separate totals from `/delivery-funding/summary`; every charge in every state from `/history`, filterable, each saying what happens next from the server's `nextAction`. **Pay now** opens the gateway for a charge the server says can be paid; a credit order, which is never settled, can only be paid this way. A payment that has been made is never reported as failed: slow or unclear confirming reads "we're confirming your payment", and a closed window is quiet.
+#### Fixed
+- Saving store settings no longer resets the store minimum, clears the free-delivery value and switches supplier-funded delivery off. The API saves the delivery policy whole, and the app was leaving those fields out.
+
 ### [phase6/mobile-sandbox-auto-advance] - Test mode says when the delivery moves on its own (API D-196)
 #### Changed
 - The supplier's Test mode card says "The simulator also advances this delivery automatically, every N s" only when the API reports the interval (`sandboxAutoAdvanceSeconds`); with automatic moves off it no longer claims they happen.

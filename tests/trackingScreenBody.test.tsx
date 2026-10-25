@@ -1,6 +1,6 @@
 import React from 'react';
 import { Linking } from 'react-native';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MandiToastProvider } from '@/components/common';
@@ -56,7 +56,7 @@ function setup(audience: 'buyer' | 'supplier') {
     </SafeAreaProvider>
   );
   const view = render(tree());
-  return { ...view, again: () => view.rerender(tree()) };
+  return { ...view, client, again: () => view.rerender(tree()) };
 }
 
 beforeEach(() => {
@@ -304,5 +304,83 @@ describe('TrackingScreenBody', () => {
     fireEvent.press(await screen.findByText('Help'));
     await waitFor(() => expect(openThread).toHaveBeenCalledWith('token', 1, 2));
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/chat/77?suggestType=ORDER&suggestId=5'));
+  });
+
+  describe('a failed delivery is not the end of the screen (API D-206)', () => {
+    const failed = { ...delivery, status: 'DELIVERY_FAILED', failureReason: 'Customer unreachable', underReview: true, canSwitchToOwn: false };
+
+    /** The refetch interval the delivery query was given on its latest render, asked the way react-query asks it. */
+    const deliveryInterval = (data: unknown) => {
+      const calls = mockUseQuery.mock.calls.filter(([o]: any[]) => o.refetchInterval && String(o.queryKey).includes('delivery'));
+      return calls[calls.length - 1][0].refetchInterval({ state: { data } });
+    };
+
+    it('tells the restaurant what happens next, offers nothing to do, and keeps listening', async () => {
+      (fetchDelivery as jest.Mock).mockResolvedValue(failed);
+      setup('buyer');
+      expect((await screen.findAllByText("Delivery didn't go through")).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/you do not need to do anything/i).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/Customer unreachable|secret/)).toBeNull();
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(screen.queryByText('I will deliver it myself')).toBeNull();
+      expect(deliveryInterval(failed)).toBe(30_000);
+    });
+
+    it('tells the supplier our team is resolving it and not to send another courier, with no retry', async () => {
+      (fetchDelivery as jest.Mock).mockResolvedValue(failed);
+      setup('supplier');
+      expect(await screen.findByText('Delivery failed')).toBeTruthy();
+      expect(screen.getAllByText(/Please do not arrange another delivery partner/).length).toBeGreaterThan(0);
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(screen.queryByText('I will deliver it myself')).toBeNull();
+      expect(screen.queryByText('Request delivery partner')).toBeNull();
+    });
+
+    it('a booking whose outcome is being confirmed offers no retry that could book a second courier', async () => {
+      (reassignDelivery as jest.Mock).mockClear();
+      (switchToOwnDelivery as jest.Mock).mockClear();
+      (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'READY_FOR_PICKUP' });
+      (fetchDelivery as jest.Mock).mockResolvedValue({
+        ...delivery, status: 'PROVIDER_UNAVAILABLE', driverName: null, trackable: false, underReview: true, canSwitchToOwn: true,
+      });
+      setup('supplier');
+      expect((await screen.findAllByText('Delivery under review')).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/do not book another delivery partner/).length).toBeGreaterThan(0);
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(screen.queryByText('I will deliver it myself')).toBeNull();
+      expect(reassignDelivery).not.toHaveBeenCalled();
+      expect(switchToOwnDelivery).not.toHaveBeenCalled();
+    });
+
+    it('when our team marks it delivered, the same screen updates to the receipt', async () => {
+      (fetchDelivery as jest.Mock).mockResolvedValue(failed);
+      const view = setup('buyer');
+      expect((await screen.findAllByText("Delivery didn't go through")).length).toBeGreaterThan(0);
+
+      (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'DELIVERED' });
+      (fetchDelivery as jest.Mock).mockResolvedValue({
+        ...delivery, status: 'DELIVERED', deliveredAt: '2026-01-01T10:10:00', underReview: false, failureReason: null,
+      });
+      await act(async () => { await view.client.invalidateQueries({ queryKey: ['supplier-order', 5] }); });
+
+      await waitFor(() => expect(screen.queryByText("Delivery didn't go through")).toBeNull());
+      expect(screen.queryByText(/you do not need to do anything/i)).toBeNull();
+      expect(await screen.findByText(/^Delivered at /)).toBeTruthy();
+      expect(deliveryInterval({ ...delivery, status: 'DELIVERED' })).toBe(false);
+    });
+
+    it('when our team cancels and refunds, the screen shows the cancelled order, not a stale failure', async () => {
+      (fetchDelivery as jest.Mock).mockResolvedValue(failed);
+      const view = setup('buyer');
+      expect((await screen.findAllByText("Delivery didn't go through")).length).toBeGreaterThan(0);
+
+      (fetchSupplierOrder as jest.Mock).mockResolvedValue({ ...order, status: 'CANCELLED', cancellationReason: 'Cancelled by operations' });
+      (fetchDelivery as jest.Mock).mockResolvedValue({ ...delivery, status: 'CANCELLED', underReview: false });
+      await act(async () => { await view.client.invalidateQueries({ queryKey: ['supplier-order', 5] }); });
+
+      expect((await screen.findAllByText('Order cancelled')).length).toBeGreaterThan(0);
+      expect(screen.queryByText("Delivery didn't go through")).toBeNull();
+      expect(deliveryInterval({ ...delivery, status: 'CANCELLED' })).toBe(false);
+    });
   });
 });

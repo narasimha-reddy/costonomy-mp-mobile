@@ -23,6 +23,9 @@ const COPY = {
   draft: 'Awaiting payment',
   draftPill: 'The restaurant has not completed payment yet.',
   failed: 'Delivery failed',
+  failedPill: 'Our team is resolving this. Please do not arrange another delivery partner; this page updates when it is settled.',
+  review: 'Delivery under review',
+  reviewPill: 'We are confirming this delivery partner\'s booking. Please do not book another delivery partner; this page updates by itself.',
   pickupReady: 'Waiting for collection',
   pickupPill: 'The restaurant will collect it from your store.',
   ownReady: 'Ready to send',
@@ -109,7 +112,11 @@ export function supplierTrackingHeader(i: {
     return out('delivered', view.headline, { ...neutral, layout: 'receipt' });
   }
   if (dStatus === 'DELIVERY_FAILED') {
-    return out('failed', COPY.failed, { ...neutral, pill: pill(delivery?.failureReason ? partnerWording(delivery.failureReason) : delivery?.failureReason, 'warning') });
+    const reason = delivery?.failureReason ? partnerWording(delivery.failureReason) : null;
+    return out('failed', COPY.failed, { ...neutral, pill: pill(reason ? `${reason} ${COPY.failedPill}` : COPY.failedPill, 'warning') });
+  }
+  if (delivery?.underReview === true && dStatus !== 'CANCELLED') {
+    return out('review', COPY.review, { ...neutral, pill: pill(COPY.reviewPill, 'warning') });
   }
   if (kind === 'pickup' && oStatus === 'READY_FOR_PICKUP') {
     return out('pickup_ready', COPY.pickupReady, { pill: pill(COPY.pickupPill) });

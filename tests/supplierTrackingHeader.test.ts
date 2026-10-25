@@ -63,9 +63,19 @@ describe('supplierTrackingHeader state matrix', () => {
   it('failed shows the reason to the supplier', () => {
     expect(head(order(C, 'OUT_FOR_DELIVERY'), delivery('DELIVERY_FAILED'))).toMatchObject({
       state: 'failed', title: 'Delivery failed', tone: 'neutral', map: 'none', partner: 'none',
-      pill: { text: 'Delivery partner app timed out', tone: 'warning' },
+      pill: {
+        text: 'Delivery partner app timed out Our team is resolving this. Please do not arrange another delivery partner; this page updates when it is settled.',
+        tone: 'warning',
+      },
     });
-    expect(head(order(C, 'OUT_FOR_DELIVERY'), delivery('DELIVERY_FAILED', { failureReason: null })).pill).toBeNull();
+    // With no reason to give, it still says what happens next.
+    expect(head(order(C, 'OUT_FOR_DELIVERY'), delivery('DELIVERY_FAILED', { failureReason: null })).pill?.text)
+      .toBe('Our team is resolving this. Please do not arrange another delivery partner; this page updates when it is settled.');
+  });
+  it('review: a booking being confirmed says not to book another courier', () => {
+    expect(head(order(C, 'READY_FOR_PICKUP'), delivery('PROVIDER_UNAVAILABLE', { underReview: true }))).toMatchObject({
+      state: 'review', title: 'Delivery under review',
+    });
   });
   it('pickup_ready', () => {
     expect(head(order('PICKUP', 'READY_FOR_PICKUP'))).toMatchObject({

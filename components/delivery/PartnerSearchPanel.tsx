@@ -35,7 +35,7 @@ export function PartnerSearchPanel({
   });
   const waited = useTimeoutFlag(true, waitMs);
   const stuck = waitMs === 0 || waited;
-  const stopped = delivery != null && canRetryPartner(delivery.mode, delivery.status);
+  const stopped = delivery != null && canRetryPartner(delivery.mode, delivery.status, delivery.underReview);
 
   if (buyer) {
     // When the partner fell through the hero and the banner say so; here only the reassurance.

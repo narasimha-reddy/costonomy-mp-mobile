@@ -262,8 +262,8 @@ export default function SupplierOrderScreen() {
     onSuccess: (next) => {
       track('delivery_partner_retried', { screen: SCREEN, entityId: orderId });
       void queryClient.invalidateQueries({ queryKey: ['supplier-order', orderId, 'delivery'] });
-      show(canRetryPartner(next.mode, next.status) ? 'Still no partner available' : 'Delivery partner requested',
-        canRetryPartner(next.mode, next.status) ? 'info' : 'success');
+      show(canRetryPartner(next.mode, next.status, next.underReview) ? 'Still no partner available' : 'Delivery partner requested',
+        canRetryPartner(next.mode, next.status, next.underReview) ? 'info' : 'success');
     },
     onError: (caught) => onRefusal(caught, 'Could not request another partner.'),
   });

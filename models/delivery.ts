@@ -64,6 +64,12 @@ export interface Delivery {
   locationAgeSeconds: number | null;
   failureCode: string | null;
   failureReason: string | null;
+  /**
+   * Our team is looking at this delivery: it failed after pickup, or a booking's outcome is unknown. Nothing the app does
+   * can fix it, and the app must not offer another partner meanwhile (that could send a second courier). Absent on older
+   * servers, which means not under review. Cleared by the server once the delivery is resolved (API D-206).
+   */
+  underReview?: boolean;
   requestedAt: string | null;
   pickedUpAt: string | null;
   deliveredAt: string | null;

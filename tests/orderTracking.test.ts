@@ -150,7 +150,10 @@ describe('orderTrackingView, every delivery status x mode x audience', () => {
     });
     expect(v.currentIndex).toBe(5);
     expect(v.problem).toBe('danger');
-    expect(v.subline).toBe('Delivery partner app timed out at gate 4');
+    // The reason, then what happens next: our team resolves it and the supplier must not book another courier.
+    expect(v.subline).toContain('Delivery partner app timed out at gate 4');
+    expect(v.subline).toContain('Our team is resolving this');
+    expect(v.subline).toContain('do not arrange another delivery partner');
   });
 
   it('gives the supplier the reason and the buyer calm copy for a retryable failure', () => {

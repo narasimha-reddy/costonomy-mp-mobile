@@ -49,8 +49,8 @@ export default function StoreSettingsScreen() {
 function StoreRow({ store, onOpen }: { store: SupplierStore; onOpen: () => void }) {
   const { accessToken } = useSession();
 
-  // The list in context carries what registration returned; hours and the full
-  // address arrive from the store's own endpoint.
+  // The list in context is the business's stores without their marketplace
+  // settings; the store's own read (common's outlet and its settings) fills them.
   const detail = useQuery({
     queryKey: ['supplier-store', store.id],
     queryFn: () => fetchStore(accessToken as string, store.id),

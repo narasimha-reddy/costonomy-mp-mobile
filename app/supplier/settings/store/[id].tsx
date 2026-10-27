@@ -25,9 +25,11 @@ import {
   MandiLocationField,
   MandiScreen,
   MandiSkeletonList,
+  MandiStateField,
   MandiStatusChip,
   MandiStickyBar,
   MandiText,
+  useStateIsKnown,
   useToast,
 } from '@/components/common';
 import { normaliseHours } from '@/lib/supplier/storeHours';
@@ -139,6 +141,7 @@ export default function StoreDetailScreen() {
   const directOrdersValue = directOrders ?? data?.directOrdersEnabled ?? false;
   const hoursValue = hours ?? data?.operatingHours
     ?? { days: [], opensAt: '10:00', closesAt: '21:00' };
+  const stateKnown = useStateIsKnown(stateValue);
 
   // Device capture and typed coordinates feed one value, so whichever the
   // supplier used last is what gets saved.
@@ -186,6 +189,9 @@ export default function StoreDetailScreen() {
   const problem = nameValue.trim().length < 2 ? 'Enter a store name.'
     : line1Value.trim() === '' ? 'Enter the street address.'
     : cityValue.trim() === '' ? 'Enter the city.'
+    // The marketplace needs a state from common's list and a PIN code for every store (D-208).
+    : !stateKnown ? 'Choose the state from the list.'
+    : !/^\d{6}$/.test(pincodeValue.trim()) ? 'Enter the six-digit PIN code.'
     // D-097. Required here as well as at registration, which is how the stores
     // that predate the rule acquire a contact: the next person to save one has
     // to supply it. Nothing was backfilled beyond what the business contact
@@ -368,10 +374,11 @@ export default function StoreDetailScreen() {
                 value={pincodeValue}
                 onChangeText={(text) => setPincode(text.replace(/[^\d]/g, '').slice(0, 6))}
                 keyboardType="number-pad"
+                required
                 style={styles.flex}
               />
             </View>
-            <MandiFormField label="State" value={stateValue} onChangeText={setStateName} />
+            <MandiStateField value={stateValue} onChangeText={setStateName} required />
 
             {/* The pin, not the address, is what delivery is quoted from — an
                 address that geocodes badly is a store no restaurant can reach. */}

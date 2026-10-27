@@ -199,7 +199,22 @@ Both role experiences are built: restaurant and supplier, from onboarding
 through discovery, requests, orders, payment, credit, delivery, receiving and
 disputes.
 
-### Latest: Razorpay payments
+### Latest: businesses, outlets and stores live in costonomy-common-api (API D-208)
+
+The Marketplace API no longer stores restaurants, outlets, suppliers, stores, users,
+devices or roles. The app creates and edits them in costonomy-common-api directly
+(`services/org.ts`, through `commonRequest`): registration is `POST /v1/orgs` with
+the first outlet or store and `enrollApps: ['MARKETPLACE']`; outlets and stores are
+`/v1/outlets/{id}`; delivery instructions, preparation time, direct orders and the
+store's Offline switch are the outlet's MARKETPLACE settings; opening hours are the
+outlet's `operatingHours` (`lib/org/operatingHours.ts` converts them); states are
+picked by name and sent as ISO codes (`lib/geo/states.ts`, `MandiStateField`). The
+GSTIN is a business identifier sent to common's verification queue. A supplier's
+lifecycle and `canTrade` come from the Marketplace API's
+`GET /api/v1/suppliers/{id}/standing`. Delivery and credit policies and delivery
+slots stay on the Marketplace API.
+
+### Razorpay payments
 
 Four stacked PRs; the server side is in `costonomy-mp-api` (D-098 to D-102).
 

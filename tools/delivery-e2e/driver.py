@@ -186,6 +186,29 @@ def common(path, body):
             return err.code, json.load(err)
         except ValueError:
             return err.code, {}
+def common_api(method, path, token, body=None):
+    """costonomy-common-api with a user's token: (status, data, error). Businesses, outlets and stores live there
+    (API D-208): the API's outlet and supplier_store tables are gone, so test data about places is changed here."""
+    h = {'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + token}
+    if method in ('POST', 'PUT', 'PATCH'): h['Idempotency-Key'] = str(uuid.uuid4())
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(COMMON + path, data=data, method=method, headers=h)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            txt = r.read().decode(); code = r.status
+    except urllib.error.HTTPError as err:
+        txt = err.read().decode(); code = err.code
+    try: j = json.loads(txt) if txt else {}
+    except Exception: j = {'_text': txt[:200]}
+    return code, (j if code < 400 else None), (j.get('error') if code >= 400 else None)
+def outlet_latlng(token):
+    """The outlet's pin, from common."""
+    c, d, e = common_api('GET', '/v1/outlets/%d' % OUTLET, token)
+    if c != 200: raise RuntimeError('outlet %d: %s %s' % (OUTLET, c, e))
+    return [d.get('latitude'), d.get('longitude')]
+def set_outlet_latlng(token, lat, lng):
+    c, d, e = common_api('PATCH', '/v1/outlets/%d' % OUTLET, token, {'latitude': float(lat), 'longitude': float(lng)})
+    if c != 200: raise RuntimeError('outlet %d pin: %s %s' % (OUTLET, c, e))
 def session(phone):
     """access token; refresh preferred (common rotates it), code sign-in at most once per number."""
     c = _load()
@@ -356,18 +379,25 @@ def spec_forb(shots, s):
 # ---------------- test-data setup that must be undone ----------------
 RESTORE = os.path.join(OUT, '.restore.json')
 def widen_hours():
-    """Open the store all day (it is closed at night); remember the original so restore_hours() can undo it."""
+    """Open the store all day (it is closed at night); remember the original so restore_hours() can undo it.
+
+    The store's hours are its outlet's operatingHours in costonomy-common-api (API D-208), in common's shape
+    {"mon": [["09:00", "21:00"]], ...}; an absent day is closed."""
     s = tok('seller')
-    c, d, e = api('GET', '/supplier-stores/%d' % STORE, s, idem=False)
-    orig = d['operatingHours']
+    c, d, e = common_api('GET', '/v1/outlets/%d' % STORE, s)
+    if c != 200: return c, e
+    orig = d.get('operatingHours') or {}
     if not os.path.exists(RESTORE):
         json.dump({'operatingHours': orig}, open(RESTORE, 'w'))
-    c, d, e = api('PATCH', '/supplier-stores/%d' % STORE, s, {'operatingHours': {'days': orig['days'], 'opensAt': '00:00', 'closesAt': '23:59'}})
+    days = [k for k in ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun') if orig.get(k)] or \
+        ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+    c, d, e = common_api('PATCH', '/v1/outlets/%d' % STORE, s, {'operatingHours': {k: [['00:00', '23:59']] for k in days}})
     return c, e
 def restore_hours():
     if not os.path.exists(RESTORE): return None
     orig = json.load(open(RESTORE))['operatingHours']
-    c, d, e = api('PATCH', '/supplier-stores/%d' % STORE, tok('seller'), {'operatingHours': orig})
+    # An empty object reads as the marketplace default, the same as hours that were never set.
+    c, d, e = common_api('PATCH', '/v1/outlets/%d' % STORE, tok('seller'), {'operatingHours': orig or {}})
     if c == 200: os.remove(RESTORE)
     return c
 

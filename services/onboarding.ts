@@ -1,43 +1,58 @@
-import { apiRequest } from '@/lib/api/client';
-import type { Outlet } from '@/services/restaurant';
-import type { Supplier } from '@/services/supplier';
+import { requireStateCode, statesOrEmpty } from '@/lib/geo/states';
+import { toOutletInput, toRestaurant } from '@/lib/org/mapping';
+import type { CommonOrg } from '@/lib/org/types';
+import { createOrg } from '@/services/org';
+import type { Restaurant } from '@/services/restaurant';
 
-export interface Restaurant {
-  id: number;
+export type { Restaurant };
+
+/**
+ * Registering a business. Restaurants and suppliers are created in costonomy-common-api, enrolled in the marketplace
+ * in the same call (Marketplace API D-208): the caller becomes the owner, and the first outlet or store travels with
+ * the business so there is no window in which one exists without a place to order for or ship from.
+ *
+ * <p>Marketplace enrollment needs the place's address line, city, state, PIN code and contact number, and a store's
+ * pin; common refuses with `ENROLLMENT_REQUIREMENTS_UNMET` otherwise, so the screens ask for all of them.
+ */
+
+interface FirstPlace {
   name: string;
-  legalName: string | null;
-  gstin: string | null;
-  status: string;
-  outlets: Outlet[];
+  addressLine1: string;
+  addressLine2?: string;
+  landmark?: string;
+  city: string;
+  /** The state's name as picked; sent as its code. */
+  state: string;
+  pincode: string;
+  latitude?: string;
+  longitude?: string;
+  contactName?: string;
+  contactPhone: string;
 }
 
 export interface CreateRestaurantInput {
   name: string;
   legalName?: string;
   gstin?: string;
-  firstOutlet: {
-    name: string;
-    addressLine1: string;
-    addressLine2?: string;
-    landmark?: string;
-    city: string;
-    state: string;
-    pincode?: string;
-    latitude?: string;
-    longitude?: string;
-    contactName?: string;
-    contactPhone?: string;
-  };
+  firstOutlet: FirstPlace;
 }
 
-/**
- * Create a restaurant. The caller becomes its owner.
- *
- * <p>The first outlet travels with it, so setup is one round trip and a
- * restaurant cannot exist in a state where nobody can order for it.
- */
-export function createRestaurant(token: string, input: CreateRestaurantInput): Promise<Restaurant> {
-  return apiRequest<Restaurant>('/api/v1/restaurants', { method: 'POST', token, body: input });
+/** Create a restaurant with its first outlet. The key belongs to the screen's attempt, so a retry is the same create. */
+export async function createRestaurant(
+  token: string,
+  input: CreateRestaurantInput,
+  idempotencyKey: string,
+): Promise<Restaurant> {
+  const stateCode = await requireStateCode(input.firstOutlet.state);
+  const org = await createOrg(token, {
+    orgType: 'RESTAURANT',
+    displayName: input.name,
+    legalName: input.legalName,
+    gstin: input.gstin,
+    contactPhone: input.firstOutlet.contactPhone,
+    firstOutlet: { ...toOutletInput(input.firstOutlet, stateCode), kind: 'OUTLET', name: input.firstOutlet.name },
+  }, idempotencyKey);
+  return toRestaurant(org, await statesOrEmpty(), []);
 }
 
 export interface CreateSupplierInput {
@@ -48,41 +63,38 @@ export interface CreateSupplierInput {
   contactName: string;
   contactPhone: string;
   contactEmail?: string;
-  firstStore: {
-    name: string;
-    addressLine1: string;
-    city: string;
-    state: string;
-    pincode?: string;
-    latitude?: string;
-    longitude?: string;
+  /** Set after the person has seen common's possible matches and chose to register anyway. */
+  ignoreClaimCandidates?: boolean;
+  firstStore: FirstPlace & {
     /** Required, and its own answer: a branch is answered by whoever is on it. */
     contactName: string;
-    contactPhone: string;
-    responseSlaSeconds?: number;
-    preparationMinutes?: number;
   };
 }
 
-export function createSupplier(token: string, input: CreateSupplierInput): Promise<Supplier> {
-  return apiRequest<Supplier>('/api/v1/suppliers', { method: 'POST', token, body: input });
+/**
+ * Create a supplier with its first store. A GSTIN given here is recorded on the business (unverified); submitting it
+ * for verification is {@link submitGstinVerification}'s job, after this.
+ *
+ * <p>Common refuses with `CLAIM_CANDIDATES_EXIST` (details.candidates) when the GSTIN or phone matches a supplier a
+ * buyer already listed; the screen explains and can resend with `ignoreClaimCandidates`.
+ */
+export async function createSupplier(
+  token: string,
+  input: CreateSupplierInput,
+  idempotencyKey: string,
+): Promise<CommonOrg> {
+  const stateCode = await requireStateCode(input.firstStore.state);
+  return createOrg(token, {
+    orgType: 'SUPPLIER',
+    displayName: input.displayName,
+    legalName: input.legalName,
+    gstin: input.gstin,
+    contactName: input.contactName,
+    contactPhone: input.contactPhone,
+    contactEmail: input.contactEmail,
+    ignoreClaimCandidates: input.ignoreClaimCandidates,
+    firstOutlet: { ...toOutletInput(input.firstStore, stateCode), kind: 'STORE', name: input.firstStore.name },
+  }, idempotencyKey);
 }
 
-/**
- * Submit GST verification.
- *
- * <p>A supplier cannot trade until this is reviewed — `canTrade` stays false and
- * no restaurant sees their catalog. The registration screen says so rather than
- * letting someone list a hundred SKUs and wonder why nothing sells.
- */
-export function submitVerification(
-  token: string,
-  supplierId: number,
-  body: { verificationType: string; gstin: string; legalName: string; evidenceUrl?: string },
-) {
-  return apiRequest(`/api/v1/suppliers/${supplierId}/verification`, {
-    method: 'POST',
-    token,
-    body,
-  });
-}
+export { submitGstinVerification } from '@/services/supplier';

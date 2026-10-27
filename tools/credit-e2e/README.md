@@ -26,7 +26,7 @@ dependencies.
   `mysql` through `MYSQL_PWD` only; they are never printed or written.
 * costonomy-common-api on `http://localhost:8082` (`COMMON=` overrides it): sign-in is common's (`tools/mp-local.js`).
 * Seed data: restaurant `+919876500004` (outlet 1), other tenant `+919876500007` (outlet 2), suppliers
-  `+919876511001/2/3` (stores 1/2/3, each the SUP_OWNER of its organisation), `supplier_credit_policy.credit_enabled=1`
+  `+919876511001/2/3` (stores 1/2/3, each the Owner of its business in costonomy-common-api), `supplier_credit_policy.credit_enabled=1`
   for stores 1 to 3. Sign-in is code `123456` at common-api; the helper waits out the code cooldown and caches tokens (and the
   refresh token) in `tools/credit-e2e/.sessions.json` (gitignored, mode 600).
 
@@ -77,7 +77,7 @@ labels these scenarios create (Payment reversed, Credit note, Written off).
   S8 asserts the pending payout rows and marks "applied once / generating twice" NOT-RUN until an applied payout exists.
 * There is no restaurant user without CREDIT permission in the local data and no invite API, so that single S4 check
   is skipped; the other-tenant user is covered in S9.
-* There is no local supplier user other than SUP_OWNER (no store manager, finance, salesperson or admin), so the rows of the
+* There is no local supplier user other than the business Owner (no store manager, finance, salesperson or admin), so the rows of the
   S11 to S14 permission matrix for those roles are SKIPped (their grants are covered by the API integration tests). The 50 reminders
   per store per day limit, the 20,000-row export limit and a payout that has been APPLIED by a settlement run are also not reachable.
 * S6 depends on the hourly `costonomy.mp.credit.overdue-interval`. Restart the API with a short interval

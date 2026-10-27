@@ -10,6 +10,11 @@ import type { Membership } from '@/lib/session/types';
  * grant already covers every store beneath it, so an owner holds one SUPPLIER
  * membership and no SUPPLIER_STORE rows. Reading the store list off
  * SUPPLIER_STORE memberships would show an owner nothing.
+ *
+ * <p>The business and its stores come from costonomy-common-api, the lifecycle,
+ * verification and each store's online state from the Marketplace API's standing
+ * endpoint (`fetchSupplier`); a store granted on its own is read from common with
+ * its marketplace settings (`fetchStore`). D-208.
  */
 export interface StoresState {
   stores: SupplierStore[];

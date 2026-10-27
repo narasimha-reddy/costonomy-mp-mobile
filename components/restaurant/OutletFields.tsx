@@ -6,6 +6,7 @@ import {
   MandiFormField,
   MandiLocationField,
   MandiSectionHeader,
+  MandiStateField,
 } from '@/components/common';
 import { Spacing } from '@/theme';
 
@@ -38,12 +39,21 @@ export const EMPTY_OUTLET: OutletDraft = {
   coordinates: null,
 };
 
-/** The three things without which an outlet cannot be created. */
-export function outletIsComplete(draft: OutletDraft): boolean {
+/**
+ * What an outlet needs before it can be saved: a name, and everything the marketplace requires of an outlet in
+ * costonomy-common-api (address line, city, a state from its list, a six-digit PIN code and a contact number). Common
+ * refuses the outlet without them (`ENROLLMENT_REQUIREMENTS_UNMET`), so the button waits instead.
+ *
+ * <p>`stateKnown` is whether the state resolves to one of common's (`useStateIsKnown`).
+ */
+export function outletIsComplete(draft: OutletDraft, stateKnown = true): boolean {
   return draft.name.trim().length >= 2
     && draft.addressLine1.trim().length >= 2
     && draft.city.trim().length >= 2
-    && draft.state.trim().length >= 2;
+    && draft.state.trim().length >= 2
+    && stateKnown
+    && /^\d{6}$/.test(draft.pincode.trim())
+    && draft.contactPhone.replace(/[^\d]/g, '').length >= 7;
 }
 
 /**
@@ -114,12 +124,12 @@ export function OutletFields({
             value={draft.pincode}
             onChangeText={(text) => onChange({ pincode: text.replace(/[^\d]/g, '').slice(0, 6) })}
             disabled={disabled}
+            required
             keyboardType="number-pad"
             style={styles.flex}
           />
         </View>
-        <MandiFormField
-          label="State"
+        <MandiStateField
           value={draft.state}
           onChangeText={(state) => onChange({ state })}
           disabled={disabled}
@@ -153,6 +163,7 @@ export function OutletFields({
           value={draft.contactPhone}
           onChangeText={(text) => onChange({ contactPhone: text.replace(/[^\d+]/g, '') })}
           disabled={disabled}
+          required
           keyboardType="phone-pad"
           hint="Who the delivery partner calls when they arrive."
         />

@@ -12,6 +12,7 @@ function outlet(id: number, restaurantId: number): Outlet {
     landmark: null,
     city: null,
     state: null,
+    stateCode: null,
     pincode: null,
     latitude: null,
     longitude: null,

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Money paths and the API's later phases]
 
+### [vendor_payments_mgmt] - Businesses, outlets and stores are read and written in costonomy-common-api (API D-208, common D-85)
+#### Changed
+- Registering a restaurant or a supplier creates the business with its first outlet or store in common (`POST /v1/orgs`, enrolled in the marketplace, with an `Idempotency-Key`). The outlet step now needs a PIN code and a state from common's list, and a store needs its pin, because marketplace enrollment requires them.
+- The supplier's GSTIN is recorded on the business at registration and sent to common's verification queue (`/v1/orgs/{id}/verifications`). If that fails, More offers "Send GSTIN for verification" (also after a rejection).
+- A supplier whose GSTIN or phone matches one a restaurant already listed is told so (`CLAIM_CANDIDATES_EXIST`) and can register as a new business anyway.
+- Restaurant settings, outlets (list, add, edit, close/reopen through common's status endpoint) and the outlet switcher read and write common; delivery instructions are the outlet's MARKETPLACE setting.
+- Supplier business, store list and store settings read and write common: preparation time, direct orders and the Offline switch are the store's MARKETPLACE settings (`online`), the answer window is read-only from them, and opening hours are converted to and from common's `{"mon": [["09:00","21:00"]]}` shape.
+- A supplier's lifecycle, verification status and `canTrade` come from the Marketplace API's `GET /api/v1/suppliers/{id}/standing`; More words the not-trading banner by that status (not submitted, pending, more information wanted, rejected, verified but not active, suspended).
+- States are shown and typed by name (`MandiStateField`, with suggestions) and sent as ISO codes from common's `GET /v1/geo/states`.
+#### Removed
+- Every call to the Marketplace API's removed restaurant, outlet, supplier, store and verification endpoints.
+
 ### [phase6/delivery-failure-recovery] - A failed delivery shows what happens next and keeps updating (API D-206)
 #### Fixed
 - A `DELIVERY_FAILED` delivery was treated as over: the order screens stopped refreshing, so a delivery our team marked delivered or cancelled still showed as failed. They now keep refreshing every 30 s until the server reports `DELIVERED` or `CANCELLED`.

@@ -27,6 +27,11 @@ let mockGranted: string[] = ['credit.edit'];
 jest.mock('@/hooks/usePermissions', () => ({
   usePermissions: () => ({ canForStore: (p: string) => mockGranted.includes(p) }),
 }));
+// The state field checks the name against common's list (D-208).
+jest.mock('@/lib/geo/states', () => ({
+  ...jest.requireActual('@/lib/geo/states'),
+  fetchStates: jest.fn(async () => [{ code: 'IN-MH', name: 'Maharashtra' }]),
+}));
 jest.mock('@/components/common', () => ({
   ...jest.requireActual('@/components/common'),
   useToast: () => ({ show: jest.fn() }),
@@ -38,7 +43,7 @@ jest.mock('@/services/supplier', () => ({
 }));
 
 const store = {
-  id: 5, supplierOrganizationId: 1, name: 'Main', addressLine1: '1 Road', addressLine2: null, city: 'Pune', state: 'MH',
+  id: 5, supplierOrganizationId: 1, name: 'Main', addressLine1: '1 Road', addressLine2: null, city: 'Pune', state: 'Maharashtra', stateCode: 'IN-MH',
   pincode: '411001', latitude: null, longitude: null, contactName: 'Asha', contactPhone: '9876543210',
   operatingHours: { days: ['MON'], opensAt: '10:00', closesAt: '21:00' }, responseSlaSeconds: 600, preparationMinutes: 60,
   directOrdersEnabled: false, status: 'ACTIVE',

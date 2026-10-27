@@ -23,6 +23,7 @@ import {
   MandiSkeletonList,
   MandiStickyBar,
   MandiText,
+  useStateIsKnown,
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
@@ -79,6 +80,7 @@ export default function OutletSettingsScreen() {
     coordinates: edits.coordinates ?? location.coordinates ?? saved.coordinates,
   };
   const statusValue = status ?? outlet?.status ?? 'ACTIVE';
+  const stateKnown = useStateIsKnown(draft.state);
 
   const save = useMutation({
     mutationFn: () =>
@@ -124,7 +126,7 @@ export default function OutletSettingsScreen() {
             <MandiButton
               label="Save changes"
               size="lg"
-              disabled={!outletIsComplete(draft)}
+              disabled={!outletIsComplete(draft, stateKnown)}
               loading={save.isPending}
               onPress={() => save.mutate()}
             />

@@ -3,6 +3,7 @@
 //   node tools/credit-e2e/suite.js            # all scenarios
 //   node tools/credit-e2e/suite.js S1 S4      # some (they depend on each other; see README)
 const L = require('./lib');
+const local = require('../mp-local');
 const { api, db, dbVal, dbNum, eq, ok, contains, skip, expectStatus, money, sum, until, sleep, RUN, PHONES } = L;
 
 const SWEEP_WAIT_S = Number(process.env.SWEEP_WAIT_S || 120);
@@ -227,10 +228,15 @@ async function setup() {
   for (const store of [1, 2, 3]) {
     eq(`store ${store} offers credit (supplier_credit_policy.credit_enabled)`, dbNum(`select credit_enabled from supplier_credit_policy where supplier_store_id=${store}`), 1);
   }
-  // Which user is active on each store: the SUPPLIER-scoped role of the supplier user whose id equals the organisation.
-  for (const [store, phone] of [[2, PHONES.sup2], [3, PHONES.sup3]]) {
-    const row = db(`select u.phone, r.code, ur.scope_type, ur.scope_id, ur.status from user_role ur join users u on u.id=ur.user_id join role r on r.id=ur.role_id join supplier_store ss on ss.supplier_organization_id=ur.scope_id where ur.scope_type='SUPPLIER' and ss.id=${store} and u.phone='${phone}'`)[0];
-    ok(`store ${store}: ${phone} holds an ACTIVE supplier role on its organisation`, !!row && row[4] === 'ACTIVE', JSON.stringify(row));
+  // Which user is active on each store: their sign-in holds a business-wide (SUPPLIER) grant on the store's business.
+  // Stores, businesses and grants live in costonomy-common-api now (API D-208), so this asks common for the store's
+  // business and the API's /auth/me for the grant, instead of reading the API's old user_role/supplier_store tables.
+  for (const [store, phone, tok] of [[2, PHONES.sup2, T.sup2], [3, PHONES.sup3, T.sup3]]) {
+    const place = await local.commonGet(`/v1/outlets/${store}`, tok);
+    const me = await G('/auth/me', tok);
+    const grant = (me.data?.memberships || []).find((m) => m.scopeType === 'SUPPLIER' && m.scopeId === place.data?.orgId);
+    ok(`store ${store}: ${phone} holds a business-wide supplier role on its business`, place.status === 200 && !!grant,
+      JSON.stringify({ status: place.status, orgId: place.data?.orgId, grant: grant && { scopeId: grant.scopeId, roles: grant.roles } }));
   }
   ctx.walletStart = await walletBalance();
 }
@@ -446,7 +452,7 @@ async function s4() {
   const byRest = await P(`/credit/agreements/${ctx.a3}/modify`, T.rest, { approvedLimit: 99999, creditPeriodDays: 15, reason: 'self-raise' });
   expectStatus('the restaurant cannot raise its own limit', byRest, 404);
   eq('  ...limit unchanged', (await agr(ctx.a3)).approvedLimit, n(full.approvedLimit));
-  skip('restaurant user without CREDIT permission gets 404', 'the local DB has only REST_OWNER users on outlets 1 and 2 (no restaurant user lacking CREDIT_VIEW); the other tenant (outlet 2 owner) is asserted in S9');
+  skip('restaurant user without CREDIT permission gets 404', 'the local data has only restaurant Owners on outlets 1 and 2 (no restaurant user lacking credit.view); the other tenant (outlet 2 owner) is asserted in S9');
 
   await armDates();
 }
@@ -1077,7 +1083,7 @@ async function s9() {
 // settles what it made at the end, so a re-run on a used database starts clean. No row is ever deleted.
 
 const WORST = ['OVERDUE', 'IN_GRACE', 'DUE_TODAY', 'DUE_SOON', 'DUE_LATER'];
-const FOREIGN_NOTE = 'no other supplier role exists in the local data (only SUP_OWNER users), so manager / finance cases are not run';
+const FOREIGN_NOTE = 'no other supplier role exists in the local data (only supplier Owners), so manager / finance cases are not run';
 
 /** Everything the supplier-side receivables screens say about one store, checked against SQL and against the invoices' own states. */
 async function checkReceivablesAgainstSql(label, storeId, tok) {

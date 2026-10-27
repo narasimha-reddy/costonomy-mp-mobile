@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/contexts/SessionProvider';
@@ -18,9 +18,12 @@ import {
   MandiHeader,
   MandiScreen,
   MandiStickyBar,
+  useStateIsKnown,
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
+import { newIdempotencyKey } from '@/lib/api/client';
+import { isDefinitiveFailure } from '@/lib/api/idempotency';
 import { track } from '@/analytics';
 
 const SCREEN = 'REST-ACCOUNT-01';
@@ -54,6 +57,9 @@ export default function NewOutletScreen() {
     ...edits,
     coordinates: edits.coordinates ?? location.coordinates ?? null,
   };
+  const stateKnown = useStateIsKnown(draft.state);
+  // One key per attempt to add this outlet, kept across retries so a retried add cannot make a second outlet.
+  const attemptKey = useRef(newIdempotencyKey());
 
   const create = useMutation({
     mutationFn: () =>
@@ -70,7 +76,7 @@ export default function NewOutletScreen() {
         deliveryInstructions: draft.deliveryInstructions.trim() || undefined,
         latitude: draft.coordinates?.latitude || undefined,
         longitude: draft.coordinates?.longitude || undefined,
-      }),
+      }, attemptKey.current),
     onSuccess: async (created) => {
       track('outlet_created', { screen: SCREEN, entityId: created.id });
       // Awaited so the switcher has the new outlet before we select it.
@@ -79,8 +85,10 @@ export default function NewOutletScreen() {
       toast.show(`${created.name} added`, 'success');
       router.replace('/restaurant/settings/outlets');
     },
-    onError: (caught) =>
-      toast.show(caught instanceof ApiError ? caught.message : 'Could not add that.', 'error'),
+    onError: (caught) => {
+      if (isDefinitiveFailure(caught)) attemptKey.current = newIdempotencyKey();
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not add that.', 'error');
+    },
   });
 
   if (!allowed) {
@@ -103,7 +111,7 @@ export default function NewOutletScreen() {
           <MandiButton
             label="Add outlet"
             size="lg"
-            disabled={!outletIsComplete(draft)}
+            disabled={!outletIsComplete(draft, stateKnown)}
             loading={create.isPending}
             onPress={() => create.mutate()}
           />

@@ -6,17 +6,19 @@ import type { Membership } from '@/lib/session/types';
 /**
  * The outlets this user can order for.
  *
- * <p><b>A restaurant-scope grant already covers every outlet under it.</b> The
- * server says so — {@code ScopeResolver}: "a grant at the parent satisfies a
- * check at the child — an owner does not need re-granting for every outlet they
- * open". So an owner holds one RESTAURANT membership and no OUTLET memberships,
+ * <p><b>A restaurant-scope grant already covers every outlet under it.</b> A
+ * business-wide role in costonomy-common-api covers every outlet the business
+ * has, so an owner holds one RESTAURANT membership and no OUTLET memberships,
  * and reading the outlet list off OUTLET-scope memberships alone shows an owner
  * an empty list for outlets they demonstrably own.
  *
- * <p>The list is therefore resolved the way the server models it: outlets are
- * fetched per restaurant the user holds a grant in, and unioned with the outlets
- * named by any OUTLET-scope grant — which is how a manager assigned to two of a
- * chain's nine outlets gets exactly those two.
+ * <p>The list is therefore resolved the way access is modelled: outlets are
+ * fetched from common per restaurant (business) the user holds a grant in
+ * (`GET /v1/orgs/{id}/outlets`), and unioned with the outlets named by any
+ * OUTLET-scope grant (`GET /v1/outlets/{id}`) — which is how a manager assigned
+ * to two of a chain's nine outlets gets exactly those two. Membership ids are
+ * common's business and outlet ids (Marketplace API D-208). A CLOSED outlet is
+ * gone for good and is left out.
  *
  * <p>`/auth/me` is deliberately not the place for this. A chain with fifty
  * outlets would carry all fifty on every session restore, and outlets change far
@@ -101,7 +103,7 @@ export function useOutlets(): OutletsState {
   });
 
   const outlets = dedupeBy(
-    results.flatMap((r) => r.data ?? []),
+    results.flatMap((r) => r.data ?? []).filter((o) => o.status !== 'CLOSED'),
     (o) => o.id,
   );
 

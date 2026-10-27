@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useStore } from '@/contexts/StoreProvider';
+import { submitGstinVerification, type Supplier } from '@/services/supplier';
+import { newIdempotencyKey } from '@/lib/api/client';
+import { isDefinitiveFailure } from '@/lib/api/idempotency';
+import { ApiError } from '@/lib/api/errors';
 import { SupplierHeader } from '@/components/supplier/SupplierHeader';
 import {
   MandiButton,
@@ -12,6 +17,7 @@ import {
   MandiSectionHeader,
   MandiStatusChip,
   MandiText,
+  useToast,
 } from '@/components/common';
 import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
 
@@ -23,14 +29,38 @@ import { Colors, Radius, Spacing, TouchTarget } from '@/theme';
  * verification is pending cannot trade — `canTrade` is false and no restaurant
  * sees their catalog — and this is the only screen that can tell them so. Buried
  * under "settings" it would be a support ticket a week later.
+ *
+ * <p>Lifecycle, verification and `canTrade` are the Marketplace API's standing
+ * (D-208). When the GSTIN was never sent for verification, or was not approved,
+ * this is where it is sent (again), to common's verification queue.
  */
 export default function SupplierMoreScreen() {
   const router = useRouter();
-  const { me, signOut } = useSession();
+  const { me, signOut, accessToken } = useSession();
   const { supplier, stores, store } = useStore();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  // One key per submission attempt, kept across retries so a retry is the same request.
+  const verifyKey = useRef(newIdempotencyKey());
 
   const verified = supplier?.verificationStatus === 'VERIFIED';
   const canTrade = supplier?.canTrade ?? false;
+  const canSubmit = supplier != null && supplier.lifecycleStatus !== 'SUSPENDED'
+    && (supplier.verificationStatus === 'NOT_SUBMITTED' || supplier.verificationStatus === 'REJECTED');
+
+  const submit = useMutation({
+    mutationFn: () => submitGstinVerification(
+      accessToken as string, supplier?.id as number, supplier?.legalName ?? '', verifyKey.current),
+    onSuccess: () => {
+      verifyKey.current = newIdempotencyKey();
+      void queryClient.invalidateQueries({ queryKey: ['supplier', supplier?.id] });
+      toast.show('Sent for verification', 'success');
+    },
+    onError: (caught) => {
+      if (isDefinitiveFailure(caught)) verifyKey.current = newIdempotencyKey();
+      toast.show(caught instanceof ApiError ? caught.message : 'Could not send that.', 'error');
+    },
+  });
 
   return (
     <MandiScreen header={<SupplierHeader subtitle="More" />}>
@@ -41,9 +71,7 @@ export default function SupplierMoreScreen() {
             <View style={styles.flex}>
               <MandiText variant="bodyEmphasis">You cannot receive orders yet</MandiText>
               <MandiText variant="caption" color={Colors.textSecondary}>
-                {verified
-                  ? 'Your account is verified but not active for trading. We will be in touch.'
-                  : 'Restaurants only see verified suppliers. Your GST verification is with our team.'}
+                {notTradingReason(supplier)}
               </MandiText>
             </View>
           </View>
@@ -52,6 +80,16 @@ export default function SupplierMoreScreen() {
             tone={verified ? 'success' : 'pending'}
             size="sm"
           />
+          {canSubmit && supplier.gstin != null && (
+            <MandiButton
+              label={supplier.verificationStatus === 'REJECTED' ? 'Send GSTIN again' : 'Send GSTIN for verification'}
+              variant="secondary"
+              size="sm"
+              loading={submit.isPending}
+              onPress={() => submit.mutate()}
+              fullWidth={false}
+            />
+          )}
         </MandiCard>
       )}
 
@@ -118,6 +156,27 @@ export default function SupplierMoreScreen() {
       </View>
     </MandiScreen>
   );
+}
+
+/** Why a supplier cannot take orders yet, from the server's standing. */
+function notTradingReason(supplier: Supplier): string {
+  if (supplier.lifecycleStatus === 'SUSPENDED') {
+    return 'Your account is suspended, so restaurants cannot order from you. Contact support.';
+  }
+  switch (supplier.verificationStatus) {
+    case 'VERIFIED':
+      return 'Your account is verified but not active for trading. We will be in touch.';
+    case 'NOT_SUBMITTED':
+      return supplier.gstin == null
+        ? 'Restaurants only see verified suppliers, and there is no GSTIN on file. Contact support to add one.'
+        : 'Restaurants only see verified suppliers. Send your GSTIN to our team to be verified.';
+    case 'REJECTED':
+      return 'Your GST verification was not approved. Check your details under Business and send it again.';
+    case 'INFORMATION_REQUESTED':
+      return 'Our team needs more information to verify your GST details. We will be in touch.';
+    default:
+      return 'Restaurants only see verified suppliers. Your GST verification is with our team.';
+  }
 }
 
 function Row({

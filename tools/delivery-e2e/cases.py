@@ -189,16 +189,18 @@ def case5():
 
 # ---------------------------------------------------------------- case 6 / 7 (no partner)
 ORIG_OUTLET = {}
+# The outlet's pin is in costonomy-common-api (API D-208), changed there with the buyer's token. The API reads outlets
+# from common, possibly through a short cache: if a case below still quotes from the old pin, wait out that cache.
 def force_far():
-    r = db("select latitude,longitude from outlet where id=%d" % OUTLET)[0]
+    r = outlet_latlng(tok('buyer'))
     ORIG_OUTLET['ll'] = r
     json.dump({'outlet': r}, open(os.path.join(OUT, '.restore-outlet.json'), 'w'))
-    db("update outlet set latitude=19.0760, longitude=72.8777 where id=%d" % OUTLET)
+    set_outlet_latlng(tok('buyer'), 19.0760, 72.8777)
 def restore_outlet():
     p = os.path.join(OUT, '.restore-outlet.json')
     if os.path.exists(p):
         r = json.load(open(p))['outlet']
-        db("update outlet set latitude=%s, longitude=%s where id=%d" % (r[0], r[1], OUTLET))
+        set_outlet_latlng(tok('buyer'), r[0], r[1])
         os.remove(p)
 def no_partner_delivery(c):
     """Costonomy-delivery order whose delivery cannot find a partner (drop is far away)."""
@@ -256,7 +258,7 @@ def case7():
     c = '7'
     oid, did = no_partner_delivery(c)
     check(c, 'QUOTE_FAILED', 'QUOTE_FAILED', dstatus(did), 'order %d delivery %s' % (oid, did))
-    o = db("select latitude,longitude from outlet where id=%d" % OUTLET)[0]
+    o = outlet_latlng(tok('buyer'))
     db("update delivery set drop_latitude=%s, drop_longitude=%s where id=%s" % (o[0], o[1], did))
     code, d, e = api('POST', '/deliveries/%s/reassign' % did, tok('seller'), {'reason': 'e2e manual retry'})
     check(c, 'manual retry', 200, code, str(e)[:150] if e else '')

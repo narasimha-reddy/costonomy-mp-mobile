@@ -22,6 +22,10 @@ export interface Membership {
   scopeName: string | null;
   parentScopeId: number | null;
   parentScopeName: string | null;
+  /**
+   * The names of the costonomy-common-api roles held here ("Owner", "Manager", or one the business made). For
+   * display only: what a person may do is `permissions`, never a role name.
+   */
   roles: string[];
   permissions: string[];
 }

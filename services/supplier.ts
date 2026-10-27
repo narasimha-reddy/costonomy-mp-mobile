@@ -1,9 +1,31 @@
 import { apiRequest } from '@/lib/api/client';
+import { ApiError } from '@/lib/api/errors';
+import { requireStateCode, statesOrEmpty } from '@/lib/geo/states';
+import { activeGstin, toOutletInput, toSupplier, toSupplierStore } from '@/lib/org/mapping';
+import { toCommonHours, type OperatingHours } from '@/lib/org/operatingHours';
+import { MP_SETTING } from '@/lib/org/types';
+import {
+  fetchSupplierStanding,
+  getMarketplaceSettings,
+  getOrg,
+  getOutlet,
+  listIdentifiers,
+  patchOrg,
+  patchOutlet,
+  putMarketplaceSetting,
+  submitIdentifierVerification,
+  type VerificationRequest,
+} from '@/services/org';
 import { uploadFile, type UploadedFile } from '@/lib/api/upload';
 import type { IncomingOrder, SupplierOrder } from '@/models/procurement';
 import type { RateSheetResponse, UpdateRateSheetItem, UpdateRateSheetResponse } from '@/models/catalog';
 import type { Money } from '@/utils/money';
 
+/**
+ * A supplier's store. The store itself (name, address, pin, contact, hours) is an outlet in costonomy-common-api; its
+ * marketplace settings (preparation time, direct orders, online) are that outlet's MARKETPLACE settings there
+ * (Marketplace API D-208). Delivery, credit and slots stay on the Marketplace API.
+ */
 export interface SupplierStore {
   id: number;
   supplierOrganizationId: number;
@@ -11,7 +33,9 @@ export interface SupplierStore {
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
+  /** The state's name; `stateCode` is what common stores. */
   state: string | null;
+  stateCode: string | null;
   pincode: string | null;
   latitude: Money | null;
   longitude: Money | null;
@@ -27,6 +51,7 @@ export interface SupplierStore {
   preparationMinutes: number | null;
   /** Restaurants may order from this store without sending a request. D-094. */
   directOrdersEnabled: boolean;
+  /** ACTIVE (taking orders), OFFLINE (the `online` setting is off), or common's status when not ACTIVE there. */
   status: string;
 }
 
@@ -39,6 +64,7 @@ export interface Supplier {
   contactName: string | null;
   contactPhone: string | null;
   contactEmail: string | null;
+  /** From the Marketplace API's standing endpoint, never computed here. */
   lifecycleStatus: string;
   verificationStatus: string;
   /** Whether this supplier can currently receive orders. The server's answer. */
@@ -46,12 +72,25 @@ export interface Supplier {
   stores: SupplierStore[];
 }
 
-export function fetchSupplier(token: string, supplierId: number): Promise<Supplier> {
-  return apiRequest<Supplier>(`/api/v1/suppliers/${supplierId}`, { token });
+/** The business from common, with its standing from the Marketplace API and its GSTIN from common's identifiers. */
+export async function fetchSupplier(token: string, supplierId: number): Promise<Supplier> {
+  const [org, standing, identifiers, states] = await Promise.all([
+    getOrg(token, supplierId),
+    fetchSupplierStanding(token, supplierId),
+    listIdentifiers(token, supplierId).catch(() => []),
+    statesOrEmpty(),
+  ]);
+  return toSupplier(org, standing, identifiers, states);
 }
 
-export function fetchStore(token: string, storeId: number): Promise<SupplierStore> {
-  return apiRequest<SupplierStore>(`/api/v1/supplier-stores/${storeId}`, { token });
+/** One store, with its marketplace settings. */
+export async function fetchStore(token: string, storeId: number): Promise<SupplierStore> {
+  const [store, settings, states] = await Promise.all([
+    getOutlet(token, storeId),
+    getMarketplaceSettings(token, storeId),
+    statesOrEmpty(),
+  ]);
+  return toSupplierStore(store, states, settings);
 }
 
 // ── Orders ────────────────────────────────────────────────────────────
@@ -310,36 +349,29 @@ export function updateSku(
 export interface UpdateSupplierInput {
   legalName?: string;
   displayName?: string;
-  gstin?: string;
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
 }
 
-export function updateSupplier(
+/** The business's name and contacts, in common. The GSTIN is not edited here (it is what verification checked). */
+export async function updateSupplier(
   token: string,
   supplierId: number,
   patch: UpdateSupplierInput,
 ): Promise<Supplier> {
-  return apiRequest<Supplier>(`/api/v1/suppliers/${supplierId}`, {
-    method: 'PATCH',
-    token,
-    body: patch,
-  });
+  await patchOrg(token, supplierId, patch);
+  return fetchSupplier(token, supplierId);
 }
 
-/** Day names and `HH:mm`, in the store's local time. */
-export interface OperatingHours {
-  days: string[];
-  opensAt: string;
-  closesAt: string;
-}
+export type { OperatingHours };
 
 export interface UpdateStoreInput {
   name?: string;
   addressLine1?: string;
   addressLine2?: string;
   city?: string;
+  /** The state's name, as picked; sent to common as its code. */
   state?: string;
   pincode?: string;
   latitude?: string;
@@ -355,31 +387,60 @@ export interface UpdateStoreInput {
    * are there, and a store that keeps stock has already answered.
    */
   directOrdersEnabled?: boolean;
-  /** ACTIVE or OFFLINE. Going offline stops new orders without closing the store. */
+  /**
+   * ACTIVE or OFFLINE: the store's MARKETPLACE `online` setting. Going offline stops new orders without closing the
+   * store, whose status in common stays ACTIVE.
+   */
   status?: 'ACTIVE' | 'OFFLINE';
 }
 
-export function updateStore(
+/**
+ * Save a store: its place in common (one PATCH), then each marketplace setting that was sent (one PUT each). The
+ * PATCH goes first, so a refused address leaves the settings untouched.
+ */
+export async function updateStore(
   token: string,
   storeId: number,
   patch: UpdateStoreInput,
 ): Promise<SupplierStore> {
-  return apiRequest<SupplierStore>(`/api/v1/supplier-stores/${storeId}`, {
-    method: 'PATCH',
-    token,
-    body: patch,
-  });
+  const place = toOutletInput(patch, patch.state !== undefined ? await requireStateCode(patch.state) : null);
+  if (patch.operatingHours) place.operatingHours = toCommonHours(patch.operatingHours);
+  if (Object.keys(place).length > 0) await patchOutlet(token, storeId, place);
+
+  if (patch.preparationMinutes !== undefined) {
+    await putMarketplaceSetting(token, storeId, MP_SETTING.preparationMinutes, patch.preparationMinutes);
+  }
+  if (patch.directOrdersEnabled !== undefined) {
+    await putMarketplaceSetting(token, storeId, MP_SETTING.directOrdersEnabled, patch.directOrdersEnabled);
+  }
+  if (patch.status !== undefined) {
+    await putMarketplaceSetting(token, storeId, MP_SETTING.online, patch.status === 'ACTIVE');
+  }
+  return fetchStore(token, storeId);
 }
 
-export function fetchVerification(token: string, supplierId: number) {
-  return apiRequest<{
-    id: number;
-    verificationType: string;
-    status: string;
-    rejectionReason: string | null;
-    verifiedAt: string | null;
-    createdAt: string;
-  }>(`/api/v1/suppliers/${supplierId}/verification`, { token });
+/**
+ * Send the business's GSTIN for verification (common's verification queue).
+ *
+ * <p>Uses the GSTIN identifier on file (registration records it); the legal name travels with it for the reviewer.
+ * Refused with `NO_GSTIN` when none is on file. A supplier cannot trade until this is reviewed and Costonomy
+ * activates them; the standing endpoint reports where that stands.
+ */
+export async function submitGstinVerification(
+  token: string,
+  supplierId: number,
+  legalName: string,
+  idempotencyKey: string,
+): Promise<VerificationRequest> {
+  const gstin = activeGstin(await listIdentifiers(token, supplierId));
+  if (gstin == null) {
+    throw new ApiError({
+      code: 'NO_GSTIN',
+      message: 'There is no GSTIN on file to verify. Contact support to add one.',
+      status: 422,
+    });
+  }
+  return submitIdentifierVerification(token, supplierId, gstin, { legalName, gstin: gstin.idValue }, idempotencyKey);
 }
 
 // ── Creating a SKU ────────────────────────────────────────────────────

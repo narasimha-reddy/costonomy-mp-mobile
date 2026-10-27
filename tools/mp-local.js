@@ -46,6 +46,14 @@ async function common(pathname, body) {
   return { status: res.status, data: json, error: json?.error };
 }
 
+/** GET from costonomy-common-api with a user's token: {status, data, error}. Businesses, outlets and stores live there (D-208). */
+async function commonGet(pathname, token) {
+  const res = await fetch(COMMON + pathname, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } });
+  let json = null;
+  try { json = await res.json(); } catch { /* empty */ }
+  return { status: res.status, data: json, error: json?.error };
+}
+
 /** New tokens from a refresh token (common rotates it: keep the new one), or null when it is refused. */
 async function refresh(refreshToken) {
   const r = await common('/v1/auth/refresh', { refreshToken, clientId: CLIENT_ID });
@@ -71,4 +79,4 @@ async function signIn(phone) {
   throw new Error('sign-in: gave up waiting for the code cooldown for ' + phone);
 }
 
-module.exports = { apiRepo, apiSettings, database, signIn, refresh, COMMON };
+module.exports = { apiRepo, apiSettings, database, signIn, refresh, commonGet, COMMON };

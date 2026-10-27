@@ -2,6 +2,12 @@
 
 This guide explains how supplier onboarding, verification, and activation work across **Costonomy Mandi**, how suppliers become visible to restaurants, and how to verify and activate suppliers during local development and testing.
 
+> **Since Marketplace API D-208 (common D-85)** the supplier, its stores and its GSTIN live in
+> **costonomy-common-api**, not in the Marketplace database. The lifecycle below is no longer stored: the
+> Marketplace API derives it from common (claim status, business and enrollment status, the GSTIN's verification,
+> and whether the business-wide MARKETPLACE enrollment is `live`) and reports it at
+> `GET /api/v1/suppliers/{id}/standing`. The app reads it there and never computes it.
+
 ---
 
 ## 1. Core Principles
@@ -13,9 +19,10 @@ This guide explains how supplier onboarding, verification, and activation work a
    - Restaurants and kitchens **only see suppliers and stores that are `ACTIVE`**.
    - If a supplier is in `REGISTERED`, `VERIFICATION_PENDING`, or `VERIFIED`, neither their stores nor their SKUs appear in restaurant searches or product comparisons.
 3. **One GSTIN, One Supplier**:
-   - `supplier_organization.gstin` has a unique database index (`uk_supplier_org_gstin`).
-   - A business cannot register multiple times under the same tax ID to fragment performance history.
-   - Once verified, the GSTIN is locked and cannot be changed without admin intervention.
+   - The GSTIN is one of the business's identifiers in common. Registering a supplier whose GSTIN or phone matches
+     one a restaurant already listed is refused with `CLAIM_CANDIDATES_EXIST` (the app explains and offers to
+     register anyway); taking over the listed one is a claim, handled by support.
+   - Once verified, the GSTIN is locked (common refuses to change a verified identifier).
 
 ---
 
@@ -49,11 +56,11 @@ flowchart TD
 | Current State | Allowed Next States | Trigger / Actor |
 |---|---|---|
 | `INVITED` | `REGISTERED` | Supplier user registers via OTP flow. |
-| `REGISTERED` | `VERIFICATION_PENDING`, `SUSPENDED` | Supplier submits verification documents (`submitVerification`). |
+| `REGISTERED` | `VERIFICATION_PENDING`, `SUSPENDED` | Supplier sends the GSTIN to common's verification queue (`submitGstinVerification`). |
 | `VERIFICATION_PENDING` | `VERIFIED`, `REGISTERED`, `SUSPENDED` | Platform Admin reviews: **Approve** moves to `VERIFIED`; **Reject** returns to `REGISTERED` so errors can be corrected. |
 | `VERIFIED` | `ACTIVE`, `SUSPENDED` | Platform Admin explicitly activates the supplier (`activate`). |
-| `ACTIVE` | `OFFLINE`, `SUSPENDED` | Supplier sets store offline, or operations suspends. |
-| `OFFLINE` | `ACTIVE`, `SUSPENDED` | Supplier sets store active again. |
+| `ACTIVE` | `OFFLINE`, `SUSPENDED` | Supplier sets a store offline (its MARKETPLACE `online` setting in common), or operations suspends. |
+| `OFFLINE` | `ACTIVE`, `SUSPENDED` | Supplier sets the store online again. |
 | `SUSPENDED` | `ACTIVE` | Operations reinstates after resolving dispute/audit. |
 
 ---
@@ -67,63 +74,51 @@ A supplier becomes **`VERIFIED`** when:
    - Verified against government tax registries.
 2. **Matching Legal Name**:
    - `legalName` matches the legal entity name on the GST registration.
-3. **Proof Document (`evidenceUrl`)**:
-   - Uploaded PDF/image of the GST Registration Certificate (Form GST REG-06) or business license.
-4. **Append-Only Verification History**:
-   - Every submission is recorded in `supplier_verification` (table schema maintains an immutable audit trail of who submitted, when, the exact JSON payload claimed, who reviewed it, and why).
-5. **Operator Approval**:
-   - An actor with the `SUPPLIER_VERIFY` permission approves the submission.
+3. **Verification History**:
+   - Every submission is a verification request in common (`GET /v1/orgs/{id}/verifications`): who submitted, when,
+     what was claimed, who reviewed it, and why.
+4. **Operator Approval**:
+   - Costonomy staff decide the request in common's verification queue.
 
 ---
 
 ## 4. API Endpoints
 
-### Supplier-Facing APIs
+### Supplier-Facing (costonomy-common-api, the user's token)
 
-- **Register Supplier Organization**:
+- **Register the business with its first store, enrolled in the marketplace** (send an `Idempotency-Key`):
   ```http
-  POST /api/v1/suppliers
+  POST /v1/orgs
+  { "orgType": "SUPPLIER", "displayName": "…", "legalName": "…", "gstin": "36AAACH7409R1Z3",
+    "contactName": "…", "contactPhone": "…", "enrollApps": ["MARKETPLACE"],
+    "firstOutlet": { "kind": "STORE", "name": "…", "addressLine1": "…", "city": "…", "stateCode": "IN-TG",
+                     "pincode": "500001", "latitude": 17.38, "longitude": 78.48, "contactName": "…",
+                     "contactPhone": "…" } }
   ```
-- **Create Warehouse / Store**:
+  The GSTIN is recorded as an unverified identifier. MARKETPLACE enrollment needs every field of `firstOutlet`
+  shown, including the coordinates for a store (`ENROLLMENT_REQUIREMENTS_UNMET` otherwise).
+- **Add a store**: `POST /v1/orgs/{id}/outlets` (`kind: "STORE"`).
+- **Submit the GSTIN for verification**:
   ```http
-  POST /api/v1/suppliers/{supplierId}/stores
+  GET  /v1/orgs/{id}/identifiers              → the GSTIN identifier's id
+  POST /v1/orgs/{id}/verifications
+  { "subjectType": "BUSINESS_IDENTIFIER", "subjectId": <identifier id>, "checkType": "GSTIN",
+    "data": { "legalName": "…", "gstin": "…" } }
   ```
-- **Submit for Verification**:
-  ```http
-  POST /api/v1/suppliers/{supplierId}/verifications
-  Content-Type: application/json
+- **View verification history**: `GET /v1/orgs/{id}/verifications`.
 
-  {
-    "verificationType": "GST",
-    "gstin": "36AAACH7409R1Z3",
-    "legalName": "Bhavana Suppliers Pvt Ltd",
-    "evidenceUrl": "https://storage.costonomy.com/verifications/gst_cert_01.pdf"
-  }
-  ```
-- **View Verification History**:
+### Marketplace API
+
+- **Standing** (lifecycle, verification, `canTrade`, and each store's status and whether it takes orders):
   ```http
-  GET /api/v1/suppliers/{supplierId}/verifications
+  GET /api/v1/suppliers/{supplierId}/standing
   ```
 
-### Operations / Admin APIs (Requires `SUPPLIER_VERIFY` permission)
+### Operations
 
-- **Review Verification (Approve / Reject)**:
-  ```http
-  POST /api/v1/admin/suppliers/verifications/{verificationId}/review
-  Content-Type: application/json
-
-  {
-    "approved": true,
-    "reason": "GSTIN verified active and legal name matches."
-  }
-  ```
-  *(Moves supplier to `VERIFIED`)*
-
-- **Activate Supplier for Trading**:
-  ```http
-  POST /api/v1/admin/suppliers/{supplierId}/activate
-  ```
-  *(Moves supplier to `ACTIVE` and publishes `SupplierActivated` domain event)*
+- **Review a verification**: common's verification queue (Costonomy staff).
+- **Activate for trading**: `POST /api/v1/admin/suppliers/{supplierId}/activate` on the Marketplace API, which sets
+  the business-wide MARKETPLACE enrollment `live` in common. Verification never activates on its own.
 
 ---
 
@@ -152,43 +147,12 @@ When a restaurant browses the app (on `http://localhost:7071`):
 
 ## 6. Local Development & Testing Quickstart
 
-When testing locally, you can quickly inspect and update supplier records in MySQL:
+The Marketplace database no longer has `supplier_organization`, `supplier_store` or `supplier_verification`; the SQL
+that used to be here no longer applies. Locally:
 
-### Inspect Current Supplier State
-```sql
-USE costonomy_mp;
+1. Look at a supplier's standing: `GET http://localhost:7070/costonomy-mp-api/api/v1/suppliers/{id}/standing` with the
+   supplier's token.
+2. Approve its GSTIN verification in common's verification queue (common's dev console, or its admin API).
+3. Activate it: `POST /api/v1/admin/suppliers/{id}/activate` with an operations token.
 
--- Check supplier organizations
-SELECT id, legal_name, display_name, gstin, lifecycle_status, verification_status 
-FROM supplier_organization;
-
--- Check stores
-SELECT id, supplier_organization_id, name, city, status 
-FROM supplier_store;
-
--- Check verification submissions
-SELECT id, supplier_organization_id, verification_type, status, reviewed_at 
-FROM supplier_verification;
-```
-
-### Instantly Verify and Activate Supplier (ID: 1)
-```sql
-USE costonomy_mp;
-
--- 1. Mark verification approved
-UPDATE supplier_verification 
-SET status = 'VERIFIED', reviewed_at = NOW(), verified_at = NOW() 
-WHERE supplier_organization_id = 1;
-
--- 2. Mark organization verified and active
-UPDATE supplier_organization 
-SET verification_status = 'VERIFIED', lifecycle_status = 'ACTIVE' 
-WHERE id = 1;
-
--- 3. Ensure store is active
-UPDATE supplier_store 
-SET status = 'ACTIVE' 
-WHERE supplier_organization_id = 1;
-```
-
-After running this, refresh your browser at `http://localhost:7071/restaurant/search` &rarr; the supplier will immediately appear under the **Suppliers** tab.
+After that, refresh `http://localhost:7071/restaurant/search` &rarr; the supplier appears under the **Suppliers** tab.

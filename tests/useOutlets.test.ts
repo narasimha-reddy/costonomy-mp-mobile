@@ -18,7 +18,7 @@ describe('outlet resolution (D-056)', () => {
   it('treats a restaurant grant as covering the restaurant, not zero outlets', () => {
     // The bug this exists to stop: an owner holds one RESTAURANT membership and
     // no OUTLET rows, and was shown "no outlets" for outlets they had just made.
-    const owner = [membership({ scopeType: 'RESTAURANT', scopeId: 1, roles: ['REST_OWNER'] })];
+    const owner = [membership({ scopeType: 'RESTAURANT', scopeId: 1, roles: ['Owner'] })];
 
     expect(restaurantScopeIds(owner)).toEqual([1]);
     expect(directOutletIds(owner)).toEqual([]);
@@ -59,8 +59,8 @@ describe('outlet resolution (D-056)', () => {
 
   it('deduplicates repeated scopes', () => {
     const duplicated = [
-      membership({ scopeType: 'RESTAURANT', scopeId: 1, roles: ['REST_OWNER'] }),
-      membership({ scopeType: 'RESTAURANT', scopeId: 1, roles: ['REST_MANAGER'] }),
+      membership({ scopeType: 'RESTAURANT', scopeId: 1, roles: ['Owner'] }),
+      membership({ scopeType: 'RESTAURANT', scopeId: 1, roles: ['Manager'] }),
     ];
 
     expect(restaurantScopeIds(duplicated)).toEqual([1]);

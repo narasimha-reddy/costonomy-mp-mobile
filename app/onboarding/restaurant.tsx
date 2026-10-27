@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
@@ -15,10 +15,14 @@ import {
   MandiScreen,
   MandiStepBar,
   MandiStickyBar,
+  MandiStateField,
   MandiText,
+  useStateIsKnown,
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
+import { newIdempotencyKey } from '@/lib/api/client';
+import { isDefinitiveFailure } from '@/lib/api/idempotency';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -33,9 +37,11 @@ const STEPS = ['Your restaurant', 'Your first outlet', 'Confirm'];
  * setup on a phone.
  *
  * <p><b>The outlet is not optional.</b> A restaurant with no outlet cannot order:
- * carts, requirements, credit and delivery all belong to an outlet. The API takes
- * both in one call for the same reason, so there is no window in which a
- * half-made restaurant exists.
+ * carts, requirements, credit and delivery all belong to an outlet. The restaurant
+ * is created in costonomy-common-api with its first outlet and its marketplace
+ * enrollment in one call (D-208), so there is no window in which a half-made
+ * restaurant exists. Enrollment needs the PIN code, a state from common's list and
+ * a contact number, so the outlet step asks for them.
  */
 export default function RestaurantOnboardingScreen() {
   const router = useRouter();
@@ -57,6 +63,9 @@ export default function RestaurantOnboardingScreen() {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
+  const stateKnown = useStateIsKnown(state);
+  // One key per attempt to create this restaurant, kept across retries so a retry cannot make a second one.
+  const attemptKey = useRef(newIdempotencyKey());
 
   const create = useMutation({
     mutationFn: () =>
@@ -69,12 +78,12 @@ export default function RestaurantOnboardingScreen() {
           addressLine1: addressLine1.trim(),
           city: city.trim(),
           state: state.trim(),
-          pincode: pincode.trim() || undefined,
+          pincode: pincode.trim(),
           latitude: pin?.latitude,
           longitude: pin?.longitude,
-          contactPhone: me?.user.phone ?? undefined,
+          contactPhone: me?.user.phone ?? '',
         },
-      }),
+      }, attemptKey.current),
     onSuccess: async (restaurant) => {
       track('restaurant_registered', { screen: SCREEN, entityId: restaurant.id },
         { located: pin != null });
@@ -84,11 +93,13 @@ export default function RestaurantOnboardingScreen() {
       toast.show(`${restaurant.name} is ready`, 'success');
       router.replace('/restaurant');
     },
-    onError: (caught) =>
+    onError: (caught) => {
+      if (isDefinitiveFailure(caught)) attemptKey.current = newIdempotencyKey();
       toast.show(
         caught instanceof ApiError ? caught.message : 'Could not create your restaurant.',
         'error',
-      ),
+      );
+    },
   });
 
   const stepValid = useMemo(() => {
@@ -97,10 +108,11 @@ export default function RestaurantOnboardingScreen() {
       return outletName.trim().length > 1
         && addressLine1.trim().length > 2
         && city.trim().length > 1
-        && state.trim().length > 1;
+        && stateKnown
+        && /^\d{6}$/.test(pincode.trim());
     }
     return true;
-  }, [step, name, outletName, addressLine1, city, state]);
+  }, [step, name, outletName, addressLine1, city, stateKnown, pincode]);
 
   return (
     <MandiScreen
@@ -187,21 +199,16 @@ export default function RestaurantOnboardingScreen() {
               style={styles.flex}
             />
             <MandiFormField
-              label="State"
-              value={state}
-              onChangeText={setState}
-              placeholder="Karnataka"
+              label="PIN code"
+              value={pincode}
+              onChangeText={(text) => setPincode(text.replace(/\D/g, '').slice(0, 6))}
+              placeholder="560038"
+              keyboardType="number-pad"
               required
               style={styles.flex}
             />
           </View>
-          <MandiFormField
-            label="PIN code"
-            value={pincode}
-            onChangeText={(text) => setPincode(text.replace(/\D/g, '').slice(0, 6))}
-            placeholder="560038"
-            keyboardType="number-pad"
-          />
+          <MandiStateField value={state} onChangeText={setState} required />
 
           {/* The map is part of registering: a outlet pinned wrong here is one
               nobody can quote delivery to, and the person who would notice is

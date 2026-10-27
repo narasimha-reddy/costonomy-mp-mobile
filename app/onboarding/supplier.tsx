@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/contexts/SessionProvider';
 import { useDeviceLocation } from '@/hooks/useDeviceLocation';
-import { createSupplier, submitVerification } from '@/services/onboarding';
+import { createSupplier, submitGstinVerification } from '@/services/onboarding';
 import {
   MandiButton,
   MandiCard,
@@ -15,10 +15,14 @@ import {
   MandiScreen,
   MandiStepBar,
   MandiStickyBar,
+  MandiStateField,
   MandiText,
+  useStateIsKnown,
   useToast,
 } from '@/components/common';
 import { ApiError } from '@/lib/api/errors';
+import { newIdempotencyKey } from '@/lib/api/client';
+import { isDefinitiveFailure } from '@/lib/api/idempotency';
 import { track } from '@/analytics';
 import { Colors, Spacing } from '@/theme';
 
@@ -49,7 +53,14 @@ const PHONE = /^[+]?[0-9 ()-]{7,20}$/;
  * <p>The verification is submitted after the organisation exists, because it
  * belongs to it. If that second call fails the supplier is still created and
  * usable for catalog work — so the screen routes on regardless and says what is
- * still outstanding, rather than stranding a registration halfway.
+ * still outstanding (More offers the submit again), rather than stranding a
+ * registration halfway.
+ *
+ * <p>Both live in costonomy-common-api (D-208): the business, its first store and
+ * its marketplace enrollment in one call, then the GSTIN (recorded on the business
+ * by that call) sent to common's verification queue. A store needs its pin, PIN
+ * code and a state from common's list to be enrolled, so the store step waits for
+ * them.
  */
 export default function SupplierOnboardingScreen() {
   const router = useRouter();
@@ -71,6 +82,12 @@ export default function SupplierOnboardingScreen() {
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
   const [gstin, setGstin] = useState('');
+  const stateKnown = useStateIsKnown(state);
+  // Common found a supplier that may be this one (a restaurant listed it before it signed up). Null: no question.
+  const [possibleMatch, setPossibleMatch] = useState<string[] | null>(null);
+  // One key per attempt at each call, kept across retries so a retry is the same create and the same submission.
+  const createKey = useRef(newIdempotencyKey());
+  const verifyKey = useRef(newIdempotencyKey());
 
   /**
    * Who to ring, at the business and at the branch. D-097.
@@ -101,8 +118,9 @@ export default function SupplierOnboardingScreen() {
   const storeContactPhoneValue = storeContactPhone ?? contactPhoneValue;
 
   const register = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ ignoreClaimCandidates }: { ignoreClaimCandidates: boolean }) => {
       const supplier = await createSupplier(accessToken as string, {
+        ignoreClaimCandidates,
         legalName: legalName.trim() || displayName.trim(),
         displayName: displayName.trim(),
         gstin: gstin.trim(),
@@ -113,21 +131,22 @@ export default function SupplierOnboardingScreen() {
           addressLine1: addressLine1.trim(),
           city: city.trim(),
           state: state.trim(),
-          pincode: pincode.trim() || undefined,
+          pincode: pincode.trim(),
           latitude: pin?.latitude,
           longitude: pin?.longitude,
           contactName: storeContactNameValue.trim(),
           contactPhone: storeContactPhoneValue.trim(),
         },
-      });
+      }, createKey.current);
 
       let verificationSubmitted = true;
       try {
-        await submitVerification(accessToken as string, supplier.id, {
-          verificationType: 'GST',
-          gstin: gstin.trim(),
-          legalName: legalName.trim() || displayName.trim(),
-        });
+        await submitGstinVerification(
+          accessToken as string,
+          supplier.id,
+          legalName.trim() || displayName.trim(),
+          verifyKey.current,
+        );
       } catch {
         // The organisation exists and the person can work on their catalog.
         // Stranding them here would be worse than telling them what is left.
@@ -147,11 +166,17 @@ export default function SupplierOnboardingScreen() {
       );
       router.replace('/supplier');
     },
-    onError: (caught) =>
+    onError: (caught) => {
+      if (isDefinitiveFailure(caught)) createKey.current = newIdempotencyKey();
+      if (caught instanceof ApiError && caught.code === 'CLAIM_CANDIDATES_EXIST') {
+        setPossibleMatch(candidateNames(caught.details));
+        return;
+      }
       toast.show(
         caught instanceof ApiError ? caught.message : 'Could not register your business.',
         'error',
-      ),
+      );
+    },
   });
 
   const stepValid = useMemo(() => {
@@ -164,12 +189,15 @@ export default function SupplierOnboardingScreen() {
       return storeName.trim().length > 1
         && addressLine1.trim().length > 2
         && city.trim().length > 1
-        && state.trim().length > 1
+        && stateKnown
+        && /^\d{6}$/.test(pincode.trim())
+        // A store is found by distance: the marketplace will not enroll one without its pin.
+        && pin != null
         && storeContactNameValue.trim().length > 1
         && PHONE.test(storeContactPhoneValue.trim());
     }
     return GSTIN.test(gstin.trim());
-  }, [step, displayName, contactName, contactPhoneValue, storeName, addressLine1, city, state,
+  }, [step, displayName, contactName, contactPhoneValue, storeName, addressLine1, city, stateKnown, pincode, pin,
     storeContactNameValue, storeContactPhoneValue, gstin]);
 
   const gstinTouched = gstin.trim().length > 0;
@@ -184,7 +212,9 @@ export default function SupplierOnboardingScreen() {
             size="lg"
             disabled={!stepValid}
             loading={register.isPending}
-            onPress={() => (step === 2 ? register.mutate() : setStep(step + 1))}
+            onPress={() => (step === 2
+              ? register.mutate({ ignoreClaimCandidates: false })
+              : setStep(step + 1))}
           />
         </MandiStickyBar>
       }
@@ -268,21 +298,16 @@ export default function SupplierOnboardingScreen() {
               style={styles.flex}
             />
             <MandiFormField
-              label="State"
-              value={state}
-              onChangeText={setState}
-              placeholder="Karnataka"
+              label="PIN code"
+              value={pincode}
+              onChangeText={(text) => setPincode(text.replace(/\D/g, '').slice(0, 6))}
+              placeholder="560034"
+              keyboardType="number-pad"
               required
               style={styles.flex}
             />
           </View>
-          <MandiFormField
-            label="PIN code"
-            value={pincode}
-            onChangeText={(text) => setPincode(text.replace(/\D/g, '').slice(0, 6))}
-            placeholder="560034"
-            keyboardType="number-pad"
-          />
+          <MandiStateField value={state} onChangeText={setState} required />
 
           {/* Copied from the business, and editable. A restaurant chasing a
               delivery rings the branch, not head office. */}
@@ -357,6 +382,29 @@ export default function SupplierOnboardingScreen() {
             />
           </MandiCard>
 
+          {possibleMatch != null && (
+            <MandiCard accentColor={Colors.warning}>
+              <MandiText variant="bodyEmphasis">You may already be listed</MandiText>
+              <MandiText variant="caption" color={Colors.textSecondary}>
+                {possibleMatch.length > 0
+                  ? `A restaurant already added a supplier with this GSTIN or phone number (${possibleMatch.join(', ')}). `
+                  : 'A restaurant already added a supplier with this GSTIN or phone number. '}
+                If that is you, contact support to take it over and keep its history. If it is not, register
+                as a new business.
+              </MandiText>
+              <MandiButton
+                label="Register as a new business"
+                variant="secondary"
+                size="md"
+                loading={register.isPending}
+                onPress={() => {
+                  setPossibleMatch(null);
+                  register.mutate({ ignoreClaimCandidates: true });
+                }}
+              />
+            </MandiCard>
+          )}
+
           <View style={styles.note}>
             <Ionicons name="shield-checkmark-outline" size={18} color={Colors.info} />
             <MandiText variant="caption" color={Colors.textSecondary} style={styles.flex}>
@@ -368,6 +416,17 @@ export default function SupplierOnboardingScreen() {
       )}
     </MandiScreen>
   );
+}
+
+/**
+ * The masked phone numbers in common's CLAIM_CANDIDATES_EXIST details (`{orgId, maskedPhone, matchedBy}` each), for
+ * the "you may already be listed" card. Common masks them; nothing more about another business is shown.
+ */
+function candidateNames(details: Record<string, unknown> | undefined): string[] {
+  const candidates = Array.isArray(details?.candidates) ? details.candidates : [];
+  return candidates
+    .map((c) => (c && typeof c === 'object' ? (c as Record<string, unknown>).maskedPhone : null))
+    .filter((phone): phone is string => typeof phone === 'string' && phone.trim() !== '');
 }
 
 function Line({ label, value, warn }: { label: string; value: string; warn?: boolean }) {

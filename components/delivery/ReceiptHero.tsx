@@ -30,7 +30,7 @@ export function ReceiptHero({ title, subtitle }: { title: string; subtitle: stri
     <View style={styles.wrap} onLayout={(e) => { const w = e.nativeEvent.layout.width; if (w > 0) setWidth(w); }}>
       <View style={styles.slot} />
       <View style={styles.paper}>
-        <Svg width={52} height={52} viewBox="0 0 52 52" style={styles.bag} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Svg width={52} height={52} viewBox="0 0 52 52" style={styles.bag} aria-hidden>
           <Path d="M10 18h32l-2.5 28H12.5z" fill={Colors.success} />
           <Path d="M18 18v-4a8 8 0 0 1 16 0v4" stroke={Colors.success} strokeWidth={3} fill="none" strokeLinecap="round" />
           <Circle cx="26" cy="32" r="9" fill={Colors.surface} />

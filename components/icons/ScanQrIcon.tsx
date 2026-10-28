@@ -26,8 +26,7 @@ export function ScanQrIcon({
       height={size}
       viewBox="0 0 96 96"
       testID={`scan-qr-icon-${variant}`}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
+      aria-hidden
     >
       {variant === 'filled' && <Circle cx={48} cy={48} r={48} fill={Colors.primary} />}
       <G transform={`translate(48 48) scale(${scale}) translate(-48 -48)`}>

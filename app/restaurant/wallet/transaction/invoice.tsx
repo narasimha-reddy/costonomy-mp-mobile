@@ -34,7 +34,10 @@ export default function InvoiceViewerScreen() {
   const router = useRouter();
   const toast = useToast();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  // The viewer's own width, not the window's: on a wide browser the app is a narrow column inside the window.
+  const windowWidth = useWindowDimensions().width;
+  const [measured, setMeasured] = useState(0);
+  const width = measured > 0 ? measured : windowWidth;
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const query = useWalletInvoice(id);
@@ -165,7 +168,11 @@ export default function InvoiceViewerScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         renderItem={() => (
           <View>
-            <View style={styles.viewer} testID="bill-viewer">
+            <View
+              style={styles.viewer}
+              testID="bill-viewer"
+              onLayout={(e) => setMeasured(Math.round(e.nativeEvent.layout.width))}
+            >
               {failed ? (
                 <View style={[styles.failed, { width }]}>
                   <Text style={styles.failedText}>We could not load the bill photo.</Text>
